@@ -1,10 +1,10 @@
 const storageKey = "pulsenote-state-v1";
 const statusList = ["Pendente", "Em andamento", "Concluida", "Cancelada"];
 const viewTitles = {
-  dashboard: "Seu dia em foco",
-  notes: "Anotacoes inteligentes",
-  tasks: "Quadro de tarefas",
-  calendar: "Agenda integrada",
+  dashboard: "Seu dia em foco ✨",
+  notes: "Anotações",
+  tasks: "Tarefas",
+  calendar: "Agenda",
   goals: "Metas e conquistas",
 };
 const themeList = ["sunny", "ocean", "candy", "forest", "night"];
@@ -35,11 +35,17 @@ const elements = {
 };
 
 document.addEventListener("DOMContentLoaded", () => {
-  elements.todayLabel.textContent = new Intl.DateTimeFormat("pt-BR", {
+  const now = new Date();
+  const hour = now.getHours();
+  const greeting = hour < 12 ? "Bom dia" : hour < 18 ? "Boa tarde" : "Boa noite";
+  const icon = hour < 12 ? "☀️" : hour < 18 ? "🌤️" : "🌙";
+  const dateStr = new Intl.DateTimeFormat("pt-BR", {
     weekday: "long",
     day: "2-digit",
     month: "long",
-  }).format(new Date());
+  }).format(now);
+
+  elements.todayLabel.textContent = `${greeting}, Douglas ${icon}  ·  ${dateStr.charAt(0).toUpperCase() + dateStr.slice(1)}`;
 
   state.theme = normalizeTheme(state.theme);
   applyTheme(state.theme);
@@ -183,6 +189,16 @@ function bindForms() {
     document.querySelector("#taskTitle").focus();
   });
   elements.globalSearch.addEventListener("input", renderAll);
+
+  // Filter chips (new UI)
+  document.querySelectorAll("[data-note-filter]").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      document.querySelectorAll("[data-note-filter]").forEach((c) => c.classList.remove("active"));
+      chip.classList.add("active");
+      document.querySelector("#noteFilter").value = chip.dataset.noteFilter;
+      renderNotes();
+    });
+  });
 }
 
 function bindActions() {
@@ -215,12 +231,19 @@ function bindActions() {
 
 function setView(view) {
   activeView = view;
+  // Sync sidebar nav
   document.querySelectorAll(".nav-item").forEach((item) => {
+    item.classList.toggle("active", item.dataset.view === view);
+  });
+  // Sync bottom nav (mobile)
+  document.querySelectorAll(".bottom-nav-item").forEach((item) => {
     item.classList.toggle("active", item.dataset.view === view);
   });
   document.querySelectorAll(".view").forEach((section) => section.classList.remove("active-view"));
   document.querySelector(`#${view}View`).classList.add("active-view");
   elements.viewTitle.textContent = viewTitles[view];
+  // Scroll to top on mobile
+  window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 function saveNote(event) {
@@ -428,30 +451,45 @@ function renderNotes() {
   renderList(
     "#notesList",
     notes,
-    (note) => `
-      <article class="note-card">
-        <header>
-          <div>
-            <h3>${escapeHtml(note.title)}</h3>
-            <div class="note-meta">${escapeHtml(note.category)} · ${escapeHtml(note.folder)}</div>
+    (note) => {
+      // Build checklist preview (max 3 items)
+      const checklistHtml = note.checklist && note.checklist.length
+        ? `<div class="checklist-preview">${note.checklist.slice(0, 3).map((item) =>
+            `<div class="cl-item">
+              <span class="cl-check">✓</span>
+              <span class="cl-text">${escapeHtml(item)}</span>
+            </div>`
+          ).join("")}${note.checklist.length > 3 ? `<div class="cl-item"><span class="task-meta">+${note.checklist.length - 3} mais itens</span></div>` : ""}</div>`
+        : "";
+
+      const tagsHtml = note.tags && note.tags.length
+        ? `<div class="tag-list">${note.tags.slice(0,3).map((t) => `<span class="pill">#${escapeHtml(t)}</span>`).join("")}</div>`
+        : "";
+
+      return `
+        <article class="note-card">
+          <header>
+            <div>
+              <h3>${escapeHtml(note.title)}</h3>
+              <div class="note-meta">${escapeHtml(note.category)} · ${formatDate(note.createdAt)}</div>
+            </div>
+            <button class="mini-button" onclick="toggleFavorite('${note.id}')" title="Favoritar" style="font-size:1.1rem;background:none;border:none;padding:0;width:30px;height:30px;display:grid;place-items:center;flex-shrink:0;border-radius:50%;">${note.favorite ? "⭐" : "☆"}</button>
+          </header>
+          ${note.description ? `<p>${escapeHtml(note.description)}</p>` : ""}
+          ${checklistHtml}
+          ${tagsHtml}
+          <div class="tag-list" style="margin-top:4px">
+            <span class="priority-pill priority-${note.priority}">${note.priority}</span>
           </div>
-          <button class="mini-button" onclick="toggleFavorite('${note.id}')" title="Favoritar">${note.favorite ? "★" : "☆"}</button>
-        </header>
-        <p>${escapeHtml(note.description || "Sem descricao.")}</p>
-        <div class="tag-list">
-          <span class="priority-pill priority-${note.priority}">${note.priority}</span>
-          ${note.tags.map((tag) => `<span class="pill">#${escapeHtml(tag)}</span>`).join("")}
-        </div>
-        ${note.checklist.length ? `<div class="note-meta">${note.checklist.length} itens de checklist</div>` : ""}
-        ${note.attachments.length ? `<div class="note-meta">${note.attachments.length} anexo(s) ou link(s)</div>` : ""}
-        <div class="card-actions">
-          <button onclick="editNote('${note.id}')">Editar</button>
-          <button onclick="convertNoteToTask('${note.id}')">Virar tarefa</button>
-          <button onclick="deleteNote('${note.id}')">Excluir</button>
-        </div>
-      </article>
-    `,
-    "Nenhuma anotacao encontrada."
+          <div class="card-actions">
+            <button onclick="editNote('${note.id}')">✏️ Editar</button>
+            <button onclick="convertNoteToTask('${note.id}')">➡️ Tarefa</button>
+            <button onclick="deleteNote('${note.id}')">🗑️</button>
+          </div>
+        </article>
+      `;
+    },
+    "Nenhuma anotação encontrada. Crie a primeira! ✨"
   );
 }
 
@@ -530,18 +568,19 @@ function renderTasks() {
 }
 
 function renderTaskRow(task) {
+  const isDone = task.status === "Concluida";
   return `
     <article class="task-row" draggable="true" ondragstart="dragTask('${task.id}')">
       <div class="task-main">
-        <button class="task-check" onclick="toggleTask('${task.id}')" title="Check-in">${task.status === "Concluida" ? "✓" : ""}</button>
+        <button class="task-check" onclick="toggleTask('${task.id}')" title="Concluir" style="${isDone ? "background:var(--green);border-color:var(--green);color:#fff;" : ""}">${isDone ? "✓" : ""}</button>
         <div>
-          <div class="task-title">${escapeHtml(task.title)}</div>
+          <div class="task-title" style="${isDone ? "text-decoration:line-through;opacity:0.5;" : ""}">${escapeHtml(task.title)}</div>
           <div class="task-meta">${formatDate(task.dueDate)} · ${escapeHtml(task.priority)}</div>
         </div>
       </div>
       <div class="tag-list">
         <span class="status-pill status-${task.status.replace(" ", "-")}">${task.status}</span>
-        <button class="mini-button" onclick="deleteTask('${task.id}')" title="Excluir">×</button>
+        <button class="mini-button" onclick="deleteTask('${task.id}')" title="Excluir" style="padding:0;width:28px;height:28px;">🗑️</button>
       </div>
     </article>
   `;
@@ -626,13 +665,13 @@ function filterEventsByDate(date) {
 function renderEventRow(event) {
   return `
     <article class="event-row">
-      <div>
-        <strong>${escapeHtml(event.title)}</strong>
-        <div class="event-meta">${formatDate(event.date)} as ${event.time} · ${escapeHtml(event.location)}</div>
+      <div style="flex:1;min-width:0">
+        <strong style="font-size:0.9rem">${escapeHtml(event.title)}</strong>
+        <div class="event-meta">📅 ${formatDate(event.date)} às ${event.time} · 📍 ${escapeHtml(event.location)}</div>
       </div>
-      <div class="tag-list">
-        <span class="pill">${event.reminder} min</span>
-        <button class="mini-button" onclick="deleteEvent('${event.id}')" title="Excluir">×</button>
+      <div class="tag-list" style="flex-shrink:0">
+        <span class="pill" style="background:var(--orange-soft);color:var(--orange);border-color:var(--orange)">⏰ ${event.reminder}min</span>
+        <button class="mini-button" onclick="deleteEvent('${event.id}')" title="Excluir" style="padding:0;width:28px;height:28px">🗑️</button>
       </div>
     </article>
   `;
@@ -654,23 +693,24 @@ function renderGoals() {
     state.goals,
     (goal) => {
       const percent = Math.min(100, Math.round((goal.current / goal.target) * 100));
+      const isComplete = goal.current >= goal.target;
       return `
-        <article class="goal-card panel">
+        <article class="goal-card" style="${isComplete ? "border-color:var(--green);background:var(--green-soft);" : ""}">
           <div>
             <h2>${escapeHtml(goal.title)}</h2>
-            <div class="task-meta">${goal.current}/${goal.target} etapas</div>
+            <div class="task-meta">${goal.current}/${goal.target} etapas ${isComplete ? "🎉" : ""}</div>
           </div>
-          <div class="progress-track"><div style="width:${percent}%"></div></div>
+          <div class="progress-track"><div style="width:${percent}%;background:${isComplete ? "var(--green)" : "linear-gradient(90deg,var(--accent),var(--purple))"}"></div></div>
           <div class="goal-controls">
-            <button class="mini-button" onclick="changeGoal('${goal.id}', -1)">-</button>
-            <span class="pill">${percent}%</span>
+            <button class="mini-button" onclick="changeGoal('${goal.id}', -1)">−</button>
+            <span class="pill" style="${isComplete ? "background:var(--green);color:#fff;border-color:var(--green);" : ""}">${percent}%</span>
             <button class="mini-button" onclick="changeGoal('${goal.id}', 1)">+</button>
-            <button class="mini-button" onclick="deleteGoal('${goal.id}')">Excluir</button>
+            <button class="mini-button" onclick="deleteGoal('${goal.id}')" style="margin-left:auto">🗑️</button>
           </div>
         </article>
       `;
     },
-    "Nenhuma meta criada."
+    "Nenhuma meta criada. Defina seu foco! 🎯"
   );
   renderAchievements();
 }
@@ -699,17 +739,17 @@ function renderAchievements() {
   const favorites = state.notes.filter((note) => note.favorite).length;
   const completedGoals = state.goals.filter((goal) => goal.current >= goal.target).length;
   const achievements = [
-    { title: "Primeiro check-in", detail: "Concluir uma tarefa", unlocked: done >= 1 },
-    { title: "Dia produtivo", detail: "Concluir tres tarefas", unlocked: done >= 3 },
-    { title: "Biblioteca viva", detail: "Favoritar uma anotacao", unlocked: favorites >= 1 },
-    { title: "Meta batida", detail: "Completar uma meta", unlocked: completedGoals >= 1 },
+    { title: "Primeiro check-in", detail: "Concluir uma tarefa", icon: "🏅", unlocked: done >= 1 },
+    { title: "Dia produtivo", detail: "Concluir três tarefas", icon: "🔥", unlocked: done >= 3 },
+    { title: "Biblioteca viva", detail: "Favoritar uma anotação", icon: "⭐", unlocked: favorites >= 1 },
+    { title: "Meta batida", detail: "Completar uma meta", icon: "🎯", unlocked: completedGoals >= 1 },
   ];
   document.querySelector("#achievementCount").textContent = `${achievements.filter((item) => item.unlocked).length}/${achievements.length}`;
   document.querySelector("#achievements").innerHTML = achievements
     .map(
       (item) => `
         <article class="achievement ${item.unlocked ? "unlocked" : ""}">
-          <strong>${item.unlocked ? "✓" : "○"} ${item.title}</strong>
+          <strong>${item.icon} ${item.title}${item.unlocked ? " ✓" : ""}</strong>
           <span class="task-meta">${item.detail}</span>
         </article>
       `
