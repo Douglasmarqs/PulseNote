@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PulseNote - Produtividade pessoal</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">
+            <span></span>
+          </div>
+          <div>
+            <strong>PulseNote</strong>
+            <span>Produtividade divertida</span>
+          </div>
+        </div>
+
+        <nav class="nav-list" aria-label="Navegacao principal">
+          <button class="nav-item active" data-view="dashboard" title="Dashboard">
+            <span class="icon">D</span>
+            <span>Dashboard</span>
+          </button>
+          <button class="nav-item" data-view="notes" title="Anotacoes">
+            <span class="icon">N</span>
+            <span>Anotacoes</span>
+          </button>
+          <button class="nav-item" data-view="tasks" title="Tarefas">
+            <span class="icon">T</span>
+            <span>Tarefas</span>
+          </button>
+          <button class="nav-item" data-view="calendar" title="Agenda">
+            <span class="icon">A</span>
+            <span>Agenda</span>
+          </button>
+          <button class="nav-item" data-view="goals" title="Metas">
+            <span class="icon">M</span>
+            <span>Metas</span>
+          </button>
+        </nav>
+
+        <div class="sidebar-footer">
+          <label class="theme-picker">
+            <span>Tema</span>
+            <select id="themeSelect" title="Escolher tema">
+              <option value="sunny">Sol</option>
+              <option value="ocean">Oceano</option>
+              <option value="candy">Doce</option>
+              <option value="forest">Floresta</option>
+              <option value="night">Noite</option>
+            </select>
+          </label>
+          <button id="themeToggle" class="ghost-button" title="Alternar tema">
+            <span class="icon">C</span>
+            <span>Trocar cor</span>
+          </button>
+          <div class="streak-box">
+            <span class="muted">Sequencia</span>
+            <strong id="streakCount">0 dias</strong>
+          </div>
+        </div>
+      </aside>
+
+      <main class="main-area">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow" id="todayLabel">Hoje</p>
+            <h1 id="viewTitle">Seu dia em foco</h1>
+          </div>
+          <div class="topbar-actions">
+            <label class="search-box">
+              <span class="icon">B</span>
+              <input id="globalSearch" type="search" placeholder="Pesquisar notas, tarefas e compromissos" />
+            </label>
+            <label class="theme-chip" title="Escolher tema">
+              <span class="icon">C</span>
+              <select id="themeSelectMobile">
+                <option value="sunny">Sol</option>
+                <option value="ocean">Oceano</option>
+                <option value="candy">Doce</option>
+                <option value="forest">Floresta</option>
+                <option value="night">Noite</option>
+              </select>
+            </label>
+            <button id="quickAddTask" class="primary-button">
+              <span class="icon">+</span>
+              <span>Tarefa</span>
+            </button>
+          </div>
+        </header>
+
+        <section id="dashboardView" class="view active-view" aria-labelledby="viewTitle">
+          <section class="daily-hero">
+            <div class="hero-copy">
+              <p class="eyebrow">Jornada de hoje</p>
+              <h2 id="heroQuestLabel">Complete tarefas para ganhar XP</h2>
+              <div class="hero-progress">
+                <div class="progress-track"><div id="heroProgressBar"></div></div>
+                <strong id="heroProgressLabel">0%</strong>
+              </div>
+              <div class="hero-actions">
+                <button class="primary-button" data-view-shortcut="tasks">Comecar foco</button>
+                <span class="pill" id="heroLevelLabel">Nivel 1</span>
+              </div>
+            </div>
+            <div class="mascot-card" aria-hidden="true">
+              <div class="mascot">
+                <span class="mascot-eye left"></span>
+                <span class="mascot-eye right"></span>
+                <span class="mascot-smile"></span>
+                <span class="mascot-badge">XP</span>
+              </div>
+            </div>
+          </section>
+
+          <div class="metric-grid">
+            <article class="metric-panel">
+              <span class="metric-icon">OK</span>
+              <span>Tarefas concluidas</span>
+              <strong id="doneMetric">0</strong>
+              <small id="doneMetricDetail">Hoje</small>
+            </article>
+            <article class="metric-panel">
+              <span class="metric-icon">%</span>
+              <span>Progresso geral</span>
+              <strong id="progressMetric">0%</strong>
+              <small>Notas, tarefas e metas</small>
+            </article>
+            <article class="metric-panel">
+              <span class="metric-icon">CAL</span>
+              <span>Compromissos</span>
+              <strong id="eventMetric">0</strong>
+              <small>Proximos 7 dias</small>
+            </article>
+            <article class="metric-panel">
+              <span class="metric-icon">XP</span>
+              <span>Pontos</span>
+              <strong id="scoreMetric">0</strong>
+              <small id="levelMetric">Nivel 1</small>
+            </article>
+          </div>
+
+          <div class="dashboard-layout">
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Resumo</p>
+                  <h2>Prioridades do dia</h2>
+                </div>
+                <button class="icon-button" data-view-shortcut="tasks" title="Abrir tarefas">></button>
+              </div>
+              <div id="todayTasks" class="task-list compact-list"></div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Agenda</p>
+                  <h2>Proximos compromissos</h2>
+                </div>
+                <button class="icon-button" data-view-shortcut="calendar" title="Abrir agenda">></button>
+              </div>
+              <div id="upcomingEvents" class="event-list compact-list"></div>
+            </section>
+
+            <section class="panel wide">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Produtividade</p>
+                  <h2>Desempenho semanal</h2>
+                </div>
+                <span class="pill" id="weeklySummary">0 concluida</span>
+              </div>
+              <div id="chartBars" class="bar-chart"></div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Metas</p>
+                  <h2>Foco da semana</h2>
+                </div>
+                <button class="icon-button" data-view-shortcut="goals" title="Abrir metas">></button>
+              </div>
+              <div id="goalSummary" class="goal-stack"></div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Conectores</p>
+                  <h2>Sincronizacao</h2>
+                </div>
+                <span class="pill">Local</span>
+              </div>
+              <div class="connector-grid">
+                <div class="connector-row"><span>Google Calendar</span><button class="mini-button">Conectar</button></div>
+                <div class="connector-row"><span>Outlook</span><button class="mini-button">Conectar</button></div>
+                <div class="connector-row"><span>Apple Calendar</span><button class="mini-button">Conectar</button></div>
+                <div class="connector-row"><span>Backup automatico</span><button class="mini-button">Ativar</button></div>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section id="notesView" class="view">
+          <div class="workbench">
+            <form id="noteForm" class="editor-panel">
+              <div class="form-heading">
+                <div>
+                  <p class="eyebrow">Nova anotacao</p>
+                  <h2>Capturar ideia</h2>
+                </div>
+                <button type="submit" class="primary-button">
+                  <span class="icon">+</span>
+                  <span>Salvar</span>
+                </button>
+              </div>
+              <input id="noteId" type="hidden" />
+              <label>
+                Titulo
+                <input id="noteTitle" required maxlength="80" placeholder="Ex.: Planejar projeto" />
+              </label>
+              <label>
+                Descricao
+                <textarea id="noteDescription" rows="5" placeholder="Escreva detalhes, topicos, links ou observacoes"></textarea>
+              </label>
+              <div class="form-grid">
+                <label>
+                  Categoria
+                  <input id="noteCategory" list="categoryOptions" placeholder="Trabalho" />
+                </label>
+                <label>
+                  Pasta
+                  <input id="noteFolder" placeholder="Projetos" />
+                </label>
+                <label>
+                  Tags
+                  <input id="noteTags" placeholder="planejamento, foco" />
+                </label>
+                <label>
+                  Prioridade
+                  <select id="notePriority">
+                    <option>Baixa</option>
+                    <option selected>Media</option>
+                    <option>Alta</option>
+                    <option>Urgente</option>
+                  </select>
+                </label>
+              </div>
+              <label>
+                Checklist
+                <textarea id="noteChecklist" rows="3" placeholder="Uma tarefa por linha"></textarea>
+              </label>
+              <label>
+                Anexos e links
+                <input id="noteAttachments" placeholder="https://..., arquivo.pdf, imagem.png" />
+              </label>
+              <label>
+                Meta relacionada
+                <input id="noteGoal" placeholder="Ex.: Entregar MVP esta semana" />
+              </label>
+              <label>
+                Observacoes adicionais
+                <textarea id="noteObservations" rows="2"></textarea>
+              </label>
+              <div class="form-actions">
+                <button id="resetNoteForm" type="button" class="ghost-button">Limpar</button>
+                <button id="suggestNote" type="button" class="ghost-button">Sugerir com IA</button>
+              </div>
+            </form>
+
+            <section class="list-panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Biblioteca</p>
+                  <h2>Anotacoes</h2>
+                </div>
+                <select id="noteFilter" title="Filtrar anotacoes">
+                  <option value="all">Todas</option>
+                  <option value="favorite">Favoritas</option>
+                  <option value="Alta">Alta prioridade</option>
+                  <option value="Urgente">Urgentes</option>
+                </select>
+              </div>
+              <div id="notesList" class="note-grid"></div>
+            </section>
+          </div>
+        </section>
+
+        <section id="tasksView" class="view">
+          <div class="board-toolbar">
+            <form id="taskForm" class="inline-form">
+              <input id="taskTitle" required placeholder="Adicionar tarefa rapida" />
+              <select id="taskPriority">
+                <option>Baixa</option>
+                <option selected>Media</option>
+                <option>Alta</option>
+                <option>Urgente</option>
+              </select>
+              <input id="taskDue" type="date" />
+              <button class="primary-button" type="submit">
+                <span class="icon">+</span>
+                <span>Adicionar</span>
+              </button>
+            </form>
+            <div class="progress-strip">
+              <span>Progresso</span>
+              <div class="progress-track"><div id="taskProgressBar"></div></div>
+              <strong id="taskProgressLabel">0%</strong>
+            </div>
+          </div>
+          <div id="taskBoard" class="task-board"></div>
+        </section>
+
+        <section id="calendarView" class="view">
+          <div class="calendar-layout">
+            <form id="eventForm" class="editor-panel compact-editor">
+              <div class="form-heading">
+                <div>
+                  <p class="eyebrow">Agenda</p>
+                  <h2>Novo compromisso</h2>
+                </div>
+                <button class="primary-button" type="submit">
+                  <span class="icon">+</span>
+                  <span>Salvar</span>
+                </button>
+              </div>
+              <input id="eventTitle" required placeholder="Titulo" />
+              <div class="form-grid">
+                <input id="eventDate" type="date" required />
+                <input id="eventTime" type="time" required />
+              </div>
+              <input id="eventLocation" placeholder="Local ou link" />
+              <select id="eventReminder">
+                <option value="5">5 min antes</option>
+                <option value="15" selected>15 min antes</option>
+                <option value="30">30 min antes</option>
+                <option value="60">1 hora antes</option>
+              </select>
+              <textarea id="eventNotes" rows="3" placeholder="Notas do compromisso"></textarea>
+            </form>
+
+            <section class="calendar-panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Calendario</p>
+                  <h2 id="monthLabel">Mes</h2>
+                </div>
+                <div class="segmented">
+                  <button class="active" data-calendar-mode="month">Mes</button>
+                  <button data-calendar-mode="week">Semana</button>
+                  <button data-calendar-mode="day">Dia</button>
+                </div>
+              </div>
+              <div id="calendarGrid" class="calendar-grid"></div>
+              <div id="calendarEvents" class="event-list"></div>
+            </section>
+          </div>
+        </section>
+
+        <section id="goalsView" class="view">
+          <div class="goals-layout">
+            <form id="goalForm" class="inline-form">
+              <input id="goalTitle" required placeholder="Nova meta da semana" />
+              <input id="goalTarget" type="number" min="1" max="100" value="5" />
+              <button class="primary-button" type="submit">
+                <span class="icon">+</span>
+                <span>Criar meta</span>
+              </button>
+            </form>
+            <div id="goalsList" class="goal-grid"></div>
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Conquistas</p>
+                  <h2>Gamificacao</h2>
+                </div>
+                <span class="pill" id="achievementCount">0/4</span>
+              </div>
+              <div id="achievements" class="achievement-grid"></div>
+            </section>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <datalist id="categoryOptions">
+      <option value="Trabalho"></option>
+      <option value="Estudos"></option>
+      <option value="Pessoal"></option>
+      <option value="Saude"></option>
+      <option value="Financas"></option>
+    </datalist>
+
+    <script src="app.js"></script>
+  </body>
+</html>
