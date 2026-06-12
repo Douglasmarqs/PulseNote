@@ -1,3 +1,18 @@
+import { addDoc, collection } from "firebase/firestore";
+import { db } from "./firebase/firestore.js";
+import { auth } from "./firebase/auth.js";
+
+onAuthStateChanged(auth, (user) => {
+
+  if (!user) {
+    window.location.href = "/src/login.html";
+    return;
+  }
+
+  console.log("Usuário logado:", user.email);
+
+});
+
 const storageKey = "pulsenote-state-v1";
 const statusList = ["Pendente", "Em andamento", "Concluida", "Cancelada"];
 const viewTitles = {
