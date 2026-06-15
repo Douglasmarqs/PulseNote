@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+  <title>PulseNote — Entrar</title>
+  <link rel="stylesheet" href="auth.css"/>
+</head>
+<body>
+
+  <div class="auth-bg">
+    <div class="auth-blobs">
+      <div class="blob blob-1"></div>
+      <div class="blob blob-2"></div>
+      <div class="blob blob-3"></div>
+    </div>
+  </div>
+
+  <main class="auth-shell">
+
+    <!-- Brand -->
+    <div class="auth-brand">
+      <div class="brand-mark">
+        <span class="brand-icon">⚡</span>
+      </div>
+      <div>
+        <strong>PulseNote</strong>
+        <span>Produtividade pessoal</span>
+      </div>
+    </div>
+
+    <!-- Card -->
+    <div class="auth-card">
+
+      <!-- Tabs -->
+      <div class="auth-tabs">
+        <button class="auth-tab active" data-tab="login">Entrar</button>
+        <button class="auth-tab" data-tab="register">Criar conta</button>
+      </div>
+
+      <!-- LOGIN FORM -->
+      <form id="loginForm" class="auth-form active-form">
+        <h1 class="auth-title">Bem-vindo de volta 👋</h1>
+        <p class="auth-subtitle">Entre com seu e-mail e senha</p>
+
+        <div class="field-group">
+          <label class="field-label" for="loginEmail">E-mail</label>
+          <div class="field-wrap">
+            <span class="field-icon">✉️</span>
+            <input id="loginEmail" type="email" class="field-input" placeholder="seu@email.com" autocomplete="email" required/>
+          </div>
+        </div>
+
+        <div class="field-group">
+          <div class="field-label-row">
+            <label class="field-label" for="loginPassword">Senha</label>
+            <a href="forgot-password.html" class="auth-link">Esqueci minha senha</a>
+          </div>
+          <div class="field-wrap">
+            <span class="field-icon">🔒</span>
+            <input id="loginPassword" type="password" class="field-input" placeholder="Sua senha" autocomplete="current-password" required/>
+            <button type="button" class="toggle-pw" data-target="loginPassword">👁️</button>
+          </div>
+        </div>
+
+        <div id="loginError" class="auth-error" hidden></div>
+
+        <button type="submit" class="auth-btn" id="loginBtn">
+          <span class="btn-text">Entrar</span>
+          <span class="btn-spinner" hidden>⏳</span>
+        </button>
+
+        <p class="auth-switch">
+          Não tem conta?
+          <button type="button" class="auth-link" data-switch="register">Criar conta grátis</button>
+        </p>
+      </form>
+
+      <!-- REGISTER FORM -->
+      <form id="registerForm" class="auth-form">
+        <h1 class="auth-title">Criar sua conta ✨</h1>
+        <p class="auth-subtitle">Grátis para sempre. Sem cartão de crédito.</p>
+
+        <div class="field-group">
+          <label class="field-label" for="regName">Nome completo</label>
+          <div class="field-wrap">
+            <span class="field-icon">👤</span>
+            <input id="regName" type="text" class="field-input" placeholder="Seu nome" autocomplete="name" required/>
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label" for="regEmail">E-mail</label>
+          <div class="field-wrap">
+            <span class="field-icon">✉️</span>
+            <input id="regEmail" type="email" class="field-input" placeholder="seu@email.com" autocomplete="email" required/>
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label" for="regPassword">Senha</label>
+          <div class="field-wrap">
+            <span class="field-icon">🔒</span>
+            <input id="regPassword" type="password" class="field-input" placeholder="Mínimo 6 caracteres" autocomplete="new-password" required minlength="6"/>
+            <button type="button" class="toggle-pw" data-target="regPassword">👁️</button>
+          </div>
+          <div class="pw-strength-bar"><div id="pwStrengthFill"></div></div>
+          <span id="pwStrengthLabel" class="pw-strength-label"></span>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label" for="regPasswordConfirm">Confirmar senha</label>
+          <div class="field-wrap">
+            <span class="field-icon">🔒</span>
+            <input id="regPasswordConfirm" type="password" class="field-input" placeholder="Repita a senha" autocomplete="new-password" required/>
+          </div>
+        </div>
+
+        <div id="registerError" class="auth-error" hidden></div>
+
+        <button type="submit" class="auth-btn" id="registerBtn">
+          <span class="btn-text">Criar conta</span>
+          <span class="btn-spinner" hidden>⏳</span>
+        </button>
+
+        <p class="auth-switch">
+          Já tem conta?
+          <button type="button" class="auth-link" data-switch="login">Entrar</button>
+        </p>
+      </form>
+
+    </div><!-- /auth-card -->
+
+    <!-- Features strip -->
+    <div class="auth-features">
+      <div class="feature-pill">📝 Notas coloridas</div>
+      <div class="feature-pill">✅ Tarefas kanban</div>
+      <div class="feature-pill">💰 Finanças</div>
+      <div class="feature-pill">🎯 Metas</div>
+    </div>
+
+  </main>
+
+  <script src="auth.js"></script>
+</body>
+</html>
