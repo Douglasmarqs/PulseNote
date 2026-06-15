@@ -1,0 +1,597 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>PulseNote - Produtividade pessoal</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="auth.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+
+      <!-- ========== SIDEBAR (desktop) ========== -->
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark"><span></span></div>
+          <div>
+            <strong>PulseNote</strong>
+            <span>Produtividade divertida</span>
+          </div>
+        </div>
+
+        <nav class="nav-list" aria-label="Navegação principal">
+          <button class="nav-item active" data-view="dashboard">
+            <span class="icon">🏠</span>
+            <span>Início</span>
+          </button>
+          <button class="nav-item" data-view="notes">
+            <span class="icon">📝</span>
+            <span>Notas</span>
+          </button>
+          <button class="nav-item" data-view="tasks">
+            <span class="icon">✅</span>
+            <span>Tarefas</span>
+          </button>
+          <button class="nav-item" data-view="calendar">
+            <span class="icon">📅</span>
+            <span>Agenda</span>
+          </button>
+          <button class="nav-item" data-view="goals">
+            <span class="icon">🎯</span>
+            <span>Metas</span>
+          </button>
+          <button class="nav-item" data-view="finances">
+            <span class="icon">💰</span>
+            <span>Finanças</span>
+          </button>
+        </nav>
+
+        <div class="sidebar-footer">
+          <label class="theme-picker">
+            <span>Tema</span>
+            <select id="themeSelect" title="Escolher tema">
+              <option value="sunny">☀️ Sol</option>
+              <option value="ocean">🌊 Oceano</option>
+              <option value="candy">🍬 Doce</option>
+              <option value="forest">🌿 Floresta</option>
+              <option value="night">🌙 Noite</option>
+            </select>
+          </label>
+          <button id="themeToggle" class="ghost-button">
+            <span>🎨</span>
+            <span>Trocar tema</span>
+          </button>
+          <div class="streak-box">
+            <span class="muted">🔥 Sequência</span>
+            <strong id="streakCount">0 dias</strong>
+          </div>
+        </div>
+      </aside>
+
+      <!-- ========== MAIN AREA ========== -->
+      <main class="main-area">
+
+        <!-- TOP BAR -->
+        <header class="topbar">
+          <div>
+            <p id="todayLabel">Hoje</p>
+            <h1 id="viewTitle">Seu dia em foco</h1>
+          </div>
+          <div class="topbar-actions">
+            <label class="search-box">
+              <span class="icon">🔍</span>
+              <input id="globalSearch" type="search" placeholder="Pesquisar..." />
+            </label>
+            <label class="theme-chip" title="Tema">
+              <span class="icon">🎨</span>
+              <select id="themeSelectMobile">
+                <option value="sunny">Sol</option>
+                <option value="ocean">Oceano</option>
+                <option value="candy">Doce</option>
+                <option value="forest">Floresta</option>
+                <option value="night">Noite</option>
+              </select>
+            </label>
+            <button id="quickAddTask" class="primary-button">
+              <span class="icon">＋</span>
+              <span>Tarefa</span>
+            </button>
+          </div>
+        </header>
+
+        <!-- ===== DASHBOARD VIEW ===== -->
+        <section id="dashboardView" class="view active-view">
+
+          <!-- Hero -->
+          <section class="daily-hero">
+            <div class="hero-copy">
+              <p class="eyebrow">Jornada de hoje</p>
+              <h2 id="heroQuestLabel">Complete tarefas para ganhar XP</h2>
+              <div class="hero-progress">
+                <div class="progress-track"><div id="heroProgressBar"></div></div>
+                <strong id="heroProgressLabel">0%</strong>
+              </div>
+              <div class="hero-actions">
+                <button class="primary-button" data-view-shortcut="tasks">🎯 Começar foco</button>
+                <span class="pill" id="heroLevelLabel">Nível 1</span>
+              </div>
+            </div>
+            <div class="mascot-card" aria-hidden="true">
+              <div class="mascot">
+                <span class="mascot-eye left"></span>
+                <span class="mascot-eye right"></span>
+                <span class="mascot-smile"></span>
+                <span class="mascot-badge">XP</span>
+              </div>
+            </div>
+          </section>
+
+          <!-- Metrics -->
+          <div class="metric-grid">
+            <article class="metric-panel">
+              <span class="metric-icon">✅</span>
+              <span>Tarefas concluídas</span>
+              <strong id="doneMetric">0</strong>
+              <small id="doneMetricDetail">Hoje</small>
+            </article>
+            <article class="metric-panel">
+              <span class="metric-icon">📊</span>
+              <span>Progresso geral</span>
+              <strong id="progressMetric">0%</strong>
+              <small>Notas, tarefas e metas</small>
+            </article>
+            <article class="metric-panel">
+              <span class="metric-icon">📅</span>
+              <span>Compromissos</span>
+              <strong id="eventMetric">0</strong>
+              <small>Próximos 7 dias</small>
+            </article>
+            <article class="metric-panel">
+              <span class="metric-icon">⭐</span>
+              <span>Pontos XP</span>
+              <strong id="scoreMetric">0</strong>
+              <small id="levelMetric">Nível 1</small>
+            </article>
+          </div>
+
+          <!-- Dashboard panels -->
+          <div class="dashboard-layout">
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Resumo</p>
+                  <h2>Prioridades do dia</h2>
+                </div>
+                <button class="icon-button" data-view-shortcut="tasks" title="Ver tarefas">→</button>
+              </div>
+              <div id="todayTasks" class="compact-list"></div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Agenda</p>
+                  <h2>Próximos compromissos</h2>
+                </div>
+                <button class="icon-button" data-view-shortcut="calendar" title="Ver agenda">→</button>
+              </div>
+              <div id="upcomingEvents" class="event-list"></div>
+            </section>
+
+            <section class="panel wide">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Produtividade</p>
+                  <h2>Desempenho semanal</h2>
+                </div>
+                <span class="pill" id="weeklySummary">0 concluídas</span>
+              </div>
+              <div id="chartBars" class="bar-chart"></div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Metas</p>
+                  <h2>Foco da semana</h2>
+                </div>
+                <button class="icon-button" data-view-shortcut="goals" title="Ver metas">→</button>
+              </div>
+              <div id="goalSummary" class="goal-stack"></div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Finanças do mês</p>
+                  <h2>Resumo rápido</h2>
+                </div>
+                <button class="icon-button" data-view-shortcut="finances" title="Ver finanças">→</button>
+              </div>
+              <div id="dashFinancePanel"></div>
+            </section>
+          </div>
+        </section>
+
+        <!-- ===== NOTES VIEW ===== -->
+        <section id="notesView" class="view">
+          <div class="workbench">
+
+            <!-- Editor -->
+            <form id="noteForm" class="editor-panel">
+              <div class="form-heading">
+                <div>
+                  <p class="eyebrow">Nova anotação</p>
+                  <h2>Capturar ideia</h2>
+                </div>
+                <button type="submit" class="primary-button">
+                  <span class="icon">＋</span>
+                  <span>Salvar</span>
+                </button>
+              </div>
+              <input id="noteId" type="hidden" />
+              <label>
+                Título
+                <input id="noteTitle" required maxlength="80" placeholder="Ex.: Planejar projeto" />
+              </label>
+              <label>
+                Descrição
+                <textarea id="noteDescription" rows="4" placeholder="Detalhes, tópicos, links..."></textarea>
+              </label>
+              <div class="form-grid">
+                <label>
+                  Categoria
+                  <input id="noteCategory" list="categoryOptions" placeholder="Trabalho" />
+                </label>
+                <label>
+                  Pasta
+                  <input id="noteFolder" placeholder="Projetos" />
+                </label>
+                <label>
+                  Tags
+                  <input id="noteTags" placeholder="planejamento, foco" />
+                </label>
+                <label>
+                  Prioridade
+                  <select id="notePriority">
+                    <option>Baixa</option>
+                    <option selected>Media</option>
+                    <option>Alta</option>
+                    <option>Urgente</option>
+                  </select>
+                </label>
+              </div>
+              <label>
+                Checklist
+                <textarea id="noteChecklist" rows="3" placeholder="Uma tarefa por linha"></textarea>
+              </label>
+              <label>
+                Anexos e links
+                <input id="noteAttachments" placeholder="https://..." />
+              </label>
+              <label>
+                Meta relacionada
+                <input id="noteGoal" placeholder="Ex.: Entregar MVP esta semana" />
+              </label>
+              <label>
+                Observações adicionais
+                <textarea id="noteObservations" rows="2"></textarea>
+              </label>
+              <div class="form-actions">
+                <button id="resetNoteForm" type="button" class="ghost-button">Limpar</button>
+                <button id="suggestNote" type="button" class="ghost-button">✨ Sugerir com IA</button>
+              </div>
+            </form>
+
+            <!-- Notes List -->
+            <section class="list-panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Biblioteca</p>
+                  <h2>Anotações</h2>
+                </div>
+              </div>
+
+              <!-- Filter chips -->
+              <div class="note-filters">
+                <button class="filter-chip active" data-note-filter="all">📋 Todas</button>
+                <button class="filter-chip" data-note-filter="favorite">⭐ Favoritas</button>
+                <button class="filter-chip" data-note-filter="Alta">🔴 Alta</button>
+                <button class="filter-chip" data-note-filter="Urgente">🚨 Urgentes</button>
+              </div>
+
+              <!-- Legacy select (hidden, kept for JS compat) -->
+              <select id="noteFilter" style="display:none">
+                <option value="all">Todas</option>
+                <option value="favorite">Favoritas</option>
+                <option value="Alta">Alta prioridade</option>
+                <option value="Urgente">Urgentes</option>
+              </select>
+
+              <div id="notesList" class="note-grid"></div>
+            </section>
+          </div>
+        </section>
+
+        <!-- ===== TASKS VIEW ===== -->
+        <section id="tasksView" class="view">
+          <div class="board-toolbar">
+            <form id="taskForm" class="inline-form">
+              <input id="taskTitle" required placeholder="➕ Adicionar tarefa rápida" />
+              <select id="taskPriority">
+                <option>Baixa</option>
+                <option selected>Media</option>
+                <option>Alta</option>
+                <option>Urgente</option>
+              </select>
+              <input id="taskDue" type="date" />
+              <button class="primary-button" type="submit">
+                <span>Adicionar</span>
+              </button>
+            </form>
+            <div class="progress-strip">
+              <span>Progresso</span>
+              <div class="progress-track"><div id="taskProgressBar"></div></div>
+              <strong id="taskProgressLabel">0%</strong>
+            </div>
+          </div>
+          <div id="taskBoard" class="task-board"></div>
+        </section>
+
+        <!-- ===== CALENDAR VIEW ===== -->
+        <section id="calendarView" class="view">
+          <div class="calendar-layout">
+            <form id="eventForm" class="editor-panel compact-editor">
+              <div class="form-heading">
+                <div>
+                  <p class="eyebrow">Agenda</p>
+                  <h2>Novo compromisso</h2>
+                </div>
+                <button class="primary-button" type="submit">
+                  <span>Salvar</span>
+                </button>
+              </div>
+              <input id="eventTitle" required placeholder="Título do compromisso" />
+              <div class="form-grid">
+                <input id="eventDate" type="date" required />
+                <input id="eventTime" type="time" required />
+              </div>
+              <input id="eventLocation" placeholder="📍 Local ou link" />
+              <select id="eventReminder">
+                <option value="5">5 min antes</option>
+                <option value="15" selected>15 min antes</option>
+                <option value="30">30 min antes</option>
+                <option value="60">1 hora antes</option>
+              </select>
+              <textarea id="eventNotes" rows="3" placeholder="Notas do compromisso"></textarea>
+            </form>
+
+            <section class="calendar-panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Calendário</p>
+                  <h2 id="monthLabel">Mês</h2>
+                </div>
+                <div class="segmented">
+                  <button class="active" data-calendar-mode="month">Mês</button>
+                  <button data-calendar-mode="week">Semana</button>
+                  <button data-calendar-mode="day">Dia</button>
+                </div>
+              </div>
+              <div id="calendarGrid" class="calendar-grid"></div>
+              <div id="calendarEvents" class="event-list"></div>
+            </section>
+          </div>
+        </section>
+
+        <!-- ===== GOALS VIEW ===== -->
+        <section id="goalsView" class="view">
+          <div class="goals-layout">
+            <form id="goalForm" class="inline-form">
+              <input id="goalTitle" required placeholder="🎯 Nova meta da semana" />
+              <input id="goalTarget" type="number" min="1" max="100" value="5" style="max-width:100px" />
+              <button class="primary-button" type="submit">
+                <span>Criar meta</span>
+              </button>
+            </form>
+            <div id="goalsList" class="goal-grid"></div>
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Conquistas</p>
+                  <h2>Gamificação</h2>
+                </div>
+                <span class="pill" id="achievementCount">0/4</span>
+              </div>
+              <div id="achievements" class="achievement-grid"></div>
+            </section>
+          </div>
+        </section>
+
+        <!-- ===== FINANCES VIEW ===== -->
+        <section id="financesView" class="view">
+          <div class="fin-layout">
+
+            <!-- LEFT: Form + Summary -->
+            <div class="fin-left">
+
+              <!-- Add transaction form -->
+              <div class="editor-panel fin-form-card">
+                <div class="form-heading">
+                  <div>
+                    <p class="eyebrow">Novo registro</p>
+                    <h2>Adicionar</h2>
+                  </div>
+                </div>
+
+                <!-- Type toggle -->
+                <div class="fin-type-toggle">
+                  <button class="fin-type-btn active" data-fin-type="despesa">
+                    💸 Despesa
+                  </button>
+                  <button class="fin-type-btn" data-fin-type="receita">
+                    💰 Receita
+                  </button>
+                </div>
+
+                <form id="expenseForm">
+                  <input id="expenseType" type="hidden" value="despesa" />
+                  <div class="fin-amount-field">
+                    <span class="fin-currency-sign">R$</span>
+                    <input id="expenseAmount" type="text" inputmode="decimal" placeholder="0,00" required />
+                  </div>
+                  <label>
+                    Descrição
+                    <input id="expenseDescription" placeholder="Ex.: Almoço, Salário..." />
+                  </label>
+                  <label>
+                    Categoria
+                    <select id="expenseCategory">
+                      <option value="alimentacao">🍔 Alimentação</option>
+                      <option value="transporte">🚗 Transporte</option>
+                      <option value="saude">💊 Saúde</option>
+                      <option value="lazer">🎬 Lazer</option>
+                      <option value="educacao">📚 Educação</option>
+                      <option value="moradia">🏠 Moradia</option>
+                      <option value="roupas">👗 Roupas</option>
+                      <option value="outros">📦 Outros</option>
+                    </select>
+                  </label>
+                  <label>
+                    Data
+                    <input id="expenseDate" type="date" />
+                  </label>
+                  <button type="submit" class="primary-button" style="width:100%;justify-content:center;height:48px;font-size:1rem">
+                    ➕ Registrar
+                  </button>
+                </form>
+              </div>
+
+              <!-- Month filter -->
+              <div class="note-filters" id="finMonthFilters" style="margin-top:4px">
+                <button class="filter-chip active" data-fin-filter="current">Este mês</button>
+                <button class="filter-chip" data-fin-filter="all">Todos</button>
+              </div>
+
+              <!-- Summary cards -->
+              <div class="fin-summary-grid">
+                <div class="fin-summary-card receita">
+                  <span class="fin-sum-icon">💰</span>
+                  <span class="fin-sum-label">Receitas</span>
+                  <strong id="finReceitas">R$ 0,00</strong>
+                </div>
+                <div class="fin-summary-card despesa">
+                  <span class="fin-sum-icon">💸</span>
+                  <span class="fin-sum-label">Despesas</span>
+                  <strong id="finDespesas">R$ 0,00</strong>
+                </div>
+                <div class="fin-summary-card saldo" id="finSaldoCard">
+                  <span class="fin-sum-icon">📊</span>
+                  <span class="fin-sum-label">Saldo</span>
+                  <strong id="finSaldo">R$ 0,00</strong>
+                </div>
+              </div>
+
+              <!-- Budget bar -->
+              <div class="fin-budget-bar panel" style="padding:16px">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                  <span style="font-weight:700;font-size:0.9rem">Uso do orçamento</span>
+                  <span id="finUsedLabel" style="font-size:0.8rem;color:var(--muted)">0%</span>
+                </div>
+                <div class="progress-track" style="height:10px">
+                  <div id="finProgressBar" style="width:0%;transition:width 400ms ease;background:var(--green)"></div>
+                </div>
+              </div>
+
+              <!-- Category breakdown -->
+              <div class="panel">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Análise</p>
+                    <h2>Por categoria</h2>
+                  </div>
+                </div>
+                <div id="finCategories" class="fin-cat-list"></div>
+              </div>
+            </div>
+
+            <!-- RIGHT: Calendar + Transactions -->
+            <div class="fin-right">
+
+              <!-- Financial Calendar -->
+              <div class="panel fin-calendar-card">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Calendário</p>
+                    <h2 id="finMonthLabel">Financeiro</h2>
+                  </div>
+                  <div style="display:flex;gap:6px">
+                    <span class="pill" style="background:var(--green-soft);color:var(--green);border-color:var(--green)">● Receita</span>
+                    <span class="pill" style="background:var(--red-soft);color:var(--red);border-color:var(--red)">● Despesa</span>
+                  </div>
+                </div>
+                <div id="finCalGrid" class="fin-cal-grid"></div>
+              </div>
+
+              <!-- Transaction list -->
+              <div class="panel">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Histórico</p>
+                    <h2>Transações</h2>
+                  </div>
+                </div>
+                <div id="finTransactions" class="fin-tx-list"></div>
+              </div>
+            </div>
+
+          </div><!-- /fin-layout -->
+        </section><!-- /financesView -->
+
+      </main><!-- /main-area -->
+    </div><!-- /app-shell -->
+
+    <!-- ========== BOTTOM NAV (mobile) ========== -->
+    <nav class="bottom-nav" aria-label="Navegação mobile">
+      <button class="bottom-nav-item active" data-view="dashboard">
+        <span class="bn-icon">🏠</span>
+        <span>Início</span>
+      </button>
+      <button class="bottom-nav-item" data-view="notes">
+        <span class="bn-icon">📝</span>
+        <span>Notas</span>
+      </button>
+      <button class="bottom-nav-item" data-view="tasks">
+        <span class="bn-icon">✅</span>
+        <span>Tarefas</span>
+      </button>
+      <button class="bottom-nav-item" data-view="calendar">
+        <span class="bn-icon">📅</span>
+        <span>Agenda</span>
+      </button>
+      <button class="bottom-nav-item" data-view="goals">
+        <span class="bn-icon">🎯</span>
+        <span>Metas</span>
+      </button>
+      <button class="bottom-nav-item" data-view="finances">
+        <span class="bn-icon">💰</span>
+        <span>Finanças</span>
+      </button>
+    </nav>
+
+    <!-- Toast -->
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <!-- Datalists -->
+    <datalist id="categoryOptions">
+      <option value="Trabalho"></option>
+      <option value="Estudos"></option>
+      <option value="Pessoal"></option>
+      <option value="Saúde"></option>
+      <option value="Finanças"></option>
+    </datalist>
+
+    <script src="app.js"></script>
+  </body>
+</html>
