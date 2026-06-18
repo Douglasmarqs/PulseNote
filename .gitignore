@@ -1,0 +1,10 @@
+# Pastas antigas / indesejadas
+backend/
+frontend/
+{backend,frontend}/
+node_modules/
+
+# Sistema
+.DS_Store
+Thumbs.db
+*.log

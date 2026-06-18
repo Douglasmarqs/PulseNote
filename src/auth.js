@@ -1,5 +1,4 @@
 // auth.js — Autenticação PulseNote via Firebase
-// Usado em: login.html e forgot-password.html
 
 import { auth } from "./firebase-init.js";
 import {
@@ -10,98 +9,44 @@ import {
   onAuthStateChanged,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
-// ── Tradução de erros Firebase para PT-BR ──────────────────────
+// ── Tradução de erros Firebase → PT-BR (cobre todos os casos conhecidos) ──
 function translateAuthError(code) {
   const map = {
-    "auth/email-already-in-use":   "Este e-mail já está cadastrado.",
-    "auth/invalid-email":          "E-mail inválido.",
-    "auth/weak-password":          "A senha deve ter pelo menos 6 caracteres.",
-    "auth/user-not-found":         "E-mail ou senha incorretos.",
-    "auth/wrong-password":         "E-mail ou senha incorretos.",
-    "auth/invalid-credential":     "E-mail ou senha incorretos.",
-    "auth/too-many-requests":      "Muitas tentativas. Aguarde alguns minutos.",
-    "auth/network-request-failed": "Erro de conexão. Verifique sua internet.",
-    "auth/user-disabled":          "Esta conta foi desativada.",
-    "auth/missing-password":       "Informe sua senha.",
-    "auth/missing-email":          "Informe seu e-mail.",
+    // Cadastro
+    "auth/email-already-in-use":        "Este e-mail já está cadastrado. Tente fazer login.",
+    "auth/invalid-email":               "E-mail inválido. Verifique o formato.",
+    "auth/weak-password":               "Senha muito fraca. Use pelo menos 6 caracteres.",
+    "auth/operation-not-allowed":       "Cadastro por e-mail não está ativado. Fale com o administrador.",
+    // Login
+    "auth/user-not-found":              "E-mail não encontrado. Verifique ou crie uma conta.",
+    "auth/wrong-password":              "Senha incorreta. Tente novamente.",
+    "auth/invalid-credential":          "E-mail ou senha incorretos.",
+    "auth/user-disabled":               "Esta conta foi desativada.",
+    // Domínio / configuração
+    "auth/unauthorized-domain":         "Este domínio não está autorizado no Firebase. Adicione-o em Authentication → Settings → Authorized domains.",
+    "auth/configuration-not-found":     "Firebase não configurado corretamente. Verifique o firebase-config.js.",
+    // Rede / limite
+    "auth/too-many-requests":           "Muitas tentativas. Aguarde alguns minutos e tente novamente.",
+    "auth/network-request-failed":      "Sem conexão. Verifique sua internet e tente novamente.",
+    // Campos
+    "auth/missing-password":            "Informe sua senha.",
+    "auth/missing-email":               "Informe seu e-mail.",
+    "auth/internal-error":              "Erro interno do Firebase. Tente novamente em instantes.",
   };
-  return map[code] || "Ocorreu um erro inesperado. Tente novamente.";
+  return map[code] || `Erro inesperado (${code}). Tente novamente.`;
 }
 
-// ── Guard: se já está logado na login.html, vai direto para o app ──
-// Usa unsubscribe para não ficar escutando após redirecionar
+// ── Guard: já logado → vai direto para o app ──────────────────
 const unsubscribeAuthCheck = onAuthStateChanged(auth, (user) => {
-  unsubscribeAuthCheck(); // para de escutar depois da primeira checagem
-  const isLoginPage = window.location.pathname.endsWith("login.html")
-    || window.location.pathname === "/"
-    || window.location.pathname.endsWith("/");
-  if (user && isLoginPage) {
+  unsubscribeAuthCheck();
+  const path = window.location.pathname;
+  const isAuthPage = path.endsWith("login.html")
+    || path === "/"
+    || path.endsWith("/");
+  if (user && isAuthPage) {
     window.location.replace("index.html");
   }
 });
-
-// ── Tabs: alterna entre Entrar / Criar conta ───────────────────
-document.querySelectorAll(".auth-tab").forEach((tab) => {
-  tab.addEventListener("click", () => switchTab(tab.dataset.tab));
-});
-document.querySelectorAll("[data-switch]").forEach((btn) => {
-  btn.addEventListener("click", () => switchTab(btn.dataset.switch));
-});
-
-function switchTab(target) {
-  document.querySelectorAll(".auth-tab").forEach((t) =>
-    t.classList.toggle("active", t.dataset.tab === target)
-  );
-  document.querySelectorAll(".auth-form").forEach((f) =>
-    f.classList.remove("active-form")
-  );
-  const formId = target === "login" ? "loginForm" : "registerForm";
-  const form = document.getElementById(formId);
-  if (form) {
-    form.classList.add("active-form");
-    form.querySelector("input")?.focus();
-  }
-}
-
-// ── Toggle mostrar/ocultar senha ───────────────────────────────
-document.querySelectorAll(".toggle-pw").forEach((btn) => {
-  btn.addEventListener("click", () => {
-    const input = document.getElementById(btn.dataset.target);
-    if (!input) return;
-    input.type = input.type === "password" ? "text" : "password";
-    btn.textContent = input.type === "password" ? "👁️" : "🙈";
-  });
-});
-
-// ── Medidor de força da senha ──────────────────────────────────
-const pwInput = document.getElementById("regPassword");
-if (pwInput) pwInput.addEventListener("input", () => updateStrength(pwInput.value));
-
-function updateStrength(pw) {
-  const fill  = document.getElementById("pwStrengthFill");
-  const label = document.getElementById("pwStrengthLabel");
-  if (!fill || !label) return;
-
-  let score = 0;
-  if (pw.length >= 6)               score++;
-  if (pw.length >= 10)              score++;
-  if (/[A-Z]/.test(pw))            score++;
-  if (/[0-9]/.test(pw))            score++;
-  if (/[^A-Za-z0-9]/.test(pw))    score++;
-
-  const levels = [
-    { w: "0%",   color: "#e8ecf2", text: "" },
-    { w: "25%",  color: "#ff3b30", text: "Fraca" },
-    { w: "50%",  color: "#ff9500", text: "Regular" },
-    { w: "75%",  color: "#ffcc00", text: "Boa" },
-    { w: "100%", color: "#34c759", text: "Forte 💪" },
-  ];
-  const lvl             = levels[Math.min(score, 4)];
-  fill.style.width      = pw.length === 0 ? "0%" : lvl.w;
-  fill.style.background = lvl.color;
-  label.textContent     = pw.length === 0 ? "" : lvl.text;
-  label.style.color     = lvl.color;
-}
 
 // ── Helpers UI ─────────────────────────────────────────────────
 function showError(elId, msg) {
@@ -124,6 +69,66 @@ function setLoading(btnId, loading) {
   if (spinner) spinner.hidden = !loading;
 }
 
+// ── Tabs ───────────────────────────────────────────────────────
+document.querySelectorAll(".auth-tab").forEach((tab) => {
+  tab.addEventListener("click", () => switchTab(tab.dataset.tab));
+});
+document.querySelectorAll("[data-switch]").forEach((btn) => {
+  btn.addEventListener("click", () => switchTab(btn.dataset.switch));
+});
+
+function switchTab(target) {
+  document.querySelectorAll(".auth-tab").forEach((t) =>
+    t.classList.toggle("active", t.dataset.tab === target)
+  );
+  document.querySelectorAll(".auth-form").forEach((f) =>
+    f.classList.remove("active-form")
+  );
+  const form = document.getElementById(target === "login" ? "loginForm" : "registerForm");
+  if (form) {
+    form.classList.add("active-form");
+    form.querySelector("input")?.focus();
+  }
+}
+
+// ── Toggle senha visível/oculta ────────────────────────────────
+document.querySelectorAll(".toggle-pw").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const input = document.getElementById(btn.dataset.target);
+    if (!input) return;
+    input.type = input.type === "password" ? "text" : "password";
+    btn.textContent = input.type === "password" ? "👁️" : "🙈";
+  });
+});
+
+// ── Medidor de força da senha ──────────────────────────────────
+const pwInput = document.getElementById("regPassword");
+if (pwInput) pwInput.addEventListener("input", () => updateStrength(pwInput.value));
+
+function updateStrength(pw) {
+  const fill  = document.getElementById("pwStrengthFill");
+  const label = document.getElementById("pwStrengthLabel");
+  if (!fill || !label) return;
+  let score = 0;
+  if (pw.length >= 6)            score++;
+  if (pw.length >= 10)           score++;
+  if (/[A-Z]/.test(pw))         score++;
+  if (/[0-9]/.test(pw))         score++;
+  if (/[^A-Za-z0-9]/.test(pw)) score++;
+  const levels = [
+    { w: "0%",   color: "#e8ecf2", text: "" },
+    { w: "25%",  color: "#ff3b30", text: "Fraca" },
+    { w: "50%",  color: "#ff9500", text: "Regular" },
+    { w: "75%",  color: "#ffcc00", text: "Boa" },
+    { w: "100%", color: "#34c759", text: "Forte 💪" },
+  ];
+  const lvl = levels[Math.min(score, 4)];
+  fill.style.width      = pw.length === 0 ? "0%" : lvl.w;
+  fill.style.background = lvl.color;
+  label.textContent     = pw.length === 0 ? "" : lvl.text;
+  label.style.color     = lvl.color;
+}
+
 // ── LOGIN ──────────────────────────────────────────────────────
 const loginForm = document.getElementById("loginForm");
 if (loginForm) {
@@ -137,6 +142,7 @@ if (loginForm) {
       await signInWithEmailAndPassword(auth, email, password);
       window.location.replace("index.html");
     } catch (err) {
+      console.error("Login error:", err.code, err.message);
       showError("loginError", translateAuthError(err.code));
       setLoading("loginBtn", false);
     }
@@ -155,16 +161,21 @@ if (registerForm) {
     const pw      = document.getElementById("regPassword").value;
     const confirm = document.getElementById("regPasswordConfirm").value;
 
+    // Validações no front antes de chamar o Firebase
     if (name.length < 2) {
       showError("registerError", "Informe seu nome completo.");
       return;
     }
-    if (pw !== confirm) {
-      showError("registerError", "As senhas não conferem.");
+    if (!email.includes("@")) {
+      showError("registerError", "Informe um e-mail válido.");
       return;
     }
     if (pw.length < 6) {
       showError("registerError", "A senha deve ter pelo menos 6 caracteres.");
+      return;
+    }
+    if (pw !== confirm) {
+      showError("registerError", "As senhas não conferem.");
       return;
     }
 
@@ -172,8 +183,10 @@ if (registerForm) {
     try {
       const credential = await createUserWithEmailAndPassword(auth, email, pw);
       await updateProfile(credential.user, { displayName: name });
+      // Cadastro OK → vai direto para o app
       window.location.replace("index.html");
     } catch (err) {
+      console.error("Register error:", err.code, err.message);
       showError("registerError", translateAuthError(err.code));
       setLoading("registerBtn", false);
     }
@@ -187,7 +200,6 @@ if (forgotForm) {
     e.preventDefault();
     hideError("forgotError");
     setLoading("forgotBtn", true);
-
     const email = document.getElementById("forgotEmail").value.trim();
     try {
       await sendPasswordResetEmail(auth, email, {
@@ -196,13 +208,13 @@ if (forgotForm) {
       document.getElementById("stepEmail").hidden   = true;
       document.getElementById("stepSuccess").hidden = false;
     } catch (err) {
-      // Por segurança, não revelamos se o e-mail existe ou não
+      console.error("Reset error:", err.code, err.message);
       if (err.code === "auth/invalid-email") {
         showError("forgotError", "Informe um e-mail válido.");
         setLoading("forgotBtn", false);
         return;
       }
-      // Para qualquer outro erro (e-mail não existe, etc), mostramos sucesso
+      // Qualquer outro erro: mostramos sucesso por segurança (não revelamos e-mails cadastrados)
       document.getElementById("stepEmail").hidden   = true;
       document.getElementById("stepSuccess").hidden = false;
     }

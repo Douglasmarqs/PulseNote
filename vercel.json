@@ -1,9 +1,9 @@
 {
   "rewrites": [
-    { "source": "/",                   "destination": "/src/login.html" },
-    { "source": "/login",              "destination": "/src/login.html" },
-    { "source": "/app",                "destination": "/src/index.html" },
-    { "source": "/forgot-password",    "destination": "/src/forgot-password.html" }
+    { "source": "/",                "destination": "/src/login.html" },
+    { "source": "/login",           "destination": "/src/login.html" },
+    { "source": "/app",             "destination": "/src/index.html" },
+    { "source": "/forgot-password", "destination": "/src/forgot-password.html" }
   ],
   "headers": [
     {
