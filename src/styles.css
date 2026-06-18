@@ -1350,3 +1350,323 @@ textarea { resize: vertical; min-height: 80px; }
   .dashboard-layout { grid-template-columns: repeat(3, 1fr); }
   .metric-grid { grid-template-columns: repeat(4, 1fr); }
 }
+
+/* ============================================================
+   FINANCES MODULE
+   ============================================================ */
+
+/* Layout */
+.fin-layout {
+  display: grid;
+  grid-template-columns: 380px 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+.fin-left, .fin-right { display: grid; gap: 16px; }
+
+/* Form card */
+.fin-form-card { gap: 14px; }
+
+/* Type toggle */
+.fin-type-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 4px;
+  background: var(--surface2);
+  border-radius: 14px;
+  border: 1.5px solid var(--line);
+}
+
+.fin-type-btn {
+  padding: 10px 6px;
+  border-radius: 11px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text2);
+  transition: all 200ms ease;
+  border: none;
+  background: none;
+}
+
+.fin-type-btn.active[data-fin-type="despesa"] {
+  background: var(--red-soft);
+  color: var(--red);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+.fin-type-btn.active[data-fin-type="receita"] {
+  background: var(--green-soft);
+  color: var(--green);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+/* Amount field */
+.fin-amount-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface2);
+  border: 2px solid var(--line);
+  border-radius: 16px;
+  padding: 4px 16px;
+  transition: border-color 200ms, box-shadow 200ms;
+}
+
+.fin-amount-field:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  background: var(--surface);
+}
+
+.fin-currency-sign {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.fin-amount-field input {
+  border: none;
+  background: transparent;
+  font-size: 1.8rem;
+  font-weight: 800;
+  color: var(--text);
+  min-height: 52px;
+  padding: 0;
+  letter-spacing: -0.03em;
+  box-shadow: none !important;
+}
+
+.fin-amount-field input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+/* Summary cards */
+.fin-summary-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+}
+
+.fin-summary-card {
+  background: var(--surface);
+  border-radius: 18px;
+  border: 1.5px solid var(--line);
+  padding: 16px 14px;
+  display: grid;
+  gap: 4px;
+  box-shadow: var(--shadow-card);
+  transition: transform 180ms;
+}
+
+.fin-summary-card:hover { transform: translateY(-2px); }
+
+.fin-sum-icon {
+  font-size: 1.4rem;
+  margin-bottom: 2px;
+}
+
+.fin-sum-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.fin-summary-card strong {
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.fin-summary-card.receita strong { color: var(--green); }
+.fin-summary-card.despesa strong { color: var(--red); }
+.fin-summary-card.saldo strong   { color: var(--saldo-color, var(--green)); }
+
+/* Category breakdown */
+.fin-cat-list { display: grid; gap: 10px; }
+
+.fin-cat-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.fin-cat-info {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 120px;
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--text2);
+}
+
+.fin-cat-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.fin-cat-label { white-space: nowrap; }
+
+.fin-cat-bar-wrap {
+  flex: 1;
+  height: 8px;
+  background: var(--surface2);
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+}
+
+.fin-cat-bar {
+  height: 100%;
+  border-radius: inherit;
+  min-width: 4px;
+  transition: width 400ms ease;
+}
+
+.fin-cat-value {
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--text);
+  min-width: 80px;
+  text-align: right;
+}
+
+/* Financial calendar */
+.fin-calendar-card { padding: 18px; }
+
+.fin-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 5px;
+}
+
+.fin-cal-day {
+  aspect-ratio: 1;
+  border-radius: 10px;
+  background: var(--surface2);
+  border: 1.5px solid transparent;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text2);
+  cursor: pointer;
+  transition: all 150ms;
+  gap: 2px;
+  padding: 0;
+}
+
+.fin-cal-day strong {
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.fin-cal-day:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.fin-cal-day.today {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.fin-cal-day.has-data {
+  border-color: var(--line);
+}
+
+/* Day dots */
+.fin-day-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.fin-day-dot.receita { background: var(--green); }
+.fin-day-dot.despesa { background: var(--red); }
+.fin-day-dot.both    { background: linear-gradient(90deg, var(--green) 50%, var(--red) 50%); }
+
+.fin-cal-day.today .fin-day-dot { background: rgba(255,255,255,0.7); }
+
+/* Transaction list */
+.fin-tx-list { display: grid; gap: 8px; }
+
+.fin-transaction {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: var(--surface2);
+  border-radius: 14px;
+  border: 1.5px solid var(--line);
+  transition: all 160ms;
+}
+
+.fin-transaction:hover { background: var(--line); }
+
+.fin-tx-icon {
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+
+.fin-tx-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.fin-tx-info strong {
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fin-tx-amount {
+  font-size: 0.96rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.fin-tx-amount.receita { color: var(--green); }
+.fin-tx-amount.despesa { color: var(--red); }
+
+/* ---- Finance responsive ---- */
+@media (max-width: 1100px) {
+  .fin-layout { grid-template-columns: 1fr; }
+  .fin-summary-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+@media (max-width: 720px) {
+  .fin-layout { grid-template-columns: 1fr; gap: 14px; }
+  .fin-summary-grid { grid-template-columns: 1fr 1fr; }
+  .fin-summary-grid .fin-summary-card:last-child { grid-column: span 2; }
+  .fin-cal-grid { grid-template-columns: repeat(7, 1fr); gap: 3px; }
+  .fin-cal-day { font-size: 0.7rem; border-radius: 8px; }
+  .fin-cat-info { min-width: 90px; font-size: 0.78rem; }
+  .fin-cat-value { min-width: 64px; font-size: 0.78rem; }
+}

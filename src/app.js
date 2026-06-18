@@ -1,4 +1,158 @@
-const storageKey = "pulsenote-state-v1";
+// ============================================================
+// PulseNote — Autenticação e sincronização via Firebase
+// ============================================================
+import { auth, db } from "./firebase-init.js";
+import {
+  onAuthStateChanged,
+  signOut,
+  updateProfile,
+  updatePassword,
+  reauthenticateWithCredential,
+  EmailAuthProvider,
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {
+  doc,
+  setDoc,
+  onSnapshot,
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const storageKey = "pulsenote-state-v1"; // cache local — só para abrir o app instantaneamente
+
+let currentUser   = null;   // objeto do usuário logado (Firebase Auth)
+let unsubscribeDoc = null;  // função para parar de "escutar" o Firestore
+let syncTimer      = null;
+
+// ── Helpers de usuário (substituem getToken/getUser antigos) ──
+function getUser() {
+  if (!currentUser) return null;
+  return {
+    id: currentUser.uid,
+    name: currentUser.displayName || "Usuário",
+    email: currentUser.email,
+  };
+}
+
+// ── Indicador visual de status de sincronização ───────────────
+function showSyncStatus(status) {
+  let el = document.getElementById("syncStatus");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "syncStatus";
+    el.style.cssText = `
+      position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
+      padding:7px 16px;border-radius:999px;font-size:0.78rem;font-weight:700;
+      z-index:9999;transition:opacity 300ms;pointer-events:none;
+      background:var(--surface,#fff);border:1.5px solid var(--line,#e8ecf2);
+      box-shadow:0 4px 16px rgba(0,0,0,0.1);color:var(--text2,#4a5568);
+    `;
+    document.body.appendChild(el);
+  }
+  const states = {
+    saving:  { text: "⏳ Salvando...",          color: "var(--accent,#4f8ef7)" },
+    saved:   { text: "✅ Salvo na nuvem",       color: "var(--green,#34c759)"  },
+    offline: { text: "📵 Sem conexão (local)",  color: "var(--orange,#ff9500)" },
+    error:   { text: "❌ Erro ao salvar",       color: "var(--red,#ff3b30)"    },
+  };
+  const s = states[status] || states.saved;
+  el.textContent   = s.text;
+  el.style.color   = s.color;
+  el.style.opacity = "1";
+  if (status === "saved") setTimeout(() => { el.style.opacity = "0"; }, 1800);
+}
+
+// ── Salva o state atual no Firestore (documento do usuário) ───
+async function syncToServer() {
+  if (!currentUser || !state) return;
+  showSyncStatus("saving");
+  try {
+    await setDoc(doc(db, "userData", currentUser.uid), {
+      data: state,
+      updatedAt: new Date().toISOString(),
+    });
+    localStorage.setItem(storageKey, JSON.stringify(state));
+    showSyncStatus("saved");
+  } catch (err) {
+    console.error("Erro ao salvar no Firestore:", err);
+    showSyncStatus(navigator.onLine ? "error" : "offline");
+  }
+}
+
+function scheduleSyncToServer() {
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(syncToServer, 1200);
+}
+
+// Mostra avisos quando a conexão cai ou volta
+window.addEventListener("offline", () => showSyncStatus("offline"));
+window.addEventListener("online", () => {
+  if (currentUser) syncToServer();
+});
+
+// ── Logout ──────────────────────────────────────────────────
+async function logout() {
+  try {
+    if (unsubscribeDoc) unsubscribeDoc();
+    await signOut(auth);
+  } finally {
+    // Não removemos o cache local — só os dados de sessão.
+    // Assim, se a pessoa logar de novo rapidamente, o app abre instantâneo
+    // enquanto busca os dados atualizados do Firestore.
+    window.location.replace("login.html");
+  }
+}
+
+// ── Guarda de autenticação + carregamento em tempo real ───────
+// Esta é a peça central: o app só é exibido depois de confirmar
+// que existe um usuário logado, e os dados vêm sempre do Firestore.
+const appReady = new Promise((resolve) => {
+  onAuthStateChanged(auth, async (user) => {
+    if (!user) {
+      // Não está logado → manda para a tela de login
+      window.location.replace("login.html");
+      return;
+    }
+
+    currentUser = user;
+
+    // Carrega cache local imediatamente (abre o app rápido, sem tela branca)
+    const cached = localStorage.getItem(storageKey);
+    if (cached) {
+      try { state = JSON.parse(cached); } catch { /* ignore */ }
+    }
+
+    // Escuta o documento do usuário no Firestore em tempo real.
+    // Isso significa: se a pessoa logar em outro dispositivo e
+    // mudar algo, este dispositivo atualiza sozinho, sem precisar
+    // recarregar a página.
+    const userDocRef = doc(db, "userData", user.uid);
+
+    unsubscribeDoc = onSnapshot(
+      userDocRef,
+      (snapshot) => {
+        if (snapshot.exists()) {
+          const remote = snapshot.data().data;
+          if (remote && typeof remote === "object") {
+            state = remote;
+            if (!state.finances) state.finances = [];
+            localStorage.setItem(storageKey, JSON.stringify(state));
+          }
+        } else {
+          // Primeiro acesso deste usuário — usa o state padrão (loadState)
+          // e já cria o documento dele no Firestore.
+          setDoc(userDocRef, { data: state, updatedAt: new Date().toISOString() }).catch(console.error);
+        }
+        renderAll();
+        resolve();
+      },
+      (err) => {
+        console.error("Erro ao escutar Firestore:", err);
+        showSyncStatus("error");
+        resolve(); // segue com os dados locais em cache mesmo com erro
+      }
+    );
+  });
+});
+
 const statusList = ["Pendente", "Em andamento", "Concluida", "Cancelada"];
 const viewTitles = {
   dashboard: "Seu dia em foco ✨",
@@ -6,7 +160,19 @@ const viewTitles = {
   tasks: "Tarefas",
   calendar: "Agenda",
   goals: "Metas e conquistas",
+  finances: "Finanças",
 };
+
+const expenseCategories = [
+  { id: "alimentacao", label: "🍔 Alimentação",  color: "#ff9500" },
+  { id: "transporte",  label: "🚗 Transporte",   color: "#5ac8fa" },
+  { id: "saude",       label: "💊 Saúde",        color: "#ff3b30" },
+  { id: "lazer",       label: "🎬 Lazer",        color: "#af52de" },
+  { id: "educacao",    label: "📚 Educação",     color: "#34c759" },
+  { id: "moradia",     label: "🏠 Moradia",      color: "#ff6b6b" },
+  { id: "roupas",      label: "👗 Roupas",       color: "#ff2d55" },
+  { id: "outros",      label: "📦 Outros",       color: "#8a9bb0" },
+];
 const themeList = ["sunny", "ocean", "candy", "forest", "night"];
 const themeNames = {
   sunny: "Sol",
@@ -34,7 +200,11 @@ const elements = {
   toast: document.querySelector("#toast"),
 };
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
+  // Espera o Firebase confirmar o login e carregar os dados antes de seguir
+  await appReady;
+  if (!currentUser) return; // já foi redirecionado para login.html
+
   const now = new Date();
   const hour = now.getHours();
   const greeting = hour < 12 ? "Bom dia" : hour < 18 ? "Boa tarde" : "Boa noite";
@@ -45,7 +215,11 @@ document.addEventListener("DOMContentLoaded", () => {
     month: "long",
   }).format(now);
 
-  elements.todayLabel.textContent = `${greeting}, Douglas ${icon}  ·  ${dateStr.charAt(0).toUpperCase() + dateStr.slice(1)}`;
+  const user = getUser();
+  const firstName = user?.name?.split(" ")[0] || "Usuário";
+  elements.todayLabel.textContent = `${greeting}, ${firstName} ${icon}  ·  ${dateStr.charAt(0).toUpperCase() + dateStr.slice(1)}`;
+
+  renderProfileButton(user);
 
   state.theme = normalizeTheme(state.theme);
   applyTheme(state.theme);
@@ -55,10 +229,171 @@ document.addEventListener("DOMContentLoaded", () => {
   renderAll();
 });
 
+function renderProfileButton(user) {
+  const topbarActions = document.querySelector(".topbar-actions");
+  if (!topbarActions || document.querySelector(".user-avatar-btn")) return;
+
+  const initial = (user?.name || "U").charAt(0).toUpperCase();
+  const wrapper = document.createElement("div");
+  wrapper.style.position = "relative";
+
+  wrapper.innerHTML = `
+    <button class="user-avatar-btn" id="profileBtn" title="${user?.name || "Perfil"}">${initial}</button>
+    <div class="user-dropdown" id="profileDropdown" hidden>
+      <div class="user-dropdown-header">
+        <strong>${user?.name || "Usuário"}</strong>
+        <span>${user?.email || ""}</span>
+      </div>
+      <button class="dropdown-item" id="dropdownProfile">👤 Meu perfil</button>
+      <button class="dropdown-item" id="dropdownTheme">🎨 Trocar tema</button>
+      <button class="dropdown-item danger" id="dropdownLogout">🚪 Sair da conta</button>
+    </div>
+  `;
+
+  topbarActions.prepend(wrapper);
+
+  // Abre/fecha o menu
+  document.getElementById("profileBtn").addEventListener("click", (e) => {
+    e.stopPropagation();
+    const dd = document.getElementById("profileDropdown");
+    dd.hidden = !dd.hidden;
+  });
+  document.addEventListener("click", () => {
+    const dd = document.getElementById("profileDropdown");
+    if (dd) dd.hidden = true;
+  });
+
+  // ── Botão de Sair (Logout) ───────────────────────────────────
+  document.getElementById("dropdownLogout").addEventListener("click", async () => {
+    document.getElementById("profileDropdown").hidden = true;
+    if (!confirm("Deseja sair da sua conta?")) return;
+
+    // Garante que qualquer alteração pendente é salva antes de sair
+    clearTimeout(syncTimer);
+    showSyncStatus("saving");
+    try {
+      await syncToServer();
+    } finally {
+      await logout(); // logout() já redireciona para login.html
+    }
+  });
+
+  document.getElementById("dropdownProfile").addEventListener("click", () => {
+    document.getElementById("profileDropdown").hidden = true;
+    showProfileModal(user);
+  });
+
+  document.getElementById("dropdownTheme").addEventListener("click", () => {
+    document.getElementById("profileDropdown").hidden = true;
+    document.querySelector("#themeSelectMobile")?.focus();
+  });
+}
+
+function showProfileModal(user) {
+  const existing = document.getElementById("profileModal");
+  if (existing) { existing.remove(); return; }
+
+  const modal = document.createElement("div");
+  modal.id = "profileModal";
+  modal.style.cssText = `position:fixed;inset:0;z-index:500;background:rgba(0,0,0,0.4);backdrop-filter:blur(4px);display:grid;place-items:center;padding:20px`;
+  modal.innerHTML = `
+    <div style="background:var(--surface);border-radius:24px;padding:28px;width:100%;max-width:400px;box-shadow:0 20px 60px rgba(0,0,0,0.2);animation:fadeUp 200ms ease">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+        <h2 style="font-size:1.15rem;font-weight:800">Meu perfil</h2>
+        <button id="closeProfileModal" style="width:32px;height:32px;border-radius:10px;background:var(--surface2);border:none;font-size:1.1rem;cursor:pointer">✕</button>
+      </div>
+      <div style="text-align:center;margin-bottom:20px">
+        <div style="width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,#4f8ef7,#af52de);color:#fff;font-size:1.8rem;font-weight:800;display:grid;place-items:center;margin:0 auto 10px">${(user?.name||"U").charAt(0).toUpperCase()}</div>
+        <strong style="font-size:1rem">${user?.name||""}</strong>
+        <div style="font-size:0.85rem;color:var(--muted)">${user?.email||""}</div>
+      </div>
+      <div style="display:grid;gap:10px">
+        <label style="display:grid;gap:5px;font-size:0.82rem;font-weight:600;color:var(--muted)">
+          Nome
+          <input id="profileName" value="${user?.name||""}" style="min-height:42px;border:1.5px solid var(--line);border-radius:12px;padding:8px 12px;background:var(--surface2);color:var(--text);font-size:0.9rem"/>
+        </label>
+        <hr style="border:none;border-top:1px solid var(--line)"/>
+        <p style="font-size:0.82rem;font-weight:700;color:var(--muted)">Alterar senha</p>
+        <input id="profileCurrentPw" type="password" placeholder="Senha atual" style="min-height:42px;border:1.5px solid var(--line);border-radius:12px;padding:8px 12px;background:var(--surface2);color:var(--text);font-size:0.9rem;width:100%"/>
+        <input id="profileNewPw" type="password" placeholder="Nova senha (mín. 6 chars)" style="min-height:42px;border:1.5px solid var(--line);border-radius:12px;padding:8px 12px;background:var(--surface2);color:var(--text);font-size:0.9rem;width:100%"/>
+        <div id="profileModalError" style="color:var(--red);font-size:0.84rem;font-weight:600;display:none"></div>
+        <button id="saveProfileBtn" style="height:46px;border-radius:14px;background:var(--accent);color:#fff;font-weight:700;font-size:0.95rem;border:none;cursor:pointer;width:100%">Salvar alterações</button>
+        <button id="logoutFromModal" style="height:44px;border-radius:14px;background:var(--red-soft,#ffeeed);color:var(--red,#ff3b30);font-weight:700;font-size:0.9rem;border:none;cursor:pointer;width:100%">🚪 Sair da conta</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  document.getElementById("closeProfileModal").addEventListener("click", () => modal.remove());
+  modal.addEventListener("click", (e) => { if (e.target === modal) modal.remove(); });
+
+  // Logout direto do modal de perfil também
+  document.getElementById("logoutFromModal").addEventListener("click", async () => {
+    if (!confirm("Deseja sair da sua conta?")) return;
+    modal.remove();
+    await syncToServer();
+    await logout();
+  });
+
+  document.getElementById("saveProfileBtn").addEventListener("click", async () => {
+    const newName   = document.getElementById("profileName").value.trim();
+    const currentPw = document.getElementById("profileCurrentPw").value;
+    const newPw     = document.getElementById("profileNewPw").value;
+    const errEl     = document.getElementById("profileModalError");
+    errEl.style.display = "none";
+
+    try {
+      // Atualiza nome no Firebase Auth
+      if (newName && newName !== user.name) {
+        await updateProfile(currentUser, { displayName: newName });
+      }
+
+      // Troca de senha — exige reautenticação por segurança
+      if (currentPw && newPw) {
+        if (newPw.length < 6) {
+          errEl.textContent = "A nova senha deve ter pelo menos 6 caracteres.";
+          errEl.style.display = "block";
+          return;
+        }
+        const credential = EmailAuthProvider.credential(currentUser.email, currentPw);
+        await reauthenticateWithCredential(currentUser, credential);
+        await updatePassword(currentUser, newPw);
+      }
+
+      showToast("✅ Perfil atualizado!");
+      modal.remove();
+      // Atualiza o avatar/nome exibido sem precisar recarregar a página
+      document.querySelector(".user-avatar-btn").textContent = (newName || user.name || "U").charAt(0).toUpperCase();
+    } catch (err) {
+      const messages = {
+        "auth/wrong-password": "Senha atual incorreta.",
+        "auth/invalid-credential": "Senha atual incorreta.",
+        "auth/requires-recent-login": "Por segurança, faça login novamente antes de trocar a senha.",
+        "auth/weak-password": "A nova senha é muito fraca.",
+      };
+      errEl.textContent = messages[err.code] || "Erro ao salvar. Tente novamente.";
+      errEl.style.display = "block";
+    }
+  });
+}
+
 function loadState() {
   const saved = localStorage.getItem(storageKey);
   if (saved) {
-    return JSON.parse(saved);
+    const parsed = JSON.parse(saved);
+    // Migrate: add finances array if missing (existing users)
+    if (!parsed.finances) {
+      parsed.finances = [
+        { id: crypto.randomUUID(), type: "receita", amount: 3300.00, category: "outros",      description: "Salário",           date: `${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,"0")}-01` },
+        { id: crypto.randomUUID(), type: "despesa", amount: 1200.00, category: "moradia",     description: "Aluguel",           date: `${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,"0")}-05` },
+        { id: crypto.randomUUID(), type: "despesa", amount: 320.80,  category: "alimentacao", description: "Supermercado",      date: todayIso },
+        { id: crypto.randomUUID(), type: "despesa", amount: 89.90,   category: "transporte",  description: "Combustível",       date: todayIso },
+        { id: crypto.randomUUID(), type: "despesa", amount: 49.90,   category: "lazer",       description: "Netflix + Spotify", date: offsetDate(-3) },
+        { id: crypto.randomUUID(), type: "receita", amount: 450.00,  category: "outros",      description: "Freela",            date: offsetDate(-2) },
+      ];
+    }
+    return parsed;
   }
 
   return {
@@ -125,11 +460,24 @@ function loadState() {
       { id: crypto.randomUUID(), title: "Concluir 8 tarefas importantes", target: 8, current: 3 },
       { id: crypto.randomUUID(), title: "Manter rotina de estudos", target: 5, current: 2 },
     ],
+    finances: [
+      { id: crypto.randomUUID(), type: "receita",  amount: 3300.00, category: "outros",       description: "Salário",           date: `${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,"0")}-01` },
+      { id: crypto.randomUUID(), type: "despesa",  amount: 1200.00, category: "moradia",      description: "Aluguel",           date: `${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,"0")}-05` },
+      { id: crypto.randomUUID(), type: "despesa",  amount: 320.80,  category: "alimentacao",  description: "Supermercado",      date: todayIso },
+      { id: crypto.randomUUID(), type: "despesa",  amount: 89.90,   category: "transporte",   description: "Combustível",       date: todayIso },
+      { id: crypto.randomUUID(), type: "despesa",  amount: 49.90,   category: "lazer",        description: "Netflix + Spotify", date: offsetDate(-3) },
+      { id: crypto.randomUUID(), type: "despesa",  amount: 158.00,  category: "saude",        description: "Farmácia",          date: offsetDate(-5) },
+      { id: crypto.randomUUID(), type: "receita",  amount: 450.00,  category: "outros",       description: "Freela",            date: offsetDate(-2) },
+      { id: crypto.randomUUID(), type: "despesa",  amount: 35.90,   category: "alimentacao",  description: "Almoço fora",       date: offsetDate(-1) },
+    ],
   };
 }
 
+// Salva mudanças localmente de imediato e agenda o envio para o Firestore
+// (debounce de 1.2s — evita gravar a cada tecla digitada, por exemplo)
 function saveState() {
   localStorage.setItem(storageKey, JSON.stringify(state));
+  scheduleSyncToServer();
 }
 
 function normalizeTheme(theme) {
@@ -197,6 +545,28 @@ function bindForms() {
       chip.classList.add("active");
       document.querySelector("#noteFilter").value = chip.dataset.noteFilter;
       renderNotes();
+    });
+  });
+
+  // Finance form
+  const expForm = document.querySelector("#expenseForm");
+  if (expForm) expForm.addEventListener("submit", saveExpense);
+
+  // Finance type toggle
+  document.querySelectorAll("[data-fin-type]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll("[data-fin-type]").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      document.querySelector("#expenseType").value = btn.dataset.finType;
+    });
+  });
+
+  // Finance month filter chips
+  document.querySelectorAll("[data-fin-filter]").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      document.querySelectorAll("[data-fin-filter]").forEach((c) => c.classList.remove("active"));
+      chip.classList.add("active");
+      renderFinances();
     });
   });
 }
@@ -359,12 +729,15 @@ function renderAll() {
   renderTasks();
   renderCalendar();
   renderGoals();
+  renderFinances();
 }
 
 function setDefaultDates() {
   document.querySelector("#taskDue").value ||= todayIso;
   document.querySelector("#eventDate").value ||= todayIso;
   document.querySelector("#eventTime").value ||= "09:00";
+  const expDate = document.querySelector("#expenseDate");
+  if (expDate) expDate.value ||= todayIso;
 }
 
 function queryFilter(items, fields) {
@@ -400,6 +773,35 @@ function renderDashboard() {
   renderList("#upcomingEvents", nextEvents.sort(sortEvent).slice(0, 5), renderEventRow, "Nenhum compromisso nos proximos dias.");
   renderChart();
   renderGoalSummary();
+  renderDashFinance();
+}
+
+function renderDashFinance() {
+  const el = document.querySelector("#dashFinancePanel");
+  if (!el || !state.finances) return;
+  const now = new Date();
+  const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const entries = state.finances.filter((f) => f.date.startsWith(currentMonthKey));
+  const receitas = entries.filter((f) => f.type === "receita").reduce((s, f) => s + f.amount, 0);
+  const despesas = entries.filter((f) => f.type === "despesa").reduce((s, f) => s + f.amount, 0);
+  const saldo = receitas - despesas;
+  const usedPct = receitas > 0 ? Math.min(100, Math.round((despesas / receitas) * 100)) : 0;
+  el.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px">
+      <div style="text-align:center"><div style="font-size:0.75rem;color:var(--muted);font-weight:600;margin-bottom:2px">Receitas</div><strong style="color:var(--green);font-size:1rem;font-weight:800">${formatCurrency(receitas)}</strong></div>
+      <div style="text-align:center"><div style="font-size:0.75rem;color:var(--muted);font-weight:600;margin-bottom:2px">Despesas</div><strong style="color:var(--red);font-size:1rem;font-weight:800">${formatCurrency(despesas)}</strong></div>
+      <div style="text-align:center"><div style="font-size:0.75rem;color:var(--muted);font-weight:600;margin-bottom:2px">Saldo</div><strong style="color:${saldo >= 0 ? "var(--green)" : "var(--red)"};font-size:1rem;font-weight:800">${formatCurrency(saldo)}</strong></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <div class="progress-track" style="flex:1;height:8px"><div style="width:${usedPct}%;height:100%;border-radius:999px;background:${usedPct > 80 ? "var(--red)" : usedPct > 60 ? "var(--orange)" : "var(--green)"};transition:width 400ms"></div></div>
+      <span style="font-size:0.8rem;font-weight:700;color:var(--muted)">${usedPct}%</span>
+    </div>
+    ${entries.slice(0, 3).map((f) => {
+      const cat = expenseCategories.find((c) => c.id === f.category) || { label: "📦 Outros", color: "#8a9bb0" };
+      const isReceita = f.type === "receita";
+      return `<div class="connector-row"><span style="font-size:0.88rem;font-weight:600">${isReceita ? "💰" : cat.label.split(" ")[0]} ${escapeHtml(f.description)}</span><span style="font-weight:800;color:${isReceita ? "var(--green)" : "var(--red)"}">${isReceita ? "+" : "-"}${formatCurrency(f.amount)}</span></div>`;
+    }).join("")}
+  `;
 }
 
 function calculateStreak() {
@@ -791,6 +1193,188 @@ function celebrate(message) {
   window.setTimeout(() => burst.remove(), 900);
 }
 
+// ============================================================
+//  FINANCES MODULE
+// ============================================================
+
+function getActiveFinMonth() {
+  const active = document.querySelector("[data-fin-filter].active");
+  if (!active) return "current";
+  return active.dataset.finFilter; // "current", "all", or "YYYY-MM"
+}
+
+function saveExpense(event) {
+  event.preventDefault();
+  const type = document.querySelector("#expenseType").value || "despesa";
+  const amount = parseFloat(valueOf("#expenseAmount").replace(",", "."));
+  if (isNaN(amount) || amount <= 0) { showToast("Informe um valor válido."); return; }
+  const entry = {
+    id: crypto.randomUUID(),
+    type,
+    amount,
+    category: valueOf("#expenseCategory") || "outros",
+    description: valueOf("#expenseDescription") || (type === "receita" ? "Receita" : "Despesa"),
+    date: valueOf("#expenseDate") || todayIso,
+  };
+  if (!state.finances) state.finances = [];
+  state.finances.unshift(entry);
+  saveState();
+  renderFinances();
+  showToast(type === "receita" ? "💰 Receita adicionada!" : "💸 Despesa registrada!");
+  event.target.reset();
+  document.querySelector("#expenseDate").value = todayIso;
+  document.querySelector("#expenseType").value = "despesa";
+  // Reset type buttons
+  document.querySelectorAll("[data-fin-type]").forEach((b) => b.classList.toggle("active", b.dataset.finType === "despesa"));
+}
+
+function deleteFinance(id) {
+  state.finances = state.finances.filter((f) => f.id !== id);
+  saveState();
+  renderFinances();
+  showToast("Registro removido.");
+}
+
+function formatCurrency(value) {
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
+}
+
+function renderFinances() {
+  if (!document.querySelector("#financesView")) return;
+  if (!state.finances) state.finances = [];
+
+  const monthFilter = getActiveFinMonth();
+  const now = new Date();
+  const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
+  let entries = [...state.finances].sort((a, b) => b.date.localeCompare(a.date));
+  if (monthFilter === "all") {
+    // no filter — show all time
+  } else {
+    entries = entries.filter((f) => f.date.startsWith(currentMonthKey));
+  }
+
+  const receitas  = entries.filter((f) => f.type === "receita").reduce((s, f) => s + f.amount, 0);
+  const despesas  = entries.filter((f) => f.type === "despesa").reduce((s, f) => s + f.amount, 0);
+  const saldo     = receitas - despesas;
+  const usedPct   = receitas > 0 ? Math.min(100, Math.round((despesas / receitas) * 100)) : 0;
+
+  // Summary cards
+  document.querySelector("#finReceitas").textContent  = formatCurrency(receitas);
+  document.querySelector("#finDespesas").textContent  = formatCurrency(despesas);
+  document.querySelector("#finSaldo").textContent     = formatCurrency(saldo);
+  document.querySelector("#finSaldoCard").style.setProperty("--saldo-color", saldo >= 0 ? "var(--green)" : "var(--red)");
+  document.querySelector("#finProgressBar").style.width = `${usedPct}%`;
+  document.querySelector("#finProgressBar").style.background = usedPct > 80 ? "var(--red)" : usedPct > 60 ? "var(--orange)" : "var(--green)";
+  document.querySelector("#finUsedLabel").textContent = `${usedPct}% das receitas usadas`;
+
+  // Category breakdown
+  const byCat = {};
+  entries.filter((f) => f.type === "despesa").forEach((f) => {
+    byCat[f.category] = (byCat[f.category] || 0) + f.amount;
+  });
+
+  const catHtml = Object.entries(byCat)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([catId, total]) => {
+      const cat = expenseCategories.find((c) => c.id === catId) || { label: "📦 Outros", color: "#8a9bb0" };
+      const pct = despesas > 0 ? Math.round((total / despesas) * 100) : 0;
+      return `
+        <div class="fin-cat-row">
+          <div class="fin-cat-info">
+            <span class="fin-cat-dot" style="background:${cat.color}"></span>
+            <span class="fin-cat-label">${cat.label}</span>
+          </div>
+          <div class="fin-cat-bar-wrap">
+            <div class="fin-cat-bar" style="width:${pct}%;background:${cat.color}20;outline:2px solid ${cat.color}40"></div>
+          </div>
+          <span class="fin-cat-value">${formatCurrency(total)}</span>
+        </div>`;
+    }).join("") || `<div class="empty-state" style="padding:12px">Sem despesas no período</div>`;
+
+  document.querySelector("#finCategories").innerHTML = catHtml;
+
+  // Transaction list
+  const listHtml = entries.length
+    ? entries.slice(0, 20).map((f) => {
+        const cat = expenseCategories.find((c) => c.id === f.category) || { label: "📦 Outros", color: "#8a9bb0" };
+        const isReceita = f.type === "receita";
+        return `
+          <article class="fin-transaction">
+            <div class="fin-tx-icon" style="background:${isReceita ? "var(--green-soft)" : cat.color + "22"};color:${isReceita ? "var(--green)" : cat.color}">
+              ${isReceita ? "💰" : cat.label.split(" ")[0]}
+            </div>
+            <div class="fin-tx-info">
+              <strong>${escapeHtml(f.description)}</strong>
+              <span class="task-meta">${isReceita ? "Receita" : cat.label.replace(/^.\s/, "")} · ${formatDate(f.date)}</span>
+            </div>
+            <div class="fin-tx-amount ${isReceita ? "receita" : "despesa"}">
+              ${isReceita ? "+" : "-"}${formatCurrency(f.amount)}
+            </div>
+            <button class="mini-button" onclick="deleteFinance('${f.id}')" style="padding:0;width:26px;height:26px;flex-shrink:0">🗑️</button>
+          </article>`;
+      }).join("")
+    : `<div class="empty-state">Nenhum registro no período 📭</div>`;
+
+  document.querySelector("#finTransactions").innerHTML = listHtml;
+
+  // Calendar heatmap
+  renderFinCalendar(currentMonthKey, entries);
+}
+
+function renderFinCalendar(monthKey, entries) {
+  const grid = document.querySelector("#finCalGrid");
+  if (!grid) return;
+  const [year, month] = monthKey.split("-").map(Number);
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const byDay = {};
+  entries.forEach((f) => {
+    const day = f.date.slice(8, 10);
+    if (!byDay[day]) byDay[day] = { receita: 0, despesa: 0 };
+    byDay[day][f.type] += f.amount;
+  });
+  const days = [...Array(daysInMonth)].map((_, i) => {
+    const d = String(i + 1).padStart(2, "0");
+    const data = byDay[d];
+    const dateStr = `${monthKey}-${d}`;
+    const isToday = dateStr === todayIso;
+    let dot = "";
+    if (data) {
+      if (data.receita > 0 && data.despesa > 0) dot = `<span class="fin-day-dot both"></span>`;
+      else if (data.receita > 0) dot = `<span class="fin-day-dot receita"></span>`;
+      else if (data.despesa > 0) dot = `<span class="fin-day-dot despesa"></span>`;
+    }
+    return `<button class="fin-cal-day ${isToday ? "today" : ""} ${data ? "has-data" : ""}" onclick="filterFinByDate('${dateStr}')"><strong>${i + 1}</strong>${dot}</button>`;
+  });
+  grid.innerHTML = days.join("");
+}
+
+function filterFinByDate(date) {
+  const entries = state.finances.filter((f) => f.date === date);
+  const listHtml = entries.length
+    ? entries.map((f) => {
+        const cat = expenseCategories.find((c) => c.id === f.category) || { label: "📦 Outros", color: "#8a9bb0" };
+        const isReceita = f.type === "receita";
+        return `
+          <article class="fin-transaction">
+            <div class="fin-tx-icon" style="background:${isReceita ? "var(--green-soft)" : cat.color + "22"};color:${isReceita ? "var(--green)" : cat.color}">
+              ${isReceita ? "💰" : cat.label.split(" ")[0]}
+            </div>
+            <div class="fin-tx-info">
+              <strong>${escapeHtml(f.description)}</strong>
+              <span class="task-meta">${isReceita ? "Receita" : cat.label.replace(/^.\s/, "")} · ${formatDate(f.date)}</span>
+            </div>
+            <div class="fin-tx-amount ${isReceita ? "receita" : "despesa"}">
+              ${isReceita ? "+" : "-"}${formatCurrency(f.amount)}
+            </div>
+            <button class="mini-button" onclick="deleteFinance('${f.id}')" style="padding:0;width:26px;height:26px;flex-shrink:0">🗑️</button>
+          </article>`;
+      }).join("")
+    : `<div class="empty-state">Sem registros neste dia 📭</div>`;
+  document.querySelector("#finTransactions").innerHTML = listHtml;
+}
+
 window.editNote = editNote;
 window.toggleFavorite = toggleFavorite;
 window.convertNoteToTask = convertNoteToTask;
@@ -802,3 +1386,5 @@ window.filterEventsByDate = filterEventsByDate;
 window.deleteEvent = deleteEvent;
 window.changeGoal = changeGoal;
 window.deleteGoal = deleteGoal;
+window.deleteFinance = deleteFinance;
+window.filterFinByDate = filterFinByDate;

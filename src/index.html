@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>PulseNote - Produtividade pessoal</title>
     <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="auth.css" />
   </head>
   <body>
     <div class="app-shell">
@@ -39,6 +40,10 @@
           <button class="nav-item" data-view="goals">
             <span class="icon">🎯</span>
             <span>Metas</span>
+          </button>
+          <button class="nav-item" data-view="finances">
+            <span class="icon">💰</span>
+            <span>Finanças</span>
           </button>
         </nav>
 
@@ -199,16 +204,12 @@
             <section class="panel">
               <div class="panel-header">
                 <div>
-                  <p class="eyebrow">Conectores</p>
-                  <h2>Sincronização</h2>
+                  <p class="eyebrow">Finanças do mês</p>
+                  <h2>Resumo rápido</h2>
                 </div>
-                <span class="pill">Local</span>
+                <button class="icon-button" data-view-shortcut="finances" title="Ver finanças">→</button>
               </div>
-              <div class="connector-grid">
-                <div class="connector-row"><span>Google Calendar</span><button class="mini-button">Conectar</button></div>
-                <div class="connector-row"><span>Outlook</span><button class="mini-button">Conectar</button></div>
-                <div class="connector-row"><span>Backup automático</span><button class="mini-button">Ativar</button></div>
-              </div>
+              <div id="dashFinancePanel"></div>
             </section>
           </div>
         </section>
@@ -408,6 +409,146 @@
           </div>
         </section>
 
+        <!-- ===== FINANCES VIEW ===== -->
+        <section id="financesView" class="view">
+          <div class="fin-layout">
+
+            <!-- LEFT: Form + Summary -->
+            <div class="fin-left">
+
+              <!-- Add transaction form -->
+              <div class="editor-panel fin-form-card">
+                <div class="form-heading">
+                  <div>
+                    <p class="eyebrow">Novo registro</p>
+                    <h2>Adicionar</h2>
+                  </div>
+                </div>
+
+                <!-- Type toggle -->
+                <div class="fin-type-toggle">
+                  <button class="fin-type-btn active" data-fin-type="despesa">
+                    💸 Despesa
+                  </button>
+                  <button class="fin-type-btn" data-fin-type="receita">
+                    💰 Receita
+                  </button>
+                </div>
+
+                <form id="expenseForm">
+                  <input id="expenseType" type="hidden" value="despesa" />
+                  <div class="fin-amount-field">
+                    <span class="fin-currency-sign">R$</span>
+                    <input id="expenseAmount" type="text" inputmode="decimal" placeholder="0,00" required />
+                  </div>
+                  <label>
+                    Descrição
+                    <input id="expenseDescription" placeholder="Ex.: Almoço, Salário..." />
+                  </label>
+                  <label>
+                    Categoria
+                    <select id="expenseCategory">
+                      <option value="alimentacao">🍔 Alimentação</option>
+                      <option value="transporte">🚗 Transporte</option>
+                      <option value="saude">💊 Saúde</option>
+                      <option value="lazer">🎬 Lazer</option>
+                      <option value="educacao">📚 Educação</option>
+                      <option value="moradia">🏠 Moradia</option>
+                      <option value="roupas">👗 Roupas</option>
+                      <option value="outros">📦 Outros</option>
+                    </select>
+                  </label>
+                  <label>
+                    Data
+                    <input id="expenseDate" type="date" />
+                  </label>
+                  <button type="submit" class="primary-button" style="width:100%;justify-content:center;height:48px;font-size:1rem">
+                    ➕ Registrar
+                  </button>
+                </form>
+              </div>
+
+              <!-- Month filter -->
+              <div class="note-filters" id="finMonthFilters" style="margin-top:4px">
+                <button class="filter-chip active" data-fin-filter="current">Este mês</button>
+                <button class="filter-chip" data-fin-filter="all">Todos</button>
+              </div>
+
+              <!-- Summary cards -->
+              <div class="fin-summary-grid">
+                <div class="fin-summary-card receita">
+                  <span class="fin-sum-icon">💰</span>
+                  <span class="fin-sum-label">Receitas</span>
+                  <strong id="finReceitas">R$ 0,00</strong>
+                </div>
+                <div class="fin-summary-card despesa">
+                  <span class="fin-sum-icon">💸</span>
+                  <span class="fin-sum-label">Despesas</span>
+                  <strong id="finDespesas">R$ 0,00</strong>
+                </div>
+                <div class="fin-summary-card saldo" id="finSaldoCard">
+                  <span class="fin-sum-icon">📊</span>
+                  <span class="fin-sum-label">Saldo</span>
+                  <strong id="finSaldo">R$ 0,00</strong>
+                </div>
+              </div>
+
+              <!-- Budget bar -->
+              <div class="fin-budget-bar panel" style="padding:16px">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                  <span style="font-weight:700;font-size:0.9rem">Uso do orçamento</span>
+                  <span id="finUsedLabel" style="font-size:0.8rem;color:var(--muted)">0%</span>
+                </div>
+                <div class="progress-track" style="height:10px">
+                  <div id="finProgressBar" style="width:0%;transition:width 400ms ease;background:var(--green)"></div>
+                </div>
+              </div>
+
+              <!-- Category breakdown -->
+              <div class="panel">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Análise</p>
+                    <h2>Por categoria</h2>
+                  </div>
+                </div>
+                <div id="finCategories" class="fin-cat-list"></div>
+              </div>
+            </div>
+
+            <!-- RIGHT: Calendar + Transactions -->
+            <div class="fin-right">
+
+              <!-- Financial Calendar -->
+              <div class="panel fin-calendar-card">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Calendário</p>
+                    <h2 id="finMonthLabel">Financeiro</h2>
+                  </div>
+                  <div style="display:flex;gap:6px">
+                    <span class="pill" style="background:var(--green-soft);color:var(--green);border-color:var(--green)">● Receita</span>
+                    <span class="pill" style="background:var(--red-soft);color:var(--red);border-color:var(--red)">● Despesa</span>
+                  </div>
+                </div>
+                <div id="finCalGrid" class="fin-cal-grid"></div>
+              </div>
+
+              <!-- Transaction list -->
+              <div class="panel">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Histórico</p>
+                    <h2>Transações</h2>
+                  </div>
+                </div>
+                <div id="finTransactions" class="fin-tx-list"></div>
+              </div>
+            </div>
+
+          </div><!-- /fin-layout -->
+        </section><!-- /financesView -->
+
       </main><!-- /main-area -->
     </div><!-- /app-shell -->
 
@@ -433,6 +574,10 @@
         <span class="bn-icon">🎯</span>
         <span>Metas</span>
       </button>
+      <button class="bottom-nav-item" data-view="finances">
+        <span class="bn-icon">💰</span>
+        <span>Finanças</span>
+      </button>
     </nav>
 
     <!-- Toast -->
@@ -447,6 +592,6 @@
       <option value="Finanças"></option>
     </datalist>
 
-    <script src="app.js"></script>
+    <script type="module" src="app.js"></script>
   </body>
 </html>

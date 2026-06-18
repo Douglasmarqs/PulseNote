@@ -1,0 +1,32 @@
+rules_version = '2';
+
+// ============================================================
+// Regras de Segurança do Firestore — PulseNote
+// ============================================================
+// Estas regras são aplicadas pelo PRÓPRIO SERVIDOR DO FIREBASE,
+// não pelo app. Isso significa que mesmo que alguém modifique
+// o código JavaScript do site, NUNCA conseguirá ler ou escrever
+// dados de outro usuário — a validação é feita na nuvem.
+//
+// COMO APLICAR:
+// 1. No Firebase Console → Firestore Database → Regras
+// 2. Cole o conteúdo abaixo e clique em "Publicar"
+// ============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Cada usuário só pode ler/escrever o PRÓPRIO documento,
+    // identificado pelo seu UID de autenticação.
+    match /userData/{userId} {
+      allow read, write: if request.auth != null
+                          && request.auth.uid == userId;
+    }
+
+    // Bloqueia explicitamente qualquer outra coleção/documento
+    // não previsto nas regras acima (segurança em profundidade).
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
