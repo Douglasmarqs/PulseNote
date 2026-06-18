@@ -105,27 +105,27 @@ async function logout() {
 // Esta é a peça central: o app só é exibido depois de confirmar
 // que existe um usuário logado, e os dados vêm sempre do Firestore.
 const appReady = new Promise((resolve) => {
+  let resolved = false; // garante que resolve() é chamado apenas uma vez
+
   onAuthStateChanged(auth, async (user) => {
     if (!user) {
-      // Não está logado → manda para a tela de login
       window.location.replace("login.html");
       return;
     }
 
     currentUser = user;
 
-    // Carrega cache local imediatamente (abre o app rápido, sem tela branca)
+    // Exibe cache local imediatamente (app abre instantâneo, sem tela branca)
     const cached = localStorage.getItem(storageKey);
     if (cached) {
       try { state = JSON.parse(cached); } catch { /* ignore */ }
     }
 
-    // Escuta o documento do usuário no Firestore em tempo real.
-    // Isso significa: se a pessoa logar em outro dispositivo e
-    // mudar algo, este dispositivo atualiza sozinho, sem precisar
-    // recarregar a página.
     const userDocRef = doc(db, "userData", user.uid);
 
+    // onSnapshot escuta mudanças em tempo real no Firestore.
+    // É chamado: (1) imediatamente com os dados atuais, (2) toda vez
+    // que outro dispositivo/aba salvar algo novo.
     unsubscribeDoc = onSnapshot(
       userDocRef,
       (snapshot) => {
@@ -137,17 +137,23 @@ const appReady = new Promise((resolve) => {
             localStorage.setItem(storageKey, JSON.stringify(state));
           }
         } else {
-          // Primeiro acesso deste usuário — usa o state padrão (loadState)
-          // e já cria o documento dele no Firestore.
-          setDoc(userDocRef, { data: state, updatedAt: new Date().toISOString() }).catch(console.error);
+          // Primeiro login deste usuário — cria o documento com os dados padrão
+          setDoc(userDocRef, { data: state, updatedAt: new Date().toISOString() })
+            .catch(console.error);
         }
-        renderAll();
-        resolve();
+
+        renderAll(); // re-renderiza quando chega dado novo do servidor
+
+        // Resolve a promise apenas na primeira vez (libera o DOMContentLoaded)
+        if (!resolved) {
+          resolved = true;
+          resolve();
+        }
       },
       (err) => {
         console.error("Erro ao escutar Firestore:", err);
         showSyncStatus("error");
-        resolve(); // segue com os dados locais em cache mesmo com erro
+        if (!resolved) { resolved = true; resolve(); } // segue com cache local
       }
     );
   });
@@ -201,8 +207,37 @@ const elements = {
 };
 
 document.addEventListener("DOMContentLoaded", async () => {
-  // Espera o Firebase confirmar o login e carregar os dados antes de seguir
+  // Mostra overlay de carregamento enquanto o Firebase autentica
+  const overlay = document.createElement("div");
+  overlay.id = "appLoadingOverlay";
+  overlay.innerHTML = `
+    <div style="position:fixed;inset:0;z-index:9998;background:var(--bg,#f5f7fa);
+      display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px">
+      <div style="width:52px;height:52px;border-radius:16px;
+        background:linear-gradient(145deg,#4f8ef7,#af52de);
+        display:grid;place-items:center;font-size:1.5rem;
+        box-shadow:0 6px 20px rgba(79,142,247,0.35)">⚡</div>
+      <strong style="font-size:1.1rem;font-weight:800;color:var(--text,#1a1f2e);
+        font-family:-apple-system,sans-serif">PulseNote</strong>
+      <div style="width:32px;height:3px;border-radius:999px;
+        background:var(--line,#e8ecf2);overflow:hidden">
+        <div style="height:100%;border-radius:inherit;
+          background:linear-gradient(90deg,#4f8ef7,#af52de);
+          animation:loadingBar 1.2s ease-in-out infinite alternate;width:60%"></div>
+      </div>
+    </div>
+    <style>@keyframes loadingBar{from{transform:translateX(-100%)}to{transform:translateX(180%)}}</style>
+  `;
+  document.body.appendChild(overlay);
+
+  // Aguarda o Firebase confirmar sessão e carregar dados do Firestore
   await appReady;
+
+  // Remove overlay com fade suave
+  overlay.style.transition = "opacity 300ms ease";
+  overlay.style.opacity = "0";
+  setTimeout(() => overlay.remove(), 320);
+
   if (!currentUser) return; // já foi redirecionado para login.html
 
   const now = new Date();
