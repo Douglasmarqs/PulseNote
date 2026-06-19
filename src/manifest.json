@@ -1,0 +1,58 @@
+{
+  "name": "PulseNote — Produtividade Pessoal",
+  "short_name": "PulseNote",
+  "description": "Notas, tarefas, finanças e metas em um só app, com sincronização na nuvem.",
+  "start_url": "/",
+  "id": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone"],
+  "orientation": "portrait-primary",
+  "background_color": "#f5f7fa",
+  "theme_color": "#4f8ef7",
+  "lang": "pt-BR",
+  "dir": "ltr",
+  "categories": ["productivity", "finance", "lifestyle"],
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Nova tarefa",
+      "short_name": "Tarefa",
+      "description": "Adicionar uma nova tarefa rapidamente",
+      "url": "/index.html?action=new-task",
+      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Nova despesa",
+      "short_name": "Despesa",
+      "description": "Registrar uma nova despesa",
+      "url": "/index.html?action=new-expense",
+      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}

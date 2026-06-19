@@ -1,7 +1,7 @@
 // ============================================================
 // PulseNote — Autenticação e sincronização via Firebase
 // ============================================================
-import { auth, db } from "./firebase-init.js";
+import { auth, db, storage } from "./firebase-init.js";
 import {
   onAuthStateChanged,
   signOut,
@@ -15,6 +15,11 @@ import {
   setDoc,
   onSnapshot,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {
+  ref,
+  uploadBytes,
+  getDownloadURL,
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
 const storageKey = "pulsenote-state-v1"; // cache local — só para abrir o app instantaneamente
 
@@ -177,8 +182,19 @@ const expenseCategories = [
   { id: "educacao",    label: "📚 Educação",     color: "#34c759" },
   { id: "moradia",     label: "🏠 Moradia",      color: "#ff6b6b" },
   { id: "roupas",      label: "👗 Roupas",       color: "#ff2d55" },
+  { id: "assinaturas", label: "🔁 Assinaturas",  color: "#5856d6" },
   { id: "outros",      label: "📦 Outros",       color: "#8a9bb0" },
 ];
+
+// Retorna categorias fixas + categorias criadas pelo usuário
+function getAllCategories() {
+  const custom = state.customCategories || [];
+  return [...expenseCategories, ...custom];
+}
+
+function findCategory(catId) {
+  return getAllCategories().find((c) => c.id === catId) || { label: "📦 Outros", color: "#8a9bb0" };
+}
 const themeList = ["sunny", "ocean", "candy", "forest", "night"];
 const themeNames = {
   sunny: "Sol",
@@ -262,64 +278,101 @@ document.addEventListener("DOMContentLoaded", async () => {
   bindForms();
   bindActions();
   renderAll();
+  handlePwaShortcutAction();
 });
 
 function renderProfileButton(user) {
   const topbarActions = document.querySelector(".topbar-actions");
   if (!topbarActions || document.querySelector(".user-avatar-btn")) return;
 
-  const initial = (user?.name || "U").charAt(0).toUpperCase();
+  const initial  = (user?.name || "U").charAt(0).toUpperCase();
+  const photoURL = currentUser?.photoURL || "";
+
   const wrapper = document.createElement("div");
   wrapper.style.position = "relative";
 
-  wrapper.innerHTML = `
-    <button class="user-avatar-btn" id="profileBtn" title="${user?.name || "Perfil"}">${initial}</button>
-    <div class="user-dropdown" id="profileDropdown" hidden>
-      <div class="user-dropdown-header">
-        <strong>${user?.name || "Usuário"}</strong>
-        <span>${user?.email || ""}</span>
-      </div>
-      <button class="dropdown-item" id="dropdownProfile">👤 Meu perfil</button>
-      <button class="dropdown-item" id="dropdownTheme">🎨 Trocar tema</button>
-      <button class="dropdown-item danger" id="dropdownLogout">🚪 Sair da conta</button>
-    </div>
-  `;
+  const avatarContent = photoURL
+    ? `<img src="${photoURL}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" alt="foto"/>`
+    : initial;
 
+  // O botão fica no topbar; o dropdown é anexado direto no <body> —
+  // assim ele nunca fica "preso" num container estreito que quebra
+  // o posicionamento no mobile (bug do print: dropdown cortado à esquerda).
+  wrapper.innerHTML = `
+    <button class="user-avatar-btn" id="profileBtn" title="${user?.name || "Perfil"}" style="overflow:hidden">
+      ${avatarContent}
+    </button>
+  `;
   topbarActions.prepend(wrapper);
 
-  // Abre/fecha o menu
+  // Overlay escuro por trás do dropdown (estilo bottom-sheet no mobile)
+  const backdrop = document.createElement("div");
+  backdrop.id = "profileDropdownBackdrop";
+  backdrop.hidden = true;
+  backdrop.style.cssText = `position:fixed;inset:0;z-index:199;background:rgba(0,0,0,0.3);backdrop-filter:blur(2px)`;
+  document.body.appendChild(backdrop);
+
+  const dropdown = document.createElement("div");
+  dropdown.className = "user-dropdown";
+  dropdown.id = "profileDropdown";
+  dropdown.hidden = true;
+  dropdown.innerHTML = `
+    <div class="user-dropdown-header" style="display:flex;align-items:center;gap:12px">
+      <div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#4f8ef7,#af52de);
+        color:#fff;font-weight:800;font-size:1rem;display:grid;place-items:center;
+        flex-shrink:0;overflow:hidden">
+        ${photoURL
+          ? `<img src="${photoURL}" style="width:100%;height:100%;object-fit:cover" alt=""/>`
+          : initial}
+      </div>
+      <div style="min-width:0">
+        <strong style="display:block;font-size:0.9rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${user?.name || "Usuário"}</strong>
+        <span style="font-size:0.78rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block">${user?.email || ""}</span>
+      </div>
+    </div>
+    <button class="dropdown-item" id="dropdownProfile">👤 Meu perfil</button>
+    <button class="dropdown-item" id="dropdownTheme">🎨 Trocar tema</button>
+    <button class="dropdown-item danger" id="dropdownLogout">🚪 Sair da conta</button>
+  `;
+  document.body.appendChild(dropdown);
+
+  // No desktop, posiciona o dropdown sob o avatar. No mobile, o CSS
+  // (auth.css) sobrescreve para position:fixed (bottom-sheet) e isso é ignorado.
+  function positionDropdown() {
+    if (window.innerWidth <= 720) return;
+    const rect = document.getElementById("profileBtn").getBoundingClientRect();
+    dropdown.style.position = "fixed";
+    dropdown.style.top   = `${rect.bottom + 10}px`;
+    dropdown.style.right = `${window.innerWidth - rect.right}px`;
+    dropdown.style.left  = "auto";
+  }
+
+  function openDropdown()  { positionDropdown(); dropdown.hidden = false; backdrop.hidden = false; }
+  function closeDropdown() { dropdown.hidden = true; backdrop.hidden = true; }
+
   document.getElementById("profileBtn").addEventListener("click", (e) => {
     e.stopPropagation();
-    const dd = document.getElementById("profileDropdown");
-    dd.hidden = !dd.hidden;
-  });
-  document.addEventListener("click", () => {
-    const dd = document.getElementById("profileDropdown");
-    if (dd) dd.hidden = true;
+    dropdown.hidden ? openDropdown() : closeDropdown();
   });
 
-  // ── Botão de Sair (Logout) ───────────────────────────────────
+  backdrop.addEventListener("click", closeDropdown);
+  window.addEventListener("resize", () => { if (!dropdown.hidden) positionDropdown(); });
+
   document.getElementById("dropdownLogout").addEventListener("click", async () => {
-    document.getElementById("profileDropdown").hidden = true;
+    closeDropdown();
     if (!confirm("Deseja sair da sua conta?")) return;
-
-    // Garante que qualquer alteração pendente é salva antes de sair
     clearTimeout(syncTimer);
     showSyncStatus("saving");
-    try {
-      await syncToServer();
-    } finally {
-      await logout(); // logout() já redireciona para login.html
-    }
+    try { await syncToServer(); } finally { await logout(); }
   });
 
   document.getElementById("dropdownProfile").addEventListener("click", () => {
-    document.getElementById("profileDropdown").hidden = true;
+    closeDropdown();
     showProfileModal(user);
   });
 
   document.getElementById("dropdownTheme").addEventListener("click", () => {
-    document.getElementById("profileDropdown").hidden = true;
+    closeDropdown();
     document.querySelector("#themeSelectMobile")?.focus();
   });
 }
@@ -328,42 +381,185 @@ function showProfileModal(user) {
   const existing = document.getElementById("profileModal");
   if (existing) { existing.remove(); return; }
 
+  const photoURL = currentUser?.photoURL || "";
+  const initial  = (user?.name || "U").charAt(0).toUpperCase();
+
   const modal = document.createElement("div");
   modal.id = "profileModal";
-  modal.style.cssText = `position:fixed;inset:0;z-index:500;background:rgba(0,0,0,0.4);backdrop-filter:blur(4px);display:grid;place-items:center;padding:20px`;
+  modal.style.cssText = `position:fixed;inset:0;z-index:500;background:rgba(0,0,0,0.45);
+    backdrop-filter:blur(6px);display:grid;place-items:center;padding:20px`;
+
   modal.innerHTML = `
-    <div style="background:var(--surface);border-radius:24px;padding:28px;width:100%;max-width:400px;box-shadow:0 20px 60px rgba(0,0,0,0.2);animation:fadeUp 200ms ease">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-        <h2 style="font-size:1.15rem;font-weight:800">Meu perfil</h2>
-        <button id="closeProfileModal" style="width:32px;height:32px;border-radius:10px;background:var(--surface2);border:none;font-size:1.1rem;cursor:pointer">✕</button>
+    <div style="background:var(--surface);border-radius:24px;padding:28px;width:100%;
+      max-width:420px;box-shadow:0 20px 60px rgba(0,0,0,0.25);animation:fadeUp 200ms ease;
+      max-height:90dvh;overflow-y:auto">
+
+      <!-- Cabeçalho -->
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:22px">
+        <h2 style="font-size:1.15rem;font-weight:800;color:var(--text)">Meu perfil</h2>
+        <button id="closeProfileModal" style="width:32px;height:32px;border-radius:10px;
+          background:var(--surface2);border:none;font-size:1rem;cursor:pointer;
+          color:var(--text2)">✕</button>
       </div>
-      <div style="text-align:center;margin-bottom:20px">
-        <div style="width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,#4f8ef7,#af52de);color:#fff;font-size:1.8rem;font-weight:800;display:grid;place-items:center;margin:0 auto 10px">${(user?.name||"U").charAt(0).toUpperCase()}</div>
-        <strong style="font-size:1rem">${user?.name||""}</strong>
-        <div style="font-size:0.85rem;color:var(--muted)">${user?.email||""}</div>
+
+      <!-- Foto de perfil -->
+      <div style="display:flex;flex-direction:column;align-items:center;gap:12px;margin-bottom:22px">
+        <div style="position:relative;width:88px;height:88px">
+          <div id="avatarPreview" style="width:88px;height:88px;border-radius:50%;
+            background:linear-gradient(135deg,#4f8ef7,#af52de);
+            color:#fff;font-size:2rem;font-weight:800;
+            display:grid;place-items:center;overflow:hidden;
+            box-shadow:0 4px 16px rgba(79,142,247,0.3);flex-shrink:0">
+            ${photoURL
+              ? `<img src="${photoURL}" style="width:100%;height:100%;object-fit:cover" alt=""/>`
+              : initial}
+          </div>
+          <!-- Botão de câmera sobre o avatar -->
+          <label for="photoFileInput" style="position:absolute;bottom:0;right:0;
+            width:28px;height:28px;border-radius:50%;
+            background:var(--accent);color:#fff;
+            display:grid;place-items:center;font-size:0.85rem;
+            cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.2);
+            border:2px solid var(--surface)" title="Alterar foto">
+            📷
+          </label>
+          <input id="photoFileInput" type="file" accept="image/*" style="display:none"/>
+        </div>
+
+        <!-- Barra de progresso do upload -->
+        <div id="uploadProgress" style="display:none;width:100%;max-width:200px">
+          <div style="height:4px;background:var(--line);border-radius:999px;overflow:hidden">
+            <div id="uploadProgressBar" style="height:100%;width:0%;
+              background:linear-gradient(90deg,#4f8ef7,#af52de);
+              border-radius:inherit;transition:width 200ms ease"></div>
+          </div>
+          <p style="font-size:0.75rem;color:var(--muted);text-align:center;margin-top:4px">
+            Enviando foto...
+          </p>
+        </div>
+
+        <div style="text-align:center">
+          <strong style="display:block;font-size:1rem;color:var(--text)">${user?.name || ""}</strong>
+          <span style="font-size:0.82rem;color:var(--muted)">${user?.email || ""}</span>
+        </div>
       </div>
-      <div style="display:grid;gap:10px">
+
+      <!-- Campos -->
+      <div style="display:grid;gap:12px">
         <label style="display:grid;gap:5px;font-size:0.82rem;font-weight:600;color:var(--muted)">
           Nome
-          <input id="profileName" value="${user?.name||""}" style="min-height:42px;border:1.5px solid var(--line);border-radius:12px;padding:8px 12px;background:var(--surface2);color:var(--text);font-size:0.9rem"/>
+          <input id="profileName" value="${user?.name || ""}"
+            style="min-height:44px;border:1.5px solid var(--line);border-radius:12px;
+            padding:8px 12px;background:var(--surface2);color:var(--text);font-size:0.9rem;width:100%"/>
         </label>
+
         <hr style="border:none;border-top:1px solid var(--line)"/>
-        <p style="font-size:0.82rem;font-weight:700;color:var(--muted)">Alterar senha</p>
-        <input id="profileCurrentPw" type="password" placeholder="Senha atual" style="min-height:42px;border:1.5px solid var(--line);border-radius:12px;padding:8px 12px;background:var(--surface2);color:var(--text);font-size:0.9rem;width:100%"/>
-        <input id="profileNewPw" type="password" placeholder="Nova senha (mín. 6 chars)" style="min-height:42px;border:1.5px solid var(--line);border-radius:12px;padding:8px 12px;background:var(--surface2);color:var(--text);font-size:0.9rem;width:100%"/>
-        <div id="profileModalError" style="color:var(--red);font-size:0.84rem;font-weight:600;display:none"></div>
-        <button id="saveProfileBtn" style="height:46px;border-radius:14px;background:var(--accent);color:#fff;font-weight:700;font-size:0.95rem;border:none;cursor:pointer;width:100%">Salvar alterações</button>
-        <button id="logoutFromModal" style="height:44px;border-radius:14px;background:var(--red-soft,#ffeeed);color:var(--red,#ff3b30);font-weight:700;font-size:0.9rem;border:none;cursor:pointer;width:100%">🚪 Sair da conta</button>
+
+        <p style="font-size:0.82rem;font-weight:700;color:var(--muted);margin:0">Alterar senha</p>
+
+        <input id="profileCurrentPw" type="password" placeholder="Senha atual"
+          style="min-height:44px;border:1.5px solid var(--line);border-radius:12px;
+          padding:8px 12px;background:var(--surface2);color:var(--text);font-size:0.9rem;width:100%"/>
+
+        <input id="profileNewPw" type="password" placeholder="Nova senha (mín. 6 caracteres)"
+          style="min-height:44px;border:1.5px solid var(--line);border-radius:12px;
+          padding:8px 12px;background:var(--surface2);color:var(--text);font-size:0.9rem;width:100%"/>
+
+        <div id="profileModalError"
+          style="color:var(--red,#ff3b30);font-size:0.84rem;font-weight:600;
+          display:none;background:var(--red-soft,#ffeeed);padding:10px 12px;
+          border-radius:10px;border:1px solid #ffcdd2"></div>
+
+        <div id="profileModalSuccess"
+          style="color:var(--green,#34c759);font-size:0.84rem;font-weight:600;
+          display:none;background:var(--green-soft,#e5f9ec);padding:10px 12px;
+          border-radius:10px;border:1px solid #a5d6a7"></div>
+
+        <button id="saveProfileBtn"
+          style="height:48px;border-radius:14px;background:var(--accent,#4f8ef7);
+          color:#fff;font-weight:700;font-size:0.95rem;border:none;cursor:pointer;width:100%">
+          Salvar alterações
+        </button>
+
+        <button id="logoutFromModal"
+          style="height:44px;border-radius:14px;background:var(--red-soft,#ffeeed);
+          color:var(--red,#ff3b30);font-weight:700;font-size:0.9rem;
+          border:none;cursor:pointer;width:100%">
+          🚪 Sair da conta
+        </button>
       </div>
     </div>
   `;
 
   document.body.appendChild(modal);
 
+  // Fechar modal
   document.getElementById("closeProfileModal").addEventListener("click", () => modal.remove());
   modal.addEventListener("click", (e) => { if (e.target === modal) modal.remove(); });
 
-  // Logout direto do modal de perfil também
+  // ── Upload de foto ─────────────────────────────────────────────
+  document.getElementById("photoFileInput").addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Validações
+    if (!file.type.startsWith("image/")) {
+      showProfileError("Selecione um arquivo de imagem (JPG, PNG, etc).");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      showProfileError("A imagem deve ter no máximo 5 MB.");
+      return;
+    }
+
+    // Preview local imediato (antes de fazer upload)
+    const localURL = URL.createObjectURL(file);
+    document.getElementById("avatarPreview").innerHTML =
+      `<img src="${localURL}" style="width:100%;height:100%;object-fit:cover" alt=""/>`;
+
+    // Mostra barra de progresso
+    const progressWrap = document.getElementById("uploadProgress");
+    const progressBar  = document.getElementById("uploadProgressBar");
+    progressWrap.style.display = "block";
+    progressBar.style.width    = "30%";
+
+    try {
+      // Faz upload para Firebase Storage: avatars/{uid}/profile.jpg
+      const storageRef = ref(storage, `avatars/${currentUser.uid}/profile`);
+      progressBar.style.width = "60%";
+
+      await uploadBytes(storageRef, file, { contentType: file.type });
+      progressBar.style.width = "85%";
+
+      // Pega a URL pública da foto
+      const downloadURL = await getDownloadURL(storageRef);
+      progressBar.style.width = "100%";
+
+      // Salva no perfil do Firebase Auth
+      await updateProfile(currentUser, { photoURL: downloadURL });
+
+      // Atualiza todos os avatares na UI sem recarregar
+      updateAllAvatars(downloadURL);
+
+      progressWrap.style.display = "none";
+      showProfileSuccess("✅ Foto atualizada com sucesso!");
+    } catch (err) {
+      console.error("Upload error:", err);
+      progressWrap.style.display = "none";
+      // Se o Storage não estiver ativado, mostra instrução clara
+      if (err.code === "storage/unauthorized") {
+        showProfileError("Firebase Storage não está ativado. Veja as instruções abaixo.");
+      } else {
+        showProfileError("Erro ao enviar a foto. Tente novamente.");
+      }
+      // Reverte o preview para a foto anterior
+      document.getElementById("avatarPreview").innerHTML = photoURL
+        ? `<img src="${photoURL}" style="width:100%;height:100%;object-fit:cover" alt=""/>`
+        : initial;
+    }
+  });
+
+  // ── Logout ─────────────────────────────────────────────────────
   document.getElementById("logoutFromModal").addEventListener("click", async () => {
     if (!confirm("Deseja sair da sua conta?")) return;
     modal.remove();
@@ -371,46 +567,97 @@ function showProfileModal(user) {
     await logout();
   });
 
+  // ── Salvar nome / senha ────────────────────────────────────────
   document.getElementById("saveProfileBtn").addEventListener("click", async () => {
     const newName   = document.getElementById("profileName").value.trim();
     const currentPw = document.getElementById("profileCurrentPw").value;
     const newPw     = document.getElementById("profileNewPw").value;
-    const errEl     = document.getElementById("profileModalError");
-    errEl.style.display = "none";
+    hideProfileMessages();
 
     try {
-      // Atualiza nome no Firebase Auth
-      if (newName && newName !== user.name) {
+      let changed = false;
+
+      // Atualiza nome
+      if (newName && newName !== (currentUser.displayName || "")) {
         await updateProfile(currentUser, { displayName: newName });
+        // Atualiza nome no dropdown sem recarregar
+        const nameEl = document.querySelector(".user-dropdown-header strong");
+        if (nameEl) nameEl.textContent = newName;
+        changed = true;
       }
 
-      // Troca de senha — exige reautenticação por segurança
-      if (currentPw && newPw) {
-        if (newPw.length < 6) {
-          errEl.textContent = "A nova senha deve ter pelo menos 6 caracteres.";
-          errEl.style.display = "block";
-          return;
-        }
+      // Troca de senha
+      if (currentPw || newPw) {
+        if (!currentPw) { showProfileError("Informe a senha atual."); return; }
+        if (!newPw)     { showProfileError("Informe a nova senha."); return; }
+        if (newPw.length < 6) { showProfileError("A nova senha deve ter pelo menos 6 caracteres."); return; }
+
         const credential = EmailAuthProvider.credential(currentUser.email, currentPw);
         await reauthenticateWithCredential(currentUser, credential);
         await updatePassword(currentUser, newPw);
+
+        // Limpa os campos de senha
+        document.getElementById("profileCurrentPw").value = "";
+        document.getElementById("profileNewPw").value     = "";
+        changed = true;
       }
 
-      showToast("✅ Perfil atualizado!");
-      modal.remove();
-      // Atualiza o avatar/nome exibido sem precisar recarregar a página
-      document.querySelector(".user-avatar-btn").textContent = (newName || user.name || "U").charAt(0).toUpperCase();
+      if (changed) {
+        showProfileSuccess("✅ Perfil atualizado com sucesso!");
+        showToast("✅ Perfil atualizado!");
+      } else {
+        showProfileSuccess("Nenhuma alteração detectada.");
+      }
     } catch (err) {
       const messages = {
-        "auth/wrong-password": "Senha atual incorreta.",
-        "auth/invalid-credential": "Senha atual incorreta.",
+        "auth/wrong-password":        "Senha atual incorreta.",
+        "auth/invalid-credential":    "Senha atual incorreta.",
         "auth/requires-recent-login": "Por segurança, faça login novamente antes de trocar a senha.",
-        "auth/weak-password": "A nova senha é muito fraca.",
+        "auth/weak-password":         "A nova senha é muito fraca.",
       };
-      errEl.textContent = messages[err.code] || "Erro ao salvar. Tente novamente.";
-      errEl.style.display = "block";
+      showProfileError(messages[err.code] || `Erro: ${err.message}`);
     }
   });
+
+  // ── Helpers internos do modal ──────────────────────────────────
+  function showProfileError(msg) {
+    const el = document.getElementById("profileModalError");
+    el.textContent    = msg;
+    el.style.display  = "block";
+    document.getElementById("profileModalSuccess").style.display = "none";
+  }
+  function showProfileSuccess(msg) {
+    const el = document.getElementById("profileModalSuccess");
+    el.textContent    = msg;
+    el.style.display  = "block";
+    document.getElementById("profileModalError").style.display = "none";
+  }
+  function hideProfileMessages() {
+    document.getElementById("profileModalError").style.display   = "none";
+    document.getElementById("profileModalSuccess").style.display = "none";
+  }
+}
+
+// Atualiza todos os pontos da UI que exibem o avatar do usuário
+function updateAllAvatars(photoURL) {
+  // Botão principal no topbar
+  const mainBtn = document.querySelector(".user-avatar-btn");
+  if (mainBtn) {
+    mainBtn.innerHTML = `<img src="${photoURL}"
+      style="width:100%;height:100%;object-fit:cover;border-radius:50%" alt=""/>`;
+  }
+  // Mini avatar no dropdown
+  const dropdownAvatar = document.querySelector(".user-dropdown-header div");
+  if (dropdownAvatar) {
+    dropdownAvatar.innerHTML = `<img src="${photoURL}"
+      style="width:100%;height:100%;object-fit:cover" alt=""/>`;
+  }
+  // Avatar grande no modal de perfil (se ainda estiver aberto)
+  const previewEl = document.getElementById("avatarPreview");
+  if (previewEl) {
+    previewEl.innerHTML = `<img src="${photoURL}"
+      style="width:100%;height:100%;object-fit:cover" alt=""/>`;
+  }
 }
 
 function loadState() {
@@ -586,6 +833,17 @@ function bindForms() {
   // Finance form
   const expForm = document.querySelector("#expenseForm");
   if (expForm) expForm.addEventListener("submit", saveExpense);
+
+  // Popula o select de categorias (fixas + customizadas) na primeira carga
+  populateCategorySelect();
+
+  // Botão "+ Nova categoria"
+  const newCatBtn = document.querySelector("#newCategoryBtn");
+  if (newCatBtn) newCatBtn.addEventListener("click", openNewCategoryPrompt);
+
+  // Botão "Cancelar edição" (some quando não está editando)
+  const cancelEditBtn = document.querySelector("#cancelEditExpense");
+  if (cancelEditBtn) cancelEditBtn.addEventListener("click", resetExpenseForm);
 
   // Finance type toggle
   document.querySelectorAll("[data-fin-type]").forEach((btn) => {
@@ -1125,9 +1383,10 @@ function deleteEvent(id) {
 }
 
 function renderGoals() {
+  const goals = queryFilter(state.goals, ["title"]);
   renderList(
     "#goalsList",
-    state.goals,
+    goals,
     (goal) => {
       const percent = Math.min(100, Math.round((goal.current / goal.target) * 100));
       const isComplete = goal.current >= goal.target;
@@ -1147,7 +1406,7 @@ function renderGoals() {
         </article>
       `;
     },
-    "Nenhuma meta criada. Defina seu foco! 🎯"
+    elements.globalSearch.value.trim() ? "Nenhuma meta encontrada para essa busca." : "Nenhuma meta criada. Defina seu foco! 🎯"
   );
   renderAchievements();
 }
@@ -1240,27 +1499,81 @@ function getActiveFinMonth() {
 
 function saveExpense(event) {
   event.preventDefault();
+  const editId = valueOf("#expenseId");
   const type = document.querySelector("#expenseType").value || "despesa";
   const amount = parseFloat(valueOf("#expenseAmount").replace(",", "."));
   if (isNaN(amount) || amount <= 0) { showToast("Informe um valor válido."); return; }
-  const entry = {
-    id: crypto.randomUUID(),
-    type,
-    amount,
-    category: valueOf("#expenseCategory") || "outros",
-    description: valueOf("#expenseDescription") || (type === "receita" ? "Receita" : "Despesa"),
-    date: valueOf("#expenseDate") || todayIso,
-  };
+
   if (!state.finances) state.finances = [];
-  state.finances.unshift(entry);
+
+  if (editId) {
+    // Modo edição: atualiza o registro existente
+    state.finances = state.finances.map((f) =>
+      f.id === editId
+        ? {
+            ...f,
+            type,
+            amount,
+            category: valueOf("#expenseCategory") || "outros",
+            description: valueOf("#expenseDescription") || (type === "receita" ? "Receita" : "Despesa"),
+            date: valueOf("#expenseDate") || todayIso,
+          }
+        : f
+    );
+    showToast("✏️ Registro atualizado!");
+  } else {
+    const entry = {
+      id: crypto.randomUUID(),
+      type,
+      amount,
+      category: valueOf("#expenseCategory") || "outros",
+      description: valueOf("#expenseDescription") || (type === "receita" ? "Receita" : "Despesa"),
+      date: valueOf("#expenseDate") || todayIso,
+    };
+    state.finances.unshift(entry);
+    showToast(type === "receita" ? "💰 Receita adicionada!" : "💸 Despesa registrada!");
+  }
+
   saveState();
   renderFinances();
-  showToast(type === "receita" ? "💰 Receita adicionada!" : "💸 Despesa registrada!");
-  event.target.reset();
+  resetExpenseForm();
+}
+
+function resetExpenseForm() {
+  document.querySelector("#expenseForm").reset();
+  document.querySelector("#expenseId").value = "";
   document.querySelector("#expenseDate").value = todayIso;
   document.querySelector("#expenseType").value = "despesa";
-  // Reset type buttons
   document.querySelectorAll("[data-fin-type]").forEach((b) => b.classList.toggle("active", b.dataset.finType === "despesa"));
+  // Restaura o texto do botão e título do formulário
+  const submitBtn = document.querySelector("#expenseForm button[type=submit]");
+  if (submitBtn) submitBtn.textContent = "➕ Registrar";
+  const cancelBtn = document.querySelector("#cancelEditExpense");
+  if (cancelBtn) cancelBtn.hidden = true;
+}
+
+function editFinance(id) {
+  const entry = state.finances.find((f) => f.id === id);
+  if (!entry) return;
+
+  setView("finances");
+
+  document.querySelector("#expenseId").value          = entry.id;
+  document.querySelector("#expenseAmount").value       = String(entry.amount).replace(".", ",");
+  document.querySelector("#expenseDescription").value  = entry.description || "";
+  document.querySelector("#expenseDate").value         = entry.date;
+  document.querySelector("#expenseType").value         = entry.type;
+  document.querySelectorAll("[data-fin-type]").forEach((b) => b.classList.toggle("active", b.dataset.finType === entry.type));
+
+  populateCategorySelect(entry.category);
+
+  const submitBtn = document.querySelector("#expenseForm button[type=submit]");
+  if (submitBtn) submitBtn.textContent = "💾 Salvar alterações";
+  const cancelBtn = document.querySelector("#cancelEditExpense");
+  if (cancelBtn) cancelBtn.hidden = false;
+
+  document.querySelector("#expenseAmount").focus();
+  document.querySelector(".fin-form-card")?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function deleteFinance(id) {
@@ -1284,9 +1597,19 @@ function renderFinances() {
 
   let entries = [...state.finances].sort((a, b) => b.date.localeCompare(a.date));
   if (monthFilter === "all") {
-    // no filter — show all time
+    // sem filtro de mês — mostra tudo
   } else {
     entries = entries.filter((f) => f.date.startsWith(currentMonthKey));
+  }
+
+  // Aplica a busca global (por descrição ou categoria)
+  const query = elements.globalSearch.value.trim().toLowerCase();
+  if (query) {
+    entries = entries.filter((f) => {
+      const cat = findCategory(f.category);
+      return (f.description || "").toLowerCase().includes(query)
+          || cat.label.toLowerCase().includes(query);
+    });
   }
 
   const receitas  = entries.filter((f) => f.type === "receita").reduce((s, f) => s + f.amount, 0);
@@ -1294,7 +1617,6 @@ function renderFinances() {
   const saldo     = receitas - despesas;
   const usedPct   = receitas > 0 ? Math.min(100, Math.round((despesas / receitas) * 100)) : 0;
 
-  // Summary cards
   document.querySelector("#finReceitas").textContent  = formatCurrency(receitas);
   document.querySelector("#finDespesas").textContent  = formatCurrency(despesas);
   document.querySelector("#finSaldo").textContent     = formatCurrency(saldo);
@@ -1303,7 +1625,7 @@ function renderFinances() {
   document.querySelector("#finProgressBar").style.background = usedPct > 80 ? "var(--red)" : usedPct > 60 ? "var(--orange)" : "var(--green)";
   document.querySelector("#finUsedLabel").textContent = `${usedPct}% das receitas usadas`;
 
-  // Category breakdown
+  // Distribuição por categoria
   const byCat = {};
   entries.filter((f) => f.type === "despesa").forEach((f) => {
     byCat[f.category] = (byCat[f.category] || 0) + f.amount;
@@ -1313,7 +1635,7 @@ function renderFinances() {
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5)
     .map(([catId, total]) => {
-      const cat = expenseCategories.find((c) => c.id === catId) || { label: "📦 Outros", color: "#8a9bb0" };
+      const cat = findCategory(catId);
       const pct = despesas > 0 ? Math.round((total / despesas) * 100) : 0;
       return `
         <div class="fin-cat-row">
@@ -1330,32 +1652,33 @@ function renderFinances() {
 
   document.querySelector("#finCategories").innerHTML = catHtml;
 
-  // Transaction list
   const listHtml = entries.length
-    ? entries.slice(0, 20).map((f) => {
-        const cat = expenseCategories.find((c) => c.id === f.category) || { label: "📦 Outros", color: "#8a9bb0" };
-        const isReceita = f.type === "receita";
-        return `
-          <article class="fin-transaction">
-            <div class="fin-tx-icon" style="background:${isReceita ? "var(--green-soft)" : cat.color + "22"};color:${isReceita ? "var(--green)" : cat.color}">
-              ${isReceita ? "💰" : cat.label.split(" ")[0]}
-            </div>
-            <div class="fin-tx-info">
-              <strong>${escapeHtml(f.description)}</strong>
-              <span class="task-meta">${isReceita ? "Receita" : cat.label.replace(/^.\s/, "")} · ${formatDate(f.date)}</span>
-            </div>
-            <div class="fin-tx-amount ${isReceita ? "receita" : "despesa"}">
-              ${isReceita ? "+" : "-"}${formatCurrency(f.amount)}
-            </div>
-            <button class="mini-button" onclick="deleteFinance('${f.id}')" style="padding:0;width:26px;height:26px;flex-shrink:0">🗑️</button>
-          </article>`;
-      }).join("")
-    : `<div class="empty-state">Nenhum registro no período 📭</div>`;
+    ? entries.slice(0, 30).map((f) => renderFinTransaction(f)).join("")
+    : `<div class="empty-state">${query ? "Nenhum resultado para essa busca 🔍" : "Nenhum registro no período 📭"}</div>`;
 
   document.querySelector("#finTransactions").innerHTML = listHtml;
 
-  // Calendar heatmap
   renderFinCalendar(currentMonthKey, entries);
+}
+
+function renderFinTransaction(f) {
+  const cat = findCategory(f.category);
+  const isReceita = f.type === "receita";
+  return `
+    <article class="fin-transaction">
+      <div class="fin-tx-icon" style="background:${isReceita ? "var(--green-soft)" : cat.color + "22"};color:${isReceita ? "var(--green)" : cat.color}">
+        ${isReceita ? "💰" : cat.label.split(" ")[0]}
+      </div>
+      <div class="fin-tx-info">
+        <strong>${escapeHtml(f.description)}</strong>
+        <span class="task-meta">${isReceita ? "Receita" : cat.label.replace(/^.\s/, "")} · ${formatDate(f.date)}</span>
+      </div>
+      <div class="fin-tx-amount ${isReceita ? "receita" : "despesa"}">
+        ${isReceita ? "+" : "-"}${formatCurrency(f.amount)}
+      </div>
+      <button class="mini-button" onclick="editFinance('${f.id}')" title="Editar" style="padding:0;width:26px;height:26px;flex-shrink:0">✏️</button>
+      <button class="mini-button" onclick="deleteFinance('${f.id}')" title="Excluir" style="padding:0;width:26px;height:26px;flex-shrink:0">🗑️</button>
+    </article>`;
 }
 
 function renderFinCalendar(monthKey, entries) {
@@ -1388,26 +1711,142 @@ function renderFinCalendar(monthKey, entries) {
 function filterFinByDate(date) {
   const entries = state.finances.filter((f) => f.date === date);
   const listHtml = entries.length
-    ? entries.map((f) => {
-        const cat = expenseCategories.find((c) => c.id === f.category) || { label: "📦 Outros", color: "#8a9bb0" };
-        const isReceita = f.type === "receita";
-        return `
-          <article class="fin-transaction">
-            <div class="fin-tx-icon" style="background:${isReceita ? "var(--green-soft)" : cat.color + "22"};color:${isReceita ? "var(--green)" : cat.color}">
-              ${isReceita ? "💰" : cat.label.split(" ")[0]}
-            </div>
-            <div class="fin-tx-info">
-              <strong>${escapeHtml(f.description)}</strong>
-              <span class="task-meta">${isReceita ? "Receita" : cat.label.replace(/^.\s/, "")} · ${formatDate(f.date)}</span>
-            </div>
-            <div class="fin-tx-amount ${isReceita ? "receita" : "despesa"}">
-              ${isReceita ? "+" : "-"}${formatCurrency(f.amount)}
-            </div>
-            <button class="mini-button" onclick="deleteFinance('${f.id}')" style="padding:0;width:26px;height:26px;flex-shrink:0">🗑️</button>
-          </article>`;
-      }).join("")
+    ? entries.map((f) => renderFinTransaction(f)).join("")
     : `<div class="empty-state">Sem registros neste dia 📭</div>`;
   document.querySelector("#finTransactions").innerHTML = listHtml;
+}
+
+// Preenche o <select> de categorias com as fixas + customizadas do usuário.
+// Se selectedId for passado, marca essa opção como selecionada.
+function populateCategorySelect(selectedId) {
+  const select = document.querySelector("#expenseCategory");
+  if (!select) return;
+  const current = selectedId || select.value;
+  select.innerHTML = getAllCategories()
+    .map((cat) => `<option value="${cat.id}">${cat.label}</option>`)
+    .join("");
+  if (current) select.value = current;
+}
+
+function openNewCategoryPrompt() {
+  const modal = document.createElement("div");
+  modal.id = "newCategoryModal";
+  modal.style.cssText = `position:fixed;inset:0;z-index:600;background:rgba(0,0,0,0.45);
+    backdrop-filter:blur(6px);display:grid;place-items:center;padding:20px`;
+
+  const colorOptions = ["#ff9500","#5ac8fa","#ff3b30","#af52de","#34c759","#ff6b6b","#ff2d55","#5856d6","#00c7be","#8a9bb0"];
+  const emojiOptions  = ["🔁","💡","🎮","🐾","✈️","🎁","🏋️","📱","🧾","🛠️","🍷","🚀"];
+
+  modal.innerHTML = `
+    <div style="background:var(--surface);border-radius:24px;padding:26px;width:100%;max-width:380px;
+      box-shadow:0 20px 60px rgba(0,0,0,0.25);animation:fadeUp 200ms ease">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
+        <h2 style="font-size:1.1rem;font-weight:800;color:var(--text)">Nova categoria</h2>
+        <button id="closeNewCategory" style="width:30px;height:30px;border-radius:10px;
+          background:var(--surface2);border:none;font-size:1rem;cursor:pointer;color:var(--text2)">✕</button>
+      </div>
+
+      <label style="display:grid;gap:5px;font-size:0.82rem;font-weight:600;color:var(--muted);margin-bottom:12px">
+        Nome da categoria
+        <input id="newCatName" placeholder="Ex.: Assinaturas" maxlength="24"
+          style="min-height:44px;border:1.5px solid var(--line);border-radius:12px;
+          padding:8px 12px;background:var(--surface2);color:var(--text);font-size:0.92rem;width:100%"/>
+      </label>
+
+      <p style="font-size:0.8rem;font-weight:600;color:var(--muted);margin-bottom:8px">Ícone</p>
+      <div id="emojiPicker" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px">
+        ${emojiOptions.map((e, i) => `
+          <button class="cat-emoji-btn ${i === 0 ? "active" : ""}" data-emoji="${e}"
+            style="width:38px;height:38px;border-radius:10px;font-size:1.1rem;
+            border:2px solid ${i === 0 ? "var(--accent)" : "var(--line)"};
+            background:var(--surface2);cursor:pointer">${e}</button>
+        `).join("")}
+      </div>
+
+      <p style="font-size:0.8rem;font-weight:600;color:var(--muted);margin-bottom:8px">Cor</p>
+      <div id="colorPicker" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px">
+        ${colorOptions.map((c, i) => `
+          <button class="cat-color-btn ${i === 0 ? "active" : ""}" data-color="${c}"
+            style="width:30px;height:30px;border-radius:50%;background:${c};cursor:pointer;
+            border:3px solid ${i === 0 ? "var(--text)" : "transparent"}"></button>
+        `).join("")}
+      </div>
+
+      <div id="newCategoryError" style="color:var(--red,#ff3b30);font-size:0.84rem;font-weight:600;
+        display:none;background:var(--red-soft,#ffeeed);padding:10px 12px;border-radius:10px;margin-bottom:12px"></div>
+
+      <button id="saveNewCategory" style="height:48px;border-radius:14px;background:var(--accent);
+        color:#fff;font-weight:700;font-size:0.95rem;border:none;cursor:pointer;width:100%">
+        Criar categoria
+      </button>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  let selectedEmoji = emojiOptions[0];
+  let selectedColor = colorOptions[0];
+
+  modal.querySelectorAll(".cat-emoji-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      modal.querySelectorAll(".cat-emoji-btn").forEach((b) => b.style.borderColor = "var(--line)");
+      btn.style.borderColor = "var(--accent)";
+      selectedEmoji = btn.dataset.emoji;
+    });
+  });
+
+  modal.querySelectorAll(".cat-color-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      modal.querySelectorAll(".cat-color-btn").forEach((b) => b.style.borderColor = "transparent");
+      btn.style.borderColor = "var(--text)";
+      selectedColor = btn.dataset.color;
+    });
+  });
+
+  document.getElementById("closeNewCategory").addEventListener("click", () => modal.remove());
+  modal.addEventListener("click", (e) => { if (e.target === modal) modal.remove(); });
+
+  document.getElementById("saveNewCategory").addEventListener("click", () => {
+    const name = document.getElementById("newCatName").value.trim();
+    const errEl = document.getElementById("newCategoryError");
+    if (!name) {
+      errEl.textContent = "Digite um nome para a categoria.";
+      errEl.style.display = "block";
+      return;
+    }
+
+    const id = "custom_" + name.toLowerCase().replace(/[^a-z0-9]+/g, "_").slice(0, 24) + "_" + Date.now().toString(36);
+
+    if (!state.customCategories) state.customCategories = [];
+    state.customCategories.push({
+      id,
+      label: `${selectedEmoji} ${name}`,
+      color: selectedColor,
+    });
+    saveState();
+
+    populateCategorySelect(id);
+    modal.remove();
+    showToast(`✅ Categoria "${name}" criada!`);
+  });
+}
+
+// Abre direto a tela certa quando o app é aberto via atalho do PWA
+// (ex: pressionar e segurar o ícone na tela inicial → "Nova tarefa")
+function handlePwaShortcutAction() {
+  const action = new URLSearchParams(window.location.search).get("action");
+  if (!action) return;
+
+  if (action === "new-task") {
+    setView("tasks");
+    setTimeout(() => document.querySelector("#taskTitle")?.focus(), 200);
+  } else if (action === "new-expense") {
+    setView("finances");
+    setTimeout(() => document.querySelector("#expenseAmount")?.focus(), 200);
+  }
+
+  // Limpa o parâmetro da URL para não reabrir a mesma ação ao recarregar
+  history.replaceState(null, "", window.location.pathname);
 }
 
 window.editNote = editNote;
@@ -1422,4 +1861,5 @@ window.deleteEvent = deleteEvent;
 window.changeGoal = changeGoal;
 window.deleteGoal = deleteGoal;
 window.deleteFinance = deleteFinance;
+window.editFinance = editFinance;
 window.filterFinByDate = filterFinByDate;

@@ -1670,3 +1670,32 @@ textarea { resize: vertical; min-height: 80px; }
   .fin-cat-info { min-width: 90px; font-size: 0.78rem; }
   .fin-cat-value { min-width: 64px; font-size: 0.78rem; }
 }
+
+/* ---- Botão de nova categoria e cancelar edição ---- */
+#newCategoryBtn:hover {
+  background: var(--accent-soft) !important;
+  border-color: var(--accent) !important;
+}
+
+#cancelEditExpense:hover {
+  background: var(--line) !important;
+}
+
+/* ---- Emoji/cor pickers do modal de nova categoria ---- */
+.cat-emoji-btn:hover, .cat-color-btn:hover {
+  transform: scale(1.08);
+  transition: transform 140ms ease;
+}
+
+/* ---- Botão de editar transação ---- */
+.fin-transaction .mini-button {
+  transition: all 140ms ease;
+}
+.fin-transaction .mini-button:hover {
+  transform: scale(1.1);
+}
+
+/* ---- Banner de instalação PWA ---- */
+#pwaInstallBanner strong, #pwaInstallBanner span {
+  font-family: inherit;
+}

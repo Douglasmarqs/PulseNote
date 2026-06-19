@@ -4,6 +4,20 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>PulseNote - Produtividade pessoal</title>
+
+    <!-- PWA: instalação e ícone na tela inicial -->
+    <link rel="manifest" href="manifest.json" />
+    <meta name="theme-color" content="#4f8ef7" />
+    <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png" />
+    <link rel="shortcut icon" href="favicon.ico" />
+
+    <!-- iOS: ícone e comportamento de app instalado -->
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="PulseNote" />
+
     <link rel="stylesheet" href="styles.css" />
     <link rel="stylesheet" href="auth.css" />
   </head>
@@ -436,6 +450,7 @@
                 </div>
 
                 <form id="expenseForm">
+                  <input id="expenseId" type="hidden" value="" />
                   <input id="expenseType" type="hidden" value="despesa" />
                   <div class="fin-amount-field">
                     <span class="fin-currency-sign">R$</span>
@@ -447,16 +462,24 @@
                   </label>
                   <label>
                     Categoria
-                    <select id="expenseCategory">
-                      <option value="alimentacao">🍔 Alimentação</option>
-                      <option value="transporte">🚗 Transporte</option>
-                      <option value="saude">💊 Saúde</option>
-                      <option value="lazer">🎬 Lazer</option>
-                      <option value="educacao">📚 Educação</option>
-                      <option value="moradia">🏠 Moradia</option>
-                      <option value="roupas">👗 Roupas</option>
-                      <option value="outros">📦 Outros</option>
-                    </select>
+                    <div style="display:flex;gap:8px;align-items:stretch">
+                      <select id="expenseCategory" style="flex:1">
+                        <option value="alimentacao">🍔 Alimentação</option>
+                        <option value="transporte">🚗 Transporte</option>
+                        <option value="saude">💊 Saúde</option>
+                        <option value="lazer">🎬 Lazer</option>
+                        <option value="educacao">📚 Educação</option>
+                        <option value="moradia">🏠 Moradia</option>
+                        <option value="roupas">👗 Roupas</option>
+                        <option value="assinaturas">🔁 Assinaturas</option>
+                        <option value="outros">📦 Outros</option>
+                      </select>
+                      <button type="button" id="newCategoryBtn" title="Criar nova categoria"
+                        style="flex-shrink:0;width:42px;border-radius:12px;border:1.5px solid var(--line);
+                        background:var(--surface2);color:var(--accent);font-size:1.2rem;font-weight:700;cursor:pointer">
+                        ＋
+                      </button>
+                    </div>
                   </label>
                   <label>
                     Data
@@ -464,6 +487,12 @@
                   </label>
                   <button type="submit" class="primary-button" style="width:100%;justify-content:center;height:48px;font-size:1rem">
                     ➕ Registrar
+                  </button>
+                  <button type="button" id="cancelEditExpense" hidden
+                    style="width:100%;justify-content:center;height:40px;font-size:0.88rem;
+                    margin-top:8px;border-radius:12px;border:1.5px solid var(--line);
+                    background:var(--surface2);color:var(--text2);cursor:pointer;font-weight:600">
+                    Cancelar edição
                   </button>
                 </form>
               </div>
@@ -592,6 +621,7 @@
       <option value="Finanças"></option>
     </datalist>
 
+    <script src="pwa-install.js"></script>
     <script type="module" src="app.js"></script>
   </body>
 </html>
