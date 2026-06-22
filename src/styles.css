@@ -648,8 +648,13 @@ p, h1, h2, h3 { margin: 0; }
   font-size: 0.85rem;
   transition: all 160ms;
   flex-shrink: 0;
+  position: relative;
 }
 .task-check:hover { border-color: var(--green); background: var(--green-soft); }
+
+@media (max-width: 720px) {
+  .task-check::after { content: ""; position: absolute; inset: -8px; }
+}
 
 .task-title { font-weight: 600; font-size: 0.9rem; overflow-wrap: anywhere; color: var(--text); }
 .task-meta, .note-meta, .event-meta { color: var(--muted); font-size: 0.8rem; margin-top: 1px; }
@@ -701,6 +706,21 @@ p, h1, h2, h3 { margin: 0; }
   transition: all 150ms;
 }
 .mini-button:hover, .card-actions button:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+
+/* No mobile, botões de ação pequenos (editar, excluir, favoritar, mover)
+   ganham uma área de toque mínima de 44x44px mesmo mantendo o visual
+   compacto — usa um "padding invisível" via pseudo-elemento para não
+   precisar tocar 2-3 vezes até acertar o botão certo. */
+@media (max-width: 720px) {
+  .mini-button, .card-actions button {
+    position: relative;
+  }
+  .mini-button::after, .card-actions button::after {
+    content: "";
+    position: absolute;
+    inset: -7px;
+  }
+}
 
 /* ---------- BAR CHART ---------- */
 .bar-chart {
@@ -791,6 +811,16 @@ input, textarea, select {
   background: var(--surface2);
   font-size: 0.9rem;
   transition: border-color 180ms, box-shadow 180ms;
+}
+
+/* No mobile, todo campo de formulário precisa ter pelo menos 16px de
+   font-size — abaixo disso, o iOS Safari faz zoom automático ao focar
+   o campo (e não desfaz o zoom sozinho), o que dá a sensação de
+   "tela bagunçada" que precisa de esforço para usar. */
+@media (max-width: 720px) {
+  input, textarea, select {
+    font-size: 16px;
+  }
 }
 
 input:focus, textarea:focus, select:focus {
@@ -946,6 +976,11 @@ textarea { resize: vertical; min-height: 80px; }
   font-size: 0.6rem;
   cursor: pointer;
   transition: all 150ms;
+  position: relative;
+}
+
+@media (max-width: 720px) {
+  .cl-check::after { content: ""; position: absolute; inset: -12px; }
 }
 
 .cl-check.done {
@@ -1026,6 +1061,47 @@ textarea { resize: vertical; min-height: 80px; }
 }
 
 .task-column.drag-over { border-color: var(--accent); background: var(--accent-soft); }
+
+/* Abas de status (só visíveis no mobile) */
+.task-status-tabs { display: none; }
+
+@media (max-width: 720px) {
+  .task-status-tabs {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 4px;
+    margin-bottom: 12px;
+  }
+  .task-status-tabs::-webkit-scrollbar { display: none; }
+
+  .status-tab {
+    flex-shrink: 0;
+    padding: 9px 16px;
+    border-radius: 999px;
+    font-size: 0.84rem;
+    font-weight: 700;
+    color: var(--text2);
+    background: var(--surface2);
+    border: 1.5px solid var(--line);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 160ms;
+  }
+  .status-tab.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+  }
+
+  /* Com as abas ativas, o board vira 1 coluna e mostra só a coluna
+     correspondente à aba selecionada — sem precisar rolar tudo */
+  .task-board { grid-template-columns: 1fr; }
+  .task-column { display: none; }
+  .task-column.tab-active { display: flex; }
+}
 
 .column-title {
   display: flex;
@@ -1667,8 +1743,15 @@ textarea { resize: vertical; min-height: 80px; }
   .fin-summary-grid .fin-summary-card:last-child { grid-column: span 2; }
   .fin-cal-grid { grid-template-columns: repeat(7, 1fr); gap: 3px; }
   .fin-cal-day { font-size: 0.7rem; border-radius: 8px; }
-  .fin-cat-info { min-width: 90px; font-size: 0.78rem; }
-  .fin-cat-value { min-width: 64px; font-size: 0.78rem; }
+  .fin-cat-row { gap: 6px; }
+  .fin-cat-info { min-width: 76px; font-size: 0.74rem; flex-shrink: 0; }
+  .fin-cat-bar-wrap { min-width: 0; }
+  .fin-cat-value { min-width: 56px; font-size: 0.74rem; flex-shrink: 0; }
+}
+
+@media (max-width: 380px) {
+  .fin-cat-info { min-width: 64px; font-size: 0.7rem; }
+  .fin-cat-value { min-width: 48px; font-size: 0.7rem; }
 }
 
 /* ---- Botão de nova categoria e cancelar edição ---- */
@@ -1698,4 +1781,36 @@ textarea { resize: vertical; min-height: 80px; }
 /* ---- Banner de instalação PWA ---- */
 #pwaInstallBanner strong, #pwaInstallBanner span {
   font-family: inherit;
+}
+
+/* ---- Botão fixo de instalação do PWA ---- */
+.pwa-fixed-install-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 14px;
+  border-radius: 12px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1.5px solid var(--accent);
+  font-size: 0.84rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 160ms ease;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.pwa-fixed-install-btn:hover {
+  background: var(--accent);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+@media (max-width: 720px) {
+  .pwa-fixed-install-btn {
+    height: 36px;
+    padding: 0 12px;
+    font-size: 0.8rem;
+  }
 }

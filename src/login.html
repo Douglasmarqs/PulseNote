@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
   <title>PulseNote — Entrar</title>
 
   <!-- PWA: instalação e ícone na tela inicial -->
@@ -153,7 +153,15 @@
 
     <div class="auth-security-note">
       🔒 Seus dados são protegidos pela infraestrutura de segurança do Google Firebase
+      <br/>
+      <a href="privacy.html" style="font-size:0.76rem;color:#8a9bb0;text-decoration:underline">
+        Privacidade e Termos de Uso
+      </a>
     </div>
+
+    <!-- O botão "Instalar app" é inserido aqui pelo pwa-install.js,
+         apenas se o navegador permitir instalação como PWA -->
+    <div data-pwa-install-slot style="display:flex;justify-content:center;margin-top:4px"></div>
 
   </main>
 

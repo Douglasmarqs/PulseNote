@@ -215,7 +215,7 @@ body {
   border: 1.5px solid #e8ecf2;
   border-radius: 14px;
   padding: 0 42px 0 44px;
-  font-size: 0.95rem;
+  font-size: 16px; /* nunca menor que 16px: evita zoom automático no iOS Safari */
   color: #1a1f2e;
   font-family: inherit;
   transition: border-color 180ms, box-shadow 180ms, background 180ms;
@@ -492,4 +492,27 @@ body {
   .auth-title { font-size: 1.25rem; }
   .auth-features { gap: 6px; }
   .feature-pill { font-size: 0.76rem; padding: 5px 10px; }
+}
+
+/* ---- Botão fixo de instalação do PWA (tela de login) ---- */
+.pwa-fixed-install-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 20px;
+  border-radius: 999px;
+  background: rgba(79, 142, 247, 0.1);
+  color: #4f8ef7;
+  border: 1.5px solid #4f8ef7;
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 160ms ease;
+  font-family: inherit;
+}
+.pwa-fixed-install-btn:hover {
+  background: #4f8ef7;
+  color: #fff;
+  transform: translateY(-1px);
 }

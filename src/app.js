@@ -21,7 +21,14 @@ import {
   getDownloadURL,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
-const storageKey = "pulsenote-state-v1"; // cache local — só para abrir o app instantaneamente
+const BASE_STORAGE_KEY = "pulsenote-state-v1";
+
+// Retorna a chave de cache ISOLADA para o usuário atual.
+// Isso é essencial: sem isso, o navegador misturaria os dados em cache
+// de contas diferentes logadas no mesmo dispositivo.
+function getStorageKey() {
+  return currentUser ? `${BASE_STORAGE_KEY}:${currentUser.uid}` : null;
+}
 
 let currentUser   = null;   // objeto do usuário logado (Firebase Auth)
 let unsubscribeDoc = null;  // função para parar de "escutar" o Firestore
@@ -74,7 +81,8 @@ async function syncToServer() {
       data: state,
       updatedAt: new Date().toISOString(),
     });
-    localStorage.setItem(storageKey, JSON.stringify(state));
+    const key = getStorageKey();
+    if (key) localStorage.setItem(key, JSON.stringify(state));
     showSyncStatus("saved");
   } catch (err) {
     console.error("Erro ao salvar no Firestore:", err);
@@ -99,9 +107,10 @@ async function logout() {
     if (unsubscribeDoc) unsubscribeDoc();
     await signOut(auth);
   } finally {
-    // Não removemos o cache local — só os dados de sessão.
-    // Assim, se a pessoa logar de novo rapidamente, o app abre instantâneo
-    // enquanto busca os dados atualizados do Firestore.
+    // O cache local é isolado por UID (getStorageKey), então é seguro manter
+    // — não há risco de outra conta logada no mesmo aparelho "herdar" estes
+    // dados. Isso só acelera a próxima vez que esta mesma pessoa logar.
+    currentUser = null;
     window.location.replace("login.html");
   }
 }
@@ -118,47 +127,63 @@ const appReady = new Promise((resolve) => {
       return;
     }
 
-    currentUser = user;
+    // Força atualizar os dados do usuário (nome, foto) com o servidor.
+    // Sem isso, o objeto "user" pode vir de um cache local do navegador
+    // que ainda não tem a foto de perfil mais recente — é por isso que,
+    // às vezes, a foto "não aparece" depois de recarregar a página.
+    try { await user.reload(); } catch { /* segue mesmo se falhar (ex: offline) */ }
 
-    // Exibe cache local imediatamente (app abre instantâneo, sem tela branca)
-    const cached = localStorage.getItem(storageKey);
+    currentUser = auth.currentUser || user;
+
+    // IMPORTANTE: o state SEMPRE começa "vazio" (defaults de fábrica) até
+    // o Firestore confirmar os dados reais deste usuário específico.
+    // Isso evita usar por engano o cache de uma conta diferente que
+    // tenha ficado salva no mesmo navegador/dispositivo.
+    state = loadDefaultState();
+
+    // Só agora, com o usuário confirmado, lemos o cache ISOLADO por UID
+    // (chave inclui o uid — nunca se mistura com o de outra conta).
+    const key = getStorageKey();
+    const cached = key ? localStorage.getItem(key) : null;
     if (cached) {
-      try { state = JSON.parse(cached); } catch { /* ignore */ }
+      try {
+        const parsed = JSON.parse(cached);
+        if (parsed && typeof parsed === "object") state = normalizeState(parsed);
+      } catch { /* cache corrompido — ignora e segue com defaults */ }
     }
+
+    renderAll(); // mostra algo imediatamente (cache ou defaults) enquanto busca o Firestore
 
     const userDocRef = doc(db, "userData", user.uid);
 
     // onSnapshot escuta mudanças em tempo real no Firestore.
     // É chamado: (1) imediatamente com os dados atuais, (2) toda vez
-    // que outro dispositivo/aba salvar algo novo.
+    // que outro dispositivo/aba salvar algo novo para ESTE MESMO usuário.
     unsubscribeDoc = onSnapshot(
       userDocRef,
       (snapshot) => {
         if (snapshot.exists()) {
           const remote = snapshot.data().data;
           if (remote && typeof remote === "object") {
-            state = remote;
-            if (!state.finances) state.finances = [];
-            localStorage.setItem(storageKey, JSON.stringify(state));
+            state = normalizeState(remote);
+            const k = getStorageKey();
+            if (k) localStorage.setItem(k, JSON.stringify(state));
           }
         } else {
-          // Primeiro login deste usuário — cria o documento com os dados padrão
+          // Documento ainda não existe no Firestore para este usuário
+          // (primeiro login dele). Cria agora com os dados padrão/cache atual.
           setDoc(userDocRef, { data: state, updatedAt: new Date().toISOString() })
-            .catch(console.error);
+            .catch((err) => console.error("Erro ao criar documento inicial:", err));
         }
 
-        renderAll(); // re-renderiza quando chega dado novo do servidor
+        renderAll(); // re-renderiza com os dados confirmados do servidor
 
-        // Resolve a promise apenas na primeira vez (libera o DOMContentLoaded)
-        if (!resolved) {
-          resolved = true;
-          resolve();
-        }
+        if (!resolved) { resolved = true; resolve(); }
       },
       (err) => {
         console.error("Erro ao escutar Firestore:", err);
         showSyncStatus("error");
-        if (!resolved) { resolved = true; resolve(); } // segue com cache local
+        if (!resolved) { resolved = true; resolve(); } // segue com cache local/defaults
       }
     );
   });
@@ -208,7 +233,19 @@ const todayIso = new Date().toISOString().slice(0, 10);
 const tomorrowIso = offsetDate(1);
 const weekIso = offsetDate(5);
 
-let state = loadState();
+// O state começa com os valores padrão "de fábrica". Ele só é substituído
+// pelos dados reais do usuário DEPOIS que o Firebase confirma o login
+// (dentro do bloco onAuthStateChanged, em appReady) — nunca antes disso.
+let state = loadDefaultState();
+
+// Ponte para o notifications.js: como ele é um <script> normal (não um
+// módulo ES), não tem acesso direto às variáveis internas deste módulo.
+// Usamos um getter para que window.PulseNoteState sempre reflita o "state"
+// mais atual, mesmo depois de reatribuições (ex: quando os dados chegam
+// do Firestore).
+Object.defineProperty(window, "PulseNoteState", {
+  get() { return state; },
+});
 let activeView = "dashboard";
 let calendarMode = "month";
 let draggedTaskId = null;
@@ -272,6 +309,10 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   renderProfileButton(user);
 
+  // Inicia o agendador de notificações (só dispara de fato se o
+  // usuário já tiver concedido permissão anteriormente)
+  if (window.startNotificationScheduler) window.startNotificationScheduler();
+
   state.theme = normalizeTheme(state.theme);
   applyTheme(state.theme);
   bindNavigation();
@@ -331,6 +372,9 @@ function renderProfileButton(user) {
       </div>
     </div>
     <button class="dropdown-item" id="dropdownProfile">👤 Meu perfil</button>
+    <button class="dropdown-item" id="dropdownNotifications">
+      ${window.notificationsAreEnabled?.() ? "🔔 Notificações ativadas" : "🔕 Ativar notificações"}
+    </button>
     <button class="dropdown-item" id="dropdownTheme">🎨 Trocar tema</button>
     <button class="dropdown-item danger" id="dropdownLogout">🚪 Sair da conta</button>
   `;
@@ -369,6 +413,16 @@ function renderProfileButton(user) {
   document.getElementById("dropdownProfile").addEventListener("click", () => {
     closeDropdown();
     showProfileModal(user);
+  });
+
+  document.getElementById("dropdownNotifications").addEventListener("click", async () => {
+    if (window.notificationsAreEnabled?.()) {
+      showToast("As notificações já estão ativadas. Para desativar, use as configurações do navegador.");
+      closeDropdown();
+      return;
+    }
+    closeDropdown();
+    await window.requestNotificationPermission?.();
   });
 
   document.getElementById("dropdownTheme").addEventListener("click", () => {
@@ -660,24 +714,24 @@ function updateAllAvatars(photoURL) {
   }
 }
 
-function loadState() {
-  const saved = localStorage.getItem(storageKey);
-  if (saved) {
-    const parsed = JSON.parse(saved);
-    // Migrate: add finances array if missing (existing users)
-    if (!parsed.finances) {
-      parsed.finances = [
-        { id: crypto.randomUUID(), type: "receita", amount: 3300.00, category: "outros",      description: "Salário",           date: `${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,"0")}-01` },
-        { id: crypto.randomUUID(), type: "despesa", amount: 1200.00, category: "moradia",     description: "Aluguel",           date: `${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,"0")}-05` },
-        { id: crypto.randomUUID(), type: "despesa", amount: 320.80,  category: "alimentacao", description: "Supermercado",      date: todayIso },
-        { id: crypto.randomUUID(), type: "despesa", amount: 89.90,   category: "transporte",  description: "Combustível",       date: todayIso },
-        { id: crypto.randomUUID(), type: "despesa", amount: 49.90,   category: "lazer",       description: "Netflix + Spotify", date: offsetDate(-3) },
-        { id: crypto.randomUUID(), type: "receita", amount: 450.00,  category: "outros",      description: "Freela",            date: offsetDate(-2) },
-      ];
-    }
-    return parsed;
-  }
+// Garante que dados vindos do cache local ou do Firestore tenham todos os
+// campos esperados pelo app, mesmo que tenham sido salvos por uma versão
+// mais antiga (ex: contas criadas antes do módulo de Finanças existir).
+function normalizeState(parsed) {
+  if (!parsed.finances) parsed.finances = [];
+  if (!parsed.notes) parsed.notes = [];
+  if (!parsed.tasks) parsed.tasks = [];
+  if (!parsed.events) parsed.events = [];
+  if (!parsed.goals) parsed.goals = [];
+  if (!parsed.customCategories) parsed.customCategories = [];
+  if (!parsed.theme) parsed.theme = "sunny";
+  return parsed;
+}
 
+// Dados de exemplo exibidos apenas no primeiro acesso (conta nova, sem
+// nenhum documento no Firestore ainda). Servem só de demonstração —
+// assim que o usuário salvar algo, isso é substituído pelos dados reais.
+function loadDefaultState() {
   return {
     theme: "sunny",
     notes: [
@@ -758,7 +812,8 @@ function loadState() {
 // Salva mudanças localmente de imediato e agenda o envio para o Firestore
 // (debounce de 1.2s — evita gravar a cada tecla digitada, por exemplo)
 function saveState() {
-  localStorage.setItem(storageKey, JSON.stringify(state));
+  const key = getStorageKey();
+  if (key) localStorage.setItem(key, JSON.stringify(state));
   scheduleSyncToServer();
 }
 
@@ -888,6 +943,16 @@ function bindActions() {
       document.querySelectorAll("[data-calendar-mode]").forEach((item) => item.classList.remove("active"));
       button.classList.add("active");
       renderCalendar();
+    });
+  });
+
+  // Abas de status das tarefas (mobile) — trocar de aba só atualiza
+  // qual coluna fica visível, sem precisar de scroll horizontal/vertical longo
+  document.querySelectorAll("[data-status-tab]").forEach((tab) => {
+    tab.addEventListener("click", () => {
+      document.querySelectorAll("[data-status-tab]").forEach((t) => t.classList.remove("active"));
+      tab.classList.add("active");
+      renderTasks();
     });
   });
 }
@@ -1090,7 +1155,7 @@ function renderDashFinance() {
       <span style="font-size:0.8rem;font-weight:700;color:var(--muted)">${usedPct}%</span>
     </div>
     ${entries.slice(0, 3).map((f) => {
-      const cat = expenseCategories.find((c) => c.id === f.category) || { label: "📦 Outros", color: "#8a9bb0" };
+      const cat = findCategory(f.category);
       const isReceita = f.type === "receita";
       return `<div class="connector-row"><span style="font-size:0.88rem;font-weight:600">${isReceita ? "💰" : cat.label.split(" ")[0]} ${escapeHtml(f.description)}</span><span style="font-weight:800;color:${isReceita ? "var(--green)" : "var(--red)"}">${isReceita ? "+" : "-"}${formatCurrency(f.amount)}</span></div>`;
     }).join("")}
@@ -1237,11 +1302,15 @@ function renderTasks() {
   document.querySelector("#taskProgressBar").style.width = `${progress}%`;
   document.querySelector("#taskProgressLabel").textContent = `${progress}%`;
 
+  // No mobile, a aba ativa determina qual coluna fica visível
+  const activeTab = document.querySelector(".status-tab.active")?.dataset.statusTab || "Pendente";
+
   board.innerHTML = statusList
     .map((status) => {
       const columnTasks = tasks.filter((task) => task.status === status);
+      const isActiveTab = status === activeTab ? "tab-active" : "";
       return `
-        <section class="task-column" data-status="${status}">
+        <section class="task-column ${isActiveTab}" data-status="${status}">
           <div class="column-title"><h2>${status}</h2><span class="pill">${columnTasks.length}</span></div>
           ${columnTasks.map(renderTaskRow).join("") || '<div class="empty-state">Sem itens.</div>'}
         </section>
@@ -1275,10 +1344,62 @@ function renderTaskRow(task) {
       </div>
       <div class="tag-list">
         <span class="status-pill status-${task.status.replace(" ", "-")}">${task.status}</span>
+        <button class="mini-button" onclick="openTaskMoveMenu('${task.id}', event)" title="Mover para outra coluna" style="padding:0;width:28px;height:28px;">↔️</button>
         <button class="mini-button" onclick="deleteTask('${task.id}')" title="Excluir" style="padding:0;width:28px;height:28px;">🗑️</button>
       </div>
     </article>
   `;
+}
+
+// Menu rápido para mudar o status de uma tarefa sem precisar arrastar
+// (arrastar/soltar não funciona em telas de toque) — essencial no mobile.
+function openTaskMoveMenu(taskId, event) {
+  event?.stopPropagation();
+  document.getElementById("taskMoveMenu")?.remove();
+
+  const task = state.tasks.find((t) => t.id === taskId);
+  if (!task) return;
+
+  const menu = document.createElement("div");
+  menu.id = "taskMoveMenu";
+  menu.style.cssText = `position:fixed;inset:0;z-index:550;background:rgba(0,0,0,0.4);
+    backdrop-filter:blur(4px);display:grid;place-items:center;padding:20px`;
+
+  menu.innerHTML = `
+    <div style="background:var(--surface);border-radius:22px;padding:22px;width:100%;max-width:340px;
+      box-shadow:0 20px 60px rgba(0,0,0,0.25);animation:fadeUp 180ms ease;
+      max-height:90dvh;overflow-y:auto">
+      <p style="font-size:0.8rem;font-weight:700;color:var(--muted);margin-bottom:4px">Mover tarefa</p>
+      <h3 style="font-size:1rem;font-weight:800;color:var(--text);margin-bottom:16px">${escapeHtml(task.title)}</h3>
+      <div style="display:grid;gap:8px">
+        ${statusList.map((status) => `
+          <button class="task-move-option" data-move-status="${status}"
+            style="display:flex;align-items:center;justify-content:space-between;
+            padding:12px 14px;border-radius:14px;border:1.5px solid ${status === task.status ? "var(--accent)" : "var(--line)"};
+            background:${status === task.status ? "var(--accent-soft)" : "var(--surface2)"};
+            color:${status === task.status ? "var(--accent)" : "var(--text)"};
+            font-weight:700;font-size:0.9rem;cursor:pointer;width:100%">
+            <span>${status}</span>
+            ${status === task.status ? "<span>✓</span>" : ""}
+          </button>
+        `).join("")}
+      </div>
+      <button id="closeMoveMenu" style="width:100%;height:42px;margin-top:14px;border-radius:12px;
+        background:var(--surface2);border:none;color:var(--text2);font-weight:600;cursor:pointer">Cancelar</button>
+    </div>
+  `;
+
+  document.body.appendChild(menu);
+
+  menu.addEventListener("click", (e) => { if (e.target === menu) menu.remove(); });
+  document.getElementById("closeMoveMenu").addEventListener("click", () => menu.remove());
+
+  menu.querySelectorAll(".task-move-option").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      updateTaskStatus(taskId, btn.dataset.moveStatus);
+      menu.remove();
+    });
+  });
 }
 
 function dragTask(id) {
@@ -1477,6 +1598,7 @@ function showToast(message) {
   window.clearTimeout(showToast.timer);
   showToast.timer = window.setTimeout(() => elements.toast.classList.remove("show"), 2200);
 }
+window.PulseNoteShowToast = showToast; // ponte para notifications.js (script externo ao módulo)
 
 function celebrate(message) {
   showToast(message);
@@ -1739,7 +1861,8 @@ function openNewCategoryPrompt() {
 
   modal.innerHTML = `
     <div style="background:var(--surface);border-radius:24px;padding:26px;width:100%;max-width:380px;
-      box-shadow:0 20px 60px rgba(0,0,0,0.25);animation:fadeUp 200ms ease">
+      box-shadow:0 20px 60px rgba(0,0,0,0.25);animation:fadeUp 200ms ease;
+      max-height:90dvh;overflow-y:auto">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
         <h2 style="font-size:1.1rem;font-weight:800;color:var(--text)">Nova categoria</h2>
         <button id="closeNewCategory" style="width:30px;height:30px;border-radius:10px;
@@ -1835,18 +1958,34 @@ function openNewCategoryPrompt() {
 // (ex: pressionar e segurar o ícone na tela inicial → "Nova tarefa")
 function handlePwaShortcutAction() {
   const action = new URLSearchParams(window.location.search).get("action");
-  if (!action) return;
-
-  if (action === "new-task") {
-    setView("tasks");
-    setTimeout(() => document.querySelector("#taskTitle")?.focus(), 200);
-  } else if (action === "new-expense") {
-    setView("finances");
-    setTimeout(() => document.querySelector("#expenseAmount")?.focus(), 200);
+  if (action) {
+    if (action === "new-task") {
+      setView("tasks");
+      setTimeout(() => document.querySelector("#taskTitle")?.focus(), 200);
+    } else if (action === "new-expense") {
+      setView("finances");
+      setTimeout(() => document.querySelector("#expenseAmount")?.focus(), 200);
+    } else if (action.startsWith("open-")) {
+      // Vem de um clique em notificação do sistema (ver sw.js)
+      const view = action.replace("open-", "");
+      if (["dashboard", "notes", "tasks", "calendar", "goals", "finances"].includes(view)) {
+        setView(view);
+      }
+    }
+    // Limpa o parâmetro da URL para não reabrir a mesma ação ao recarregar
+    history.replaceState(null, "", window.location.pathname);
   }
 
-  // Limpa o parâmetro da URL para não reabrir a mesma ação ao recarregar
-  history.replaceState(null, "", window.location.pathname);
+  // Se o usuário tocar numa notificação enquanto o app já está aberto em
+  // outra aba, o Service Worker manda essa mensagem em vez de abrir uma
+  // nova janela — assim navegamos direto para a tela certa.
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.addEventListener("message", (event) => {
+      if (event.data?.type === "open-view" && event.data.view) {
+        setView(event.data.view);
+      }
+    });
+  }
 }
 
 window.editNote = editNote;
@@ -1855,6 +1994,7 @@ window.convertNoteToTask = convertNoteToTask;
 window.deleteNote = deleteNote;
 window.dragTask = dragTask;
 window.toggleTask = toggleTask;
+window.openTaskMoveMenu = openTaskMoveMenu;
 window.deleteTask = deleteTask;
 window.filterEventsByDate = filterEventsByDate;
 window.deleteEvent = deleteEvent;

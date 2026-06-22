@@ -2,7 +2,7 @@
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>PulseNote - Produtividade pessoal</title>
 
     <!-- PWA: instalação e ícone na tela inicial -->
@@ -93,6 +93,9 @@
             <h1 id="viewTitle">Seu dia em foco</h1>
           </div>
           <div class="topbar-actions">
+            <!-- O botão "Instalar app" é inserido aqui pelo pwa-install.js,
+                 apenas se o navegador permitir instalação como PWA -->
+            <div data-pwa-install-slot></div>
             <label class="search-box">
               <span class="icon">🔍</span>
               <input id="globalSearch" type="search" placeholder="Pesquisar..." />
@@ -349,6 +352,14 @@
               <div class="progress-track"><div id="taskProgressBar"></div></div>
               <strong id="taskProgressLabel">0%</strong>
             </div>
+          </div>
+          <!-- Abas de status — só aparecem no mobile (CSS), facilitam ver
+               cada coluna sem precisar rolar uma lista vertical enorme -->
+          <div class="task-status-tabs" id="taskStatusTabs">
+            <button class="status-tab active" data-status-tab="Pendente">Pendente</button>
+            <button class="status-tab" data-status-tab="Em andamento">Em andamento</button>
+            <button class="status-tab" data-status-tab="Concluida">Concluída</button>
+            <button class="status-tab" data-status-tab="Cancelada">Cancelada</button>
           </div>
           <div id="taskBoard" class="task-board"></div>
         </section>
@@ -622,6 +633,7 @@
     </datalist>
 
     <script src="pwa-install.js"></script>
+    <script src="notifications.js"></script>
     <script type="module" src="app.js"></script>
   </body>
 </html>

@@ -4,20 +4,24 @@
     { "source": "/login",           "destination": "/src/login.html" },
     { "source": "/app",             "destination": "/src/index.html" },
     { "source": "/forgot-password", "destination": "/src/forgot-password.html" },
+    { "source": "/privacy",         "destination": "/src/privacy.html" },
 
-    { "source": "/manifest.json",   "destination": "/src/manifest.json" },
-    { "source": "/sw.js",           "destination": "/src/sw.js" },
-    { "source": "/pwa-install.js",  "destination": "/src/pwa-install.js" },
-    { "source": "/favicon.ico",     "destination": "/src/favicon.ico" },
-    { "source": "/icons/(.*)",      "destination": "/src/icons/$1" }
+    { "source": "/manifest.json",    "destination": "/src/manifest.json" },
+    { "source": "/sw.js",            "destination": "/src/sw.js" },
+    { "source": "/pwa-install.js",   "destination": "/src/pwa-install.js" },
+    { "source": "/notifications.js", "destination": "/src/notifications.js" },
+    { "source": "/favicon.ico",      "destination": "/src/favicon.ico" },
+    { "source": "/icons/(.*)",       "destination": "/src/icons/$1" }
   ],
   "headers": [
     {
-      "source": "/src/(.*)",
+      "source": "/(.*)",
       "headers": [
-        { "key": "X-Frame-Options",        "value": "DENY" },
-        { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "Referrer-Policy",        "value": "strict-origin-when-cross-origin" }
+        { "key": "X-Frame-Options",           "value": "DENY" },
+        { "key": "X-Content-Type-Options",    "value": "nosniff" },
+        { "key": "Referrer-Policy",           "value": "strict-origin-when-cross-origin" },
+        { "key": "Permissions-Policy",        "value": "geolocation=(), microphone=(), camera=()" },
+        { "key": "X-XSS-Protection",          "value": "1; mode=block" }
       ]
     },
     {
