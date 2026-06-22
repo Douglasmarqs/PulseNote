@@ -728,84 +728,18 @@ function normalizeState(parsed) {
   return parsed;
 }
 
-// Dados de exemplo exibidos apenas no primeiro acesso (conta nova, sem
-// nenhum documento no Firestore ainda). Servem só de demonstração —
-// assim que o usuário salvar algo, isso é substituído pelos dados reais.
+// Estado inicial para contas novas (primeiro acesso, sem nenhum documento
+// no Firestore ainda). Começa zerado de propósito — cada usuário deve
+// preencher seus próprios dados, sem nenhum conteúdo de exemplo pré-salvo.
 function loadDefaultState() {
   return {
     theme: "sunny",
-    notes: [
-      {
-        id: crypto.randomUUID(),
-        title: "Organizar sprint pessoal",
-        description: "Definir tres entregas principais, revisar calendario e separar blocos de foco.",
-        category: "Trabalho",
-        folder: "Produtividade",
-        tags: ["planejamento", "foco"],
-        priority: "Alta",
-        checklist: ["Revisar tarefas pendentes", "Bloquear horarios", "Enviar resumo"],
-        attachments: ["https://calendar.google.com"],
-        goal: "Fechar a semana com clareza",
-        observations: "Converter tarefas criticas em compromissos.",
-        favorite: true,
-        createdAt: todayIso,
-      },
-      {
-        id: crypto.randomUUID(),
-        title: "Ideias para rotina de estudos",
-        description: "Criar biblioteca por temas e acompanhar progresso por ciclos.",
-        category: "Estudos",
-        folder: "Aprendizado",
-        tags: ["estudo", "habito"],
-        priority: "Media",
-        checklist: ["Separar materiais", "Criar revisao semanal"],
-        attachments: [],
-        goal: "Estudar 5 horas na semana",
-        observations: "",
-        favorite: false,
-        createdAt: todayIso,
-      },
-    ],
-    tasks: [
-      createTask("Revisar prioridades da semana", "Pendente", "Alta", todayIso),
-      createTask("Enviar pauta da reuniao", "Em andamento", "Media", todayIso),
-      createTask("Atualizar lista de metas", "Concluida", "Media", offsetDate(-1), offsetDate(-1)),
-      createTask("Cancelar assinatura duplicada", "Cancelada", "Baixa", weekIso),
-    ],
-    events: [
-      {
-        id: crypto.randomUUID(),
-        title: "Reuniao de planejamento",
-        date: todayIso,
-        time: "14:30",
-        location: "Google Meet",
-        reminder: 15,
-        notes: "Levar resumo de tarefas e metas da semana.",
-      },
-      {
-        id: crypto.randomUUID(),
-        title: "Check-in de saude",
-        date: tomorrowIso,
-        time: "08:00",
-        location: "Clinica central",
-        reminder: 60,
-        notes: "",
-      },
-    ],
-    goals: [
-      { id: crypto.randomUUID(), title: "Concluir 8 tarefas importantes", target: 8, current: 3 },
-      { id: crypto.randomUUID(), title: "Manter rotina de estudos", target: 5, current: 2 },
-    ],
-    finances: [
-      { id: crypto.randomUUID(), type: "receita",  amount: 3300.00, category: "outros",       description: "Salário",           date: `${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,"0")}-01` },
-      { id: crypto.randomUUID(), type: "despesa",  amount: 1200.00, category: "moradia",      description: "Aluguel",           date: `${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,"0")}-05` },
-      { id: crypto.randomUUID(), type: "despesa",  amount: 320.80,  category: "alimentacao",  description: "Supermercado",      date: todayIso },
-      { id: crypto.randomUUID(), type: "despesa",  amount: 89.90,   category: "transporte",   description: "Combustível",       date: todayIso },
-      { id: crypto.randomUUID(), type: "despesa",  amount: 49.90,   category: "lazer",        description: "Netflix + Spotify", date: offsetDate(-3) },
-      { id: crypto.randomUUID(), type: "despesa",  amount: 158.00,  category: "saude",        description: "Farmácia",          date: offsetDate(-5) },
-      { id: crypto.randomUUID(), type: "receita",  amount: 450.00,  category: "outros",       description: "Freela",            date: offsetDate(-2) },
-      { id: crypto.randomUUID(), type: "despesa",  amount: 35.90,   category: "alimentacao",  description: "Almoço fora",       date: offsetDate(-1) },
-    ],
+    notes: [],
+    tasks: [],
+    events: [],
+    goals: [],
+    finances: [],
+    customCategories: [],
   };
 }
 
