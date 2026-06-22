@@ -1,6 +1,5 @@
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
-const firebaseConfig = {
-  apiKey: "AIzaSyC6SmmVCWogvtaOdN3NPPPKDreGClIGvlE",
+export const firebaseConfig = {
+  apiKey: "AIzaSyC6SmMVCWogvta0dN3NPPPKDreGClIGvlE",
   authDomain: "pulsenote-f99e2.firebaseapp.com",
   projectId: "pulsenote-f99e2",
   storageBucket: "pulsenote-f99e2.firebasestorage.app",
