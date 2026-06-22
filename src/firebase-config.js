@@ -1,4 +1,4 @@
-const firebaseConfig = {
+export const firebaseConfig = {
   apiKey: "AIzaSyC6SmmVCWogvtaOdN3NPPPKDreGClIGvlE",
   authDomain: "pulsenote-f99e2.firebaseapp.com",
   projectId: "pulsenote-f99e2",
