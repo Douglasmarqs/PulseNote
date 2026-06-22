@@ -1,7 +1,7 @@
 // ============================================================
 // PulseNote — Autenticação e sincronização via Firebase
 // ============================================================
-import { auth, db, storage } from "./firebase-init.js";
+import { auth, db } from "./firebase-init.js";
 import {
   onAuthStateChanged,
   signOut,
@@ -9,17 +9,13 @@ import {
   updatePassword,
   reauthenticateWithCredential,
   EmailAuthProvider,
+  sendEmailVerification,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   doc,
   setDoc,
   onSnapshot,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import {
-  ref,
-  uploadBytes,
-  getDownloadURL,
-} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
 const BASE_STORAGE_KEY = "pulsenote-state-v1";
 
@@ -135,6 +131,15 @@ const appReady = new Promise((resolve) => {
 
     currentUser = auth.currentUser || user;
 
+    // Bloqueia o acesso aos dados até o e-mail ser confirmado. Isso vale
+    // tanto para quem acabou de se cadastrar quanto para quem faz login
+    // numa conta antiga que ainda não confirmou o e-mail.
+    if (!currentUser.emailVerified) {
+      if (!resolved) { resolved = true; resolve(); }
+      showVerifyEmailGate();
+      return;
+    }
+
     // IMPORTANTE: o state SEMPRE começa "vazio" (defaults de fábrica) até
     // o Firestore confirmar os dados reais deste usuário específico.
     // Isso evita usar por engano o cache de uma conta diferente que
@@ -197,6 +202,7 @@ const viewTitles = {
   calendar: "Agenda",
   goals: "Metas e conquistas",
   finances: "Finanças",
+  settings: "Configurações",
 };
 
 const expenseCategories = [
@@ -292,6 +298,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   setTimeout(() => overlay.remove(), 320);
 
   if (!currentUser) return; // já foi redirecionado para login.html
+  if (!currentUser.emailVerified) return; // gate de verificação já está sendo exibido
 
   const now = new Date();
   const hour = now.getHours();
@@ -318,16 +325,83 @@ document.addEventListener("DOMContentLoaded", async () => {
   bindNavigation();
   bindForms();
   bindActions();
+  bindSettingsView();
   renderAll();
   handlePwaShortcutAction();
 });
+
+// Tela de bloqueio exibida quando o usuário ainda não confirmou o e-mail.
+// Sem isso, qualquer pessoa poderia criar uma conta com um e-mail que não
+// é dela. Só dá pra usar o PulseNote depois de clicar no link enviado.
+function showVerifyEmailGate() {
+  if (document.getElementById("verifyEmailGate")) return;
+
+  const overlay = document.createElement("div");
+  overlay.id = "verifyEmailGate";
+  overlay.className = "verify-gate-overlay";
+  overlay.innerHTML = `
+    <div class="verify-gate-card">
+      <div class="verify-gate-icon">✉️</div>
+      <h2>Confirme seu e-mail</h2>
+      <p>Enviamos um link de confirmação para <strong>${currentUser.email}</strong>.
+      Abra o e-mail (e confira o spam) e clique no link para liberar o acesso.</p>
+      <div id="verifyGateMsg" class="settings-message" hidden></div>
+      <button id="verifyGateResend" class="primary-button" style="justify-content:center">Reenviar e-mail</button>
+      <button id="verifyGateCheck" class="ghost-button">Já confirmei, continuar</button>
+      <button id="verifyGateLogout" class="ghost-button danger-button">Sair da conta</button>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  function showGateMsg(text, type) {
+    const el = document.getElementById("verifyGateMsg");
+    el.textContent = text;
+    el.className = `settings-message ${type}`;
+    el.hidden = false;
+  }
+
+  let cooldown = false;
+  document.getElementById("verifyGateResend").addEventListener("click", async () => {
+    if (cooldown) return;
+    cooldown = true;
+    const btn = document.getElementById("verifyGateResend");
+    btn.disabled = true;
+    try {
+      await sendEmailVerification(currentUser);
+      showGateMsg("✅ E-mail reenviado! Verifique sua caixa de entrada.", "success");
+    } catch (err) {
+      console.error("Erro ao reenviar verificação:", err);
+      showGateMsg(
+        err.code === "auth/too-many-requests"
+          ? "Muitos pedidos de reenvio. Aguarde alguns minutos e tente novamente."
+          : "Não foi possível reenviar agora. Tente novamente em instantes.",
+        "error"
+      );
+    }
+    setTimeout(() => { cooldown = false; btn.disabled = false; }, 30000);
+  });
+
+  document.getElementById("verifyGateCheck").addEventListener("click", async () => {
+    try { await currentUser.reload(); } catch { /* segue mesmo se offline */ }
+    if (currentUser.emailVerified) {
+      window.location.reload();
+    } else {
+      showGateMsg("Ainda não detectamos a confirmação. Verifique se você já clicou no link do e-mail.", "error");
+    }
+  });
+
+  document.getElementById("verifyGateLogout").addEventListener("click", async () => {
+    overlay.remove();
+    await logout();
+  });
+}
 
 function renderProfileButton(user) {
   const topbarActions = document.querySelector(".topbar-actions");
   if (!topbarActions || document.querySelector(".user-avatar-btn")) return;
 
   const initial  = (user?.name || "U").charAt(0).toUpperCase();
-  const photoURL = currentUser?.photoURL || "";
+  const photoURL = state?.profilePhoto || currentUser?.photoURL || "";
 
   const wrapper = document.createElement("div");
   wrapper.style.position = "relative";
@@ -371,7 +445,7 @@ function renderProfileButton(user) {
         <span style="font-size:0.78rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block">${user?.email || ""}</span>
       </div>
     </div>
-    <button class="dropdown-item" id="dropdownProfile">👤 Meu perfil</button>
+    <button class="dropdown-item" id="dropdownProfile">⚙️ Configurações</button>
     <button class="dropdown-item" id="dropdownNotifications">
       ${window.notificationsAreEnabled?.() ? "🔔 Notificações ativadas" : "🔕 Ativar notificações"}
     </button>
@@ -412,7 +486,7 @@ function renderProfileButton(user) {
 
   document.getElementById("dropdownProfile").addEventListener("click", () => {
     closeDropdown();
-    showProfileModal(user);
+    setView("settings");
   });
 
   document.getElementById("dropdownNotifications").addEventListener("click", async () => {
@@ -431,237 +505,180 @@ function renderProfileButton(user) {
   });
 }
 
-function showProfileModal(user) {
-  const existing = document.getElementById("profileModal");
-  if (existing) { existing.remove(); return; }
+// Lê um arquivo de imagem, redimensiona e comprime no navegador (canvas),
+// retornando uma Data URL (base64) pronta para salvar dentro do próprio
+// documento do usuário no Firestore. Isso evita depender do Firebase
+// Storage (que hoje exige o plano pago "Blaze" para funcionar) — a foto
+// vai junto com o resto dos dados do usuário, do mesmo jeito que notas e
+// tarefas, e sincroniza automaticamente entre dispositivos.
+function fileToCompressedDataUrl(file) {
+  const MAX_BYTES = 700_000; // bem abaixo do limite de 1 MB por documento do Firestore
 
-  const photoURL = currentUser?.photoURL || "";
-  const initial  = (user?.name || "U").charAt(0).toUpperCase();
+  function renderToDataUrl(image, maxDim, quality) {
+    const ratio  = Math.min(1, maxDim / Math.max(image.width, image.height));
+    const canvas = document.createElement("canvas");
+    canvas.width  = Math.max(1, Math.round(image.width * ratio));
+    canvas.height = Math.max(1, Math.round(image.height * ratio));
+    canvas.getContext("2d").drawImage(image, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL("image/jpeg", quality);
+  }
 
-  const modal = document.createElement("div");
-  modal.id = "profileModal";
-  modal.style.cssText = `position:fixed;inset:0;z-index:500;background:rgba(0,0,0,0.45);
-    backdrop-filter:blur(6px);display:grid;place-items:center;padding:20px`;
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("read-failed"));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error("decode-failed"));
+      img.onload = () => {
+        try {
+          let quality  = 0.85;
+          let dataUrl  = renderToDataUrl(img, 320, quality);
+          while (dataUrl.length > MAX_BYTES && quality > 0.4) {
+            quality -= 0.15;
+            dataUrl = renderToDataUrl(img, 320, quality);
+          }
+          if (dataUrl.length > MAX_BYTES) {
+            dataUrl = renderToDataUrl(img, 200, 0.7);
+          }
+          if (dataUrl.length > MAX_BYTES + 200_000) {
+            reject(new Error("too-large"));
+            return;
+          }
+          resolve(dataUrl);
+        } catch (err) { reject(err); }
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
 
-  modal.innerHTML = `
-    <div style="background:var(--surface);border-radius:24px;padding:28px;width:100%;
-      max-width:420px;box-shadow:0 20px 60px rgba(0,0,0,0.25);animation:fadeUp 200ms ease;
-      max-height:90dvh;overflow-y:auto">
+// Preenche os campos da página de Configurações com os dados atuais
+// (nome, e-mail, foto). Chamada sempre que renderAll() roda, para que a
+// tela já apareça correta ao navegar até ela.
+function renderSettings() {
+  const nameEl  = document.getElementById("settingsNameInput");
+  const emailEl = document.getElementById("settingsUserEmail");
+  const userNameEl = document.getElementById("settingsUserName");
+  const preview = document.getElementById("settingsAvatarPreview");
+  if (!nameEl || !preview) return;
 
-      <!-- Cabeçalho -->
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:22px">
-        <h2 style="font-size:1.15rem;font-weight:800;color:var(--text)">Meu perfil</h2>
-        <button id="closeProfileModal" style="width:32px;height:32px;border-radius:10px;
-          background:var(--surface2);border:none;font-size:1rem;cursor:pointer;
-          color:var(--text2)">✕</button>
-      </div>
+  const user = getUser();
+  const photoURL = state?.profilePhoto || currentUser?.photoURL || "";
+  const initial = (user?.name || "U").charAt(0).toUpperCase();
 
-      <!-- Foto de perfil -->
-      <div style="display:flex;flex-direction:column;align-items:center;gap:12px;margin-bottom:22px">
-        <div style="position:relative;width:88px;height:88px">
-          <div id="avatarPreview" style="width:88px;height:88px;border-radius:50%;
-            background:linear-gradient(135deg,#4f8ef7,#af52de);
-            color:#fff;font-size:2rem;font-weight:800;
-            display:grid;place-items:center;overflow:hidden;
-            box-shadow:0 4px 16px rgba(79,142,247,0.3);flex-shrink:0">
-            ${photoURL
-              ? `<img src="${photoURL}" style="width:100%;height:100%;object-fit:cover" alt=""/>`
-              : initial}
-          </div>
-          <!-- Botão de câmera sobre o avatar -->
-          <label for="photoFileInput" style="position:absolute;bottom:0;right:0;
-            width:28px;height:28px;border-radius:50%;
-            background:var(--accent);color:#fff;
-            display:grid;place-items:center;font-size:0.85rem;
-            cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.2);
-            border:2px solid var(--surface)" title="Alterar foto">
-            📷
-          </label>
-          <input id="photoFileInput" type="file" accept="image/*" style="display:none"/>
-        </div>
+  if (document.activeElement !== nameEl) nameEl.value = user?.name || "";
+  if (userNameEl) userNameEl.textContent = user?.name || "Usuário";
+  if (emailEl) emailEl.textContent = user?.email || "";
+  preview.innerHTML = photoURL
+    ? `<img src="${photoURL}" alt="Foto de perfil"/>`
+    : initial;
+}
 
-        <!-- Barra de progresso do upload -->
-        <div id="uploadProgress" style="display:none;width:100%;max-width:200px">
-          <div style="height:4px;background:var(--line);border-radius:999px;overflow:hidden">
-            <div id="uploadProgressBar" style="height:100%;width:0%;
-              background:linear-gradient(90deg,#4f8ef7,#af52de);
-              border-radius:inherit;transition:width 200ms ease"></div>
-          </div>
-          <p style="font-size:0.75rem;color:var(--muted);text-align:center;margin-top:4px">
-            Enviando foto...
-          </p>
-        </div>
+// Liga todos os eventos da página de Configurações. Chamada uma única vez,
+// na inicialização do app (a página é estática no HTML, não um modal
+// criado/destruído via JS).
+function bindSettingsView() {
+  const msgEl = document.getElementById("settingsMessage");
+  function showSettingsMsg(text, type) {
+    msgEl.textContent = text;
+    msgEl.className   = `settings-message ${type}`;
+    msgEl.hidden       = false;
+    msgEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+  function hideSettingsMsg() {
+    msgEl.hidden = true;
+  }
 
-        <div style="text-align:center">
-          <strong style="display:block;font-size:1rem;color:var(--text)">${user?.name || ""}</strong>
-          <span style="font-size:0.82rem;color:var(--muted)">${user?.email || ""}</span>
-        </div>
-      </div>
-
-      <!-- Campos -->
-      <div style="display:grid;gap:12px">
-        <label style="display:grid;gap:5px;font-size:0.82rem;font-weight:600;color:var(--muted)">
-          Nome
-          <input id="profileName" value="${user?.name || ""}"
-            style="min-height:44px;border:1.5px solid var(--line);border-radius:12px;
-            padding:8px 12px;background:var(--surface2);color:var(--text);font-size:0.9rem;width:100%"/>
-        </label>
-
-        <hr style="border:none;border-top:1px solid var(--line)"/>
-
-        <p style="font-size:0.82rem;font-weight:700;color:var(--muted);margin:0">Alterar senha</p>
-
-        <input id="profileCurrentPw" type="password" placeholder="Senha atual"
-          style="min-height:44px;border:1.5px solid var(--line);border-radius:12px;
-          padding:8px 12px;background:var(--surface2);color:var(--text);font-size:0.9rem;width:100%"/>
-
-        <input id="profileNewPw" type="password" placeholder="Nova senha (mín. 6 caracteres)"
-          style="min-height:44px;border:1.5px solid var(--line);border-radius:12px;
-          padding:8px 12px;background:var(--surface2);color:var(--text);font-size:0.9rem;width:100%"/>
-
-        <div id="profileModalError"
-          style="color:var(--red,#ff3b30);font-size:0.84rem;font-weight:600;
-          display:none;background:var(--red-soft,#ffeeed);padding:10px 12px;
-          border-radius:10px;border:1px solid #ffcdd2"></div>
-
-        <div id="profileModalSuccess"
-          style="color:var(--green,#34c759);font-size:0.84rem;font-weight:600;
-          display:none;background:var(--green-soft,#e5f9ec);padding:10px 12px;
-          border-radius:10px;border:1px solid #a5d6a7"></div>
-
-        <button id="saveProfileBtn"
-          style="height:48px;border-radius:14px;background:var(--accent,#4f8ef7);
-          color:#fff;font-weight:700;font-size:0.95rem;border:none;cursor:pointer;width:100%">
-          Salvar alterações
-        </button>
-
-        <button id="logoutFromModal"
-          style="height:44px;border-radius:14px;background:var(--red-soft,#ffeeed);
-          color:var(--red,#ff3b30);font-weight:700;font-size:0.9rem;
-          border:none;cursor:pointer;width:100%">
-          🚪 Sair da conta
-        </button>
-      </div>
-    </div>
-  `;
-
-  document.body.appendChild(modal);
-
-  // Fechar modal
-  document.getElementById("closeProfileModal").addEventListener("click", () => modal.remove());
-  modal.addEventListener("click", (e) => { if (e.target === modal) modal.remove(); });
-
-  // ── Upload de foto ─────────────────────────────────────────────
-  document.getElementById("photoFileInput").addEventListener("change", async (e) => {
+  // ── Upload de foto (processada localmente, sem Firebase Storage) ──
+  document.getElementById("settingsPhotoInput").addEventListener("change", async (e) => {
     const file = e.target.files[0];
+    e.target.value = ""; // permite escolher o mesmo arquivo de novo depois
     if (!file) return;
+    hideSettingsMsg();
 
-    // Validações
     if (!file.type.startsWith("image/")) {
-      showProfileError("Selecione um arquivo de imagem (JPG, PNG, etc).");
+      showSettingsMsg("Selecione um arquivo de imagem (JPG, PNG, etc).", "error");
       return;
     }
-    if (file.size > 5 * 1024 * 1024) {
-      showProfileError("A imagem deve ter no máximo 5 MB.");
+    if (file.size > 10 * 1024 * 1024) {
+      showSettingsMsg("A imagem deve ter no máximo 10 MB.", "error");
       return;
     }
 
-    // Preview local imediato (antes de fazer upload)
+    const preview      = document.getElementById("settingsAvatarPreview");
+    const previousHTML = preview.innerHTML;
+    const progressWrap = document.getElementById("settingsUploadProgress");
+    const progressBar  = document.getElementById("settingsUploadProgressBar");
+
+    // Preview local imediato enquanto processa
     const localURL = URL.createObjectURL(file);
-    document.getElementById("avatarPreview").innerHTML =
-      `<img src="${localURL}" style="width:100%;height:100%;object-fit:cover" alt=""/>`;
-
-    // Mostra barra de progresso
-    const progressWrap = document.getElementById("uploadProgress");
-    const progressBar  = document.getElementById("uploadProgressBar");
-    progressWrap.style.display = "block";
-    progressBar.style.width    = "30%";
+    preview.innerHTML = `<img src="${localURL}" alt=""/>`;
+    progressWrap.hidden = false;
+    progressBar.style.width = "40%";
 
     try {
-      // Faz upload para Firebase Storage: avatars/{uid}/profile.jpg
-      const storageRef = ref(storage, `avatars/${currentUser.uid}/profile`);
-      progressBar.style.width = "60%";
-
-      await uploadBytes(storageRef, file, { contentType: file.type });
-      progressBar.style.width = "85%";
-
-      // Pega a URL pública da foto
-      const downloadURL = await getDownloadURL(storageRef);
+      const dataUrl = await fileToCompressedDataUrl(file);
       progressBar.style.width = "100%";
 
-      // Salva no perfil do Firebase Auth
-      await updateProfile(currentUser, { photoURL: downloadURL });
+      state.profilePhoto = dataUrl;
+      saveState(); // salva local na hora + agenda envio ao Firestore (debounce)
 
-      // Atualiza todos os avatares na UI sem recarregar
-      updateAllAvatars(downloadURL);
-
-      progressWrap.style.display = "none";
-      showProfileSuccess("✅ Foto atualizada com sucesso!");
+      updateAllAvatars(dataUrl);
+      progressWrap.hidden = true;
+      showSettingsMsg("✅ Foto atualizada!", "success");
+      showToast("✅ Foto de perfil atualizada!");
     } catch (err) {
-      console.error("Upload error:", err);
-      progressWrap.style.display = "none";
-      // Se o Storage não estiver ativado, mostra instrução clara
-      if (err.code === "storage/unauthorized") {
-        showProfileError("Firebase Storage não está ativado. Veja as instruções abaixo.");
-      } else {
-        showProfileError("Erro ao enviar a foto. Tente novamente.");
-      }
-      // Reverte o preview para a foto anterior
-      document.getElementById("avatarPreview").innerHTML = photoURL
-        ? `<img src="${photoURL}" style="width:100%;height:100%;object-fit:cover" alt=""/>`
-        : initial;
+      console.error("Erro ao processar foto:", err);
+      progressWrap.hidden = true;
+      preview.innerHTML = previousHTML;
+      showSettingsMsg(
+        err.message === "too-large"
+          ? "Essa imagem é muito complexa para comprimir. Tente uma foto mais simples."
+          : "Não foi possível usar essa imagem. Tente outro arquivo.",
+        "error"
+      );
     }
   });
 
-  // ── Logout ─────────────────────────────────────────────────────
-  document.getElementById("logoutFromModal").addEventListener("click", async () => {
-    if (!confirm("Deseja sair da sua conta?")) return;
-    modal.remove();
-    await syncToServer();
-    await logout();
+  // ── Salvar nome ─────────────────────────────────────────────────
+  document.getElementById("settingsNameForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    hideSettingsMsg();
+    const newName = document.getElementById("settingsNameInput").value.trim();
+    if (!newName) { showSettingsMsg("Informe um nome.", "error"); return; }
+    try {
+      await updateProfile(currentUser, { displayName: newName });
+      const nameEl = document.querySelector(".user-dropdown-header strong");
+      if (nameEl) nameEl.textContent = newName;
+      renderSettings();
+      showSettingsMsg("✅ Nome atualizado!", "success");
+      showToast("✅ Perfil atualizado!");
+    } catch (err) {
+      console.error("Erro ao salvar nome:", err);
+      showSettingsMsg(`Erro ao salvar nome: ${err.message}`, "error");
+    }
   });
 
-  // ── Salvar nome / senha ────────────────────────────────────────
-  document.getElementById("saveProfileBtn").addEventListener("click", async () => {
-    const newName   = document.getElementById("profileName").value.trim();
-    const currentPw = document.getElementById("profileCurrentPw").value;
-    const newPw     = document.getElementById("profileNewPw").value;
-    hideProfileMessages();
+  // ── Trocar senha ────────────────────────────────────────────────
+  document.getElementById("settingsPasswordForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    hideSettingsMsg();
+    const currentPw = document.getElementById("settingsCurrentPw").value;
+    const newPw     = document.getElementById("settingsNewPw").value;
+
+    if (!currentPw) { showSettingsMsg("Informe a senha atual.", "error"); return; }
+    if (!newPw || newPw.length < 6) { showSettingsMsg("A nova senha deve ter pelo menos 6 caracteres.", "error"); return; }
 
     try {
-      let changed = false;
+      const credential = EmailAuthProvider.credential(currentUser.email, currentPw);
+      await reauthenticateWithCredential(currentUser, credential);
+      await updatePassword(currentUser, newPw);
 
-      // Atualiza nome
-      if (newName && newName !== (currentUser.displayName || "")) {
-        await updateProfile(currentUser, { displayName: newName });
-        // Atualiza nome no dropdown sem recarregar
-        const nameEl = document.querySelector(".user-dropdown-header strong");
-        if (nameEl) nameEl.textContent = newName;
-        changed = true;
-      }
-
-      // Troca de senha
-      if (currentPw || newPw) {
-        if (!currentPw) { showProfileError("Informe a senha atual."); return; }
-        if (!newPw)     { showProfileError("Informe a nova senha."); return; }
-        if (newPw.length < 6) { showProfileError("A nova senha deve ter pelo menos 6 caracteres."); return; }
-
-        const credential = EmailAuthProvider.credential(currentUser.email, currentPw);
-        await reauthenticateWithCredential(currentUser, credential);
-        await updatePassword(currentUser, newPw);
-
-        // Limpa os campos de senha
-        document.getElementById("profileCurrentPw").value = "";
-        document.getElementById("profileNewPw").value     = "";
-        changed = true;
-      }
-
-      if (changed) {
-        showProfileSuccess("✅ Perfil atualizado com sucesso!");
-        showToast("✅ Perfil atualizado!");
-      } else {
-        showProfileSuccess("Nenhuma alteração detectada.");
-      }
+      document.getElementById("settingsCurrentPw").value = "";
+      document.getElementById("settingsNewPw").value     = "";
+      showSettingsMsg("✅ Senha alterada com sucesso!", "success");
+      showToast("✅ Senha alterada!");
     } catch (err) {
       const messages = {
         "auth/wrong-password":        "Senha atual incorreta.",
@@ -669,27 +686,16 @@ function showProfileModal(user) {
         "auth/requires-recent-login": "Por segurança, faça login novamente antes de trocar a senha.",
         "auth/weak-password":         "A nova senha é muito fraca.",
       };
-      showProfileError(messages[err.code] || `Erro: ${err.message}`);
+      showSettingsMsg(messages[err.code] || `Erro: ${err.message}`, "error");
     }
   });
 
-  // ── Helpers internos do modal ──────────────────────────────────
-  function showProfileError(msg) {
-    const el = document.getElementById("profileModalError");
-    el.textContent    = msg;
-    el.style.display  = "block";
-    document.getElementById("profileModalSuccess").style.display = "none";
-  }
-  function showProfileSuccess(msg) {
-    const el = document.getElementById("profileModalSuccess");
-    el.textContent    = msg;
-    el.style.display  = "block";
-    document.getElementById("profileModalError").style.display = "none";
-  }
-  function hideProfileMessages() {
-    document.getElementById("profileModalError").style.display   = "none";
-    document.getElementById("profileModalSuccess").style.display = "none";
-  }
+  // ── Sair da conta ───────────────────────────────────────────────
+  document.getElementById("settingsLogoutBtn").addEventListener("click", async () => {
+    if (!confirm("Deseja sair da sua conta?")) return;
+    await syncToServer();
+    await logout();
+  });
 }
 
 // Atualiza todos os pontos da UI que exibem o avatar do usuário
@@ -706,11 +712,10 @@ function updateAllAvatars(photoURL) {
     dropdownAvatar.innerHTML = `<img src="${photoURL}"
       style="width:100%;height:100%;object-fit:cover" alt=""/>`;
   }
-  // Avatar grande no modal de perfil (se ainda estiver aberto)
-  const previewEl = document.getElementById("avatarPreview");
+  // Avatar grande na página de Configurações
+  const previewEl = document.getElementById("settingsAvatarPreview");
   if (previewEl) {
-    previewEl.innerHTML = `<img src="${photoURL}"
-      style="width:100%;height:100%;object-fit:cover" alt=""/>`;
+    previewEl.innerHTML = `<img src="${photoURL}" alt="Foto de perfil"/>`;
   }
 }
 
@@ -725,6 +730,7 @@ function normalizeState(parsed) {
   if (!parsed.goals) parsed.goals = [];
   if (!parsed.customCategories) parsed.customCategories = [];
   if (!parsed.theme) parsed.theme = "sunny";
+  if (parsed.profilePhoto === undefined) parsed.profilePhoto = null;
   return parsed;
 }
 
@@ -734,6 +740,7 @@ function normalizeState(parsed) {
 function loadDefaultState() {
   return {
     theme: "sunny",
+    profilePhoto: null,
     notes: [],
     tasks: [],
     events: [],
@@ -1022,6 +1029,7 @@ function renderAll() {
   renderCalendar();
   renderGoals();
   renderFinances();
+  renderSettings();
 }
 
 function setDefaultDates() {

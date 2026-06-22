@@ -59,6 +59,10 @@
             <span class="icon">💰</span>
             <span>Finanças</span>
           </button>
+          <button class="nav-item" data-view="settings">
+            <span class="icon">⚙️</span>
+            <span>Configurações</span>
+          </button>
         </nav>
 
         <div class="sidebar-footer">
@@ -98,7 +102,7 @@
             <div data-pwa-install-slot></div>
             <label class="search-box">
               <span class="icon">🔍</span>
-              <input id="globalSearch" type="search" placeholder="Pesquisar..." />
+              <input id="globalSearch" type="text" inputmode="search" autocomplete="off" autocorrect="off" placeholder="Pesquisar..." />
             </label>
             <label class="theme-chip" title="Tema">
               <span class="icon">🎨</span>
@@ -588,6 +592,91 @@
 
           </div><!-- /fin-layout -->
         </section><!-- /financesView -->
+
+        <!-- ===== SETTINGS VIEW ===== -->
+        <section id="settingsView" class="view">
+          <div class="settings-layout">
+
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Conta</p>
+                  <h2>Foto de perfil</h2>
+                </div>
+              </div>
+              <div class="avatar-upload">
+                <div class="avatar-upload-photo">
+                  <div id="settingsAvatarPreview" class="avatar-circle">U</div>
+                  <label for="settingsPhotoInput" class="avatar-upload-camera" title="Alterar foto">📷</label>
+                  <input id="settingsPhotoInput" type="file" accept="image/*" hidden />
+                </div>
+                <div class="avatar-upload-info">
+                  <strong id="settingsUserName">Usuário</strong>
+                  <span id="settingsUserEmail" class="muted"></span>
+                  <div class="upload-progress" id="settingsUploadProgress" hidden>
+                    <div class="progress-track"><div id="settingsUploadProgressBar" style="width:0%"></div></div>
+                    <p>Processando imagem...</p>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Conta</p>
+                  <h2>Dados pessoais</h2>
+                </div>
+              </div>
+              <form id="settingsNameForm" class="settings-form">
+                <label>
+                  Nome
+                  <input id="settingsNameInput" maxlength="60" required />
+                </label>
+                <div class="form-actions">
+                  <button type="submit" class="primary-button"><span>Salvar nome</span></button>
+                </div>
+              </form>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Segurança</p>
+                  <h2>Alterar senha</h2>
+                </div>
+              </div>
+              <form id="settingsPasswordForm" class="settings-form">
+                <label>
+                  Senha atual
+                  <input id="settingsCurrentPw" type="password" autocomplete="current-password" />
+                </label>
+                <label>
+                  Nova senha
+                  <input id="settingsNewPw" type="password" autocomplete="new-password" placeholder="mín. 6 caracteres" />
+                </label>
+                <div class="form-actions">
+                  <button type="submit" class="primary-button"><span>Alterar senha</span></button>
+                </div>
+              </form>
+            </section>
+
+            <div id="settingsMessage" class="settings-message" hidden></div>
+
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Sessão</p>
+                  <h2>Sair da conta</h2>
+                </div>
+              </div>
+              <button id="settingsLogoutBtn" class="ghost-button danger-button">
+                <span>🚪</span><span>Sair da conta</span>
+              </button>
+            </section>
+
+          </div>
+        </section><!-- /settingsView -->
 
       </main><!-- /main-area -->
     </div><!-- /app-shell -->

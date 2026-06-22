@@ -5,6 +5,7 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   sendPasswordResetEmail,
+  sendEmailVerification,
   updateProfile,
   onAuthStateChanged,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
@@ -183,7 +184,12 @@ if (registerForm) {
     try {
       const credential = await createUserWithEmailAndPassword(auth, email, pw);
       await updateProfile(credential.user, { displayName: name });
-      // Cadastro OK → vai direto para o app
+      // Envia o e-mail de confirmação. Se isso falhar (ex: rede instável),
+      // a tela de verificação dentro do app tem um botão "Reenviar e-mail",
+      // então não bloqueamos o cadastro por causa disso.
+      try { await sendEmailVerification(credential.user); }
+      catch (verifyErr) { console.error("Erro ao enviar verificação:", verifyErr); }
+      // Cadastro OK → vai para o app (que vai exigir a confirmação do e-mail)
       window.location.replace("index.html");
     } catch (err) {
       console.error("Register error:", err.code, err.message);
