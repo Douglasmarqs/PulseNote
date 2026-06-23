@@ -147,7 +147,12 @@
 /* ---------- Reset & Base ---------- */
 *, *::before, *::after { box-sizing: border-box; }
 
-html { -webkit-tap-highlight-color: transparent; }
+html {
+  -webkit-tap-highlight-color: transparent;
+  overflow-x: hidden;
+  width: 100%;
+  max-width: 100%;
+}
 
 body {
   margin: 0;
@@ -157,6 +162,8 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
+  width: 100%;
+  max-width: 100%;
 }
 
 button, input, textarea, select {
@@ -601,8 +608,17 @@ p, h1, h2, h3 { margin: 0; }
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 12px;
   margin-bottom: 14px;
+}
+
+/* Os dois "lados" de um cabeçalho (ex.: título + selos de Receita/Despesa)
+   nunca devem forçar a página a ficar mais larga que a tela — se não
+   couber ao lado do título, quebra pra linha de baixo. */
+.panel-header > div:first-child,
+.form-heading > div:first-child {
+  min-width: 0;
 }
 
 .panel-header .eyebrow {
@@ -1428,10 +1444,6 @@ input[type="time"] {
   .inline-form .primary-button {
     flex: 0 0 auto;
     width: 100%;
-  }
-
-  .form-heading {
-    flex-wrap: wrap;
   }
 
   .form-heading .primary-button {
