@@ -66,20 +66,13 @@
         </nav>
 
         <div class="sidebar-footer">
-          <label class="theme-picker">
-            <span>Tema</span>
-            <select id="themeSelect" title="Escolher tema">
-              <option value="sunny">☀️ Sol</option>
-              <option value="ocean">🌊 Oceano</option>
-              <option value="candy">🍬 Doce</option>
-              <option value="forest">🌿 Floresta</option>
-              <option value="night">🌙 Noite</option>
-            </select>
-          </label>
-          <button id="themeToggle" class="ghost-button">
-            <span>🎨</span>
-            <span>Trocar tema</span>
-          </button>
+          <div class="tip-box">
+            <span class="tip-icon">💡</span>
+            <div class="tip-content">
+              <span class="muted">Dica do dia</span>
+              <p id="dailyTipText">Carregando dica...</p>
+            </div>
+          </div>
           <div class="streak-box">
             <span class="muted">🔥 Sequência</span>
             <strong id="streakCount">0 dias</strong>
@@ -104,14 +97,14 @@
               <span class="icon">🔍</span>
               <input id="globalSearch" type="text" inputmode="search" autocomplete="off" autocorrect="off" placeholder="Pesquisar..." />
             </label>
-            <label class="theme-chip" title="Tema">
+            <label class="theme-chip" title="Escolher tema">
               <span class="icon">🎨</span>
-              <select id="themeSelectMobile">
-                <option value="sunny">Sol</option>
-                <option value="ocean">Oceano</option>
-                <option value="candy">Doce</option>
-                <option value="forest">Floresta</option>
-                <option value="night">Noite</option>
+              <select id="themeSelect">
+                <option value="sunny">☀️ Sol</option>
+                <option value="ocean">🌊 Oceano</option>
+                <option value="candy">🍬 Doce</option>
+                <option value="forest">🌿 Floresta</option>
+                <option value="night">🌙 Noite</option>
               </select>
             </label>
             <button id="quickAddTask" class="primary-button">

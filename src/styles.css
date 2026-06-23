@@ -275,17 +275,22 @@ p, h1, h2, h3 { margin: 0; }
   gap: 8px;
 }
 
-.theme-picker {
-  display: grid;
-  gap: 6px;
+.tip-box {
+  display: flex;
+  gap: 10px;
   padding: 12px;
   background: var(--surface2);
   border-radius: 14px;
+  align-items: flex-start;
 }
 
-.theme-picker span { font-size: 0.78rem; color: var(--muted); font-weight: 600; }
+.tip-icon { font-size: 1.1rem; line-height: 1.3; }
 
-.theme-picker select, .theme-chip select {
+.tip-content { display: grid; gap: 4px; min-width: 0; }
+.tip-content .muted { font-size: 0.74rem; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; }
+.tip-content p { font-size: 0.82rem; color: var(--text2); line-height: 1.35; margin: 0; }
+
+.theme-chip select {
   height: 36px;
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -1301,7 +1306,7 @@ textarea { resize: vertical; min-height: 80px; }
   .brand > div:not(.brand-mark),
   .nav-item span:last-child,
   .ghost-button span,
-  .theme-picker,
+  .tip-box,
   .streak-box { display: none; }
 
   .sidebar { align-items: center; padding: 20px 10px; gap: 4px; }
@@ -1390,12 +1395,16 @@ textarea { resize: vertical; min-height: 80px; }
     flex-wrap: wrap;
     row-gap: 10px;
   }
+  .user-avatar-wrapper { order: 1; }
+  .theme-chip { order: 2; flex: 0 1 auto; min-width: 0; }
+  [data-pwa-install-slot] { order: 3; }
   .search-box {
     width: 100%;
     flex: 1 1 100%;
     order: 5; /* sempre na própria linha, abaixo de avatar/tema/+tarefa */
+    min-width: 0;
   }
-  .primary-button { flex: 1 1 auto; justify-content: center; }
+  .primary-button { flex: 1 1 100%; order: 6; justify-content: center; }
 
   .view { padding: 16px; }
 
