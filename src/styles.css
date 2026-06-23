@@ -60,50 +60,60 @@
   --header-height: 70px;
 }
 
-[data-theme="night"] {
+/* Tema escuro — substitui o antigo "Noite" (que tinha pouco contraste entre
+   superfícies e sombras pretas invisíveis sobre fundo preto, deixando os
+   cards "achatados"). Aqui as superfícies têm degraus de luminosidade mais
+   nítidos e a elevação dos cards usa um brilho sutil no topo + sombra mais
+   forte, que funciona de verdade sobre fundo escuro. */
+[data-theme="escuro"] {
   color-scheme: dark;
-  --bg: #0f1117;
-  --bg2: #161b24;
-  --surface: #1c2130;
-  --surface2: #232b3e;
-  --text: #f0f4ff;
-  --text2: #a8b4cc;
-  --muted: #6b7a96;
-  --line: #2a3348;
+  --bg: #0b0d12;
+  --bg2: #12151c;
+  --surface: #1a1d27;
+  --surface2: #20242f;
+  --text: #f4f6fb;
+  --text2: #b6c0d6;
+  --muted: #828ea3;
+  --line: #2e3342;
   --accent: #5b9ef8;
   --accent2: #4a8ef5;
-  --accent-soft: #1a2a4a;
-  --green: #30d158;
-  --green-soft: #0d2e1a;
-  --orange: #ff9f0a;
-  --orange-soft: #2a1d00;
-  --red: #ff453a;
-  --red-soft: #2a0e0d;
-  --purple: #bf5af2;
-  --purple-soft: #1f0d2e;
-  --pink: #ff375f;
-  --pink-soft: #2a0d15;
-  --note-yellow: #2a2410;
-  --note-blue: #0d1c2e;
-  --note-green: #0d2218;
-  --note-pink: #2a0d18;
-  --note-purple: #1a0d2a;
-  --note-orange: #2a1800;
-  --note-teal: #0d2228;
-  --note-red: #2a0d0d;
-  --note-yellow-border: #5a4e00;
-  --note-blue-border: #1a3a5c;
-  --note-green-border: #1a4024;
-  --note-pink-border: #5c1a30;
-  --note-purple-border: #4a1a5c;
-  --note-orange-border: #5c3300;
-  --note-teal-border: #1a4048;
-  --note-red-border: #5c1a1a;
-  --shadow-card: 0 2px 12px rgba(0,0,0,0.3);
-  --shadow-card-hover: 0 8px 28px rgba(0,0,0,0.4);
+  --accent-soft: #1c2a44;
+  --green: #34d17a;
+  --green-soft: #123322;
+  --orange: #ffab40;
+  --orange-soft: #3a2710;
+  --red: #ff5b54;
+  --red-soft: #3a1614;
+  --purple: #c77dff;
+  --purple-soft: #2a1c40;
+  --pink: #ff5c8a;
+  --pink-soft: #3a1a26;
+  --teal: #5fd4ff;
+  --teal-soft: #133340;
+  --yellow: #ffd60a;
+  --yellow-soft: #3a3008;
+  --note-yellow: #2c2710;
+  --note-blue: #11202f;
+  --note-green: #102a1d;
+  --note-pink: #2c1320;
+  --note-purple: #211230;
+  --note-orange: #2c1c0d;
+  --note-teal: #0f2530;
+  --note-red: #2c1212;
+  --note-yellow-border: #6b5a18;
+  --note-blue-border: #2c5c86;
+  --note-green-border: #1f6b43;
+  --note-pink-border: #80324f;
+  --note-purple-border: #5c3786;
+  --note-orange-border: #7a4318;
+  --note-teal-border: #1d6f8c;
+  --note-red-border: #7a2a26;
+  --shadow-card: 0 1px 0 rgba(255,255,255,0.05) inset, 0 6px 18px rgba(0,0,0,0.55);
+  --shadow-card-hover: 0 1px 0 rgba(255,255,255,0.07) inset, 0 12px 32px rgba(0,0,0,0.65);
+  --shadow-float: 0 24px 70px rgba(0,0,0,0.7);
 }
 
-[data-theme="ocean"] {
+[data-theme="azul"] {
   --bg: #edf6ff;
   --bg2: #dff0fb;
   --accent: #007aff;
@@ -112,7 +122,7 @@
   --green: #00c7be;
 }
 
-[data-theme="candy"] {
+[data-theme="rosa"] {
   --bg: #fff0f8;
   --bg2: #fce4f4;
   --accent: #ff2d78;
@@ -120,7 +130,7 @@
   --accent-soft: #ffd6e8;
 }
 
-[data-theme="forest"] {
+[data-theme="verde"] {
   --bg: #f0faf2;
   --bg2: #e2f5e6;
   --accent: #28a745;
@@ -128,7 +138,7 @@
   --accent-soft: #d4f0da;
 }
 
-[data-theme="sunny"] {
+[data-theme="laranja"] {
   --accent: #ff9500;
   --accent2: #e08000;
   --accent-soft: #fff3e0;
@@ -836,6 +846,17 @@ input:focus, textarea:focus, select:focus {
 
 textarea { resize: vertical; min-height: 80px; }
 
+/* Safari/iOS aplica estilo nativo "maior" em campos de data e hora,
+   ignorando a altura padrão dos demais campos — removendo a aparência
+   nativa eles passam a respeitar min-height/padding como qualquer input. */
+input[type="date"],
+input[type="time"] {
+  -webkit-appearance: none;
+  appearance: none;
+  min-height: 42px;
+  line-height: 1.3;
+}
+
 .form-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1396,6 +1417,16 @@ textarea { resize: vertical; min-height: 80px; }
     order: 5; /* sempre na própria linha, abaixo de avatar/tema/+tarefa */
   }
   .primary-button { flex: 1 1 auto; justify-content: center; }
+
+  /* Em formulários verticais (Tarefas/Agenda), o botão não deve crescer em
+     altura junto com os campos — só ocupar a largura total, mantendo a
+     mesma altura padrão dos demais botões do site. */
+  .inline-form .primary-button,
+  .compact-editor .primary-button,
+  .editor-panel .primary-button {
+    flex: 0 0 auto;
+    width: 100%;
+  }
 
   .view { padding: 16px; }
 

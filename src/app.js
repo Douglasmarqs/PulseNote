@@ -226,13 +226,13 @@ function getAllCategories() {
 function findCategory(catId) {
   return getAllCategories().find((c) => c.id === catId) || { label: "📦 Outros", color: "#8a9bb0" };
 }
-const themeList = ["sunny", "ocean", "candy", "forest", "night"];
+const themeList = ["laranja", "azul", "verde", "rosa", "escuro"];
 const themeNames = {
-  sunny: "Sol",
-  ocean: "Oceano",
-  candy: "Doce",
-  forest: "Floresta",
-  night: "Noite",
+  laranja: "Laranja",
+  azul: "Azul",
+  verde: "Verde",
+  rosa: "Rosa",
+  escuro: "Escuro",
 };
 
 const todayIso = new Date().toISOString().slice(0, 10);
@@ -698,25 +698,43 @@ function bindSettingsView() {
   });
 }
 
-// Atualiza todos os pontos da UI que exibem o avatar do usuário
+// Atualiza todos os pontos da UI que exibem o avatar do usuário.
+// Se não houver foto, cai de volta para a inicial do nome (em vez de
+// deixar um ícone de imagem quebrada).
 function updateAllAvatars(photoURL) {
+  const initial = (getUser()?.name || "U").charAt(0).toUpperCase();
+  const content = photoURL
+    ? `<img src="${photoURL}" style="width:100%;height:100%;object-fit:cover;border-radius:50%" alt=""/>`
+    : initial;
+  const contentNoRadius = photoURL
+    ? `<img src="${photoURL}" style="width:100%;height:100%;object-fit:cover" alt=""/>`
+    : initial;
+
   // Botão principal no topbar
   const mainBtn = document.querySelector(".user-avatar-btn");
-  if (mainBtn) {
-    mainBtn.innerHTML = `<img src="${photoURL}"
-      style="width:100%;height:100%;object-fit:cover;border-radius:50%" alt=""/>`;
-  }
+  if (mainBtn) mainBtn.innerHTML = content;
+
   // Mini avatar no dropdown
   const dropdownAvatar = document.querySelector(".user-dropdown-header div");
-  if (dropdownAvatar) {
-    dropdownAvatar.innerHTML = `<img src="${photoURL}"
-      style="width:100%;height:100%;object-fit:cover" alt=""/>`;
-  }
+  if (dropdownAvatar) dropdownAvatar.innerHTML = contentNoRadius;
+
   // Avatar grande na página de Configurações
   const previewEl = document.getElementById("settingsAvatarPreview");
   if (previewEl) {
-    previewEl.innerHTML = `<img src="${photoURL}" alt="Foto de perfil"/>`;
+    previewEl.innerHTML = photoURL
+      ? `<img src="${photoURL}" alt="Foto de perfil"/>`
+      : initial;
   }
+}
+
+// Lê a foto atual do state (já sincronizado com o Firestore) e atualiza
+// o avatar em tela. Chamada em todo renderAll() — é o que garante que,
+// ao trocar a foto em um aparelho, ela apareça nos outros também, sem
+// precisar deslogar/logar de novo.
+function refreshProfileAvatar() {
+  if (!document.querySelector(".user-avatar-btn")) return; // ainda não criado
+  const photoURL = state?.profilePhoto || currentUser?.photoURL || "";
+  updateAllAvatars(photoURL);
 }
 
 // Garante que dados vindos do cache local ou do Firestore tenham todos os
@@ -729,7 +747,7 @@ function normalizeState(parsed) {
   if (!parsed.events) parsed.events = [];
   if (!parsed.goals) parsed.goals = [];
   if (!parsed.customCategories) parsed.customCategories = [];
-  if (!parsed.theme) parsed.theme = "sunny";
+  if (!parsed.theme) parsed.theme = "laranja";
   if (parsed.profilePhoto === undefined) parsed.profilePhoto = null;
   return parsed;
 }
@@ -739,7 +757,7 @@ function normalizeState(parsed) {
 // preencher seus próprios dados, sem nenhum conteúdo de exemplo pré-salvo.
 function loadDefaultState() {
   return {
-    theme: "sunny",
+    theme: "laranja",
     profilePhoto: null,
     notes: [],
     tasks: [],
@@ -758,10 +776,21 @@ function saveState() {
   scheduleSyncToServer();
 }
 
+// Migra nomes antigos de tema (de antes da renomeação para cores) para os
+// novos, assim quem já tinha um tema salvo não perde a preferência.
+const legacyThemeMap = {
+  light: "laranja",
+  dark: "escuro",
+  sunny: "laranja",
+  ocean: "azul",
+  candy: "rosa",
+  forest: "verde",
+  night: "escuro",
+};
+
 function normalizeTheme(theme) {
-  if (theme === "light") return "sunny";
-  if (theme === "dark") return "night";
-  return themeList.includes(theme) ? theme : "sunny";
+  if (legacyThemeMap[theme]) return legacyThemeMap[theme];
+  return themeList.includes(theme) ? theme : "laranja";
 }
 
 function applyTheme(theme) {
@@ -1030,6 +1059,7 @@ function renderAll() {
   renderGoals();
   renderFinances();
   renderSettings();
+  refreshProfileAvatar();
 }
 
 function setDefaultDates() {
