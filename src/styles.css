@@ -1418,14 +1418,24 @@ input[type="time"] {
   }
   .primary-button { flex: 1 1 auto; justify-content: center; }
 
-  /* Em formulários verticais (Tarefas/Agenda), o botão não deve crescer em
+  /* Em formulários verticais (Tarefas/Metas), o botão não deve crescer em
      altura junto com os campos — só ocupar a largura total, mantendo a
-     mesma altura padrão dos demais botões do site. */
-  .inline-form .primary-button,
-  .compact-editor .primary-button,
-  .editor-panel .primary-button {
+     mesma altura padrão dos demais botões do site. Importante: isso NÃO
+     pode incluir .editor-panel/.compact-editor aqui, pois o botão "Salvar"
+     dentro de .form-heading (Agenda/Anotações/Finanças) está numa linha,
+     não numa coluna — dar width:100% nele empurra o botão para fora da
+     tela (foi exatamente o bug visto nos prints). */
+  .inline-form .primary-button {
     flex: 0 0 auto;
     width: 100%;
+  }
+
+  .form-heading {
+    flex-wrap: wrap;
+  }
+
+  .form-heading .primary-button {
+    flex: 0 0 auto;
   }
 
   .view { padding: 16px; }
