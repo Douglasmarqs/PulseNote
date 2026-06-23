@@ -401,11 +401,9 @@ body {
 }
 
 /* ── Profile dropdown in app ── */
-.user-avatar-wrapper { flex-shrink: 0; }
-
 .user-avatar-btn {
-  width: 44px;
-  height: 44px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   background: linear-gradient(135deg, #4f8ef7, #af52de);
   color: #fff;

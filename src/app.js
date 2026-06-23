@@ -235,29 +235,6 @@ const themeNames = {
   night: "Noite",
 };
 
-// Pequenas dicas de produtividade/foco que aparecem no rodapé da barra
-// lateral. Trocam uma vez por dia (com base no dia do ano), então sempre
-// tem algo novo sem precisar de lógica de servidor.
-const dailyTips = [
-  "Divida tarefas grandes em passos de 25 minutos. Seu cérebro agradece.",
-  "Uma tarefa concluída agora vale mais que cinco planejadas para depois.",
-  "Revise sua Agenda pela manhã: 2 minutos hoje economizam 20 depois.",
-  "Anote ideias soltas em Notas antes que elas desapareçam.",
-  "Pequenas metas diárias constroem grandes sequências. Continue!",
-  "Categorize seus gastos toda semana — o futuro você vai agradecer.",
-  "Comemore as pequenas vitórias. É assim que se ganha XP na vida real.",
-  "Antes de abrir outra aba, pergunte: isso me aproxima da minha meta?",
-  "Tarefas com prazo definido têm muito mais chance de saírem do papel.",
-  "Sequências quebram fácil — mas recomeçar também é parte do processo.",
-];
-
-function getDailyTip() {
-  const dayOfYear = Math.floor(
-    (Date.now() - new Date(new Date().getFullYear(), 0, 0)) / 86400000
-  );
-  return dailyTips[dayOfYear % dailyTips.length];
-}
-
 const todayIso = new Date().toISOString().slice(0, 10);
 const tomorrowIso = offsetDate(1);
 const weekIso = offsetDate(5);
@@ -284,6 +261,7 @@ const elements = {
   todayLabel: document.querySelector("#todayLabel"),
   globalSearch: document.querySelector("#globalSearch"),
   themeSelect: document.querySelector("#themeSelect"),
+  themeSelectMobile: document.querySelector("#themeSelectMobile"),
   toast: document.querySelector("#toast"),
 };
 
@@ -344,8 +322,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   state.theme = normalizeTheme(state.theme);
   applyTheme(state.theme);
-  const dailyTipEl = document.querySelector("#dailyTipText");
-  if (dailyTipEl) dailyTipEl.textContent = getDailyTip();
   bindNavigation();
   bindForms();
   bindActions();
@@ -428,7 +404,6 @@ function renderProfileButton(user) {
   const photoURL = state?.profilePhoto || currentUser?.photoURL || "";
 
   const wrapper = document.createElement("div");
-  wrapper.className = "user-avatar-wrapper";
   wrapper.style.position = "relative";
 
   const avatarContent = photoURL
@@ -526,7 +501,7 @@ function renderProfileButton(user) {
 
   document.getElementById("dropdownTheme").addEventListener("click", () => {
     closeDropdown();
-    document.querySelector("#themeSelect")?.focus();
+    document.querySelector("#themeSelectMobile")?.focus();
   });
 }
 
@@ -794,6 +769,9 @@ function applyTheme(theme) {
   if (elements.themeSelect) {
     elements.themeSelect.value = normalizeTheme(theme);
   }
+  if (elements.themeSelectMobile) {
+    elements.themeSelectMobile.value = normalizeTheme(theme);
+  }
 }
 
 function createTask(title, status = "Pendente", priority = "Media", dueDate = todayIso, completedAt = "") {
@@ -883,11 +861,21 @@ function bindForms() {
 }
 
 function bindActions() {
-  elements.themeSelect.addEventListener("change", (event) => {
-    state.theme = event.target.value;
+  document.querySelector("#themeToggle").addEventListener("click", () => {
+    const currentIndex = themeList.indexOf(normalizeTheme(state.theme));
+    state.theme = themeList[(currentIndex + 1) % themeList.length];
     applyTheme(state.theme);
     saveState();
     showToast(`Tema ${themeNames[state.theme]} aplicado.`);
+  });
+
+  [elements.themeSelect, elements.themeSelectMobile].forEach((select) => {
+    select.addEventListener("change", (event) => {
+      state.theme = event.target.value;
+      applyTheme(state.theme);
+      saveState();
+      showToast(`Tema ${themeNames[state.theme]} aplicado.`);
+    });
   });
 
   document.querySelectorAll("[data-calendar-mode]").forEach((button) => {
