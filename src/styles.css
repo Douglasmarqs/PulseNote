@@ -834,6 +834,7 @@ label {
 input, textarea, select {
   min-height: 42px;
   width: 100%;
+  min-width: 0; /* impede que selects com opções longas (ex.: emojis) estourem a largura do card */
   border: 1.5px solid var(--line);
   border-radius: 12px;
   padding: 8px 12px;
@@ -1503,12 +1504,42 @@ input[type="time"] {
   grid-template-columns: 380px 1fr;
   gap: 20px;
   align-items: start;
+  min-width: 0;
 }
 
-.fin-left, .fin-right { display: grid; gap: 16px; }
+.fin-left, .fin-right { display: grid; gap: 16px; min-width: 0; }
 
 /* Form card */
-.fin-form-card { gap: 14px; }
+.fin-form-card { gap: 14px; min-width: 0; }
+
+/* Categoria: select + botão de nova categoria.
+   min-width:0 é essencial aqui — sem isso, o <select> (especialmente em
+   iOS/Safari, que mede a opção mais longa com emoji) pode forçar o card
+   inteiro a ficar mais largo que a tela, empurrando tudo para fora do
+   centro. */
+.fin-cat-select-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+  min-width: 0;
+}
+
+.fin-cat-select-row select {
+  flex: 1;
+  min-width: 0;
+}
+
+.fin-cat-add-btn {
+  flex-shrink: 0;
+  width: 42px;
+  border-radius: 12px;
+  border: 1.5px solid var(--line);
+  background: var(--surface2);
+  color: var(--accent);
+  font-size: 1.2rem;
+  font-weight: 700;
+  cursor: pointer;
+}
 
 /* Type toggle */
 .fin-type-toggle {
@@ -1804,8 +1835,17 @@ input[type="time"] {
 }
 
 @media (max-width: 720px) {
-  .fin-layout { grid-template-columns: 1fr; gap: 14px; }
-  .fin-summary-grid { grid-template-columns: 1fr 1fr; }
+  .fin-layout { grid-template-columns: 1fr; gap: 12px; }
+  .fin-left, .fin-right { gap: 12px; }
+  .fin-form-card { padding: 16px; gap: 11px; }
+  .fin-amount-field input { font-size: 1.5rem; min-height: 46px; }
+  .fin-left .panel, .fin-right .panel, .fin-budget-bar.panel, .fin-calendar-card {
+    padding: 14px;
+  }
+  .fin-summary-card { padding: 12px 10px; gap: 2px; }
+  .fin-sum-icon { font-size: 1.2rem; margin-bottom: 0; }
+  .fin-summary-card strong { font-size: 0.95rem; }
+  .fin-summary-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
   .fin-summary-grid .fin-summary-card:last-child { grid-column: span 2; }
   .fin-cal-grid { grid-template-columns: repeat(7, 1fr); gap: 3px; }
   .fin-cal-day { font-size: 0.7rem; border-radius: 8px; }

@@ -477,8 +477,8 @@
                   </label>
                   <label>
                     Categoria
-                    <div style="display:flex;gap:8px;align-items:stretch">
-                      <select id="expenseCategory" style="flex:1">
+                    <div class="fin-cat-select-row">
+                      <select id="expenseCategory">
                         <option value="alimentacao">🍔 Alimentação</option>
                         <option value="transporte">🚗 Transporte</option>
                         <option value="saude">💊 Saúde</option>
@@ -489,9 +489,7 @@
                         <option value="assinaturas">🔁 Assinaturas</option>
                         <option value="outros">📦 Outros</option>
                       </select>
-                      <button type="button" id="newCategoryBtn" title="Criar nova categoria"
-                        style="flex-shrink:0;width:42px;border-radius:12px;border:1.5px solid var(--line);
-                        background:var(--surface2);color:var(--accent);font-size:1.2rem;font-weight:700;cursor:pointer">
+                      <button type="button" id="newCategoryBtn" class="fin-cat-add-btn" title="Criar nova categoria">
                         ＋
                       </button>
                     </div>
