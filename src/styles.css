@@ -1509,6 +1509,18 @@ input[type="time"] {
 
 .fin-left, .fin-right { display: grid; gap: 16px; min-width: 0; }
 
+/* Correção definitiva: qualquer elemento dentro de Finanças que seja item de
+   flex/grid recebe min-width:auto por padrão do navegador, o que permite que
+   conteúdo (textos longos, números, emojis, fontes maiores por acessibilidade)
+   force a largura do card a ultrapassar a tela — fazendo a margem direita
+   "desaparecer". Zerando min-width em toda a árvore, garantimos que qualquer
+   filho sempre pode encolher/quebrar linha em vez de estourar o layout,
+   sem precisar caçar cada componente (calendário, transações, categorias...)
+   individualmente. */
+.fin-layout, .fin-layout * {
+  min-width: 0;
+}
+
 /* Form card */
 .fin-form-card { gap: 14px; min-width: 0; }
 
