@@ -11,6 +11,7 @@ import {
   signInWithPopup,
   signInWithRedirect,
   getRedirectResult,
+  signOut,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 // Marca este navegador como "já usado antes" — assim, na próxima visita à
@@ -58,9 +59,19 @@ function translateAuthError(code) {
 // Mesmo botão serve para login e cadastro: se a conta Google ainda não
 // existe no PulseNote, o Firebase a cria automaticamente — e como o
 // Google já confirmou o e-mail, a pessoa não precisa verificar de novo.
+//
+// "prompt: select_account" (configurado em firebase-init.js) é o que faz
+// o Google sempre abrir a tela de "Escolher uma conta" — igual em outros
+// sites — em vez de logar direto com a conta que já está ativa no
+// navegador. Antes de abrir o popup, também encerramos qualquer sessão
+// do Firebase que tenha ficado pendente neste navegador, pra garantir que
+// o fluxo comece sempre limpo (sem "herdar" a conta anterior).
 async function signInWithGoogle() {
   ["loginError", "registerError"].forEach(hideError);
   try {
+    if (auth.currentUser) {
+      try { await signOut(auth); } catch (e) {}
+    }
     await signInWithPopup(auth, googleProvider);
     markDeviceAsKnown();
     window.location.replace("index.html");
