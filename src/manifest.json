@@ -44,14 +44,14 @@
       "name": "Nova tarefa",
       "short_name": "Tarefa",
       "description": "Adicionar uma nova tarefa rapidamente",
-      "url": "/index.html?action=new-task",
+      "url": "/app?action=new-task",
       "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
     },
     {
       "name": "Nova despesa",
       "short_name": "Despesa",
       "description": "Registrar uma nova despesa",
-      "url": "/index.html?action=new-expense",
+      "url": "/app?action=new-expense",
       "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
     }
   ]

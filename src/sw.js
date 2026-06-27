@@ -2,7 +2,7 @@
 // Necessário para o app ser "instalável" (PWA) no Android/Chrome,
 // funcionar parcialmente offline, e exibir notificações do sistema.
 
-const CACHE_NAME = "pulsenote-v2";
+const CACHE_NAME = "pulsenote-v3";
 
 // Arquivos essenciais para o app abrir mesmo sem internet.
 // Usamos os caminhos REAIS (dentro de /src/), não os caminhos "bonitos"
@@ -82,19 +82,29 @@ self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const targetView = event.notification.data?.view || "dashboard";
   const itemId = event.notification.data?.itemId || null;
+  const itemParam = itemId ? "&item=" + encodeURIComponent(itemId) : "";
+
+  // IMPORTANTE: usamos a URL "bonita" (/app), que é a rota real exposta pelo
+  // vercel.json (rewrites). Abrir direto em "/src/index.html" parece
+  // equivalente, mas é o caminho de ARQUIVO interno, não uma rota pública —
+  // em produção isso resultava na tela branca de erro "404: NOT_FOUND" toda
+  // vez que o usuário tocava em qualquer notificação.
+  const targetUrl = "/app?action=open-" + targetView + itemParam;
 
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientsArr) => {
-      // Se o app já estiver aberto em alguma aba, foca nela e manda a view desejada
-      const existing = clientsArr.find((c) => c.url.includes("index.html"));
+      // Se o app já estiver aberto em alguma aba, foca nela e manda a view
+      // desejada. A aba pode estar tanto em "/app" (rota bonita) quanto em
+      // "/src/index.html" (caso tenha sido aberta direto), então aceitamos os
+      // dois formatos ao procurar uma janela existente.
+      const existing = clientsArr.find((c) => c.url.includes("/app") || c.url.includes("index.html"));
       if (existing) {
         existing.focus();
         existing.postMessage({ type: "open-view", view: targetView, itemId });
         return;
       }
-      // Senão, abre uma nova aba já na view desejada (e no item, se houver)
-      const itemParam = itemId ? "&item=" + encodeURIComponent(itemId) : "";
-      return self.clients.openWindow("/src/index.html?action=open-" + targetView + itemParam);
+      // Senão, abre uma aba nova já na view desejada (e no item, se houver)
+      return self.clients.openWindow(targetUrl);
     })
   );
 });

@@ -1,0 +1,12 @@
+{
+  "name": "pulsenote",
+  "private": true,
+  "version": "1.0.0",
+  "description": "PulseNote — notas, tarefas, finanças e metas com sincronização na nuvem.",
+  "engines": {
+    "node": "20.x"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.7.0"
+  }
+}

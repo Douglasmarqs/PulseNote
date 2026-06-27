@@ -660,10 +660,31 @@ p, h1, h2, h3 { margin: 0; }
   transition: all 160ms;
 }
 
-.task-row { cursor: grab; }
+/* A tarefa tem mais metadados (data, prioridade, status) do que um evento
+   ou meta, então em vez de espremer tudo numa única linha (o que ficava
+   "embolado" — título, data e prioridade disputando o mesmo espaço), ela
+   usa duas linhas bem definidas: título+ações no topo, badges abaixo. */
+.task-row {
+  cursor: grab;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
 .task-row:hover, .event-row:hover { background: var(--line); }
 
-.task-main { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; }
+.task-row-top { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.task-row-top .task-title { flex: 1; min-width: 0; }
+
+.task-row-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+.task-row-bottom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding-left: 38px; /* alinha com o título, depois do círculo de concluir */
+}
+.task-row-bottom .task-meta { margin-top: 0; }
 
 .task-check {
   width: 28px;
@@ -1694,6 +1715,57 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   font-size: 1.2rem;
   font-weight: 700;
   cursor: pointer;
+}
+
+/* ---------- AI QUICK ENTRY (Finanças) ---------- */
+.ai-quick-entry {
+  border: 1.5px solid transparent;
+  border-radius: 16px;
+  padding: 14px;
+  margin-bottom: 16px;
+  background:
+    linear-gradient(var(--surface2), var(--surface2)) padding-box,
+    linear-gradient(120deg, #4f8ef7, #af52de) border-box;
+}
+
+.ai-quick-entry-label {
+  display: block;
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.ai-quick-entry-row { display: flex; gap: 8px; }
+
+.ai-quick-entry-row input {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  padding: 8px 12px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.92rem;
+}
+
+.ai-quick-entry-row .primary-button {
+  flex-shrink: 0;
+  height: 44px;
+  background: linear-gradient(120deg, #4f8ef7, #af52de);
+}
+
+.ai-quick-entry-hint {
+  font-size: 0.76rem;
+  color: var(--muted);
+  margin: 8px 0 0;
+  line-height: 1.4;
+}
+
+@media (max-width: 720px) {
+  .ai-quick-entry-row { flex-direction: column; }
+  .ai-quick-entry-row .primary-button { width: 100%; justify-content: center; }
 }
 
 /* Type toggle */

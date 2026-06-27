@@ -238,6 +238,15 @@ function getAllCategories(type = "despesa") {
   return [...base, ...custom];
 }
 
+// Monta a lista de categorias (despesa + receita, fixas + do usuário) no
+// formato que o endpoint de IA (api/parse-transaction.js) espera, para que
+// ele só escolha entre ids que realmente existem para este usuário.
+function buildCategoryPayload() {
+  const despesa = getAllCategories("despesa").map((c) => ({ id: c.id, type: "despesa", label: c.label }));
+  const receita = getAllCategories("receita").map((c) => ({ id: c.id, type: "receita", label: c.label }));
+  return [...despesa, ...receita];
+}
+
 function findCategory(catId) {
   const all = [...expenseCategories, ...incomeCategories, ...(state.customCategories || [])];
   return all.find((c) => c.id === catId) || { label: "📦 Outros", color: "#8a9bb0" };
@@ -878,6 +887,7 @@ function bindForms() {
   // Finance form
   const expForm = document.querySelector("#expenseForm");
   if (expForm) expForm.addEventListener("submit", saveExpense);
+  bindAiQuickEntry();
 
   // Popula o select de categorias (fixas + customizadas) na primeira carga
   populateCategorySelect();
@@ -1376,17 +1386,18 @@ function renderTaskRow(task) {
   const isDone = task.status === "Concluida";
   return `
     <article class="task-row" data-task-id="${task.id}" draggable="true" ondragstart="dragTask('${task.id}')">
-      <div class="task-main">
+      <div class="task-row-top">
         <button class="task-check" onclick="toggleTask('${task.id}')" title="Concluir" style="${isDone ? "background:var(--green);border-color:var(--green);color:#fff;" : ""}">${isDone ? "✓" : ""}</button>
-        <div>
-          <div class="task-title" style="${isDone ? "text-decoration:line-through;opacity:0.5;" : ""}">${escapeHtml(task.title)}</div>
-          <div class="task-meta">${formatDate(task.dueDate)} · ${escapeHtml(task.priority)}</div>
+        <div class="task-title" style="${isDone ? "text-decoration:line-through;opacity:0.5;" : ""}">${escapeHtml(task.title)}</div>
+        <div class="task-row-actions">
+          <button class="mini-button" onclick="openTaskMoveMenu('${task.id}', event)" title="Mover para outra coluna" style="padding:0;width:28px;height:28px;">↔️</button>
+          <button class="mini-button" onclick="deleteTask('${task.id}')" title="Excluir" style="padding:0;width:28px;height:28px;">🗑️</button>
         </div>
       </div>
-      <div class="tag-list">
+      <div class="task-row-bottom">
+        <span class="task-meta">📅 ${formatDate(task.dueDate)}</span>
+        <span class="priority-pill priority-${task.priority}">${escapeHtml(task.priority)}</span>
         <span class="status-pill status-${task.status.replace(" ", "-")}">${task.status}</span>
-        <button class="mini-button" onclick="openTaskMoveMenu('${task.id}', event)" title="Mover para outra coluna" style="padding:0;width:28px;height:28px;">↔️</button>
-        <button class="mini-button" onclick="deleteTask('${task.id}')" title="Excluir" style="padding:0;width:28px;height:28px;">🗑️</button>
       </div>
     </article>
   `;
@@ -1688,6 +1699,83 @@ function getActiveFinMonth() {
   return active.dataset.finFilter; // "current", "all", or "YYYY-MM"
 }
 
+// ── Lançamento por texto (IA) ──────────────────────────────────
+// Manda a frase digitada para api/parse-transaction.js, que pede à IA para
+// extrair valor/categoria/data/descrição, e usa a resposta para PRÉ-PREENCHER
+// o formulário normal — o usuário sempre revisa e confirma clicando em
+// "Registrar". Nada é salvo automaticamente sem o usuário ver antes.
+function bindAiQuickEntry() {
+  const input  = document.querySelector("#aiQuickText");
+  const button = document.querySelector("#aiQuickSubmit");
+  const label  = document.querySelector("#aiQuickSubmitLabel");
+  if (!input || !button || !label) return;
+
+  const ERROR_MESSAGES = {
+    ai_not_configured: "Esse recurso ainda não foi configurado neste servidor (faltam as chaves de API).",
+    unauthorized: "Sua sessão expirou. Recarregue a página e faça login novamente.",
+    invalid_text: "Escreva uma frase descrevendo o lançamento.",
+    ai_invalid_amount: "Não consegui identificar um valor nessa frase. Tente incluir o valor (ex.: \"32 reais\").",
+  };
+
+  async function runAiQuickEntry() {
+    const text = input.value.trim();
+    if (text.length < 4) {
+      showToast('Descreva um pouco melhor o lançamento (ex.: "almoço 32 reais ontem").');
+      return;
+    }
+    if (!currentUser) return;
+
+    button.disabled = true;
+    input.disabled  = true;
+    label.textContent = "Pensando...";
+
+    try {
+      const token = await currentUser.getIdToken();
+      const response = await fetch("/api/parse-transaction", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+        body: JSON.stringify({ text, categories: buildCategoryPayload(), today: todayIso }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        showToast(ERROR_MESSAGES[data.error] || "Não consegui entender esse lançamento. Tente reescrever ou preencha manualmente abaixo.");
+        return;
+      }
+
+      // Preenche o formulário normal com o que a IA entendeu
+      document.querySelectorAll("[data-fin-type]").forEach((b) => b.classList.toggle("active", b.dataset.finType === data.type));
+      document.querySelector("#expenseType").value = data.type;
+      document.querySelector(".fin-form-card")?.classList.toggle("is-receita", data.type === "receita");
+      populateCategorySelect(data.categoryId, data.type);
+
+      document.querySelector("#expenseAmount").value      = data.amount.toFixed(2).replace(".", ",");
+      document.querySelector("#expenseDescription").value = data.description || "";
+      document.querySelector("#expenseDate").value        = data.date;
+
+      input.value = "";
+      showToast("✨ Preenchido! Confira os dados e clique em Registrar.");
+      document.querySelector("#expenseAmount")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    } catch (err) {
+      console.error("Erro ao usar lançamento por texto:", err);
+      showToast("Não foi possível usar a IA agora. Preencha manualmente abaixo.");
+    } finally {
+      button.disabled = false;
+      input.disabled  = false;
+      label.textContent = "Preencher";
+    }
+  }
+
+  button.addEventListener("click", runAiQuickEntry);
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      runAiQuickEntry();
+    }
+  });
+}
+
 function saveExpense(event) {
   event.preventDefault();
   const editId = valueOf("#expenseId");
@@ -1859,14 +1947,20 @@ function renderFinances() {
 function renderFinTransaction(f) {
   const cat = findCategory(f.category);
   const isReceita = f.type === "receita";
+  // Antes, toda receita aparecia igual ("💰" + "Receita"), não importa qual
+  // categoria (Salário, Freelance, Vendas...) tivesse sido escolhida no
+  // formulário. Agora mostramos sempre o ícone/cor/nome da categoria
+  // realmente selecionada — igual já acontecia para despesas.
+  const icon    = cat.label.split(" ")[0];
+  const catName = cat.label.replace(/^\S+\s*/, "");
   return `
-    <article class="fin-transaction">
-      <div class="fin-tx-icon" style="background:${isReceita ? "var(--green-soft)" : cat.color + "22"};color:${isReceita ? "var(--green)" : cat.color}">
-        ${isReceita ? "💰" : cat.label.split(" ")[0]}
+    <article class="fin-transaction" data-fin-id="${f.id}">
+      <div class="fin-tx-icon" style="background:${cat.color}22;color:${cat.color}">
+        ${icon}
       </div>
       <div class="fin-tx-info">
         <strong>${escapeHtml(f.description)}</strong>
-        <span class="task-meta">${isReceita ? "Receita" : cat.label.replace(/^.\s/, "")} · ${formatDate(f.date)}</span>
+        <span class="task-meta">${catName} · ${formatDate(f.date)}</span>
       </div>
       <div class="fin-tx-amount ${isReceita ? "receita" : "despesa"}">
         ${isReceita ? "+" : "-"}${formatCurrency(f.amount)}
@@ -2091,7 +2185,7 @@ function highlightItem(itemId) {
 
   setTimeout(() => {
     const target = document.querySelector(
-      `[data-task-id="${itemId}"], [data-event-id="${itemId}"], [data-goal-id="${itemId}"]`
+      `[data-task-id="${itemId}"], [data-event-id="${itemId}"], [data-goal-id="${itemId}"], [data-fin-id="${itemId}"]`
     );
     if (!target) return;
     target.scrollIntoView({ behavior: "smooth", block: "center" });

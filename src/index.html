@@ -468,6 +468,18 @@
                   </div>
                 </div>
 
+                <!-- Lançamento por texto, usando IA para preencher o formulário -->
+                <div class="ai-quick-entry">
+                  <label for="aiQuickText" class="ai-quick-entry-label">✨ Lançar por texto</label>
+                  <div class="ai-quick-entry-row">
+                    <input id="aiQuickText" type="text" placeholder="Ex.: almoço 32 reais ontem" maxlength="120" />
+                    <button type="button" id="aiQuickSubmit" class="primary-button">
+                      <span id="aiQuickSubmitLabel">Preencher</span>
+                    </button>
+                  </div>
+                  <p id="aiQuickHint" class="ai-quick-entry-hint">Descreva o gasto ou recebimento numa frase — a IA preenche os campos abaixo para você revisar antes de salvar.</p>
+                </div>
+
                 <!-- Type toggle -->
                 <div class="fin-type-toggle">
                   <button class="fin-type-btn active" data-fin-type="despesa">
