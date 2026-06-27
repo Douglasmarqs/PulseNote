@@ -19,8 +19,18 @@ service cloud.firestore {
     // Cada usuário só pode ler/escrever o PRÓPRIO documento,
     // identificado pelo seu UID de autenticação.
     match /userData/{userId} {
-      allow read, write: if request.auth != null
-                          && request.auth.uid == userId;
+      allow read: if request.auth != null
+                  && request.auth.uid == userId;
+
+      // Na escrita, além da posse do documento, exige-se o formato
+      // esperado ({ data: <mapa>, updatedAt: <texto> } e nada mais).
+      // Isso bloqueia tentativas de injetar campos extras ou tipos
+      // inesperados mesmo que alguém adultere o JavaScript do site.
+      allow write: if request.auth != null
+                   && request.auth.uid == userId
+                   && request.resource.data.keys().hasOnly(['data', 'updatedAt'])
+                   && request.resource.data.data is map
+                   && request.resource.data.updatedAt is string;
     }
 
     // Bloqueia explicitamente qualquer outra coleção/documento

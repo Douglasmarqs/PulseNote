@@ -217,14 +217,30 @@ const expenseCategories = [
   { id: "outros",      label: "📦 Outros",       color: "#8a9bb0" },
 ];
 
-// Retorna categorias fixas + categorias criadas pelo usuário
-function getAllCategories() {
-  const custom = state.customCategories || [];
-  return [...expenseCategories, ...custom];
+// Receita tem uma natureza diferente de despesa — "de onde o dinheiro veio",
+// não "em que foi gasto" — por isso usa sua própria lista de categorias.
+const incomeCategories = [
+  { id: "salario",      label: "💼 Salário",         color: "#34c759" },
+  { id: "freelance",    label: "💻 Freelance/Bico",  color: "#5ac8fa" },
+  { id: "investimentos",label: "📈 Investimentos",   color: "#af52de" },
+  { id: "vendas",       label: "🏷️ Vendas",          color: "#ff9500" },
+  { id: "reembolso",    label: "↩️ Reembolso",        color: "#00c7be" },
+  { id: "presente",     label: "🎁 Presente/Bônus",   color: "#ff2d55" },
+  { id: "outros_receita", label: "📦 Outros",         color: "#8a9bb0" },
+];
+
+// Retorna categorias fixas + categorias criadas pelo usuário, filtradas pelo
+// tipo (despesa ou receita) — assim "Salário" nunca aparece como despesa, e
+// "Alimentação" nunca aparece como origem de receita.
+function getAllCategories(type = "despesa") {
+  const base = type === "receita" ? incomeCategories : expenseCategories;
+  const custom = (state.customCategories || []).filter((c) => (c.type || "despesa") === type);
+  return [...base, ...custom];
 }
 
 function findCategory(catId) {
-  return getAllCategories().find((c) => c.id === catId) || { label: "📦 Outros", color: "#8a9bb0" };
+  const all = [...expenseCategories, ...incomeCategories, ...(state.customCategories || [])];
+  return all.find((c) => c.id === catId) || { label: "📦 Outros", color: "#8a9bb0" };
 }
 const themeList = ["laranja", "azul", "verde", "rosa", "escuro"];
 const themeNames = {
@@ -319,6 +335,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Inicia o agendador de notificações (só dispara de fato se o
   // usuário já tiver concedido permissão anteriormente)
   if (window.startNotificationScheduler) window.startNotificationScheduler();
+
+  // Atualiza os contadores "Faltam Xh Ymin" da Agenda a cada 30s, em tempo real
+  setInterval(updateEventCountdowns, 30000);
 
   state.theme = normalizeTheme(state.theme);
   applyTheme(state.theme);
@@ -834,8 +853,9 @@ function bindNavigation() {
 function bindForms() {
   document.querySelector("#noteForm").addEventListener("submit", saveNote);
   document.querySelector("#resetNoteForm").addEventListener("click", resetNoteForm);
-  document.querySelector("#suggestNote").addEventListener("click", suggestNoteMetadata);
   document.querySelector("#noteFilter").addEventListener("change", renderNotes);
+  bindNoteQuickControls();
+  enableAutogrowTextareas();
   document.querySelector("#taskForm").addEventListener("submit", saveTask);
   document.querySelector("#eventForm").addEventListener("submit", saveEvent);
   document.querySelector("#goalForm").addEventListener("submit", saveGoal);
@@ -876,6 +896,8 @@ function bindForms() {
       document.querySelectorAll("[data-fin-type]").forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
       document.querySelector("#expenseType").value = btn.dataset.finType;
+      populateCategorySelect(null, btn.dataset.finType);
+      document.querySelector(".fin-form-card")?.classList.toggle("is-receita", btn.dataset.finType === "receita");
     });
   });
 
@@ -1036,18 +1058,51 @@ function resetNoteForm() {
   document.querySelector("#noteForm").reset();
   document.querySelector("#noteId").value = "";
   document.querySelector("#notePriority").value = "Media";
+  document.querySelectorAll("#notePriorityPicker .note-priority-dot").forEach((d) =>
+    d.classList.toggle("active", d.dataset.priority === "Media")
+  );
+  document.querySelector("#noteChecklistField").hidden = true;
+  document.querySelector("#noteChecklistToggle").classList.remove("active");
+  document.querySelector(".note-more-details").open = false;
+  document.querySelectorAll("#noteForm textarea.autogrow").forEach((t) => (t.style.height = "auto"));
 }
 
-function suggestNoteMetadata() {
-  const text = `${valueOf("#noteTitle")} ${valueOf("#noteDescription")}`.toLowerCase();
-  const category = text.includes("reuniao") || text.includes("projeto") ? "Trabalho" : text.includes("estudo") ? "Estudos" : "Pessoal";
-  const priority = text.includes("urgente") || text.includes("prazo") ? "Urgente" : text.includes("importante") ? "Alta" : "Media";
-  document.querySelector("#noteCategory").value = category;
-  document.querySelector("#notePriority").value = priority;
-  if (!valueOf("#noteTags")) {
-    document.querySelector("#noteTags").value = [category.toLowerCase(), priority.toLowerCase()].join(", ");
+function bindNoteQuickControls() {
+  // Seletor de prioridade por bolinhas coloridas (substitui o <select> visível)
+  document.querySelectorAll("#notePriorityPicker .note-priority-dot").forEach((dot) => {
+    dot.addEventListener("click", () => {
+      document.querySelectorAll("#notePriorityPicker .note-priority-dot").forEach((d) => d.classList.remove("active"));
+      dot.classList.add("active");
+      document.querySelector("#notePriority").value = dot.dataset.priority;
+    });
+  });
+
+  // Mostra/esconde o campo de checklist sob demanda
+  const toggleBtn = document.querySelector("#noteChecklistToggle");
+  const field = document.querySelector("#noteChecklistField");
+  if (toggleBtn && field) {
+    toggleBtn.addEventListener("click", () => {
+      field.hidden = !field.hidden;
+      toggleBtn.classList.toggle("active", !field.hidden);
+      if (!field.hidden) document.querySelector("#noteChecklist").focus();
+    });
   }
-  showToast("Sugestoes aplicadas.");
+}
+
+// Faz os textareas marcados crescerem junto com o texto, em vez de
+// quebrarem o layout do cartão ou esconderem conteúdo num scroll interno.
+function enableAutogrowTextareas() {
+  document.querySelectorAll("textarea.autogrow").forEach((textarea) => {
+    const resize = () => {
+      textarea.style.height = "auto";
+      textarea.style.height = `${textarea.scrollHeight}px`;
+    };
+    if (!textarea.dataset.autogrowBound) {
+      textarea.addEventListener("input", resize);
+      textarea.dataset.autogrowBound = "1";
+    }
+    resize();
+  });
 }
 
 function renderAll() {
@@ -1235,10 +1290,24 @@ function editNote(id) {
   document.querySelector("#noteFolder").value = note.folder;
   document.querySelector("#noteTags").value = note.tags.join(", ");
   document.querySelector("#notePriority").value = note.priority;
+  document.querySelectorAll("#notePriorityPicker .note-priority-dot").forEach((d) =>
+    d.classList.toggle("active", d.dataset.priority === note.priority)
+  );
   document.querySelector("#noteChecklist").value = note.checklist.join("\n");
   document.querySelector("#noteAttachments").value = note.attachments.join(", ");
   document.querySelector("#noteGoal").value = note.goal;
   document.querySelector("#noteObservations").value = note.observations;
+
+  // Mostra a checklist se a nota já tiver itens
+  const hasChecklist = note.checklist && note.checklist.length > 0;
+  document.querySelector("#noteChecklistField").hidden = !hasChecklist;
+  document.querySelector("#noteChecklistToggle").classList.toggle("active", hasChecklist);
+
+  // Abre "Mais detalhes" automaticamente se algum campo opcional já tiver valor
+  const hasExtra = note.category || note.folder || (note.tags && note.tags.length) || note.goal || (note.attachments && note.attachments.length) || note.observations;
+  document.querySelector(".note-more-details").open = Boolean(hasExtra);
+
+  enableAutogrowTextareas();
   setView("notes");
   document.querySelector("#noteTitle").focus();
 }
@@ -1306,7 +1375,7 @@ function renderTasks() {
 function renderTaskRow(task) {
   const isDone = task.status === "Concluida";
   return `
-    <article class="task-row" draggable="true" ondragstart="dragTask('${task.id}')">
+    <article class="task-row" data-task-id="${task.id}" draggable="true" ondragstart="dragTask('${task.id}')">
       <div class="task-main">
         <button class="task-check" onclick="toggleTask('${task.id}')" title="Concluir" style="${isDone ? "background:var(--green);border-color:var(--green);color:#fff;" : ""}">${isDone ? "✓" : ""}</button>
         <div>
@@ -1452,17 +1521,45 @@ function filterEventsByDate(date) {
 
 function renderEventRow(event) {
   return `
-    <article class="event-row">
+    <article class="event-row" data-event-id="${event.id}">
       <div style="flex:1;min-width:0">
         <strong style="font-size:0.9rem">${escapeHtml(event.title)}</strong>
         <div class="event-meta">📅 ${formatDate(event.date)} às ${event.time} · 📍 ${escapeHtml(event.location)}</div>
       </div>
       <div class="tag-list" style="flex-shrink:0">
-        <span class="pill" style="background:var(--orange-soft);color:var(--orange);border-color:var(--orange)">⏰ ${event.reminder}min</span>
+        <span class="event-countdown" data-event-date="${event.date}" data-event-time="${event.time}">${countdownLabel(event.date, event.time)}</span>
         <button class="mini-button" onclick="deleteEvent('${event.id}')" title="Excluir" style="padding:0;width:28px;height:28px">🗑️</button>
       </div>
     </article>
   `;
+}
+
+// Calcula quanto tempo falta (ou já passou) para um compromisso, em texto amigável.
+function countdownLabel(date, time) {
+  if (!date || !time) return "";
+  const target = new Date(`${date}T${time}`);
+  const diffMs = target - new Date();
+  const diffMin = Math.round(diffMs / 60000);
+
+  if (diffMin <= 0 && diffMin > -30) return "🔴 Agora";
+  if (diffMin <= -30) {
+    const hoursAgo = Math.round(Math.abs(diffMin) / 60);
+    return hoursAgo >= 1 ? `⚠️ Atrasado ${hoursAgo}h` : `⚠️ Atrasado ${Math.abs(diffMin)}min`;
+  }
+  if (diffMin < 60) return `🟠 Faltam ${diffMin}min`;
+  const hours = Math.floor(diffMin / 60);
+  const minutes = diffMin % 60;
+  if (hours < 24) return `🟢 Faltam ${hours}h${minutes ? ` ${minutes}min` : ""}`;
+  const days = Math.floor(hours / 24);
+  return `🟢 Faltam ${days} dia${days > 1 ? "s" : ""}`;
+}
+
+// Atualiza só o texto dos contadores já na tela, sem re-renderizar a lista inteira
+// (evita perder scroll/seleção e é muito mais leve do que chamar renderCalendar a cada minuto).
+function updateEventCountdowns() {
+  document.querySelectorAll(".event-countdown").forEach((el) => {
+    el.textContent = countdownLabel(el.dataset.eventDate, el.dataset.eventTime);
+  });
 }
 
 function sortEvent(first, second) {
@@ -1484,7 +1581,7 @@ function renderGoals() {
       const percent = Math.min(100, Math.round((goal.current / goal.target) * 100));
       const isComplete = goal.current >= goal.target;
       return `
-        <article class="goal-card" style="${isComplete ? "border-color:var(--green);background:var(--green-soft);" : ""}">
+        <article class="goal-card" data-goal-id="${goal.id}" style="${isComplete ? "border-color:var(--green);background:var(--green-soft);" : ""}">
           <div>
             <h2>${escapeHtml(goal.title)}</h2>
             <div class="task-meta">${goal.current}/${goal.target} etapas ${isComplete ? "🎉" : ""}</div>
@@ -1595,6 +1692,7 @@ function saveExpense(event) {
   event.preventDefault();
   const editId = valueOf("#expenseId");
   const type = document.querySelector("#expenseType").value || "despesa";
+  const defaultCategory = type === "receita" ? "outros_receita" : "outros";
   const amount = parseFloat(valueOf("#expenseAmount").replace(",", "."));
   if (isNaN(amount) || amount <= 0) { showToast("Informe um valor válido."); return; }
 
@@ -1608,7 +1706,7 @@ function saveExpense(event) {
             ...f,
             type,
             amount,
-            category: valueOf("#expenseCategory") || "outros",
+            category: valueOf("#expenseCategory") || defaultCategory,
             description: valueOf("#expenseDescription") || (type === "receita" ? "Receita" : "Despesa"),
             date: valueOf("#expenseDate") || todayIso,
           }
@@ -1620,7 +1718,7 @@ function saveExpense(event) {
       id: crypto.randomUUID(),
       type,
       amount,
-      category: valueOf("#expenseCategory") || "outros",
+      category: valueOf("#expenseCategory") || defaultCategory,
       description: valueOf("#expenseDescription") || (type === "receita" ? "Receita" : "Despesa"),
       date: valueOf("#expenseDate") || todayIso,
     };
@@ -1639,6 +1737,8 @@ function resetExpenseForm() {
   document.querySelector("#expenseDate").value = todayIso;
   document.querySelector("#expenseType").value = "despesa";
   document.querySelectorAll("[data-fin-type]").forEach((b) => b.classList.toggle("active", b.dataset.finType === "despesa"));
+  document.querySelector(".fin-form-card")?.classList.remove("is-receita");
+  populateCategorySelect(null, "despesa");
   // Restaura o texto do botão e título do formulário
   const submitBtn = document.querySelector("#expenseForm button[type=submit]");
   if (submitBtn) submitBtn.textContent = "➕ Registrar";
@@ -1658,8 +1758,9 @@ function editFinance(id) {
   document.querySelector("#expenseDate").value         = entry.date;
   document.querySelector("#expenseType").value         = entry.type;
   document.querySelectorAll("[data-fin-type]").forEach((b) => b.classList.toggle("active", b.dataset.finType === entry.type));
+  document.querySelector(".fin-form-card")?.classList.toggle("is-receita", entry.type === "receita");
 
-  populateCategorySelect(entry.category);
+  populateCategorySelect(entry.category, entry.type);
 
   const submitBtn = document.querySelector("#expenseForm button[type=submit]");
   if (submitBtn) submitBtn.textContent = "💾 Salvar alterações";
@@ -1812,14 +1913,22 @@ function filterFinByDate(date) {
 
 // Preenche o <select> de categorias com as fixas + customizadas do usuário.
 // Se selectedId for passado, marca essa opção como selecionada.
-function populateCategorySelect(selectedId) {
+function populateCategorySelect(selectedId, type = document.querySelector("#expenseType")?.value || "despesa") {
   const select = document.querySelector("#expenseCategory");
   if (!select) return;
-  const current = selectedId || select.value;
-  select.innerHTML = getAllCategories()
+  const current = selectedId || (select.dataset.type === type ? select.value : null);
+  select.dataset.type = type;
+  select.innerHTML = getAllCategories(type)
     .map((cat) => `<option value="${cat.id}">${cat.label}</option>`)
     .join("");
   if (current) select.value = current;
+
+  // Texto e atalhos mudam de cara para deixar claro que "categoria de receita"
+  // não é a mesma coisa que "categoria de despesa"
+  const label = document.querySelector("#expenseCategoryLabel");
+  const description = document.querySelector("#expenseDescription");
+  if (label) label.textContent = type === "receita" ? "De onde veio" : "Categoria";
+  if (description) description.placeholder = type === "receita" ? "Ex.: Salário de junho, Venda do sofá..." : "Ex.: Almoço, Uber...";
 }
 
 function openNewCategoryPrompt() {
@@ -1911,16 +2020,18 @@ function openNewCategoryPrompt() {
     }
 
     const id = "custom_" + name.toLowerCase().replace(/[^a-z0-9]+/g, "_").slice(0, 24) + "_" + Date.now().toString(36);
+    const activeType = document.querySelector("#expenseType")?.value || "despesa";
 
     if (!state.customCategories) state.customCategories = [];
     state.customCategories.push({
       id,
       label: `${selectedEmoji} ${name}`,
       color: selectedColor,
+      type: activeType,
     });
     saveState();
 
-    populateCategorySelect(id);
+    populateCategorySelect(id, activeType);
     modal.remove();
     showToast(`✅ Categoria "${name}" criada!`);
   });
@@ -1929,7 +2040,9 @@ function openNewCategoryPrompt() {
 // Abre direto a tela certa quando o app é aberto via atalho do PWA
 // (ex: pressionar e segurar o ícone na tela inicial → "Nova tarefa")
 function handlePwaShortcutAction() {
-  const action = new URLSearchParams(window.location.search).get("action");
+  const params = new URLSearchParams(window.location.search);
+  const action = params.get("action");
+  const itemFromUrl = params.get("item");
   if (action) {
     if (action === "new-task") {
       setView("tasks");
@@ -1942,6 +2055,7 @@ function handlePwaShortcutAction() {
       const view = action.replace("open-", "");
       if (["dashboard", "notes", "tasks", "calendar", "goals", "finances"].includes(view)) {
         setView(view);
+        if (itemFromUrl) highlightItem(itemFromUrl);
       }
     }
     // Limpa o parâmetro da URL para não reabrir a mesma ação ao recarregar
@@ -1950,14 +2064,40 @@ function handlePwaShortcutAction() {
 
   // Se o usuário tocar numa notificação enquanto o app já está aberto em
   // outra aba, o Service Worker manda essa mensagem em vez de abrir uma
-  // nova janela — assim navegamos direto para a tela certa.
+  // nova janela — assim navegamos direto para a tela certa (e para o item
+  // exato, quando a notificação se referia a um só item).
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.addEventListener("message", (event) => {
       if (event.data?.type === "open-view" && event.data.view) {
         setView(event.data.view);
+        if (event.data.itemId) highlightItem(event.data.itemId);
       }
     });
   }
+}
+
+// Rola até o cartão/linha exata referenciada por uma notificação e dá um
+// destaque pulsante por alguns segundos, pra deixar bem claro "é aqui".
+function highlightItem(itemId) {
+  // Se for uma tarefa e o mobile estiver mostrando outra aba de status,
+  // troca para a aba certa antes de tentar rolar até ela.
+  const task = state.tasks?.find((t) => t.id === itemId);
+  if (task) {
+    document.querySelectorAll("[data-status-tab]").forEach((t) =>
+      t.classList.toggle("active", t.dataset.statusTab === task.status)
+    );
+    renderTasks();
+  }
+
+  setTimeout(() => {
+    const target = document.querySelector(
+      `[data-task-id="${itemId}"], [data-event-id="${itemId}"], [data-goal-id="${itemId}"]`
+    );
+    if (!target) return;
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
+    target.classList.add("notify-highlight");
+    setTimeout(() => target.classList.remove("notify-highlight"), 2600);
+  }, 220);
 }
 
 window.editNote = editNote;

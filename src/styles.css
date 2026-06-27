@@ -882,6 +882,107 @@ input[type="time"] {
 
 .form-actions { display: flex; gap: 8px; }
 
+/* ---------- Note editor (versão simplificada) ---------- */
+.note-editor { gap: 10px; }
+
+.note-title-field input {
+  font-size: 1.05rem;
+  font-weight: 700;
+  border: none;
+  background: transparent;
+  padding: 4px 2px;
+  min-height: 38px;
+}
+.note-title-field input:focus { box-shadow: none; }
+
+.note-body-field textarea {
+  border: none;
+  background: transparent;
+  resize: none;
+  overflow: hidden;
+  padding: 4px 2px;
+  min-height: 64px;
+  font-size: 0.94rem;
+  line-height: 1.5;
+}
+.note-body-field textarea:focus { box-shadow: none; }
+
+textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms ease; }
+
+.note-quick-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 8px;
+  border-top: 1.5px dashed var(--line);
+}
+
+.note-priority-picker { display: flex; gap: 8px; align-items: center; }
+
+.note-priority-dot {
+  width: 22px;
+  height: 22px;
+  min-height: 0;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+  background: var(--surface2);
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+.note-priority-dot[data-priority="Baixa"]   { background: var(--green-soft); border-color: var(--green); color: var(--green); }
+.note-priority-dot[data-priority="Media"]   { background: var(--blue-soft, var(--accent-soft)); border-color: var(--accent); color: var(--accent); }
+.note-priority-dot[data-priority="Alta"]    { background: var(--orange-soft); border-color: var(--orange); color: var(--orange); }
+.note-priority-dot[data-priority="Urgente"] { background: var(--red-soft); border-color: var(--red); color: var(--red); }
+.note-priority-dot.active {
+  transform: scale(1.25);
+  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 18%, transparent);
+}
+
+.note-checklist-toggle {
+  min-height: 0;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  background: var(--surface2);
+  color: var(--text2);
+  border: 1.5px solid var(--line);
+  cursor: pointer;
+  transition: all 160ms;
+  white-space: nowrap;
+}
+.note-checklist-toggle.active,
+.note-checklist-toggle:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+
+.note-checklist-field { margin-top: 0; }
+
+.note-more-details {
+  border-top: 1.5px dashed var(--line);
+  padding-top: 8px;
+}
+.note-more-details summary {
+  cursor: pointer;
+  list-style: none;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  user-select: none;
+}
+.note-more-details summary::-webkit-details-marker { display: none; }
+.note-more-details summary .chev { transition: transform 160ms ease; font-size: 0.75rem; }
+.note-more-details[open] summary .chev { transform: rotate(180deg); }
+.note-more-details > *:not(summary) { margin-top: 10px; }
+.note-more-details > div.form-grid:not(:first-of-type),
+.note-more-details > label { margin-top: 10px; }
+
+.note-save-btn { flex: 1; justify-content: center; height: 46px; font-size: 0.95rem; }
+.form-actions .ghost-button { flex: 0 0 auto; width: auto; padding: 10px 18px; }
+
 /* Note filters */
 .list-panel { position: relative; }
 
@@ -910,15 +1011,17 @@ input[type="time"] {
 /* Note select (legacy, hidden by JS if filter chips present) */
 #noteFilter { display: none; }
 
-/* NOTE GRID — Masonry Style */
+/* NOTE GRID — grid responsivo (substitui o antigo "columns" CSS, que
+   reordenava e cortava os cartões de forma imprevisível quando uma nota
+   tinha muito texto — a causa do layout "quebrando" ao escrever mais). */
 .note-grid {
-  columns: 2;
-  column-gap: 14px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 14px;
+  align-items: start;
 }
 
 .note-card {
-  break-inside: avoid;
-  margin-bottom: 14px;
   border-radius: var(--radius-card);
   padding: 18px;
   border: 1.5px solid var(--note-yellow-border);
@@ -927,6 +1030,7 @@ input[type="time"] {
   cursor: pointer;
   display: block;
   position: relative;
+  overflow-wrap: anywhere;
 }
 
 .note-card:hover {
@@ -1110,32 +1214,45 @@ input[type="time"] {
 @media (max-width: 720px) {
   .task-status-tabs {
     display: flex;
-    gap: 6px;
+    gap: 4px;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
-    padding-bottom: 4px;
-    margin-bottom: 12px;
+    padding: 4px;
+    margin-bottom: 14px;
+    background: var(--surface2);
+    border-radius: 16px;
+    border: 1.5px solid var(--line);
   }
   .task-status-tabs::-webkit-scrollbar { display: none; }
 
   .status-tab {
+    flex: 1;
     flex-shrink: 0;
-    padding: 9px 16px;
-    border-radius: 999px;
-    font-size: 0.84rem;
+    padding: 9px 14px;
+    border-radius: 13px;
+    font-size: 0.82rem;
     font-weight: 700;
     color: var(--text2);
-    background: var(--surface2);
-    border: 1.5px solid var(--line);
+    background: transparent;
+    border: none;
     cursor: pointer;
     white-space: nowrap;
-    transition: all 160ms;
+    transition: all 180ms ease;
   }
-  .status-tab.active {
-    background: var(--accent);
-    color: #fff;
-    border-color: var(--accent);
+  .status-tab:active { transform: scale(0.97); }
+
+  .status-tab.active[data-status-tab="Pendente"] {
+    background: var(--surface); color: var(--muted); box-shadow: var(--shadow-card);
+  }
+  .status-tab.active[data-status-tab="Em andamento"] {
+    background: var(--accent); color: #fff; box-shadow: 0 3px 10px color-mix(in srgb, var(--accent) 35%, transparent);
+  }
+  .status-tab.active[data-status-tab="Concluida"] {
+    background: var(--green); color: #fff; box-shadow: 0 3px 10px color-mix(in srgb, var(--green) 35%, transparent);
+  }
+  .status-tab.active[data-status-tab="Cancelada"] {
+    background: var(--red); color: #fff; box-shadow: 0 3px 10px color-mix(in srgb, var(--red) 35%, transparent);
   }
 
   /* Com as abas ativas, o board vira 1 coluna e mostra só a coluna
@@ -1325,6 +1442,16 @@ input[type="time"] {
   100% { opacity: 0; transform: translate(calc(-50% + var(--x,0px)), calc(-50% + var(--y,0px))) rotate(240deg) scale(1.3); }
 }
 
+/* Destaque temporário ao abrir um item específico a partir de uma notificação */
+.notify-highlight {
+  animation: notifyPulse 1.3s ease 2;
+  border-radius: inherit;
+}
+@keyframes notifyPulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent); }
+  50%      { box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 35%, transparent); }
+}
+
 /* ---------- BOTTOM NAV (mobile) ---------- */
 .bottom-nav { display: none; }
 
@@ -1467,7 +1594,7 @@ input[type="time"] {
 
   /* Mobile notes */
   #notesView .workbench { grid-template-columns: 1fr; }
-  .note-grid { columns: 1; }
+  .note-grid { grid-template-columns: 1fr; }
 
   /* Mobile tasks */
   .board-toolbar { flex-direction: column; }
@@ -1487,9 +1614,8 @@ input[type="time"] {
   .form-grid { grid-template-columns: 1fr; }
 }
 
-/* Note grid 3 col on large screens */
+/* Note grid já se adapta sozinha em telas grandes via auto-fill */
 @media (min-width: 1400px) {
-  .note-grid { columns: 3; }
   .dashboard-layout { grid-template-columns: repeat(3, 1fr); }
   .metric-grid { grid-template-columns: repeat(4, 1fr); }
 }
@@ -1522,7 +1648,8 @@ input[type="time"] {
 }
 
 /* Form card */
-.fin-form-card { gap: 14px; min-width: 0; }
+.fin-form-card { gap: 14px; min-width: 0; transition: border-color 200ms ease, box-shadow 200ms ease; }
+.fin-form-card.is-receita { border-color: var(--green); box-shadow: 0 0 0 3px var(--green-soft); }
 
 /* Categoria: select + botão de nova categoria.
    min-width:0 é essencial aqui — sem isso, o <select> (especialmente em

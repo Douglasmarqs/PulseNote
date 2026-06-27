@@ -1,6 +1,6 @@
 // auth.js — Autenticação PulseNote via Firebase
 
-import { auth } from "./firebase-init.js";
+import { auth, googleProvider } from "./firebase-init.js";
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -8,6 +8,9 @@ import {
   sendEmailVerification,
   updateProfile,
   onAuthStateChanged,
+  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 // ── Tradução de erros Firebase → PT-BR (cobre todos os casos conhecidos) ──
@@ -33,9 +36,51 @@ function translateAuthError(code) {
     "auth/missing-password":            "Informe sua senha.",
     "auth/missing-email":               "Informe seu e-mail.",
     "auth/internal-error":              "Erro interno do Firebase. Tente novamente em instantes.",
+    // Login com Google
+    "auth/popup-closed-by-user":        "Janela do Google fechada antes de concluir o login.",
+    "auth/cancelled-popup-request":     "Login cancelado.",
+    "auth/popup-blocked":               "O navegador bloqueou a janela do Google. Tentando outro método...",
+    "auth/account-exists-with-different-credential":
+      "Já existe uma conta com este e-mail usando login por senha. Entre com e-mail e senha.",
   };
   return map[code] || `Erro inesperado (${code}). Tente novamente.`;
 }
+
+// ── LOGIN / CADASTRO COM GOOGLE ─────────────────────────────────
+// Mesmo botão serve para login e cadastro: se a conta Google ainda não
+// existe no PulseNote, o Firebase a cria automaticamente — e como o
+// Google já confirmou o e-mail, a pessoa não precisa verificar de novo.
+async function signInWithGoogle() {
+  ["loginError", "registerError"].forEach(hideError);
+  try {
+    await signInWithPopup(auth, googleProvider);
+    window.location.replace("index.html");
+  } catch (err) {
+    console.error("Google sign-in error:", err.code, err.message);
+    // Pop-up bloqueado/indisponível (comum em PWA instalado e navegadores
+    // dentro de apps) → tenta de novo com redirecionamento de página inteira
+    if (err.code === "auth/popup-blocked" || err.code === "auth/operation-not-supported-in-this-environment") {
+      try { await signInWithRedirect(auth, googleProvider); return; }
+      catch (redirectErr) { console.error("Google redirect error:", redirectErr); }
+    }
+    if (err.code === "auth/popup-closed-by-user" || err.code === "auth/cancelled-popup-request") return;
+    const visibleForm = document.querySelector(".auth-form.active-form");
+    const targetError = visibleForm?.id === "registerForm" ? "registerError" : "loginError";
+    showError(targetError, translateAuthError(err.code));
+  }
+}
+
+document.querySelectorAll("[data-google-signin]").forEach((btn) => {
+  btn.addEventListener("click", signInWithGoogle);
+});
+
+// Se o login com Google caiu no fluxo de redirecionamento (fallback acima),
+// confirma o resultado quando a página recarregar.
+getRedirectResult(auth).then((result) => {
+  if (result?.user) window.location.replace("index.html");
+}).catch((err) => {
+  if (err?.code) console.error("Erro ao concluir login com Google:", err.code, err.message);
+});
 
 // ── Guard: já logado → vai direto para o app ──────────────────
 const unsubscribeAuthCheck = onAuthStateChanged(auth, (user) => {

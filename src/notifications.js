@@ -25,7 +25,7 @@ function alreadyNotifiedToday(uniqueId) {
 }
 
 // Dispara uma notificação do sistema (ou um toast como fallback)
-function fireNotification(title, body, tag, onClickView) {
+function fireNotification(title, body, tag, onClickView, itemId) {
   if ("Notification" in window && Notification.permission === "granted") {
     try {
       // Se o Service Worker estiver ativo, usamos ele — isso permite que a
@@ -38,7 +38,7 @@ function fireNotification(title, body, tag, onClickView) {
           icon: "icons/icon-192.png",
           badge: "icons/icon-192.png",
           vibrate: [120, 60, 120],
-          data: { view: onClickView || "dashboard" },
+          data: { view: onClickView || "dashboard", itemId: itemId || null },
           renotify: false,
         }).catch(() => {
           // Fallback simples caso showNotification falhe
@@ -101,7 +101,8 @@ function checkTaskNotifications() {
         ? `"${overdue[0].title}" está atrasada.`
         : `Você tem ${overdue.length} tarefas atrasadas.`,
       "tasks-overdue",
-      "tasks"
+      "tasks",
+      overdue.length === 1 ? overdue[0].id : null
     );
   } else if (dueToday.length > 0 && !alreadyNotifiedToday("tasks_today")) {
     fireNotification(
@@ -110,7 +111,8 @@ function checkTaskNotifications() {
         ? `"${dueToday[0].title}" vence hoje.`
         : `Você tem ${dueToday.length} tarefas vencendo hoje.`,
       "tasks-today",
-      "tasks"
+      "tasks",
+      dueToday.length === 1 ? dueToday[0].id : null
     );
   }
 }
@@ -135,7 +137,8 @@ function checkEventNotifications() {
           "📅 Compromisso em breve",
           `"${event.title}" às ${event.time}${event.location ? " · " + event.location : ""}`,
           `event-${event.id}`,
-          "calendar"
+          "calendar",
+          event.id
         );
       }
     }
@@ -153,7 +156,8 @@ function checkGoalNotifications() {
         "🎯 Quase lá!",
         `"${goal.title}" está ${Math.round(percent)}% completa. Falta pouco!`,
         `goal-${goal.id}`,
-        "goals"
+        "goals",
+        goal.id
       );
     }
   });

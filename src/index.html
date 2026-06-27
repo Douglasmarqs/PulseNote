@@ -240,68 +240,82 @@
           <div class="workbench">
 
             <!-- Editor -->
-            <form id="noteForm" class="editor-panel">
+            <form id="noteForm" class="editor-panel note-editor">
               <div class="form-heading">
                 <div>
                   <p class="eyebrow">Nova anotação</p>
-                  <h2>Capturar ideia</h2>
+                  <h2>O que você quer guardar hoje?</h2>
                 </div>
-                <button type="submit" class="primary-button">
-                  <span class="icon">＋</span>
-                  <span>Salvar</span>
-                </button>
               </div>
               <input id="noteId" type="hidden" />
-              <label>
-                Título
-                <input id="noteTitle" required maxlength="80" placeholder="Ex.: Planejar projeto" />
+
+              <label class="note-title-field">
+                <input id="noteTitle" required maxlength="80" placeholder="Dê um título curto..." autocomplete="off" />
               </label>
-              <label>
-                Descrição
-                <textarea id="noteDescription" rows="4" placeholder="Detalhes, tópicos, links..."></textarea>
+              <label class="note-body-field">
+                <textarea id="noteDescription" class="autogrow" rows="3" placeholder="Escreva livremente aqui — ideias, lembretes, recados para você mesmo..."></textarea>
               </label>
-              <div class="form-grid">
-                <label>
-                  Categoria
-                  <input id="noteCategory" list="categoryOptions" placeholder="Trabalho" />
-                </label>
-                <label>
-                  Pasta
-                  <input id="noteFolder" placeholder="Projetos" />
-                </label>
-                <label>
-                  Tags
-                  <input id="noteTags" placeholder="planejamento, foco" />
-                </label>
-                <label>
-                  Prioridade
-                  <select id="notePriority">
-                    <option>Baixa</option>
-                    <option selected>Media</option>
-                    <option>Alta</option>
-                    <option>Urgente</option>
-                  </select>
-                </label>
+
+              <!-- Atalhos rápidos: cor, prioridade e checklist ficam à mão sem poluir a tela -->
+              <div class="note-quick-row">
+                <div class="note-priority-picker" id="notePriorityPicker">
+                  <button type="button" class="note-priority-dot" data-priority="Baixa" title="Prioridade baixa"></button>
+                  <button type="button" class="note-priority-dot active" data-priority="Media" title="Prioridade média"></button>
+                  <button type="button" class="note-priority-dot" data-priority="Alta" title="Prioridade alta"></button>
+                  <button type="button" class="note-priority-dot" data-priority="Urgente" title="Prioridade urgente"></button>
+                </div>
+                <select id="notePriority" hidden>
+                  <option>Baixa</option>
+                  <option selected>Media</option>
+                  <option>Alta</option>
+                  <option>Urgente</option>
+                </select>
+                <button type="button" class="note-checklist-toggle" id="noteChecklistToggle">☑️ Checklist</button>
               </div>
-              <label>
-                Checklist
+
+              <!-- Checklist: escondida até o usuário pedir, pra não intimidar quem só quer anotar algo rápido -->
+              <label id="noteChecklistField" class="note-checklist-field" hidden>
+                Itens da checklist
                 <textarea id="noteChecklist" rows="3" placeholder="Uma tarefa por linha"></textarea>
               </label>
-              <label>
-                Anexos e links
-                <input id="noteAttachments" placeholder="https://..." />
-              </label>
-              <label>
-                Meta relacionada
-                <input id="noteGoal" placeholder="Ex.: Entregar MVP esta semana" />
-              </label>
-              <label>
-                Observações adicionais
-                <textarea id="noteObservations" rows="2"></textarea>
-              </label>
+
+              <!-- Mais detalhes: tudo que é opcional fica recolhido, mas continua a 1 toque de distância -->
+              <details class="note-more-details">
+                <summary>Mais detalhes <span class="chev">▾</span></summary>
+                <div class="form-grid">
+                  <label>
+                    Categoria
+                    <input id="noteCategory" list="categoryOptions" placeholder="Trabalho" />
+                  </label>
+                  <label>
+                    Pasta
+                    <input id="noteFolder" placeholder="Projetos" />
+                  </label>
+                  <label>
+                    Tags
+                    <input id="noteTags" placeholder="planejamento, foco" />
+                  </label>
+                  <label>
+                    Meta relacionada
+                    <input id="noteGoal" placeholder="Ex.: Entregar MVP esta semana" />
+                  </label>
+                </div>
+                <label>
+                  Anexos e links
+                  <input id="noteAttachments" placeholder="https://..." />
+                </label>
+                <label>
+                  Observações adicionais
+                  <textarea id="noteObservations" class="autogrow" rows="2"></textarea>
+                </label>
+              </details>
+
               <div class="form-actions">
                 <button id="resetNoteForm" type="button" class="ghost-button">Limpar</button>
-                <button id="suggestNote" type="button" class="ghost-button">✨ Sugerir com IA</button>
+                <button type="submit" class="primary-button note-save-btn">
+                  <span class="icon">＋</span>
+                  <span>Salvar anotação</span>
+                </button>
               </div>
             </form>
 
@@ -360,10 +374,10 @@
           <!-- Abas de status — só aparecem no mobile (CSS), facilitam ver
                cada coluna sem precisar rolar uma lista vertical enorme -->
           <div class="task-status-tabs" id="taskStatusTabs">
-            <button class="status-tab active" data-status-tab="Pendente">Pendente</button>
-            <button class="status-tab" data-status-tab="Em andamento">Em andamento</button>
-            <button class="status-tab" data-status-tab="Concluida">Concluída</button>
-            <button class="status-tab" data-status-tab="Cancelada">Cancelada</button>
+            <button class="status-tab active" data-status-tab="Pendente">⚪ Pendente</button>
+            <button class="status-tab" data-status-tab="Em andamento">🔵 Em andamento</button>
+            <button class="status-tab" data-status-tab="Concluida">✅ Concluída</button>
+            <button class="status-tab" data-status-tab="Cancelada">⛔ Cancelada</button>
           </div>
           <div id="taskBoard" class="task-board"></div>
         </section>
@@ -473,10 +487,10 @@
                   </div>
                   <label>
                     Descrição
-                    <input id="expenseDescription" placeholder="Ex.: Almoço, Salário..." />
+                    <input id="expenseDescription" placeholder="Ex.: Almoço, Uber..." />
                   </label>
                   <label>
-                    Categoria
+                    <span id="expenseCategoryLabel">Categoria</span>
                     <div class="fin-cat-select-row">
                       <select id="expenseCategory">
                         <option value="alimentacao">🍔 Alimentação</option>

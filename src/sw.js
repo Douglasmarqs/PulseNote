@@ -81,6 +81,7 @@ self.addEventListener("fetch", (event) => {
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const targetView = event.notification.data?.view || "dashboard";
+  const itemId = event.notification.data?.itemId || null;
 
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientsArr) => {
@@ -88,11 +89,12 @@ self.addEventListener("notificationclick", (event) => {
       const existing = clientsArr.find((c) => c.url.includes("index.html"));
       if (existing) {
         existing.focus();
-        existing.postMessage({ type: "open-view", view: targetView });
+        existing.postMessage({ type: "open-view", view: targetView, itemId });
         return;
       }
-      // Senão, abre uma nova aba já na view desejada
-      return self.clients.openWindow("/src/index.html?action=open-" + targetView);
+      // Senão, abre uma nova aba já na view desejada (e no item, se houver)
+      const itemParam = itemId ? "&item=" + encodeURIComponent(itemId) : "";
+      return self.clients.openWindow("/src/index.html?action=open-" + targetView + itemParam);
     })
   );
 });
