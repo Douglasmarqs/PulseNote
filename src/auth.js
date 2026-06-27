@@ -13,6 +13,14 @@ import {
   getRedirectResult,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
+// Marca este navegador como "já usado antes" — assim, na próxima visita à
+// tela de login, mostramos "Bem-vindo de volta" em vez da mensagem de
+// boas-vindas de quem nunca usou o PulseNote aqui (ver script no login.html).
+const KNOWN_DEVICE_KEY = "pulsenote_known_device";
+function markDeviceAsKnown() {
+  try { localStorage.setItem(KNOWN_DEVICE_KEY, "1"); } catch (e) {}
+}
+
 // ── Tradução de erros Firebase → PT-BR (cobre todos os casos conhecidos) ──
 function translateAuthError(code) {
   const map = {
@@ -54,6 +62,7 @@ async function signInWithGoogle() {
   ["loginError", "registerError"].forEach(hideError);
   try {
     await signInWithPopup(auth, googleProvider);
+    markDeviceAsKnown();
     window.location.replace("index.html");
   } catch (err) {
     console.error("Google sign-in error:", err.code, err.message);
@@ -77,7 +86,10 @@ document.querySelectorAll("[data-google-signin]").forEach((btn) => {
 // Se o login com Google caiu no fluxo de redirecionamento (fallback acima),
 // confirma o resultado quando a página recarregar.
 getRedirectResult(auth).then((result) => {
-  if (result?.user) window.location.replace("index.html");
+  if (result?.user) {
+    markDeviceAsKnown();
+    window.location.replace("index.html");
+  }
 }).catch((err) => {
   if (err?.code) console.error("Erro ao concluir login com Google:", err.code, err.message);
 });
@@ -90,6 +102,7 @@ const unsubscribeAuthCheck = onAuthStateChanged(auth, (user) => {
     || path === "/"
     || path.endsWith("/");
   if (user && isAuthPage) {
+    markDeviceAsKnown();
     window.location.replace("index.html");
   }
 });
@@ -186,6 +199,7 @@ if (loginForm) {
     const password = document.getElementById("loginPassword").value;
     try {
       await signInWithEmailAndPassword(auth, email, password);
+      markDeviceAsKnown();
       window.location.replace("index.html");
     } catch (err) {
       console.error("Login error:", err.code, err.message);
@@ -235,6 +249,7 @@ if (registerForm) {
       try { await sendEmailVerification(credential.user); }
       catch (verifyErr) { console.error("Erro ao enviar verificação:", verifyErr); }
       // Cadastro OK → vai para o app (que vai exigir a confirmação do e-mail)
+      markDeviceAsKnown();
       window.location.replace("index.html");
     } catch (err) {
       console.error("Register error:", err.code, err.message);
@@ -256,6 +271,7 @@ if (forgotForm) {
       await sendPasswordResetEmail(auth, email, {
         url: window.location.origin + "/login.html",
       });
+      markDeviceAsKnown();
       document.getElementById("stepEmail").hidden   = true;
       document.getElementById("stepSuccess").hidden = false;
     } catch (err) {

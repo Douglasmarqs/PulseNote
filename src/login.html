@@ -58,7 +58,7 @@
           <path fill="#FBBC05" d="M3.95 10.7a5.4 5.4 0 0 1 0-3.4V4.96H.96a9 9 0 0 0 0 8.07l2.99-2.33z"/>
           <path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58A8.59 8.59 0 0 0 9 0a9 9 0 0 0-8.04 4.96l2.99 2.33C4.66 5.17 6.65 3.58 9 3.58z"/>
         </svg>
-        <span>Continuar com Google</span>
+        <span>Entrar com Google</span>
       </button>
       <div class="auth-divider"><span>ou</span></div>
 
@@ -152,6 +152,24 @@
           <button type="button" class="auth-link" data-switch="login">Entrar</button>
         </p>
       </form>
+
+      <!-- Decide ANTES da tela pintar se mostra "Bem-vindo de volta" (quem já
+           usou o PulseNote neste navegador) ou a aba de cadastro (primeira
+           visita) — evita o "flash" de uma mensagem errada por uma fração
+           de segundo. Ver auth.js para onde a marca de "já conhecido" é gravada. -->
+      <script>
+        (function () {
+          try {
+            if (localStorage.getItem("pulsenote_known_device") === "1") return;
+          } catch (e) { return; }
+          document.querySelectorAll(".auth-tab").forEach(function (t) {
+            t.classList.toggle("active", t.dataset.tab === "register");
+          });
+          document.querySelectorAll(".auth-form").forEach(function (f) {
+            f.classList.toggle("active-form", f.id === "registerForm");
+          });
+        })();
+      </script>
 
     </div><!-- /auth-card -->
 

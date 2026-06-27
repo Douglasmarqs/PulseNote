@@ -911,6 +911,7 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 
 .note-quick-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
@@ -918,27 +919,41 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   border-top: 1.5px dashed var(--line);
 }
 
-.note-priority-picker { display: flex; gap: 8px; align-items: center; }
+.note-priority-picker { display: flex; gap: 6px; flex-wrap: wrap; }
 
 .note-priority-dot {
-  width: 22px;
-  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: auto;
   min-height: 0;
-  padding: 0;
-  border-radius: 50%;
-  border: 2px solid var(--line);
+  padding: 6px 12px 6px 10px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  border: 1.5px solid var(--line);
   background: var(--surface2);
   cursor: pointer;
-  transition: all 150ms ease;
+  transition: all 160ms ease;
+  white-space: nowrap;
 }
-.note-priority-dot[data-priority="Baixa"]   { background: var(--green-soft); border-color: var(--green); color: var(--green); }
-.note-priority-dot[data-priority="Media"]   { background: var(--blue-soft, var(--accent-soft)); border-color: var(--accent); color: var(--accent); }
-.note-priority-dot[data-priority="Alta"]    { background: var(--orange-soft); border-color: var(--orange); color: var(--orange); }
-.note-priority-dot[data-priority="Urgente"] { background: var(--red-soft); border-color: var(--red); color: var(--red); }
-.note-priority-dot.active {
-  transform: scale(1.25);
-  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 18%, transparent);
+.note-priority-dot .dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
 }
+.note-priority-dot[data-priority="Baixa"]   { color: var(--green); }
+.note-priority-dot[data-priority="Media"]   { color: var(--accent); }
+.note-priority-dot[data-priority="Alta"]    { color: var(--orange); }
+.note-priority-dot[data-priority="Urgente"] { color: var(--red); }
+
+.note-priority-dot.active[data-priority="Baixa"]   { background: var(--green-soft);  border-color: var(--green); }
+.note-priority-dot.active[data-priority="Media"]   { background: var(--blue-soft, var(--accent-soft)); border-color: var(--accent); }
+.note-priority-dot.active[data-priority="Alta"]    { background: var(--orange-soft); border-color: var(--orange); }
+.note-priority-dot.active[data-priority="Urgente"] { background: var(--red-soft);    border-color: var(--red); }
+.note-priority-dot.active { transform: scale(1.04); font-weight: 800; }
 
 .note-checklist-toggle {
   min-height: 0;
@@ -1212,38 +1227,39 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 .task-status-tabs { display: none; }
 
 @media (max-width: 720px) {
+  /* Virou um "grid" 2x2 em vez de uma fileira com scroll horizontal —
+     assim as 4 abas ficam sempre 100% visíveis, sem cortar texto nem
+     depender do usuário descobrir que pode arrastar pro lado. */
   .task-status-tabs {
-    display: flex;
-    gap: 4px;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-    padding: 4px;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+    padding: 6px;
     margin-bottom: 14px;
     background: var(--surface2);
     border-radius: 16px;
     border: 1.5px solid var(--line);
   }
-  .task-status-tabs::-webkit-scrollbar { display: none; }
 
   .status-tab {
-    flex: 1;
-    flex-shrink: 0;
-    padding: 9px 14px;
-    border-radius: 13px;
-    font-size: 0.82rem;
+    padding: 10px 6px;
+    border-radius: 12px;
+    font-size: 0.8rem;
     font-weight: 700;
+    text-align: center;
     color: var(--text2);
-    background: transparent;
+    background: var(--surface);
     border: none;
     cursor: pointer;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
     transition: all 180ms ease;
   }
   .status-tab:active { transform: scale(0.97); }
 
   .status-tab.active[data-status-tab="Pendente"] {
-    background: var(--surface); color: var(--muted); box-shadow: var(--shadow-card);
+    background: var(--text); color: var(--surface); box-shadow: var(--shadow-card);
   }
   .status-tab.active[data-status-tab="Em andamento"] {
     background: var(--accent); color: #fff; box-shadow: 0 3px 10px color-mix(in srgb, var(--accent) 35%, transparent);
