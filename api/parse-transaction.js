@@ -1,31 +1,39 @@
 // api/parse-transaction.js
 // ============================================================
-// Endpoint usado pelo recurso "✨ Lançar por texto (IA)" em Finanças.
+// Endpoint usado pelo recurso "✨ Lançar por texto" em Finanças.
+// Usa o nível GRATUITO da API do Gemini (Google).
 //
 // Por que isso precisa de um backend (e não pode ser chamado direto do
-// navegador): a chave da API da IA é secreta. Se o app chamasse a Anthropic
-// direto do navegador, qualquer pessoa poderia abrir o DevTools e roubar a
-// chave. Por isso o frontend chama ESTE endpoint (que mora no mesmo domínio,
-// sem problema de CORS), e é ele quem guarda a chave e fala com a IA.
+// navegador): a chave da API é secreta. Se o app chamasse o Gemini direto
+// do navegador, qualquer pessoa poderia abrir o DevTools e roubar a chave —
+// e ela ficaria associada à SUA cota gratuita. Por isso o frontend chama
+// ESTE endpoint (no mesmo domínio, sem problema de CORS), e é ele quem
+// guarda a chave e fala com a IA.
 //
 // Fluxo:
 //   1) Confirma que quem está chamando é um usuário de verdade, logado no
 //      PulseNote (verifica o token do Firebase Auth) — sem isso, qualquer
-//      pessoa na internet poderia usar sua chave da API e gerar custos.
-//   2) Manda o texto livre + a lista de categorias do usuário para a IA,
-//      pedindo de volta um JSON estruturado.
-//   3) Valida o que a IA devolveu (nunca confiamos 100% na resposta de uma
-//      IA) antes de repassar ao frontend.
+//      pessoa na internet poderia consumir sua cota gratuita do Gemini.
+//   2) Manda o texto livre + a lista de categorias do usuário para o
+//      Gemini, com um "responseSchema" que obriga a resposta a vir num
+//      formato JSON fixo (e a escolher só entre os ids de categoria que
+//      realmente existem para esse usuário).
+//   3) Se o Gemini falhar por qualquer motivo (cota do nível grátis
+//      esgotada, erro de rede etc.), devolve um erro claro — o frontend
+//      then cai para o reconhecimento local (sem IA) como reserva, então o
+//      recurso nunca trava completamente.
 //
-// Variáveis de ambiente necessárias (configure no painel da Vercel, em
-// Project Settings → Environment Variables — veja AI_FEATURE_SETUP.md):
-//   ANTHROPIC_API_KEY
+// Variáveis de ambiente necessárias (configure no painel da Vercel — veja
+// AI_FEATURE_SETUP.md):
+//   GEMINI_API_KEY
 //   FIREBASE_PROJECT_ID
 //   FIREBASE_CLIENT_EMAIL
 //   FIREBASE_PRIVATE_KEY
 // ============================================================
 
 const admin = require("firebase-admin");
+
+const GEMINI_MODEL = "gemini-2.5-flash-lite"; // rápido, barato, elegível ao nível grátis
 
 function getFirebaseAdmin() {
   if (admin.apps.length) return admin;
@@ -75,68 +83,71 @@ module.exports = async (req, res) => {
   if (!Array.isArray(categories) || categories.length === 0) {
     return res.status(400).json({ error: "invalid_categories" });
   }
-  if (!process.env.ANTHROPIC_API_KEY) {
-    console.error("ANTHROPIC_API_KEY não configurada.");
+  if (!process.env.GEMINI_API_KEY) {
+    console.error("GEMINI_API_KEY não configurada.");
     return res.status(500).json({ error: "ai_not_configured" });
   }
 
   const todayIso = /^\d{4}-\d{2}-\d{2}$/.test(today) ? today : new Date().toISOString().slice(0, 10);
+  const categoryIds = categories.map((c) => c.id);
   const categoryList = categories.map((c) => `- ${c.id} (${c.type}): ${c.label}`).join("\n");
 
-  const system = `Você extrai dados de um lançamento financeiro a partir de uma frase em português.
+  const systemPrompt = `Você extrai dados de um lançamento financeiro a partir de uma frase em português.
 Data de hoje: ${todayIso}.
 
-Categorias disponíveis (use exatamente um destes ids, sempre do tipo compatível):
+Categorias disponíveis (escolha exatamente um destes ids, sempre do tipo compatível):
 ${categoryList}
 
 Regras:
-- "amount": número positivo em reais, com ponto decimal (ex.: 32.5).
+- "amount": número positivo em reais (ex.: 32.5).
 - Se houver referências relativas de data ("ontem", "semana passada"), calcule a data real a partir de hoje. Sem data explícita, use hoje.
 - "description": curta (até 6 palavras), capturando o essencial da frase.
 - "type": "despesa" por padrão; só use "receita" se for claramente uma entrada de dinheiro (salário, venda, recebimento, reembolso etc).
-- "categoryId": escolha o id mais adequado da lista acima, do mesmo tipo escolhido em "type". Se nada combinar bem, use a categoria "outros" (despesa) ou "outros_receita" (receita).
+- "categoryId": escolha o id mais adequado da lista acima, do mesmo tipo escolhido em "type". Se nada combinar bem, use a categoria "outros" (despesa) ou "outros_receita" (receita).`;
 
-Responda SOMENTE com um objeto JSON válido (sem markdown, sem texto antes/depois), no formato:
-{"type":"despesa","amount":0,"categoryId":"outros","description":"","date":"YYYY-MM-DD"}`;
-
-  // ── 3) Chama a IA ─────────────────────────────────────────────
+  // ── 3) Chama o Gemini, forçando o formato da resposta com responseSchema ──
   let raw;
   try {
-    const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        // Haiku é rápido e barato — mais que suficiente para uma tarefa de
-        // extração estruturada simples como essa (não precisa do modelo
-        // mais "caro" da família para isso).
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 200,
-        system,
-        messages: [
-          { role: "user", content: text.trim().slice(0, 200) },
-          // Pré-preenchemos o início da resposta do assistente com "{" —
-          // isso reduz bastante a chance de a IA "conversar" antes de
-          // mandar o JSON, em vez de ir direto ao ponto.
-          { role: "assistant", content: "{" },
-        ],
-      }),
-    });
+    const aiRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: systemPrompt }] },
+          contents: [{ parts: [{ text: text.trim().slice(0, 200) }] }],
+          generationConfig: {
+            maxOutputTokens: 200,
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: "object",
+              properties: {
+                type: { type: "string", enum: ["despesa", "receita"] },
+                amount: { type: "number" },
+                categoryId: { type: "string", enum: categoryIds },
+                description: { type: "string" },
+                date: { type: "string" },
+              },
+              required: ["type", "amount", "categoryId", "description", "date"],
+            },
+          },
+        }),
+      }
+    );
 
     if (!aiRes.ok) {
       const errBody = await aiRes.text();
-      console.error("Erro na API da Anthropic:", aiRes.status, errBody);
+      console.error("Erro na API do Gemini:", aiRes.status, errBody);
+      if (aiRes.status === 429) {
+        return res.status(429).json({ error: "ai_rate_limited" });
+      }
       return res.status(502).json({ error: "ai_request_failed" });
     }
 
     const data = await aiRes.json();
-    const continuation = (data.content || []).map((block) => block.text || "").join("");
-    raw = "{" + continuation;
+    raw = (data.candidates?.[0]?.content?.parts || []).map((p) => p.text || "").join("");
   } catch (err) {
-    console.error("Erro inesperado chamando a IA:", err);
+    console.error("Erro inesperado chamando o Gemini:", err);
     return res.status(502).json({ error: "ai_request_failed" });
   }
 
@@ -146,11 +157,11 @@ Responda SOMENTE com um objeto JSON válido (sem markdown, sem texto antes/depoi
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     parsed = JSON.parse(jsonMatch ? jsonMatch[0] : raw);
   } catch (err) {
-    console.error("Resposta da IA não é um JSON válido:", raw);
+    console.error("Resposta do Gemini não é um JSON válido:", raw);
     return res.status(502).json({ error: "ai_bad_response" });
   }
 
-  const validIds = new Set(categories.map((c) => c.id));
+  const validIds = new Set(categoryIds);
   const type = parsed.type === "receita" ? "receita" : "despesa";
   const amount = Math.round(Number(parsed.amount) * 100) / 100;
   const categoryId = validIds.has(parsed.categoryId)

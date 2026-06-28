@@ -1699,71 +1699,202 @@ function getActiveFinMonth() {
   return active.dataset.finFilter; // "current", "all", or "YYYY-MM"
 }
 
-// ── Lançamento por texto (IA) ──────────────────────────────────
-// Manda a frase digitada para api/parse-transaction.js, que pede à IA para
-// extrair valor/categoria/data/descrição, e usa a resposta para PRÉ-PREENCHER
-// o formulário normal — o usuário sempre revisa e confirma clicando em
-// "Registrar". Nada é salvo automaticamente sem o usuário ver antes.
+// ── Lançamento por texto (heurística local — sem IA externa) ───
+// Interpreta uma frase livre (ex.: "almoço 32 reais ontem") só com
+// expressões regulares e listas de palavras-chave, tudo dentro do
+// navegador — nenhum texto sai do dispositivo do usuário.
+const FIN_CATEGORY_KEYWORDS = {
+  alimentacao:  ["almoço","almoco","jantar","lanche","mercado","supermercado","restaurante","comida","ifood","padaria","café","cafe","pizza","hambúrguer","hamburguer","feira","churrasco"],
+  transporte:   ["uber","99","gasolina","combustível","combustivel","ônibus","onibus","metro","metrô","táxi","taxi","passagem","estacionamento","pedágio","pedagio","posto"],
+  saude:        ["farmácia","farmacia","remédio","remedio","médico","medico","consulta","dentista","plano de saúde","plano de saude","exame","hospital","academia"],
+  lazer:        ["cinema","show","viagem","bar","balada","streaming","jogo","passeio","ingresso","netflix"],
+  educacao:     ["curso","faculdade","livro","mensalidade escolar","escola","material escolar","apostila","aula"],
+  moradia:      ["aluguel","condomínio","condominio","luz","água","agua","internet","gás","gas","iptu","reforma","conta de"],
+  roupas:       ["roupa","calça","calca","camisa","tênis","tenis","sapato","blusa","jaqueta"],
+  assinaturas:  ["assinatura","spotify","amazon prime","youtube premium","mensalidade do"],
+  salario:      ["salário","salario","contracheque","pagamento do trabalho","pagamento da empresa"],
+  freelance:    ["freela","freelance","bico","job extra","trampo extra"],
+  investimentos:["dividendo","rendimento","investimento","ação","ações","cdb","tesouro direto"],
+  vendas:       ["venda","vendi","vendeu"],
+  reembolso:    ["reembolso","ressarcimento","devolução","devolucao"],
+  presente:     ["presente","bônus","bonus","doação","doacao","mesada"],
+};
+const FIN_INCOME_HINTS = ["recebi","receb","ganhei","caiu","depositaram","pix recebido","entrou","salário","salario","venda","vendi","freela","freelance","bico","reembolso","presente","bônus","bonus","dividendo","rendimento"];
+
+function normalizeFinAmount(raw) {
+  let s = raw.trim();
+  const hasComma = s.includes(",");
+  const hasDot = s.includes(".");
+  if (hasComma && hasDot) {
+    s = s.replace(/\./g, "").replace(",", "."); // formato BR: 1.234,56
+  } else if (hasComma) {
+    s = s.replace(",", ".");
+  } else if (hasDot) {
+    const parts = s.split(".");
+    if (parts[parts.length - 1].length === 3) s = s.replace(/\./g, ""); // ponto como milhar
+  }
+  const n = parseFloat(s);
+  return Number.isFinite(n) ? Math.round(n * 100) / 100 : null;
+}
+
+function addDaysIso(baseDate, delta) {
+  const d = new Date(baseDate);
+  d.setDate(d.getDate() + delta);
+  return d.toISOString().slice(0, 10);
+}
+
+function parseFinanceText(text) {
+  let working = text.toLowerCase();
+  const today = new Date(todayIso + "T12:00:00");
+
+  // 1) Data — extraída e REMOVIDA do texto antes de procurar o valor,
+  // senão números de data ("27/06", "5 dias atrás") podem ser confundidos
+  // com o valor do lançamento.
+  let date = todayIso;
+  if (/anteontem/.test(working)) {
+    date = addDaysIso(today, -2);
+    working = working.replace(/anteontem/g, " ");
+  } else if (/\bontem\b/.test(working)) {
+    date = addDaysIso(today, -1);
+    working = working.replace(/\bontem\b/g, " ");
+  } else if (/\bhoje\b/.test(working)) {
+    working = working.replace(/\bhoje\b/g, " ");
+  } else {
+    const daysAgoMatch = working.match(/(\d+)\s*dias?\s*atr[áa]s/);
+    if (daysAgoMatch) {
+      date = addDaysIso(today, -parseInt(daysAgoMatch[1], 10));
+      working = working.replace(daysAgoMatch[0], " ");
+    } else {
+      const explicitDate = working.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/);
+      if (explicitDate) {
+        const day = parseInt(explicitDate[1], 10);
+        const month = parseInt(explicitDate[2], 10) - 1;
+        let year = explicitDate[3] ? parseInt(explicitDate[3], 10) : today.getFullYear();
+        if (year < 100) year += 2000;
+        const d = new Date(year, month, day);
+        if (!isNaN(d)) date = d.toISOString().slice(0, 10);
+        working = working.replace(explicitDate[0], " ");
+      }
+    }
+  }
+
+  // 2) Valor — procura primeiro perto de "r$"/"reais"; senão, o primeiro
+  // número que sobrou (já sem as referências de data)
+  let amount = null;
+  const moneyMatch =
+    working.match(/r\$\s*([\d.,]+)/) ||
+    working.match(/([\d.,]+)\s*(?:reais|real)\b/) ||
+    working.match(/(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?)/);
+  if (moneyMatch) amount = normalizeFinAmount(moneyMatch[1]);
+
+  // 3) Tipo (receita/despesa)
+  const type = FIN_INCOME_HINTS.some((kw) => working.includes(kw)) ? "receita" : "despesa";
+
+  // 4) Categoria — primeiro nas fixas, depois nas personalizadas do usuário
+  // (casando pelas palavras do próprio nome, já que essas não têm uma
+  // lista de sinônimos pré-definida)
+  let categoryId = type === "receita" ? "outros_receita" : "outros";
+  const pool = type === "receita" ? incomeCategories : expenseCategories;
+  matchLoop:
+  for (const cat of pool) {
+    for (const kw of FIN_CATEGORY_KEYWORDS[cat.id] || []) {
+      if (working.includes(kw)) { categoryId = cat.id; break matchLoop; }
+    }
+  }
+  if (categoryId === (type === "receita" ? "outros_receita" : "outros")) {
+    const custom = (state.customCategories || []).filter((c) => (c.type || "despesa") === type);
+    for (const cat of custom) {
+      const words = cat.label.replace(/^\S+\s*/, "").toLowerCase().split(/\s+/).filter((w) => w.length > 2);
+      if (words.some((w) => working.includes(w))) { categoryId = cat.id; break; }
+    }
+  }
+
+  // 5) Descrição: mesma regra do formulário manual — nome da categoria
+  const description = findCategory(categoryId).label.replace(/^\S+\s*/, "");
+
+  return { type, amount, categoryId, description, date };
+}
+
+// Preenche o formulário de Finanças com o que foi reconhecido (pela IA ou
+// pela heurística local) — o usuário ainda revisa e confirma clicando em
+// "Registrar"; nada é salvo automaticamente.
+function fillExpenseFormFrom(result) {
+  document.querySelectorAll("[data-fin-type]").forEach((b) => b.classList.toggle("active", b.dataset.finType === result.type));
+  document.querySelector("#expenseType").value = result.type;
+  document.querySelector(".fin-form-card")?.classList.toggle("is-receita", result.type === "receita");
+  populateCategorySelect(result.categoryId, result.type);
+
+  document.querySelector("#expenseAmount").value      = result.amount.toFixed(2).replace(".", ",");
+  document.querySelector("#expenseDescription").value = result.description || "";
+  document.querySelector("#expenseDate").value        = result.date;
+
+  document.querySelector("#expenseAmount")?.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
 function bindAiQuickEntry() {
   const input  = document.querySelector("#aiQuickText");
   const button = document.querySelector("#aiQuickSubmit");
   const label  = document.querySelector("#aiQuickSubmitLabel");
-  if (!input || !button || !label) return;
+  if (!input || !button) return;
 
   const ERROR_MESSAGES = {
-    ai_not_configured: "Esse recurso ainda não foi configurado neste servidor (faltam as chaves de API).",
+    ai_not_configured: "A IA ainda não foi configurada neste servidor.",
     unauthorized: "Sua sessão expirou. Recarregue a página e faça login novamente.",
-    invalid_text: "Escreva uma frase descrevendo o lançamento.",
-    ai_invalid_amount: "Não consegui identificar um valor nessa frase. Tente incluir o valor (ex.: \"32 reais\").",
+    ai_rate_limited: "O limite gratuito da IA foi atingido por agora.",
   };
 
   async function runAiQuickEntry() {
     const text = input.value.trim();
-    if (text.length < 4) {
+    if (text.length < 3) {
       showToast('Descreva um pouco melhor o lançamento (ex.: "almoço 32 reais ontem").');
       return;
     }
-    if (!currentUser) return;
 
     button.disabled = true;
     input.disabled  = true;
-    label.textContent = "Pensando...";
+    if (label) label.textContent = "Pensando...";
 
     try {
-      const token = await currentUser.getIdToken();
+      const token = await currentUser?.getIdToken();
       const response = await fetch("/api/parse-transaction", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
         body: JSON.stringify({ text, categories: buildCategoryPayload(), today: todayIso }),
       });
-
       const data = await response.json().catch(() => ({}));
 
-      if (!response.ok) {
-        showToast(ERROR_MESSAGES[data.error] || "Não consegui entender esse lançamento. Tente reescrever ou preencha manualmente abaixo.");
+      if (!response.ok || !data.amount) {
+        throw { handled: true, code: data.error };
+      }
+
+      input.value = "";
+      fillExpenseFormFrom(data);
+      showToast("✨ Preenchido pela IA! Confira os dados e clique em Registrar.");
+    } catch (err) {
+      // Se a IA falhar por qualquer motivo (cota grátis esgotada, sem
+      // internet, backend ainda não configurado...), caímos para o
+      // reconhecimento local — assim o recurso nunca trava de vez.
+      if (!err?.handled) console.error("Erro ao chamar a IA:", err);
+
+      const local = parseFinanceText(text);
+      if (!local.amount || local.amount <= 0) {
+        const friendly = ERROR_MESSAGES[err?.code];
+        showToast(
+          friendly
+            ? `${friendly} Não consegui entender a frase localmente também — preencha manualmente abaixo.`
+            : 'Não consegui entender esse lançamento. Tente incluir um valor (ex.: "32 reais") ou preencha manualmente.'
+        );
         return;
       }
 
-      // Preenche o formulário normal com o que a IA entendeu
-      document.querySelectorAll("[data-fin-type]").forEach((b) => b.classList.toggle("active", b.dataset.finType === data.type));
-      document.querySelector("#expenseType").value = data.type;
-      document.querySelector(".fin-form-card")?.classList.toggle("is-receita", data.type === "receita");
-      populateCategorySelect(data.categoryId, data.type);
-
-      document.querySelector("#expenseAmount").value      = data.amount.toFixed(2).replace(".", ",");
-      document.querySelector("#expenseDescription").value = data.description || "";
-      document.querySelector("#expenseDate").value        = data.date;
-
       input.value = "";
-      showToast("✨ Preenchido! Confira os dados e clique em Registrar.");
-      document.querySelector("#expenseAmount")?.scrollIntoView({ behavior: "smooth", block: "center" });
-    } catch (err) {
-      console.error("Erro ao usar lançamento por texto:", err);
-      showToast("Não foi possível usar a IA agora. Preencha manualmente abaixo.");
+      fillExpenseFormFrom(local);
+      const friendly = ERROR_MESSAGES[err?.code];
+      showToast(friendly ? `${friendly} Usei o reconhecimento local — confira os dados.` : "✨ Preenchido (modo local)! Confira os dados e clique em Registrar.");
     } finally {
       button.disabled = false;
       input.disabled  = false;
-      label.textContent = "Preencher";
+      if (label) label.textContent = "Preencher";
     }
   }
 
@@ -1784,6 +1915,12 @@ function saveExpense(event) {
   const amount = parseFloat(valueOf("#expenseAmount").replace(",", "."));
   if (isNaN(amount) || amount <= 0) { showToast("Informe um valor válido."); return; }
 
+  const categoryId = valueOf("#expenseCategory") || defaultCategory;
+  // Antes, quando a descrição ficava em branco, o título do lançamento caía
+  // num texto genérico fixo ("Receita"/"Despesa"), não importa qual categoria
+  // tivesse sido escolhida. Agora ele usa o nome real da categoria selecionada.
+  const fallbackDescription = findCategory(categoryId).label.replace(/^\S+\s*/, "");
+
   if (!state.finances) state.finances = [];
 
   if (editId) {
@@ -1794,8 +1931,8 @@ function saveExpense(event) {
             ...f,
             type,
             amount,
-            category: valueOf("#expenseCategory") || defaultCategory,
-            description: valueOf("#expenseDescription") || (type === "receita" ? "Receita" : "Despesa"),
+            category: categoryId,
+            description: valueOf("#expenseDescription") || fallbackDescription,
             date: valueOf("#expenseDate") || todayIso,
           }
         : f
@@ -1806,8 +1943,8 @@ function saveExpense(event) {
       id: crypto.randomUUID(),
       type,
       amount,
-      category: valueOf("#expenseCategory") || defaultCategory,
-      description: valueOf("#expenseDescription") || (type === "receita" ? "Receita" : "Despesa"),
+      category: categoryId,
+      description: valueOf("#expenseDescription") || fallbackDescription,
       date: valueOf("#expenseDate") || todayIso,
     };
     state.finances.unshift(entry);
