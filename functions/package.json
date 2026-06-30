@@ -1,0 +1,17 @@
+{
+  "name": "bookverse-functions",
+  "description": "Cloud Functions do BookVerse — validação server-side de progresso de leitura",
+  "private": true,
+  "main": "index.js",
+  "engines": {
+    "node": "20"
+  },
+  "scripts": {
+    "lint": "echo \"(sem linter configurado ainda)\"",
+    "deploy": "firebase deploy --only functions"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.1.0",
+    "firebase-functions": "^5.0.0"
+  }
+}

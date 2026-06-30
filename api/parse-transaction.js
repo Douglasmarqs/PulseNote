@@ -88,6 +88,9 @@ module.exports = async (req, res) => {
     return res.status(500).json({ error: "ai_not_configured" });
   }
 
+  // O frontend (app.js) sempre envia `today` já calculado no fuso horário
+  // LOCAL do usuário (toLocalIso) — o fallback abaixo (UTC do servidor)
+  // só entra em uso se, por algum motivo, esse valor não chegar.
   const todayIso = /^\d{4}-\d{2}-\d{2}$/.test(today) ? today : new Date().toISOString().slice(0, 10);
   const categoryIds = categories.map((c) => c.id);
   const categoryList = categories.map((c) => `- ${c.id} (${c.type}): ${c.label}`).join("\n");
@@ -98,12 +101,22 @@ Data de hoje: ${todayIso}.
 Categorias disponíveis (escolha exatamente um destes ids, sempre do tipo compatível):
 ${categoryList}
 
-Regras:
-- "amount": número positivo em reais (ex.: 32.5).
-- Se houver referências relativas de data ("ontem", "semana passada"), calcule a data real a partir de hoje. Sem data explícita, use hoje.
-- "description": curta (até 6 palavras), capturando o essencial da frase.
-- "type": "despesa" por padrão; só use "receita" se for claramente uma entrada de dinheiro (salário, venda, recebimento, reembolso etc).
-- "categoryId": escolha o id mais adequado da lista acima, do mesmo tipo escolhido em "type". Se nada combinar bem, use a categoria "outros" (despesa) ou "outros_receita" (receita).`;
+Regras OBRIGATÓRIAS:
+- "amount": número positivo em reais (ex.: 32.5). Obrigatório.
+- "date": se houver referência de data relativa ("ontem", "anteontem"/"antes de ontem", "semana passada", "segunda-feira", "dia 12", "27/06" etc.), calcule a data real YYYY-MM-DD a partir de hoje. Sem referência, use hoje.
+- "type": "despesa" por padrão. Use "receita" APENAS se for entrada de dinheiro (salário, recebimento, venda, reembolso, freelance, rendimento etc.).
+- "categoryId": escolha o id que melhor descreve o que foi dito. Priorize o mais específico (ex.: se a frase cita "mercado", escolha "alimentacao" — não "outros"). Deve ser do mesmo tipo de "type".
+- "description": 2 a 5 palavras que descrevam O QUE foi gasto/recebido, extraídas do texto original — NÃO use o nome da categoria como descrição. Exemplos corretos: "Almoço no restaurante", "Uber para o trabalho", "Gasolina posto Shell", "Salário julho", "Farmácia Drogasil". Remova apenas conectores ("gastei", "paguei", "recebi", "reais", "de", "com", "no", "na" etc.).
+
+Exemplo 1 — entrada: "gastei 32 reais no ifood ontem"
+Saída: {"type":"despesa","amount":32,"categoryId":"alimentacao","description":"iFood","date":"${todayIso}"}
+
+Exemplo 2 — entrada: "paguei 80 reais de gasolina antes de ontem"
+Saída: {"type":"despesa","amount":80,"categoryId":"transporte","description":"Gasolina","date":"${todayIso}"}
+
+Exemplo 3 — entrada: "recebi salário 2500"
+Saída: {"type":"receita","amount":2500,"categoryId":"salario","description":"Salário mensal","date":"${todayIso}"}`;
+
 
   // ── 3) Chama o Gemini, forçando o formato da resposta com responseSchema ──
   let raw;
