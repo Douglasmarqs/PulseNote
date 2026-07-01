@@ -251,16 +251,21 @@ function findCategory(catId) {
   const all = [...expenseCategories, ...incomeCategories, ...(state.customCategories || [])];
   return all.find((c) => c.id === catId) || { label: "📦 Outros", color: "#8a9bb0" };
 }
-const themeList = ["laranja", "azul", "verde", "rosa", "escuro"];
-const themeNames = {
-  laranja: "Laranja",
-  azul: "Azul",
-  verde: "Verde",
-  rosa: "Rosa",
-  escuro: "Escuro",
-};
 
-const todayIso = new Date().toISOString().slice(0, 10);
+// Converte uma data para "YYYY-MM-DD" usando o fuso horário LOCAL do
+// usuário — NUNCA usar `.toISOString().slice(0, 10)` para isso, porque
+// toISOString() converte para UTC antes de cortar a string. No horário de
+// Brasília (UTC-3) isso fazia o app "virar o dia" já às 21h, mostrando o
+// dia de amanhã como "hoje" (e jogando lançamentos, calendário e o
+// reconhecimento de "ontem/anteontem" um dia adiante) durante toda a noite.
+function toLocalIso(date) {
+  const year  = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day   = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+const todayIso = toLocalIso(new Date());
 const tomorrowIso = offsetDate(1);
 const weekIso = offsetDate(5);
 
@@ -280,13 +285,13 @@ Object.defineProperty(window, "PulseNoteState", {
 let activeView = "dashboard";
 let calendarMode = "month";
 let draggedTaskId = null;
+// Mês ativo na view de Finanças. Formato "YYYY-MM". Começa no mês atual.
+let finActiveMonth = todayIso.slice(0, 7);
 
 const elements = {
   viewTitle: document.querySelector("#viewTitle"),
   todayLabel: document.querySelector("#todayLabel"),
   globalSearch: document.querySelector("#globalSearch"),
-  themeSelect: document.querySelector("#themeSelect"),
-  themeSelectMobile: document.querySelector("#themeSelectMobile"),
   toast: document.querySelector("#toast"),
 };
 
@@ -348,12 +353,14 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Atualiza os contadores "Faltam Xh Ymin" da Agenda a cada 30s, em tempo real
   setInterval(updateEventCountdowns, 30000);
 
-  state.theme = normalizeTheme(state.theme);
-  applyTheme(state.theme);
   bindNavigation();
   bindForms();
   bindActions();
   bindSettingsView();
+  bindFinanceMonthControls();
+  bindFinGoalsModal();
+  bindFinRecurModal();
+  autoApplyRecurrents();
   renderAll();
   handlePwaShortcutAction();
 });
@@ -477,7 +484,6 @@ function renderProfileButton(user) {
     <button class="dropdown-item" id="dropdownNotifications">
       ${window.notificationsAreEnabled?.() ? "🔔 Notificações ativadas" : "🔕 Ativar notificações"}
     </button>
-    <button class="dropdown-item" id="dropdownTheme">🎨 Trocar tema</button>
     <button class="dropdown-item danger" id="dropdownLogout">🚪 Sair da conta</button>
   `;
   document.body.appendChild(dropdown);
@@ -525,11 +531,6 @@ function renderProfileButton(user) {
     }
     closeDropdown();
     await window.requestNotificationPermission?.();
-  });
-
-  document.getElementById("dropdownTheme").addEventListener("click", () => {
-    closeDropdown();
-    document.querySelector("#themeSelectMobile")?.focus();
   });
 }
 
@@ -775,17 +776,15 @@ function normalizeState(parsed) {
   if (!parsed.events) parsed.events = [];
   if (!parsed.goals) parsed.goals = [];
   if (!parsed.customCategories) parsed.customCategories = [];
-  if (!parsed.theme) parsed.theme = "laranja";
+  if (!parsed.monthClosures) parsed.monthClosures = [];
+  if (!parsed.finGoals) parsed.finGoals = [];
+  if (!parsed.finRecurrents) parsed.finRecurrents = [];
   if (parsed.profilePhoto === undefined) parsed.profilePhoto = null;
   return parsed;
 }
 
-// Estado inicial para contas novas (primeiro acesso, sem nenhum documento
-// no Firestore ainda). Começa zerado de propósito — cada usuário deve
-// preencher seus próprios dados, sem nenhum conteúdo de exemplo pré-salvo.
 function loadDefaultState() {
   return {
-    theme: "laranja",
     profilePhoto: null,
     notes: [],
     tasks: [],
@@ -793,6 +792,9 @@ function loadDefaultState() {
     goals: [],
     finances: [],
     customCategories: [],
+    monthClosures: [],
+    finGoals: [],
+    finRecurrents: [],
   };
 }
 
@@ -804,32 +806,6 @@ function saveState() {
   scheduleSyncToServer();
 }
 
-// Migra nomes antigos de tema (de antes da renomeação para cores) para os
-// novos, assim quem já tinha um tema salvo não perde a preferência.
-const legacyThemeMap = {
-  light: "laranja",
-  dark: "escuro",
-  sunny: "laranja",
-  ocean: "azul",
-  candy: "rosa",
-  forest: "verde",
-  night: "escuro",
-};
-
-function normalizeTheme(theme) {
-  if (legacyThemeMap[theme]) return legacyThemeMap[theme];
-  return themeList.includes(theme) ? theme : "laranja";
-}
-
-function applyTheme(theme) {
-  document.documentElement.dataset.theme = normalizeTheme(theme);
-  if (elements.themeSelect) {
-    elements.themeSelect.value = normalizeTheme(theme);
-  }
-  if (elements.themeSelectMobile) {
-    elements.themeSelectMobile.value = normalizeTheme(theme);
-  }
-}
 
 function createTask(title, status = "Pendente", priority = "Media", dueDate = todayIso, completedAt = "") {
   return {
@@ -847,7 +823,7 @@ function createTask(title, status = "Pendente", priority = "Media", dueDate = to
 function offsetDate(days) {
   const date = new Date();
   date.setDate(date.getDate() + days);
-  return date.toISOString().slice(0, 10);
+  return toLocalIso(date);
 }
 
 function bindNavigation() {
@@ -910,35 +886,9 @@ function bindForms() {
       document.querySelector(".fin-form-card")?.classList.toggle("is-receita", btn.dataset.finType === "receita");
     });
   });
-
-  // Finance month filter chips
-  document.querySelectorAll("[data-fin-filter]").forEach((chip) => {
-    chip.addEventListener("click", () => {
-      document.querySelectorAll("[data-fin-filter]").forEach((c) => c.classList.remove("active"));
-      chip.classList.add("active");
-      renderFinances();
-    });
-  });
 }
 
 function bindActions() {
-  document.querySelector("#themeToggle").addEventListener("click", () => {
-    const currentIndex = themeList.indexOf(normalizeTheme(state.theme));
-    state.theme = themeList[(currentIndex + 1) % themeList.length];
-    applyTheme(state.theme);
-    saveState();
-    showToast(`Tema ${themeNames[state.theme]} aplicado.`);
-  });
-
-  [elements.themeSelect, elements.themeSelectMobile].forEach((select) => {
-    select.addEventListener("change", (event) => {
-      state.theme = event.target.value;
-      applyTheme(state.theme);
-      saveState();
-      showToast(`Tema ${themeNames[state.theme]} aplicado.`);
-    });
-  });
-
   document.querySelectorAll("[data-calendar-mode]").forEach((button) => {
     button.addEventListener("click", () => {
       calendarMode = button.dataset.calendarMode;
@@ -1174,8 +1124,7 @@ function renderDashboard() {
 function renderDashFinance() {
   const el = document.querySelector("#dashFinancePanel");
   if (!el || !state.finances) return;
-  const now = new Date();
-  const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const currentMonthKey = todayIso.slice(0, 7);
   const entries = state.finances.filter((f) => f.date.startsWith(currentMonthKey));
   const receitas = entries.filter((f) => f.type === "receita").reduce((s, f) => s + f.amount, 0);
   const despesas = entries.filter((f) => f.type === "despesa").reduce((s, f) => s + f.amount, 0);
@@ -1512,7 +1461,7 @@ function getMonthDays(date) {
   const year = date.getFullYear();
   const month = date.getMonth();
   const total = new Date(year, month + 1, 0).getDate();
-  return [...Array(total)].map((_, index) => new Date(year, month, index + 1).toISOString().slice(0, 10));
+  return [...Array(total)].map((_, index) => toLocalIso(new Date(year, month, index + 1)));
 }
 
 function getWeekDays(date) {
@@ -1521,7 +1470,7 @@ function getWeekDays(date) {
   return [...Array(7)].map((_, index) => {
     const day = new Date(start);
     day.setDate(start.getDate() + index);
-    return day.toISOString().slice(0, 10);
+    return toLocalIso(day);
   });
 }
 
@@ -1694,9 +1643,448 @@ function celebrate(message) {
 // ============================================================
 
 function getActiveFinMonth() {
-  const active = document.querySelector("[data-fin-filter].active");
-  if (!active) return "current";
-  return active.dataset.finFilter; // "current", "all", or "YYYY-MM"
+  return finActiveMonth; // formato "YYYY-MM"
+}
+
+// Retorna o label localizado do mês (ex.: "Junho 2026")
+function finMonthLabel(monthKey) {
+  const [year, month] = monthKey.split("-").map(Number);
+  return new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" })
+    .format(new Date(year, month - 1, 1));
+}
+
+// Retorna true se o mês está marcado como "fechado" pelo usuário
+function isMonthClosed(monthKey) {
+  return (state.monthClosures || []).some((c) => c.monthKey === monthKey);
+}
+
+// Garante que lançamentos num mês fechado sejam bloqueados (UI)
+function assertMonthNotClosed(monthKey) {
+  if (!isMonthClosed(monthKey)) return true;
+  showToast("⚠️ Este mês está fechado. Reabra-o para editar.");
+  return false;
+}
+
+// Registra o fechamento do mês ativo com um snapshot completo do período
+function closeMonth(monthKey) {
+  if (!state.monthClosures) state.monthClosures = [];
+  if (isMonthClosed(monthKey)) { showToast("✓ Mês já fechado."); return; }
+
+  const entries = (state.finances || []).filter((f) => f.date.startsWith(monthKey));
+  const receitas = entries.filter((f) => f.type === "receita").reduce((s, f) => s + f.amount, 0);
+  const despesas = entries.filter((f) => f.type === "despesa").reduce((s, f) => s + f.amount, 0);
+
+  if (!entries.length) {
+    showToast("Nenhum lançamento no período para fechar.");
+    return;
+  }
+  if (!confirm(`Fechar ${finMonthLabel(monthKey)}?\nReceitas: ${formatCurrency(receitas)}\nDespesas: ${formatCurrency(despesas)}\nSaldo: ${formatCurrency(receitas - despesas)}\n\nDepois disso, não será possível adicionar ou editar lançamentos neste mês sem reabri-lo.`)) return;
+
+  state.monthClosures.push({
+    monthKey,
+    closedAt: new Date().toISOString(),
+    receitas,
+    despesas,
+    saldo: receitas - despesas,
+    entriesCount: entries.length,
+  });
+  saveState();
+  renderFinances();
+  showToast(`🔒 ${finMonthLabel(monthKey)} fechado com sucesso!`);
+}
+
+// Remove o fechamento do mês (reabre para edições)
+function reopenMonth(monthKey) {
+  if (!isMonthClosed(monthKey)) return;
+  if (!confirm(`Reabrir ${finMonthLabel(monthKey)} para edição?`)) return;
+  state.monthClosures = (state.monthClosures || []).filter((c) => c.monthKey !== monthKey);
+  saveState();
+  renderFinances();
+  showToast(`🔓 ${finMonthLabel(monthKey)} reaberto.`);
+}
+
+// ============================================================
+// EXPORTAÇÃO — XLSX nativo (sem bibliotecas externas)
+//
+// O XLSX é um arquivo ZIP contendo XMLs no padrão OOXML. Geramos
+// toda a estrutura aqui no navegador usando apenas APIs nativas
+// (TextEncoder + Uint8Array) — sem SheetJS, sem CDN, sem servidor.
+//
+// Estrutura gerada:
+//   [Content_Types].xml
+//   _rels/.rels
+//   xl/workbook.xml          (lista as 3 abas)
+//   xl/_rels/workbook.xml.rels
+//   xl/styles.xml            (7 estilos: header, receita, despesa,
+//                             total, número, bold, default)
+//   xl/sharedStrings.xml     (todas as strings únicas → índice)
+//   xl/worksheets/sheet1.xml (Resumo)
+//   xl/worksheets/sheet2.xml (Lançamentos)
+//   xl/worksheets/sheet3.xml (Por Categoria)
+// ============================================================
+
+function buildXlsxBlob(monthKey) {
+  const entries = (state.finances || [])
+    .filter((f) => f.date.startsWith(monthKey))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const label    = finMonthLabel(monthKey);
+  const isClosed = isMonthClosed(monthKey);
+  const receitas = entries.filter((f) => f.type === "receita").reduce((s, f) => s + f.amount, 0);
+  const despesas = entries.filter((f) => f.type === "despesa").reduce((s, f) => s + f.amount, 0);
+  const saldo    = receitas - despesas;
+  const geradoEm = new Intl.DateTimeFormat("pt-BR", { dateStyle: "long" }).format(new Date());
+
+  // Distribuição por categoria (despesas)
+  const byCat = {};
+  entries.filter((f) => f.type === "despesa").forEach((f) => {
+    const cat = findCategory(f.category);
+    if (!byCat[f.category]) byCat[f.category] = { label: cat.label.replace(/^\S+\s*/, ""), total: 0 };
+    byCat[f.category].total += f.amount;
+  });
+  const catList = Object.values(byCat).sort((a, b) => b.total - a.total);
+
+  // ── Shared strings (todas as strings são centralizadas aqui) ──
+  const strIndex = new Map();
+  const strings  = [];
+  function s(str) {
+    const k = String(str ?? "");
+    if (!strIndex.has(k)) { strIndex.set(k, strings.length); strings.push(k); }
+    return strIndex.get(k);
+  }
+
+  // Pre-warm strings usadas em múltiplos lugares
+  s(""); s("Relatório Financeiro"); s(label); s("Status"); s("Fechado"); s("Aberto");
+  s("Receitas"); s("Despesas"); s("Saldo"); s("Total de lançamentos"); s("Gerado em"); s(geradoEm);
+  s("Data"); s("Descrição"); s("Categoria"); s("Tipo"); s("Valor (R$)");
+  s("Receita"); s("Despesa");
+  catList.forEach((c) => s(c.label));
+  entries.forEach((f) => {
+    s(formatDate(f.date));
+    s(f.description || "");
+    s(findCategory(f.category).label.replace(/^\S+\s*/, ""));
+  });
+
+  // ── Helpers para gerar o XML das células ──────────────────────
+  // Índices de estilo (xl/styles.xml define nessa ordem exata):
+  // 0 = default, 1 = header (bold, fundo azul), 2 = receita (verde),
+  // 3 = despesa (vermelho), 4 = saldo (azul bold), 5 = número padrão,
+  // 6 = número moeda BR
+  const ST = { def: 0, hdr: 1, rec: 2, desp: 3, saldo: 4, num: 5, brl: 6, bold: 7 };
+
+  function colRef(c) {
+    // c = índice de coluna 0-based → letra(s) A, B, …, Z, AA, …
+    let s2 = "";
+    let n = c + 1;
+    while (n > 0) { s2 = String.fromCharCode(64 + (n - 1) % 26 + 1) + s2; n = Math.floor((n - 1) / 26); }
+    return s2;
+  }
+
+  // Célula de string compartilhada (tipo="s")
+  function cs(col, row, strIdx, style = ST.def) {
+    return `<c r="${colRef(col)}${row}" t="s" s="${style}"><v>${strIdx}</v></c>`;
+  }
+  // Célula de número
+  function cn(col, row, value, style = ST.num) {
+    return `<c r="${colRef(col)}${row}" s="${style}"><v>${value}</v></c>`;
+  }
+  // Célula de moeda (BRL)
+  function cbrl(col, row, value, style = ST.brl) {
+    return cn(col, row, value, style);
+  }
+
+  // ── Aba 1: Resumo ──────────────────────────────────────────────
+  const sheet1Rows = [
+    // Linha 1: Título
+    `<row r="1">${cs(0,1,s("Relatório Financeiro"),ST.hdr)}${cs(1,1,s(label),ST.hdr)}</row>`,
+    // Linha 2: Status
+    `<row r="2">${cs(0,2,s("Status"),ST.bold)}${cs(1,2,s(isClosed ? "Fechado" : "Aberto"),isClosed ? ST.rec : ST.def)}</row>`,
+    // Linha 3: Gerado em
+    `<row r="3">${cs(0,3,s("Gerado em"),ST.bold)}${cs(1,3,s(geradoEm))}</row>`,
+    // Linha 5: Totais
+    `<row r="5">${cs(0,5,s("Receitas"),ST.hdr)}${cbrl(1,5,receitas,ST.rec)}</row>`,
+    `<row r="6">${cs(0,6,s("Despesas"),ST.hdr)}${cbrl(1,6,despesas,ST.desp)}</row>`,
+    `<row r="7">${cs(0,7,s("Saldo"),ST.hdr)}${cbrl(1,7,saldo,saldo >= 0 ? ST.rec : ST.desp)}</row>`,
+    `<row r="8">${cs(0,8,s("Total de lançamentos"),ST.bold)}${cn(1,8,entries.length,ST.num)}</row>`,
+  ];
+
+  // ── Aba 2: Lançamentos ─────────────────────────────────────────
+  const sheet2Rows = [
+    `<row r="1">${cs(0,1,s("Data"),ST.hdr)}${cs(1,1,s("Descrição"),ST.hdr)}${cs(2,1,s("Categoria"),ST.hdr)}${cs(3,1,s("Tipo"),ST.hdr)}${cs(4,1,s("Valor (R$)"),ST.hdr)}</row>`,
+    ...entries.map((f, i) => {
+      const r = i + 2;
+      const isRec = f.type === "receita";
+      const valStyle = isRec ? ST.rec : ST.desp;
+      const signedAmt = isRec ? f.amount : -f.amount;
+      return `<row r="${r}">${cs(0,r,s(formatDate(f.date)))}${cs(1,r,s(f.description||""))}${cs(2,r,s(findCategory(f.category).label.replace(/^\S+\s*/, "")))}${cs(3,r,s(isRec ? "Receita" : "Despesa"),isRec ? ST.rec : ST.desp)}${cbrl(4,r,signedAmt,valStyle)}</row>`;
+    }),
+    // Linha de total
+    (() => {
+      const r = entries.length + 3;
+      return `<row r="${r}">${cs(0,r,s("TOTAL"),ST.hdr)}${cs(1,r,s(""))}${cs(2,r,s(""))}${cs(3,r,s(""))}${cbrl(4,r,receitas-despesas,saldo>=0 ? ST.rec : ST.desp)}</row>`;
+    })(),
+  ];
+
+  // ── Aba 3: Por Categoria ───────────────────────────────────────
+  const sheet3Rows = [
+    `<row r="1">${cs(0,1,s("Categoria"),ST.hdr)}${cs(1,1,s("Valor (R$)"),ST.hdr)}${cs(2,1,s("% das Despesas"),ST.hdr)}</row>`,
+    ...catList.map((c, i) => {
+      const r = i + 2;
+      const pct = despesas > 0 ? Math.round((c.total / despesas) * 1000) / 10 : 0;
+      return `<row r="${r}">${cs(0,r,s(c.label))}${cbrl(1,r,c.total,ST.desp)}${cn(2,r,pct,ST.num)}</row>`;
+    }),
+  ];
+
+  // ── Shared strings XML ────────────────────────────────────────
+  const ssXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="${strings.length}" uniqueCount="${strings.length}">
+${strings.map((str) => `<si><t xml:space="preserve">${str.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}</t></si>`).join("")}
+</sst>`;
+
+  // ── Styles ────────────────────────────────────────────────────
+  // numFmtId 164 = "#,##0.00" (BR: precisamos substituir pontos/vírgulas
+  // depois, mas no XLSX o separador depende das configurações locais do
+  // Excel, então definimos o formato ISO como reserva e o Excel adapta)
+  const stylesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<numFmts count="1"><numFmt numFmtId="164" formatCode="#,##0.00"/></numFmts>
+<fonts count="3">
+  <font><sz val="11"/><name val="Calibri"/><color rgb="FF1A1F2E"/></font>
+  <font><sz val="11"/><b/><name val="Calibri"/><color rgb="FFFFFFFF"/></font>
+  <font><sz val="11"/><b/><name val="Calibri"/><color rgb="FF1A1F2E"/></font>
+</fonts>
+<fills count="7">
+  <fill><patternFill patternType="none"/></fill>
+  <fill><patternFill patternType="gray125"/></fill>
+  <fill><patternFill patternType="solid"><fgColor rgb="FF2C5282"/></patternFill></fill>
+  <fill><patternFill patternType="solid"><fgColor rgb="FF1A4731"/></patternFill></fill>
+  <fill><patternFill patternType="solid"><fgColor rgb="FF7B1D16"/></patternFill></fill>
+  <fill><patternFill patternType="solid"><fgColor rgb="FF1E3A5F"/></patternFill></fill>
+  <fill><patternFill patternType="none"/></fill>
+</fills>
+<borders count="2">
+  <border/>
+  <border><left style="thin"><color rgb="FFE2E8F0"/></left><right style="thin"><color rgb="FFE2E8F0"/></right><top style="thin"><color rgb="FFE2E8F0"/></top><bottom style="thin"><color rgb="FFE2E8F0"/></bottom></border>
+</borders>
+<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+<cellXfs count="8">
+  <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/>
+  <xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/>
+  <xf numFmtId="164" fontId="0" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyNumberFormat="1"/>
+  <xf numFmtId="164" fontId="0" fillId="4" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyNumberFormat="1"/>
+  <xf numFmtId="164" fontId="1" fillId="5" borderId="0" xfId="0" applyFont="1" applyFill="1" applyNumberFormat="1"/>
+  <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/>
+  <xf numFmtId="164" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyNumberFormat="1"/>
+  <xf numFmtId="0" fontId="2" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1"/>
+</cellXfs>
+<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
+</styleSheet>`;
+
+  function makeSheetXml(rows) {
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<sheetData>${rows.join("")}</sheetData>
+</worksheet>`;
+  }
+
+  // ── Montar o ZIP (OOXML = ZIP de XMLs) ───────────────────────
+  const files = {
+    "[Content_Types].xml": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+<Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+<Override PartName="/xl/worksheets/sheet3.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+<Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>
+</Types>`,
+    "_rels/.rels": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>`,
+    "xl/workbook.xml": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+<sheets>
+<sheet name="Resumo" sheetId="1" r:id="rId1"/>
+<sheet name="Lançamentos" sheetId="2" r:id="rId2"/>
+<sheet name="Por Categoria" sheetId="3" r:id="rId3"/>
+</sheets>
+</workbook>`,
+    "xl/_rels/workbook.xml.rels": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/>
+<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet3.xml"/>
+<Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+<Relationship Id="rId5" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/>
+</Relationships>`,
+    "xl/styles.xml": stylesXml,
+    "xl/sharedStrings.xml": ssXml,
+    "xl/worksheets/sheet1.xml": makeSheetXml(sheet1Rows),
+    "xl/worksheets/sheet2.xml": makeSheetXml(sheet2Rows),
+    "xl/worksheets/sheet3.xml": makeSheetXml(sheet3Rows),
+  };
+
+  return zipFiles(files);
+}
+
+// ── Gerador de ZIP puro em JS (sem pako/JSZip) ───────────────
+// Implementação mínima do formato ZIP (RFC 1952 / PKZIP) suficiente
+// para gerar OOXML válido: compressão STORED (método 0, sem deflate)
+// — o Excel aceita ZIPs sem compressão perfeitamente e não precisamos
+// de uma lib externa para deflate.
+function zipFiles(filesObj) {
+  const enc = new TextEncoder();
+
+  function u32le(n) { return [(n)&0xff,(n>>8)&0xff,(n>>16)&0xff,(n>>24)&0xff]; }
+  function u16le(n) { return [(n)&0xff,(n>>8)&0xff]; }
+
+  function crc32(data) {
+    let crc = 0xffffffff;
+    const table = crc32.table || (crc32.table = (() => {
+      const t = new Uint32Array(256);
+      for (let i = 0; i < 256; i++) {
+        let c = i;
+        for (let j = 0; j < 8; j++) c = (c & 1) ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+        t[i] = c;
+      }
+      return t;
+    })());
+    for (let i = 0; i < data.length; i++) crc = table[(crc ^ data[i]) & 0xff] ^ (crc >>> 8);
+    return (crc ^ 0xffffffff) >>> 0;
+  }
+
+  const parts    = [];
+  const central  = [];
+  let   offset   = 0;
+
+  for (const [name, content] of Object.entries(filesObj)) {
+    const nameBytes = enc.encode(name);
+    const dataBytes = typeof content === "string" ? enc.encode(content) : content;
+    const crc       = crc32(dataBytes);
+    const size      = dataBytes.length;
+
+    const lhdr = [
+      0x50,0x4b,0x03,0x04,  // Local file header signature
+      ...u16le(20),          // Version needed (2.0)
+      ...u16le(0),           // Flags
+      ...u16le(0),           // Compression method: STORED
+      ...u16le(0),           // Last mod time
+      ...u16le(0),           // Last mod date
+      ...u32le(crc),
+      ...u32le(size),        // Compressed size
+      ...u32le(size),        // Uncompressed size
+      ...u16le(nameBytes.length),
+      ...u16le(0),           // Extra field length
+      ...nameBytes,
+    ];
+
+    parts.push(new Uint8Array(lhdr));
+    parts.push(dataBytes);
+
+    central.push({ nameBytes, crc, size, offset });
+    offset += lhdr.length + size;
+  }
+
+  const cdStart = offset;
+  for (const e of central) {
+    const cd = [
+      0x50,0x4b,0x01,0x02, // Central dir signature
+      ...u16le(20),         // Version made by
+      ...u16le(20),         // Version needed
+      ...u16le(0),          // Flags
+      ...u16le(0),          // Compression: STORED
+      ...u16le(0),          // Mod time
+      ...u16le(0),          // Mod date
+      ...u32le(e.crc),
+      ...u32le(e.size),
+      ...u32le(e.size),
+      ...u16le(e.nameBytes.length),
+      ...u16le(0),          // Extra
+      ...u16le(0),          // Comment
+      ...u16le(0),          // Disk start
+      ...u16le(0),          // Internal attrs
+      ...u32le(0),          // External attrs
+      ...u32le(e.offset),
+      ...e.nameBytes,
+    ];
+    parts.push(new Uint8Array(cd));
+    offset += cd.length;
+  }
+
+  const cdSize = offset - cdStart;
+  const eocd = [
+    0x50,0x4b,0x05,0x06,  // End of central dir
+    ...u16le(0),           // Disk number
+    ...u16le(0),           // Disk w/ central dir
+    ...u16le(central.length),
+    ...u16le(central.length),
+    ...u32le(cdSize),
+    ...u32le(cdStart),
+    ...u16le(0),           // Comment length
+  ];
+  parts.push(new Uint8Array(eocd));
+
+  const total = parts.reduce((s, p) => s + p.length, 0);
+  const buf   = new Uint8Array(total);
+  let pos = 0;
+  for (const p of parts) { buf.set(p, pos); pos += p.length; }
+  return new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+}
+
+// ── Ponto de entrada do botão Exportar ───────────────────────
+function exportMonthReport(monthKey) {
+  const entries = (state.finances || []).filter((f) => f.date.startsWith(monthKey));
+  if (!entries.length) {
+    showToast("Nenhum lançamento no período para exportar.");
+    return;
+  }
+  try {
+    const blob = buildXlsxBlob(monthKey);
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.download = `relatorio-pulsénote-${monthKey}.xlsx`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    showToast("📊 Planilha exportada com sucesso!");
+  } catch (err) {
+    console.error("Erro ao gerar XLSX:", err);
+    showToast("Erro ao gerar a planilha. Tente novamente.");
+  }
+}
+
+// ============================================================
+// CONTROLES DO NAVEGADOR DE MÊS EM FINANÇAS
+// ============================================================
+function bindFinanceMonthControls() {
+  document.getElementById("finMonthPrev")?.addEventListener("click", () => {
+    const [y, m] = finActiveMonth.split("-").map(Number);
+    const d = new Date(y, m - 2, 1); // m-2 porque mês em JS é 0-based
+    finActiveMonth = toLocalIso(d).slice(0, 7);
+    renderFinances();
+  });
+
+  document.getElementById("finMonthNext")?.addEventListener("click", () => {
+    const [y, m] = finActiveMonth.split("-").map(Number);
+    const d = new Date(y, m, 1);
+    finActiveMonth = toLocalIso(d).slice(0, 7);
+    renderFinances();
+  });
+
+  document.getElementById("finCloseMonth")?.addEventListener("click", () => {
+    closeMonth(finActiveMonth);
+  });
+
+  document.getElementById("finReopenMonth")?.addEventListener("click", () => {
+    reopenMonth(finActiveMonth);
+  });
+
+  document.getElementById("finExportReport")?.addEventListener("click", () => {
+    exportMonthReport(finActiveMonth);
+  });
 }
 
 // ── Lançamento por texto (heurística local — sem IA externa) ───
@@ -1704,22 +2092,34 @@ function getActiveFinMonth() {
 // expressões regulares e listas de palavras-chave, tudo dentro do
 // navegador — nenhum texto sai do dispositivo do usuário.
 const FIN_CATEGORY_KEYWORDS = {
-  alimentacao:  ["almoço","almoco","jantar","lanche","mercado","supermercado","restaurante","comida","ifood","padaria","café","cafe","pizza","hambúrguer","hamburguer","feira","churrasco"],
-  transporte:   ["uber","99","gasolina","combustível","combustivel","ônibus","onibus","metro","metrô","táxi","taxi","passagem","estacionamento","pedágio","pedagio","posto"],
-  saude:        ["farmácia","farmacia","remédio","remedio","médico","medico","consulta","dentista","plano de saúde","plano de saude","exame","hospital","academia"],
-  lazer:        ["cinema","show","viagem","bar","balada","streaming","jogo","passeio","ingresso","netflix"],
-  educacao:     ["curso","faculdade","livro","mensalidade escolar","escola","material escolar","apostila","aula"],
-  moradia:      ["aluguel","condomínio","condominio","luz","água","agua","internet","gás","gas","iptu","reforma","conta de"],
-  roupas:       ["roupa","calça","calca","camisa","tênis","tenis","sapato","blusa","jaqueta"],
-  assinaturas:  ["assinatura","spotify","amazon prime","youtube premium","mensalidade do"],
-  salario:      ["salário","salario","contracheque","pagamento do trabalho","pagamento da empresa"],
-  freelance:    ["freela","freelance","bico","job extra","trampo extra"],
-  investimentos:["dividendo","rendimento","investimento","ação","ações","cdb","tesouro direto"],
+  alimentacao:  ["almoço","almoco","jantar","lanche","mercado","supermercado","restaurante","comida","ifood","padaria","café","cafe","pizza","hambúrguer","hamburguer","feira","churrasco","marmita","delivery","açaí","acai","sorvete","doces","rappi","padoca","brunch","sushi"],
+  transporte:   ["uber","99","gasolina","combustível","combustivel","ônibus","onibus","metro","metrô","táxi","taxi","passagem","estacionamento","pedágio","pedagio","posto","oficina","seguro do carro","ipva","licenciamento","manutenção do carro","manutencao do carro","mecânico","mecanico"],
+  saude:        ["farmácia","farmacia","remédio","remedio","médico","medico","consulta","dentista","plano de saúde","plano de saude","exame","hospital","academia","psicólogo","psicologo","terapia","fisioterapia","óculos","oculos","vacina","laboratório","laboratorio"],
+  lazer:        ["cinema","show","viagem","bar","balada","streaming","jogo","passeio","ingresso","netflix","festa","parque","hospedagem","hotel","pousada","passeio turístico"],
+  educacao:     ["curso","faculdade","livro","mensalidade escolar","escola","material escolar","apostila","aula","udemy","mensalidade da faculdade","pós-graduação","pos-graduacao"],
+  moradia:      ["aluguel","condomínio","condominio","luz","água","agua","internet","gás","gas","iptu","reforma","conta de","celular","telefone","tv a cabo","wifi","manutenção","manutencao"],
+  roupas:       ["roupa","calça","calca","camisa","tênis","tenis","sapato","blusa","jaqueta","acessório","acessorio","bolsa","perfume"],
+  assinaturas:  ["assinatura","spotify","amazon prime","youtube premium","mensalidade do","disney+","disney plus","hbo max","globoplay","apple music","icloud","google one"],
+  salario:      ["salário","salario","contracheque","pagamento do trabalho","pagamento da empresa","holerite"],
+  freelance:    ["freela","freelance","bico","job extra","trampo extra","projeto extra"],
+  investimentos:["dividendo","rendimento","investimento","ação","ações","cdb","tesouro direto","fii","fundo imobiliário","fundo imobiliario"],
   vendas:       ["venda","vendi","vendeu"],
   reembolso:    ["reembolso","ressarcimento","devolução","devolucao"],
   presente:     ["presente","bônus","bonus","doação","doacao","mesada"],
 };
 const FIN_INCOME_HINTS = ["recebi","receb","ganhei","caiu","depositaram","pix recebido","entrou","salário","salario","venda","vendi","freela","freelance","bico","reembolso","presente","bônus","bonus","dividendo","rendimento"];
+
+// Palavras "de ligação" sem valor descritivo, removidas ao montar a
+// descrição final a partir do texto digitado pelo usuário — assim sobra só
+// o que realmente importa (ex.: "gastei com uber pro trabalho ontem 18
+// reais" -> depois de tirar data e valor, removendo essas palavras, sobra
+// "uber pro trabalho", que vira a descrição "Uber pro trabalho").
+const FIN_FILLER_WORDS = [
+  "gastei","gasto","gastando","paguei","pagamento","pagando","comprei","compra","comprando",
+  "recebi","receb","ganhei","ganhando","pix","transferência","transferencia",
+  "reais","real","r\\$","de","do","da","dos","das","no","na","nos","nas","em","com","pra","para",
+  "um","uma","uns","umas","o","a","os","as","e","foi","fui","ao","à","na qual","esse","essa","isso",
+];
 
 function normalizeFinAmount(raw) {
   let s = raw.trim();
@@ -1740,8 +2140,17 @@ function normalizeFinAmount(raw) {
 function addDaysIso(baseDate, delta) {
   const d = new Date(baseDate);
   d.setDate(d.getDate() + delta);
-  return d.toISOString().slice(0, 10);
+  return toLocalIso(d);
 }
+
+// Nomes em português usados no reconhecimento local de datas (parseFinanceText)
+const FIN_MONTH_NAMES = {
+  janeiro: 0, fevereiro: 1, marco: 2, abril: 3, maio: 4, junho: 5,
+  julho: 6, agosto: 7, setembro: 8, outubro: 9, novembro: 10, dezembro: 11,
+};
+const FIN_WEEKDAY_NAMES = {
+  domingo: 0, segunda: 1, terca: 2, quarta: 3, quinta: 4, sexta: 5, sabado: 6,
+};
 
 function parseFinanceText(text) {
   let working = text.toLowerCase();
@@ -1750,67 +2159,144 @@ function parseFinanceText(text) {
   // 1) Data — extraída e REMOVIDA do texto antes de procurar o valor,
   // senão números de data ("27/06", "5 dias atrás") podem ser confundidos
   // com o valor do lançamento.
+  //
+  // Reconhece, em ordem de prioridade: "anteontem"/"antes de ontem",
+  // "ontem", "hoje", "semana passada", "há/faz X dias"/"X dias atrás",
+  // data explícita ("27/06" ou "27/06/2026"), "27 de junho", dia da
+  // semana ("segunda", "terça-feira"...) e "dia 27" (sem mês = mês atual).
   let date = todayIso;
-  if (/anteontem/.test(working)) {
+  if (/anteontem|ante-ontem|antes de ontem/.test(working)) {
     date = addDaysIso(today, -2);
-    working = working.replace(/anteontem/g, " ");
+    working = working.replace(/anteontem|ante-ontem|antes de ontem/g, " ");
   } else if (/\bontem\b/.test(working)) {
     date = addDaysIso(today, -1);
     working = working.replace(/\bontem\b/g, " ");
   } else if (/\bhoje\b/.test(working)) {
     working = working.replace(/\bhoje\b/g, " ");
+  } else if (/semana passada/.test(working)) {
+    date = addDaysIso(today, -7);
+    working = working.replace(/semana passada/g, " ");
   } else {
-    const daysAgoMatch = working.match(/(\d+)\s*dias?\s*atr[áa]s/);
+    const daysAgoMatch =
+      working.match(/(?:h[áa]|faz)\s*(\d+)\s*dias?\b/) ||
+      working.match(/(\d+)\s*dias?\s*atr[áa]s/);
     if (daysAgoMatch) {
       date = addDaysIso(today, -parseInt(daysAgoMatch[1], 10));
       working = working.replace(daysAgoMatch[0], " ");
     } else {
       const explicitDate = working.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/);
+      const monthNameMatch = !explicitDate &&
+        working.match(/\b(\d{1,2})\s*(?:de\s*)?(janeiro|fevereiro|mar[çc]o|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\b/);
+      const weekdayMatch = !explicitDate && !monthNameMatch &&
+        working.match(/\b(domingo|segunda(?:-feira)?|ter[çc]a(?:-feira)?|quarta(?:-feira)?|quinta(?:-feira)?|sexta(?:-feira)?|s[áa]bado)\b/);
+      const dayOnlyMatch = !explicitDate && !monthNameMatch && !weekdayMatch &&
+        working.match(/\bdia\s*(\d{1,2})\b/);
+
       if (explicitDate) {
         const day = parseInt(explicitDate[1], 10);
         const month = parseInt(explicitDate[2], 10) - 1;
         let year = explicitDate[3] ? parseInt(explicitDate[3], 10) : today.getFullYear();
         if (year < 100) year += 2000;
         const d = new Date(year, month, day);
-        if (!isNaN(d)) date = d.toISOString().slice(0, 10);
+        if (!isNaN(d)) date = toLocalIso(d);
         working = working.replace(explicitDate[0], " ");
+      } else if (monthNameMatch) {
+        const day = parseInt(monthNameMatch[1], 10);
+        const monthKeyName = monthNameMatch[2].replace("ç", "c");
+        const month = FIN_MONTH_NAMES[monthKeyName];
+        let d = new Date(today.getFullYear(), month, day);
+        // Se a data cair no futuro, a referência provavelmente é ao ano passado
+        if (d > today) d = new Date(today.getFullYear() - 1, month, day);
+        if (!isNaN(d)) date = toLocalIso(d);
+        working = working.replace(monthNameMatch[0], " ");
+      } else if (weekdayMatch) {
+        const normalized = weekdayMatch[1]
+          .replace("-feira", "")
+          .replace("ç", "c")
+          .replace("á", "a");
+        const targetDow = FIN_WEEKDAY_NAMES[normalized];
+        if (targetDow !== undefined) {
+          let diff = today.getDay() - targetDow;
+          if (diff <= 0) diff += 7; // sempre a ocorrência passada mais recente (nunca hoje/futuro)
+          date = addDaysIso(today, -diff);
+        }
+        working = working.replace(weekdayMatch[0], " ");
+      } else if (dayOnlyMatch) {
+        const day = parseInt(dayOnlyMatch[1], 10);
+        if (day >= 1 && day <= 31) {
+          let d = new Date(today.getFullYear(), today.getMonth(), day);
+          if (d > today) d = new Date(today.getFullYear(), today.getMonth() - 1, day);
+          if (!isNaN(d)) date = toLocalIso(d);
+        }
+        working = working.replace(dayOnlyMatch[0], " ");
       }
     }
   }
 
   // 2) Valor — procura primeiro perto de "r$"/"reais"; senão, o primeiro
-  // número que sobrou (já sem as referências de data)
+  // número que sobrou (já sem as referências de data). Removido de
+  // "working" (matching) e de "cleanText" (vira a descrição) ao mesmo tempo.
+  let cleanText = working; // vai sendo "limpo" até sobrar só a descrição
   let amount = null;
   const moneyMatch =
     working.match(/r\$\s*([\d.,]+)/) ||
     working.match(/([\d.,]+)\s*(?:reais|real)\b/) ||
     working.match(/(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?)/);
-  if (moneyMatch) amount = normalizeFinAmount(moneyMatch[1]);
+  if (moneyMatch) {
+    amount = normalizeFinAmount(moneyMatch[1]);
+    cleanText = cleanText.replace(moneyMatch[0], " ");
+  }
 
   // 3) Tipo (receita/despesa)
   const type = FIN_INCOME_HINTS.some((kw) => working.includes(kw)) ? "receita" : "despesa";
 
-  // 4) Categoria — primeiro nas fixas, depois nas personalizadas do usuário
-  // (casando pelas palavras do próprio nome, já que essas não têm uma
-  // lista de sinônimos pré-definida)
+  // 4) Categoria — escolhida pela palavra-chave MAIS ESPECÍFICA encontrada
+  // (a mais longa), não pela primeira categoria da lista que bater com
+  // qualquer palavra solta. Isso evita, por exemplo, que "conta de luz"
+  // perca pra um match mais genérico e garante mais precisão seguindo
+  // exatamente o que foi dito. Categorias personalizadas do usuário (sem
+  // lista de sinônimos própria) são checadas por palavras do próprio nome.
   let categoryId = type === "receita" ? "outros_receita" : "outros";
+  let bestMatchLen = 0;
   const pool = type === "receita" ? incomeCategories : expenseCategories;
-  matchLoop:
   for (const cat of pool) {
     for (const kw of FIN_CATEGORY_KEYWORDS[cat.id] || []) {
-      if (working.includes(kw)) { categoryId = cat.id; break matchLoop; }
+      if (kw.length > bestMatchLen && working.includes(kw)) {
+        categoryId = cat.id;
+        bestMatchLen = kw.length;
+      }
     }
   }
-  if (categoryId === (type === "receita" ? "outros_receita" : "outros")) {
-    const custom = (state.customCategories || []).filter((c) => (c.type || "despesa") === type);
-    for (const cat of custom) {
-      const words = cat.label.replace(/^\S+\s*/, "").toLowerCase().split(/\s+/).filter((w) => w.length > 2);
-      if (words.some((w) => working.includes(w))) { categoryId = cat.id; break; }
+  const custom = (state.customCategories || []).filter((c) => (c.type || "despesa") === type);
+  for (const cat of custom) {
+    const words = cat.label.replace(/^\S+\s*/, "").toLowerCase().split(/\s+/).filter((w) => w.length > 2);
+    for (const w of words) {
+      if (w.length > bestMatchLen && working.includes(w)) {
+        categoryId = cat.id;
+        bestMatchLen = w.length;
+      }
     }
   }
 
-  // 5) Descrição: mesma regra do formulário manual — nome da categoria
-  const description = findCategory(categoryId).label.replace(/^\S+\s*/, "");
+  // 5) Descrição — extraída do texto REAL digitado pelo usuário (não do
+  // nome da categoria), tirando só conectores sem valor descritivo
+  // ("gastei", "com", "no", "reais"...). Assim "gastei em viagem antes de
+  // ontem 200 reais" vira a descrição "Viagem", e não um genérico
+  // "Lazer"/"Outros" igual para tudo — cada lançamento fica identificável
+  // por si só na lista, em vez de várias linhas repetindo o nome da
+  // categoria (era esse o problema relatado).
+  let description = cleanText;
+  for (const word of FIN_FILLER_WORDS) {
+    description = description.replace(new RegExp(`\\b${word}\\b`, "gi"), " ");
+  }
+  description = description.replace(/\s+/g, " ").trim();
+  if (description.length < 2) {
+    // Nada de descritivo sobrou (ex.: o usuário só disse "50 reais ontem")
+    // — nesse caso só o nome da categoria mesmo serve de descrição.
+    description = findCategory(categoryId).label.replace(/^\S+\s*/, "");
+  } else {
+    description = description.charAt(0).toUpperCase() + description.slice(1);
+  }
 
   return { type, amount, categoryId, description, date };
 }
@@ -1911,6 +2397,15 @@ function saveExpense(event) {
   event.preventDefault();
   const editId = valueOf("#expenseId");
   const type = document.querySelector("#expenseType").value || "despesa";
+
+  // Bloqueia salvar se o mês ativo estiver fechado
+  const targetDate = valueOf("#expenseDate") || todayIso;
+  const targetMonth = targetDate.slice(0, 7);
+  if (isMonthClosed(targetMonth)) {
+    showToast("⚠️ Este mês está fechado. Reabra-o para adicionar lançamentos.");
+    return;
+  }
+
   const defaultCategory = type === "receita" ? "outros_receita" : "outros";
   const amount = parseFloat(valueOf("#expenseAmount").replace(",", "."));
   if (isNaN(amount) || amount <= 0) { showToast("Informe um valor válido."); return; }
@@ -2011,16 +2506,28 @@ function renderFinances() {
   if (!document.querySelector("#financesView")) return;
   if (!state.finances) state.finances = [];
 
-  const monthFilter = getActiveFinMonth();
-  const now = new Date();
-  const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const monthKey  = getActiveFinMonth();
+  const closed    = isMonthClosed(monthKey);
+  const todayMonth = todayIso.slice(0, 7);
 
-  let entries = [...state.finances].sort((a, b) => b.date.localeCompare(a.date));
-  if (monthFilter === "all") {
-    // sem filtro de mês — mostra tudo
-  } else {
-    entries = entries.filter((f) => f.date.startsWith(currentMonthKey));
-  }
+  // ── Atualiza o navegador de mês ──────────────────────────────
+  const labelEl   = document.querySelector("#finMonthLabel");
+  const badgeEl   = document.querySelector("#finClosedBadge");
+  const closeBtn  = document.querySelector("#finCloseMonth");
+  const reopenBtn = document.querySelector("#finReopenMonth");
+  const formCard  = document.querySelector(".fin-form-card");
+
+  if (labelEl)  labelEl.textContent = finMonthLabel(monthKey);
+  if (badgeEl)  badgeEl.hidden = !closed;
+  if (closeBtn) closeBtn.hidden = closed;
+  if (reopenBtn) reopenBtn.hidden = !closed;
+  // Formulário de novo lançamento desabilitado em mês fechado
+  if (formCard) formCard.classList.toggle("month-closed", closed);
+
+  // ── Filtra lançamentos do mês ativo ──────────────────────────
+  let entries = [...state.finances]
+    .filter((f) => f.date.startsWith(monthKey))
+    .sort((a, b) => b.date.localeCompare(a.date));
 
   // Aplica a busca global (por descrição ou categoria)
   const query = elements.globalSearch.value.trim().toLowerCase();
@@ -2073,12 +2580,15 @@ function renderFinances() {
   document.querySelector("#finCategories").innerHTML = catHtml;
 
   const listHtml = entries.length
-    ? entries.slice(0, 30).map((f) => renderFinTransaction(f)).join("")
+    ? entries.slice(0, 50).map((f) => renderFinTransaction(f)).join("")
     : `<div class="empty-state">${query ? "Nenhum resultado para essa busca 🔍" : "Nenhum registro no período 📭"}</div>`;
 
   document.querySelector("#finTransactions").innerHTML = listHtml;
 
-  renderFinCalendar(currentMonthKey, entries);
+  renderFinCalendar(monthKey, entries);
+  renderFinChart6m();
+  renderFinGoals();
+  renderFinRecurrents();
 }
 
 function renderFinTransaction(f) {
@@ -2090,26 +2600,37 @@ function renderFinTransaction(f) {
   // realmente selecionada — igual já acontecia para despesas.
   const icon    = cat.label.split(" ")[0];
   const catName = cat.label.replace(/^\S+\s*/, "");
+  // Layout em 2 linhas: título+valor numa linha, categoria/data+ações na
+  // outra. Antes tudo (ícone + título + valor + editar + excluir) disputava
+  // uma única linha, sobrando pouquíssimo espaço pro título — por isso
+  // descrições como "Alimentação" apareciam cortadas em "Alimen...".
   return `
     <article class="fin-transaction" data-fin-id="${f.id}">
       <div class="fin-tx-icon" style="background:${cat.color}22;color:${cat.color}">
         ${icon}
       </div>
-      <div class="fin-tx-info">
-        <strong>${escapeHtml(f.description)}</strong>
-        <span class="task-meta">${catName} · ${formatDate(f.date)}</span>
+      <div class="fin-tx-main">
+        <div class="fin-tx-top">
+          <strong class="fin-tx-title" title="${escapeHtml(f.description)}">${escapeHtml(f.description)}</strong>
+          <span class="fin-tx-amount ${isReceita ? "receita" : "despesa"}">${isReceita ? "+" : "-"}${formatCurrency(f.amount)}</span>
+        </div>
+        <div class="fin-tx-bottom">
+          <span class="task-meta fin-tx-meta">${catName} · ${formatDate(f.date)}</span>
+          <div class="fin-tx-actions">
+            <button class="mini-button" onclick="editFinance('${f.id}')" title="Editar">✏️</button>
+            <button class="mini-button" onclick="deleteFinance('${f.id}')" title="Excluir">🗑️</button>
+          </div>
+        </div>
       </div>
-      <div class="fin-tx-amount ${isReceita ? "receita" : "despesa"}">
-        ${isReceita ? "+" : "-"}${formatCurrency(f.amount)}
-      </div>
-      <button class="mini-button" onclick="editFinance('${f.id}')" title="Editar" style="padding:0;width:26px;height:26px;flex-shrink:0">✏️</button>
-      <button class="mini-button" onclick="deleteFinance('${f.id}')" title="Excluir" style="padding:0;width:26px;height:26px;flex-shrink:0">🗑️</button>
     </article>`;
 }
 
 function renderFinCalendar(monthKey, entries) {
   const grid = document.querySelector("#finCalGrid");
   if (!grid) return;
+  // Sincroniza o título do calendário com o mês ativo
+  const calLabel = document.querySelector("#finCalMonthLabel");
+  if (calLabel) calLabel.textContent = finMonthLabel(monthKey);
   const [year, month] = monthKey.split("-").map(Number);
   const daysInMonth = new Date(year, month, 0).getDate();
   const byDay = {};
@@ -2331,6 +2852,263 @@ function highlightItem(itemId) {
   }, 220);
 }
 
+// ============================================================
+// GRÁFICO COMPARATIVO DE 6 MESES (SVG inline)
+// ============================================================
+function renderFinChart6m() {
+  const el = document.querySelector("#finChart6m");
+  if (!el) return;
+
+  // Coleta os últimos 6 meses (incluindo o mês ativo)
+  const months = [];
+  const [ay, am] = finActiveMonth.split("-").map(Number);
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(ay, am - 1 - i, 1);
+    months.push(toLocalIso(d).slice(0, 7));
+  }
+
+  const data = months.map((mk) => {
+    const entries = (state.finances || []).filter((f) => f.date.startsWith(mk));
+    const r = entries.filter((f) => f.type === "receita").reduce((s, f) => s + f.amount, 0);
+    const d = entries.filter((f) => f.type === "despesa").reduce((s, f) => s + f.amount, 0);
+    const [y, m] = mk.split("-").map(Number);
+    const lbl = new Intl.DateTimeFormat("pt-BR", { month: "short" }).format(new Date(y, m - 1, 1));
+    return { mk, lbl, r, d };
+  });
+
+  const maxVal = Math.max(...data.flatMap((d) => [d.r, d.d]), 1);
+  const W = 100, H = 80, pad = 4, barW = 6, gap = 2;
+  const groupW = barW * 2 + gap + 4;
+  const totalW = groupW * data.length;
+
+  const bars = data.map((item, i) => {
+    const x = i * groupW + pad;
+    const rH = Math.max(2, (item.r / maxVal) * H);
+    const dH = Math.max(2, (item.d / maxVal) * H);
+    const isActive = item.mk === finActiveMonth;
+    return `
+      <rect x="${x}" y="${H - rH + pad}" width="${barW}" height="${rH}" rx="2" fill="${isActive ? "var(--green)" : "var(--green-soft)"}" stroke="${isActive ? "var(--green)" : "none"}" stroke-width="1"/>
+      <rect x="${x + barW + gap}" y="${H - dH + pad}" width="${barW}" height="${dH}" rx="2" fill="${isActive ? "var(--red)" : "var(--red-soft)"}" stroke="${isActive ? "var(--red)" : "none"}" stroke-width="1"/>
+      <text x="${x + barW}" y="${H + pad + 10}" text-anchor="middle" font-size="5" fill="var(--muted)" font-family="inherit">${item.lbl}</text>`;
+  }).join("");
+
+  const legendLine = `
+    <rect x="${pad}" y="${H + pad + 14}" width="6" height="4" rx="1" fill="var(--green)"/>
+    <text x="${pad + 8}" y="${H + pad + 18}" font-size="4.5" fill="var(--muted)" font-family="inherit">Receitas</text>
+    <rect x="${pad + 36}" y="${H + pad + 14}" width="6" height="4" rx="1" fill="var(--red)"/>
+    <text x="${pad + 44}" y="${H + pad + 18}" font-size="4.5" fill="var(--muted)" font-family="inherit">Despesas</text>`;
+
+  el.innerHTML = `<svg viewBox="0 0 ${totalW + pad * 2} ${H + pad * 2 + 22}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto">${bars}${legendLine}</svg>`;
+}
+
+// ============================================================
+// METAS DE GASTO POR CATEGORIA
+// ============================================================
+function renderFinGoals() {
+  const el = document.querySelector("#finGoalsList");
+  if (!el) return;
+  const goals = state.finGoals || [];
+  if (!goals.length) {
+    el.innerHTML = `<div class="empty-state">Nenhuma meta definida.<br>Adicione limites por categoria.</div>`;
+    return;
+  }
+  const monthKey = getActiveFinMonth();
+  const byCat = {};
+  (state.finances || []).filter((f) => f.date.startsWith(monthKey) && f.type === "despesa")
+    .forEach((f) => { byCat[f.category] = (byCat[f.category] || 0) + f.amount; });
+
+  el.innerHTML = goals.map((g) => {
+    const cat   = findCategory(g.categoryId);
+    const spent = byCat[g.categoryId] || 0;
+    const pct   = Math.min(100, Math.round((spent / g.limit) * 100));
+    const over  = spent > g.limit;
+    const color = over ? "var(--red)" : pct > 80 ? "var(--orange)" : "var(--green)";
+    return `
+      <div class="fin-goal-row">
+        <div class="fin-goal-top">
+          <span class="fin-goal-label">${cat.label}</span>
+          <span class="fin-goal-val" style="color:${color}">${formatCurrency(spent)} / ${formatCurrency(g.limit)}</span>
+          <button class="icon-button" style="padding:2px 6px;font-size:0.7rem" onclick="deleteFinGoal('${g.id}')">✕</button>
+        </div>
+        <div class="progress-track" style="height:6px;margin-top:4px">
+          <div style="width:${pct}%;height:100%;border-radius:999px;background:${color};transition:width 400ms"></div>
+        </div>
+        <span style="font-size:0.72rem;color:var(--muted)">${over ? "⚠️ Limite ultrapassado!" : `${pct}% usado`}</span>
+      </div>`;
+  }).join("");
+}
+
+function deleteFinGoal(id) {
+  state.finGoals = (state.finGoals || []).filter((g) => g.id !== id);
+  saveState();
+  renderFinGoals();
+  showToast("Meta removida.");
+}
+
+function bindFinGoalsModal() {
+  const modal   = document.querySelector("#finGoalsModal");
+  const catSel  = document.querySelector("#goalCategory");
+  const openBtn = document.querySelector("#finOpenGoalsModal");
+  const closeBtn= document.querySelector("#finCloseGoalsModal");
+  const saveBtn = document.querySelector("#finSaveGoal");
+
+  openBtn?.addEventListener("click", () => {
+    // Popula select com categorias de despesa
+    catSel.innerHTML = expenseCategories.concat(state.customCategories?.filter((c) => (c.type || "despesa") === "despesa") || [])
+      .map((c) => `<option value="${c.id}">${c.label}</option>`).join("");
+    modal.hidden = false;
+  });
+  closeBtn?.addEventListener("click", () => { modal.hidden = true; });
+  modal?.addEventListener("click", (e) => { if (e.target === modal) modal.hidden = true; });
+
+  saveBtn?.addEventListener("click", () => {
+    const catId = catSel.value;
+    const limit = parseFloat(document.querySelector("#goalLimit").value.replace(",", "."));
+    if (!catId || !limit || limit <= 0) { showToast("Preencha a categoria e o limite."); return; }
+    if (!state.finGoals) state.finGoals = [];
+    // Atualiza se já existir meta para essa categoria
+    const existing = state.finGoals.find((g) => g.categoryId === catId);
+    if (existing) { existing.limit = limit; }
+    else { state.finGoals.push({ id: crypto.randomUUID(), categoryId: catId, limit }); }
+    saveState();
+    renderFinGoals();
+    modal.hidden = true;
+    document.querySelector("#goalLimit").value = "";
+    showToast("✅ Meta salva!");
+  });
+}
+
+// ============================================================
+// LANÇAMENTOS RECORRENTES
+// ============================================================
+function renderFinRecurrents() {
+  const el = document.querySelector("#finRecurList");
+  if (!el) return;
+  const recurrents = state.finRecurrents || [];
+  if (!recurrents.length) {
+    el.innerHTML = `<div class="empty-state">Nenhum lançamento recorrente.<br>Adicione assinaturas, salário, aluguel…</div>`;
+    return;
+  }
+  el.innerHTML = recurrents.map((r) => {
+    const cat   = findCategory(r.categoryId);
+    const isRec = r.type === "receita";
+    return `
+      <div class="fin-recur-row">
+        <span class="fin-recur-icon" style="background:${cat.color}22;color:${cat.color}">${cat.label.split(" ")[0]}</span>
+        <div class="fin-recur-info">
+          <strong>${escapeHtml(r.description)}</strong>
+          <span class="task-meta">Dia ${r.day} · ${cat.label.replace(/^\S+\s*/, "")}</span>
+        </div>
+        <span class="fin-recur-amount ${isRec ? "receita" : "despesa"}">${isRec ? "+" : "-"}${formatCurrency(r.amount)}</span>
+        <div style="display:flex;gap:4px;flex-shrink:0">
+          <button class="mini-button" onclick="applyRecurrent('${r.id}')" title="Lançar agora">▶</button>
+          <button class="mini-button" onclick="deleteRecurrent('${r.id}')" title="Remover">✕</button>
+        </div>
+      </div>`;
+  }).join("");
+}
+
+function deleteRecurrent(id) {
+  state.finRecurrents = (state.finRecurrents || []).filter((r) => r.id !== id);
+  saveState();
+  renderFinRecurrents();
+  showToast("Recorrente removido.");
+}
+
+function applyRecurrent(id) {
+  const rec = (state.finRecurrents || []).find((r) => r.id === id);
+  if (!rec) return;
+  if (!assertMonthNotClosed(finActiveMonth)) return;
+
+  const [y, m] = finActiveMonth.split("-").map(Number);
+  const day    = Math.min(rec.day, new Date(y, m, 0).getDate()); // ajusta para dias válidos do mês
+  const date   = `${finActiveMonth}-${String(day).padStart(2, "0")}`;
+
+  state.finances.unshift({
+    id: crypto.randomUUID(),
+    type: rec.type,
+    amount: rec.amount,
+    category: rec.categoryId,
+    description: rec.description,
+    date,
+  });
+  saveState();
+  renderFinances();
+  showToast(`✅ "${rec.description}" lançado em ${formatDate(date)}!`);
+}
+
+function bindFinRecurModal() {
+  const modal    = document.querySelector("#finRecurModal");
+  const openBtn  = document.querySelector("#finOpenRecurModal");
+  const closeBtn = document.querySelector("#finCloseRecurModal");
+  const saveBtn  = document.querySelector("#finSaveRecur");
+  const typeSel  = document.querySelector("#recurType");
+  const catSel   = document.querySelector("#recurCategory");
+
+  function updateCatOptions() {
+    const type = typeSel?.value || "despesa";
+    catSel.innerHTML = getAllCategories(type).map((c) => `<option value="${c.id}">${c.label}</option>`).join("");
+  }
+
+  openBtn?.addEventListener("click", () => { updateCatOptions(); modal.hidden = false; });
+  closeBtn?.addEventListener("click", () => { modal.hidden = true; });
+  modal?.addEventListener("click", (e) => { if (e.target === modal) modal.hidden = true; });
+  typeSel?.addEventListener("change", updateCatOptions);
+
+  saveBtn?.addEventListener("click", () => {
+    const desc   = document.querySelector("#recurDesc").value.trim();
+    const amount = parseFloat(document.querySelector("#recurAmount").value.replace(",", "."));
+    const type   = typeSel.value;
+    const catId  = catSel.value;
+    const day    = parseInt(document.querySelector("#recurDay").value, 10);
+
+    if (!desc || !amount || amount <= 0 || !day || day < 1 || day > 31) {
+      showToast("Preencha todos os campos corretamente.");
+      return;
+    }
+    if (!state.finRecurrents) state.finRecurrents = [];
+    state.finRecurrents.push({ id: crypto.randomUUID(), description: desc, amount, type, categoryId: catId, day });
+    saveState();
+    renderFinRecurrents();
+    modal.hidden = true;
+    ["#recurDesc","#recurAmount","#recurDay"].forEach((sel) => { document.querySelector(sel).value = ""; });
+    showToast("✅ Recorrente salvo!");
+  });
+}
+
+// ── Lança automaticamente recorrentes com vencimento hoje que ainda não
+// foram lançados no mês ativo (roda uma vez por sessão ao abrir Finanças)
+function autoApplyRecurrents() {
+  const today = todayIso;
+  const monthKey = today.slice(0, 7);
+  if (isMonthClosed(monthKey)) return;
+  const [, , dd] = today.split("-").map(Number);
+  let applied = false;
+  (state.finRecurrents || []).forEach((rec) => {
+    if (rec.day !== dd) return;
+    const alreadyLaunched = (state.finances || []).some(
+      (f) => f.date === today && f.description === rec.description && f.amount === rec.amount
+    );
+    if (alreadyLaunched) return;
+    state.finances.unshift({
+      id: crypto.randomUUID(),
+      type: rec.type,
+      amount: rec.amount,
+      category: rec.categoryId,
+      description: rec.description,
+      date: today,
+    });
+    applied = true;
+    showToast(`🔁 Recorrente lançado: ${rec.description}`);
+  });
+  // Só sincroniza com o servidor se algo foi realmente adicionado —
+  // a versão anterior sempre chamava saveState() mesmo sem lançar nada,
+  // o que disparava um ciclo de sync desnecessário ao abrir o app e
+  // causava o banner "❌ Erro ao salvar" quando o Firestore estava lento
+  // ou offline.
+  if (applied) saveState();
+}
+
 window.editNote = editNote;
 window.toggleFavorite = toggleFavorite;
 window.convertNoteToTask = convertNoteToTask;
@@ -2346,3 +3124,6 @@ window.deleteGoal = deleteGoal;
 window.deleteFinance = deleteFinance;
 window.editFinance = editFinance;
 window.filterFinByDate = filterFinByDate;
+window.deleteFinGoal = deleteFinGoal;
+window.deleteRecurrent = deleteRecurrent;
+window.applyRecurrent = applyRecurrent;

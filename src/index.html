@@ -7,7 +7,11 @@
 
     <!-- PWA: instalação e ícone na tela inicial -->
     <link rel="manifest" href="manifest.json" />
-    <meta name="theme-color" content="#4f8ef7" />
+    <!-- A cor da barra do navegador/status bar agora acompanha o modo
+         escuro do sistema automaticamente (duas tags, uma por esquema) —
+         antes ficava sempre azul claro, mesmo com o celular em modo escuro. -->
+    <meta name="theme-color" content="#4f8ef7" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0b0d12" media="(prefers-color-scheme: dark)" />
     <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png" />
     <link rel="shortcut icon" href="favicon.ico" />
@@ -66,20 +70,6 @@
         </nav>
 
         <div class="sidebar-footer">
-          <label class="theme-picker">
-            <span>Tema</span>
-            <select id="themeSelect" title="Escolher tema">
-              <option value="laranja">🟠 Laranja</option>
-              <option value="azul">🔵 Azul</option>
-              <option value="verde">🟢 Verde</option>
-              <option value="rosa">🌸 Rosa</option>
-              <option value="escuro">🌙 Escuro</option>
-            </select>
-          </label>
-          <button id="themeToggle" class="ghost-button">
-            <span>🎨</span>
-            <span>Trocar tema</span>
-          </button>
           <div class="streak-box">
             <span class="muted">🔥 Sequência</span>
             <strong id="streakCount">0 dias</strong>
@@ -103,16 +93,6 @@
             <label class="search-box">
               <span class="icon">🔍</span>
               <input id="globalSearch" type="text" inputmode="search" autocomplete="off" autocorrect="off" placeholder="Pesquisar..." />
-            </label>
-            <label class="theme-chip" title="Tema">
-              <span class="icon">🎨</span>
-              <select id="themeSelectMobile">
-                <option value="laranja">Laranja</option>
-                <option value="azul">Azul</option>
-                <option value="verde">Verde</option>
-                <option value="rosa">Rosa</option>
-                <option value="escuro">Escuro</option>
-              </select>
             </label>
             <button id="quickAddTask" class="primary-button">
               <span class="icon">＋</span>
@@ -536,10 +516,25 @@
                 </form>
               </div>
 
-              <!-- Month filter -->
-              <div class="note-filters" id="finMonthFilters" style="margin-top:4px">
-                <button class="filter-chip active" data-fin-filter="current">Este mês</button>
-                <button class="filter-chip" data-fin-filter="all">Todos</button>
+              <!-- Navegador de mês + Fechamento + Exportação -->
+              <div class="fin-month-nav">
+                <button class="fin-month-arrow" id="finMonthPrev" title="Mês anterior">‹</button>
+                <div class="fin-month-center">
+                  <span id="finMonthLabel" class="fin-month-label">Junho 2026</span>
+                  <span id="finClosedBadge" class="fin-closed-badge" hidden>✓ Fechado</span>
+                </div>
+                <button class="fin-month-arrow" id="finMonthNext" title="Próximo mês">›</button>
+              </div>
+              <div class="fin-month-actions">
+                <button id="finCloseMonth" class="fin-action-btn close" title="Fechar o mês atual e arquivá-lo">
+                  🔒 Fechar mês
+                </button>
+                <button id="finReopenMonth" class="fin-action-btn reopen" hidden title="Reabrir mês fechado para edições">
+                  🔓 Reabrir
+                </button>
+                <button id="finExportReport" class="fin-action-btn export" title="Exportar relatório do mês em HTML">
+                  📄 Exportar
+                </button>
               </div>
 
               <!-- Summary cards -->
@@ -582,17 +577,56 @@
                 </div>
                 <div id="finCategories" class="fin-cat-list"></div>
               </div>
+
+              <!-- Metas por categoria -->
+              <div class="panel">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Controle</p>
+                    <h2>Metas de gasto</h2>
+                  </div>
+                  <button class="mini-button" id="finOpenGoalsModal">+ Meta</button>
+                </div>
+                <div id="finGoalsList" class="fin-goals-list">
+                  <div class="empty-state">Nenhuma meta definida.<br>Adicione limites por categoria.</div>
+                </div>
+              </div>
+
+              <!-- Recorrentes -->
+              <div class="panel">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Automação</p>
+                    <h2>Recorrentes</h2>
+                  </div>
+                  <button class="mini-button" id="finOpenRecurModal">+ Novo</button>
+                </div>
+                <div id="finRecurList" class="fin-recur-list">
+                  <div class="empty-state">Nenhum lançamento recorrente.<br>Adicione assinaturas, salário, aluguel…</div>
+                </div>
+              </div>
             </div>
 
-            <!-- RIGHT: Calendar + Transactions -->
+            <!-- RIGHT: Gráfico + Calendar + Transactions -->
             <div class="fin-right">
+
+              <!-- Gráfico comparativo 6 meses -->
+              <div class="panel">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Histórico</p>
+                    <h2>Últimos 6 meses</h2>
+                  </div>
+                </div>
+                <div id="finChart6m" class="fin-chart6m"></div>
+              </div>
 
               <!-- Financial Calendar -->
               <div class="panel fin-calendar-card">
                 <div class="panel-header">
                   <div>
                     <p class="eyebrow">Calendário</p>
-                    <h2 id="finMonthLabel">Financeiro</h2>
+                    <h2 id="finCalMonthLabel">Financeiro</h2>
                   </div>
                   <div style="display:flex;gap:6px">
                     <span class="pill" style="background:var(--green-soft);color:var(--green);border-color:var(--green)">● Receita</span>
@@ -744,6 +778,63 @@
       <option value="Saúde"></option>
       <option value="Finanças"></option>
     </datalist>
+
+    <!-- Modal: Meta de gasto por categoria -->
+    <div id="finGoalsModal" class="modal-backdrop" hidden>
+      <div class="modal-card">
+        <div class="modal-header">
+          <h2>Nova meta de gasto</h2>
+          <button class="icon-button" id="finCloseGoalsModal">✕</button>
+        </div>
+        <div class="modal-body" style="display:grid;gap:12px">
+          <label class="field">
+            <span class="field-label">Categoria</span>
+            <select id="goalCategory" class="field-input"></select>
+          </label>
+          <label class="field">
+            <span class="field-label">Limite mensal (R$)</span>
+            <input id="goalLimit" type="number" min="1" step="0.01" class="field-input" placeholder="ex.: 500">
+          </label>
+          <button id="finSaveGoal" class="primary-button" style="width:100%;justify-content:center">💾 Salvar meta</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Lançamento Recorrente -->
+    <div id="finRecurModal" class="modal-backdrop" hidden>
+      <div class="modal-card">
+        <div class="modal-header">
+          <h2>Novo lançamento recorrente</h2>
+          <button class="icon-button" id="finCloseRecurModal">✕</button>
+        </div>
+        <div class="modal-body" style="display:grid;gap:12px">
+          <label class="field">
+            <span class="field-label">Descrição</span>
+            <input id="recurDesc" type="text" class="field-input" placeholder="ex.: Netflix, Aluguel, Salário…">
+          </label>
+          <label class="field">
+            <span class="field-label">Valor (R$)</span>
+            <input id="recurAmount" type="number" min="0.01" step="0.01" class="field-input" placeholder="ex.: 49,90">
+          </label>
+          <label class="field">
+            <span class="field-label">Tipo</span>
+            <select id="recurType" class="field-input">
+              <option value="despesa">💸 Despesa</option>
+              <option value="receita">💰 Receita</option>
+            </select>
+          </label>
+          <label class="field">
+            <span class="field-label">Categoria</span>
+            <select id="recurCategory" class="field-input"></select>
+          </label>
+          <label class="field">
+            <span class="field-label">Dia do mês</span>
+            <input id="recurDay" type="number" min="1" max="31" class="field-input" placeholder="ex.: 5 (dia 5 de cada mês)">
+          </label>
+          <button id="finSaveRecur" class="primary-button" style="width:100%;justify-content:center">💾 Salvar recorrente</button>
+        </div>
+      </div>
+    </div>
 
     <script src="pwa-install.js"></script>
     <script src="notifications.js"></script>

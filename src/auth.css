@@ -554,3 +554,96 @@ body {
   color: #fff;
   transform: translateY(-1px);
 }
+
+/* ============================================================
+   Modo escuro — automático, ligado ao sistema operacional.
+   Antes as páginas de login/cadastro/recuperação de senha (este
+   arquivo) tinham todas as cores fixas em tons claros, então
+   ficavam com um "fundo branco estranho" mesmo com o celular em
+   modo escuro — só o app principal (styles.css) reagia ao tema do
+   sistema. Este bloco resolve isso sem precisar de nenhum seletor
+   manual: o navegador aplica sozinho quando o sistema está em dark.
+   ============================================================ */
+@media (prefers-color-scheme: dark) {
+  body {
+    background: #0b0d12;
+    color: #f4f6fb;
+  }
+
+  .auth-brand strong { color: #f4f6fb; }
+  .auth-brand span { color: #828ea3; }
+
+  .auth-card {
+    background: rgba(26, 29, 39, 0.92);
+    border-color: rgba(255, 255, 255, 0.08);
+    box-shadow:
+      0 4px 24px rgba(0, 0, 0, 0.35),
+      0 1px 3px rgba(0, 0, 0, 0.25),
+      inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  }
+
+  .auth-tabs { background: #12151c; }
+  .auth-tab { color: #828ea3; }
+  .auth-tab.active {
+    background: #20242f;
+    color: #5b9ef8;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  }
+
+  .auth-title { color: #f4f6fb; }
+  .auth-subtitle { color: #828ea3; }
+  .field-label { color: #b6c0d6; }
+
+  .field-input {
+    background: #12151c;
+    border-color: #2e3342;
+    color: #f4f6fb;
+  }
+  .field-input:focus {
+    border-color: #5b9ef8;
+    box-shadow: 0 0 0 3px rgba(91, 158, 248, 0.2);
+    background: #181c26;
+  }
+  .field-input::placeholder { color: #5a6478; }
+
+  .toggle-pw { color: #828ea3; }
+
+  .pw-strength-bar { background: #2e3342; }
+  .pw-strength-label { color: #828ea3; }
+
+  .auth-error {
+    background: #3a1614;
+    border-color: #7a2a26;
+    color: #ff8a85;
+  }
+
+  .google-btn {
+    background: #181c26;
+    color: #f4f6fb;
+    border-color: #2e3342;
+  }
+  .google-btn:hover { border-color: #3e4456; box-shadow: 0 3px 12px rgba(0,0,0,0.3); }
+
+  .auth-divider { color: #5a6478; }
+  .auth-divider::before, .auth-divider::after { background: #2e3342; }
+
+  .auth-link { color: #5b9ef8; }
+  .auth-link:hover { color: #79b3ff; }
+  .auth-switch { color: #828ea3; }
+
+  .auth-info-box {
+    background: #3a3008;
+    border-color: #6b5a18;
+    color: #ffe49a;
+  }
+
+  .pwa-fixed-install-btn {
+    background: rgba(91, 158, 248, 0.15);
+    color: #5b9ef8;
+    border-color: #5b9ef8;
+  }
+  .pwa-fixed-install-btn:hover {
+    background: #5b9ef8;
+    color: #0b0d12;
+  }
+}
