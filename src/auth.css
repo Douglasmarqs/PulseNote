@@ -565,7 +565,17 @@ body {
    manual: o navegador aplica sozinho quando o sistema está em dark.
    ============================================================ */
 @media (prefers-color-scheme: dark) {
-  body {
+  /* Esta regra rodava incondicionalmente sempre que o SISTEMA estava em
+     modo escuro — inclusive dentro do app principal (auth.css é
+     carregado também em index.html), ignorando por completo a escolha
+     manual "Claro" feita em Configurações > Aparência. Resultado: o
+     <body> ficava preto (essa cor aqui) por baixo do topbar/cards, que
+     seguem corretamente a var(--bg) clara — daí o "tema branco
+     estourado" (cards/topbar claros flutuando sobre um fundo preto).
+     O :not([data-theme=...]) abaixo replica a mesma guarda que
+     styles.css já usa para as variáveis de cor, então isto só entra em
+     ação quando NINGUÉM escolheu tema manualmente (modo "Sistema"). */
+  html:not([data-theme="light"]):not([data-theme="dark"]) body {
     background: #0b0d12;
     color: #f4f6fb;
   }
@@ -637,12 +647,12 @@ body {
     color: #ffe49a;
   }
 
-  .pwa-fixed-install-btn {
+  html:not([data-theme="light"]):not([data-theme="dark"]) .pwa-fixed-install-btn {
     background: rgba(91, 158, 248, 0.15);
     color: #5b9ef8;
     border-color: #5b9ef8;
   }
-  .pwa-fixed-install-btn:hover {
+  html:not([data-theme="light"]):not([data-theme="dark"]) .pwa-fixed-install-btn:hover {
     background: #5b9ef8;
     color: #0b0d12;
   }

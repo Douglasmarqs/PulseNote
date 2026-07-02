@@ -25,13 +25,29 @@ import {
 // do app e ligamos os botões em Configurações > Aparência.
 const THEME_STORAGE_KEY = "pulsenote-theme";
 
+function syncThemeColorMeta(choice) {
+  const meta = document.getElementById("themeColorMeta");
+  if (!meta) return;
+  const isDark = choice === "dark" || (choice !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  meta.setAttribute("content", isDark ? "#0b0d12" : "#f5f7fa");
+}
+
 function applyTheme(choice) {
   if (choice === "light" || choice === "dark") {
     document.documentElement.setAttribute("data-theme", choice);
   } else {
     document.documentElement.removeAttribute("data-theme"); // = "sistema"
   }
+  syncThemeColorMeta(choice);
 }
+
+// Em modo "Sistema", se a pessoa mudar o tema do aparelho com o app aberto
+// (sem tocar em nada dentro do PulseNote), a status bar nativa acompanha.
+try {
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+    if (getSavedTheme() === "system") syncThemeColorMeta("system");
+  });
+} catch { /* matchMedia/addEventListener indisponível — sem problema, é só um refinamento */ }
 
 function getSavedTheme() {
   try {

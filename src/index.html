@@ -9,22 +9,29 @@
          página, lendo a preferência salva localmente. Sem isso, a tela
          "piscaria" clara por uma fração de segundo antes do JS principal
          (app.js, que é um módulo e carrega depois) aplicar o tema certo. -->
+    <!-- Uma única tag, sem media-query, controlada por JS — antes eram
+         duas tags fixas (uma por prefers-color-scheme) que só seguiam o
+         SISTEMA. Isso fazia a status bar nativa ficar preta mesmo quando
+         a pessoa escolhia "Claro" manualmente com o aparelho em modo
+         escuro (o app.js roda depois e não tem como corrigir uma tag já
+         "vencida" pela media query certa). Agora o valor é calculado
+         aqui, de forma síncrona, junto com o data-theme, para não
+         piscar; e o app.js mantém sincronizado quando o tema muda. -->
+    <meta name="theme-color" id="themeColorMeta" content="#f5f7fa" />
     <script>
       (function () {
         try {
           var t = localStorage.getItem("pulsenote-theme");
+          var isDark = t === "dark" || (t !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
           if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+          var meta = document.getElementById("themeColorMeta");
+          if (meta) meta.setAttribute("content", isDark ? "#0b0d12" : "#f5f7fa");
         } catch (e) {}
       })();
     </script>
 
     <!-- PWA: instalação e ícone na tela inicial -->
     <link rel="manifest" href="manifest.json" />
-    <!-- A cor da barra do navegador/status bar agora acompanha o modo
-         escuro do sistema automaticamente (duas tags, uma por esquema) —
-         antes ficava sempre azul claro, mesmo com o celular em modo escuro. -->
-    <meta name="theme-color" content="#4f8ef7" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#0b0d12" media="(prefers-color-scheme: dark)" />
     <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png" />
     <link rel="shortcut icon" href="favicon.ico" />
@@ -107,7 +114,7 @@
               <span class="icon">🔍</span>
               <input id="globalSearch" type="text" inputmode="search" autocomplete="off" autocorrect="off" placeholder="Pesquisar..." />
             </label>
-            <button id="quickAddTask" class="primary-button">
+            <button id="quickAddTask" class="primary-button" aria-label="Adicionar tarefa" title="Adicionar tarefa">
               <span class="icon">＋</span>
               <span>Tarefa</span>
             </button>
@@ -144,25 +151,33 @@
           <!-- Metrics -->
           <div class="metric-grid">
             <article class="metric-panel">
-              <span class="metric-icon">✅</span>
+              <span class="metric-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 12.3l2.3 2.3L16 9.6"/></svg>
+              </span>
               <span>Tarefas concluídas</span>
               <strong id="doneMetric">0</strong>
               <small id="doneMetricDetail">Hoje</small>
             </article>
             <article class="metric-panel">
-              <span class="metric-icon">📊</span>
+              <span class="metric-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="12.5" width="3.4" height="7.5" rx="1"/><rect x="10.3" y="7.5" width="3.4" height="12.5" rx="1"/><rect x="16.6" y="3.5" width="3.4" height="16.5" rx="1"/></svg>
+              </span>
               <span>Progresso geral</span>
               <strong id="progressMetric">0%</strong>
               <small>Notas, tarefas e metas</small>
             </article>
             <article class="metric-panel">
-              <span class="metric-icon">📅</span>
+              <span class="metric-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17"/><path d="M8 3v4"/><path d="M16 3v4"/></svg>
+              </span>
               <span>Compromissos</span>
               <strong id="eventMetric">0</strong>
               <small>Próximos 7 dias</small>
             </article>
             <article class="metric-panel">
-              <span class="metric-icon">⭐</span>
+              <span class="metric-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linejoin="round"><path d="M12 2.7l2.7 5.6 6.1.6-4.5 4.3 1.2 6.1-5.5-3-5.5 3 1.2-6.1-4.5-4.3 6.1-.6L12 2.7z"/></svg>
+              </span>
               <span>Pontos XP</span>
               <strong id="scoreMetric">0</strong>
               <small id="levelMetric">Nível 1</small>

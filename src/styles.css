@@ -212,6 +212,11 @@ html {
   overflow-x: hidden;
   width: 100%;
   max-width: 100%;
+  /* Antes só o <body> tinha cor de fundo. Em PWA instalado no iOS
+     (viewport-fit=cover), a área de safe-area/notch fica fora da caixa
+     do <body> — sem isso aqui, aquela faixa podia "vazar" com a cor
+     padrão do navegador em vez de acompanhar o tema. */
+  background: var(--bg);
 }
 
 body {
@@ -581,25 +586,62 @@ p, h1, h2, h3 { margin: 0; }
   display: grid;
   gap: 6px;
   transition: transform 180ms, box-shadow 180ms;
+  animation: metricIn 520ms cubic-bezier(.22,1,.36,1) both;
 }
+.metric-panel:nth-child(1) { animation-delay: 20ms; }
+.metric-panel:nth-child(2) { animation-delay: 80ms; }
+.metric-panel:nth-child(3) { animation-delay: 140ms; }
+.metric-panel:nth-child(4) { animation-delay: 200ms; }
+
+@keyframes metricIn {
+  from { opacity: 0; transform: translateY(10px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .metric-panel { animation: none; }
+}
+
 .metric-panel:hover { transform: translateY(-2px); box-shadow: var(--shadow-card-hover); }
 
 .metric-panel .metric-icon {
-  width: 38px;
-  height: 38px;
-  border-radius: 12px;
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
   background: var(--accent-soft);
   color: var(--accent);
   display: grid;
   place-items: center;
-  font-size: 1.1rem;
   margin-bottom: 4px;
+  transition: transform 260ms cubic-bezier(.34,1.56,.64,1);
 }
+.metric-panel .metric-icon svg {
+  width: 21px;
+  height: 21px;
+  transition: transform 220ms ease;
+}
+.metric-panel:hover .metric-icon { transform: scale(1.08) rotate(-4deg); }
 
-.metric-panel:nth-child(1) .metric-icon { background: var(--green-soft); color: var(--green); }
-.metric-panel:nth-child(2) .metric-icon { background: var(--accent-soft); color: var(--accent); }
-.metric-panel:nth-child(3) .metric-icon { background: var(--orange-soft); color: var(--orange); }
-.metric-panel:nth-child(4) .metric-icon { background: var(--purple-soft); color: var(--purple); }
+.metric-panel:nth-child(1) .metric-icon {
+  background: linear-gradient(135deg, var(--green-soft), color-mix(in srgb, var(--green) 24%, var(--green-soft)));
+  color: var(--green);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--green) 14%, transparent) inset;
+}
+.metric-panel:nth-child(2) .metric-icon {
+  background: linear-gradient(135deg, var(--accent-soft), color-mix(in srgb, var(--accent) 24%, var(--accent-soft)));
+  color: var(--accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 14%, transparent) inset;
+}
+.metric-panel:nth-child(3) .metric-icon {
+  background: linear-gradient(135deg, var(--orange-soft), color-mix(in srgb, var(--orange) 24%, var(--orange-soft)));
+  color: var(--orange);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--orange) 14%, transparent) inset;
+}
+.metric-panel:nth-child(4) .metric-icon {
+  background: linear-gradient(135deg, var(--purple-soft), color-mix(in srgb, var(--purple) 24%, var(--purple-soft)));
+  color: var(--purple);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--purple) 14%, transparent) inset;
+}
 
 .metric-panel > span { font-size: 0.82rem; color: var(--muted); font-weight: 500; }
 .metric-panel strong { font-size: 2rem; font-weight: 800; letter-spacing: -0.04em; color: var(--text); }
@@ -1631,7 +1673,40 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   }
 
   .topbar-actions {
+    /* Antes tinha flex-shrink:0, e a busca (.search-box) tinha 240px
+       fixos vindos do desktop — a soma (avatar + busca + botão) nunca
+       cabia na largura do celular, e o botão "+" era empurrado/cortado
+       para fora da tela à direita. Agora o grupo pode encolher, e é a
+       busca quem cede espaço (regras logo abaixo). */
+    flex-shrink: 1;
+    min-width: 0;
+  }
+
+  /* A busca vira flexível em vez de ter 240px fixos — ela que absorve a
+     falta de espaço, nunca o avatar ou o botão de adicionar. */
+  .search-box {
+    width: auto;
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 0 10px;
+  }
+  .search-box input { min-width: 0; }
+
+  /* Botão de adicionar tarefa: só o ícone no mobile (mesma largura do
+     avatar, formato consistente), o rótulo "Tarefa" some visualmente —
+     a ação continua identificável via aria-label no HTML. O botão de
+     instalar PWA (quando aparece) recebe o mesmo tratamento. */
+  #quickAddTask.primary-button,
+  .pwa-fixed-install-btn {
     flex-shrink: 0;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    justify-content: center;
+  }
+  #quickAddTask.primary-button span:last-child,
+  .pwa-fixed-install-btn span:last-child {
+    display: none;
   }
 
   /* Em formulários verticais (Tarefas/Metas), o botão não deve crescer em

@@ -32,8 +32,7 @@
 // ============================================================
 
 const admin = require("firebase-admin");
-
-const GEMINI_MODEL = "gemini-2.5-flash-lite"; // rápido, barato, elegível ao nível grátis
+const { parseTransactionText } = require("./_lib/parseTransactionAI");
 
 function getFirebaseAdmin() {
   if (admin.apps.length) return admin;
@@ -75,117 +74,14 @@ module.exports = async (req, res) => {
     return res.status(401).json({ error: "unauthorized" });
   }
 
-  // ── 2) Validação básica da entrada ───────────────────────────
+  // ── 2) Validação básica + chamada à IA (lógica compartilhada com o
+  //      webhook do WhatsApp — ver api/_lib/parseTransactionAI.js) ──
   const { text, categories, today } = req.body || {};
-  if (!text || typeof text !== "string" || !text.trim() || text.length > 200) {
-    return res.status(400).json({ error: "invalid_text" });
-  }
-  if (!Array.isArray(categories) || categories.length === 0) {
-    return res.status(400).json({ error: "invalid_categories" });
-  }
-  if (!process.env.GEMINI_API_KEY) {
-    console.error("GEMINI_API_KEY não configurada.");
-    return res.status(500).json({ error: "ai_not_configured" });
+  const result = await parseTransactionText({ text, categories, today });
+
+  if (!result.ok) {
+    return res.status(result.status).json({ error: result.error });
   }
 
-  // O frontend (app.js) sempre envia `today` já calculado no fuso horário
-  // LOCAL do usuário (toLocalIso) — o fallback abaixo (UTC do servidor)
-  // só entra em uso se, por algum motivo, esse valor não chegar.
-  const todayIso = /^\d{4}-\d{2}-\d{2}$/.test(today) ? today : new Date().toISOString().slice(0, 10);
-  const categoryIds = categories.map((c) => c.id);
-  const categoryList = categories.map((c) => `- ${c.id} (${c.type}): ${c.label}`).join("\n");
-
-  const systemPrompt = `Você extrai dados de um lançamento financeiro a partir de uma frase em português.
-Data de hoje: ${todayIso}.
-
-Categorias disponíveis (escolha exatamente um destes ids, sempre do tipo compatível):
-${categoryList}
-
-Regras OBRIGATÓRIAS:
-- "amount": número positivo em reais (ex.: 32.5). Obrigatório.
-- "date": se houver referência de data relativa ("ontem", "anteontem"/"antes de ontem", "semana passada", "segunda-feira", "dia 12", "27/06" etc.), calcule a data real YYYY-MM-DD a partir de hoje. Sem referência, use hoje.
-- "type": "despesa" por padrão. Use "receita" APENAS se for entrada de dinheiro (salário, recebimento, venda, reembolso, freelance, rendimento etc.).
-- "categoryId": escolha o id que melhor descreve o que foi dito. Priorize o mais específico (ex.: se a frase cita "mercado", escolha "alimentacao" — não "outros"). Deve ser do mesmo tipo de "type".
-- "description": 2 a 5 palavras que descrevam O QUE foi gasto/recebido, extraídas do texto original — NÃO use o nome da categoria como descrição. Exemplos corretos: "Almoço no restaurante", "Uber para o trabalho", "Gasolina posto Shell", "Salário julho", "Farmácia Drogasil". Remova apenas conectores ("gastei", "paguei", "recebi", "reais", "de", "com", "no", "na" etc.).
-
-Exemplo 1 — entrada: "gastei 32 reais no ifood ontem"
-Saída: {"type":"despesa","amount":32,"categoryId":"alimentacao","description":"iFood","date":"${todayIso}"}
-
-Exemplo 2 — entrada: "paguei 80 reais de gasolina antes de ontem"
-Saída: {"type":"despesa","amount":80,"categoryId":"transporte","description":"Gasolina","date":"${todayIso}"}
-
-Exemplo 3 — entrada: "recebi salário 2500"
-Saída: {"type":"receita","amount":2500,"categoryId":"salario","description":"Salário mensal","date":"${todayIso}"}`;
-
-
-  // ── 3) Chama o Gemini, forçando o formato da resposta com responseSchema ──
-  let raw;
-  try {
-    const aiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: systemPrompt }] },
-          contents: [{ parts: [{ text: text.trim().slice(0, 200) }] }],
-          generationConfig: {
-            maxOutputTokens: 200,
-            responseMimeType: "application/json",
-            responseSchema: {
-              type: "object",
-              properties: {
-                type: { type: "string", enum: ["despesa", "receita"] },
-                amount: { type: "number" },
-                categoryId: { type: "string", enum: categoryIds },
-                description: { type: "string" },
-                date: { type: "string" },
-              },
-              required: ["type", "amount", "categoryId", "description", "date"],
-            },
-          },
-        }),
-      }
-    );
-
-    if (!aiRes.ok) {
-      const errBody = await aiRes.text();
-      console.error("Erro na API do Gemini:", aiRes.status, errBody);
-      if (aiRes.status === 429) {
-        return res.status(429).json({ error: "ai_rate_limited" });
-      }
-      return res.status(502).json({ error: "ai_request_failed" });
-    }
-
-    const data = await aiRes.json();
-    raw = (data.candidates?.[0]?.content?.parts || []).map((p) => p.text || "").join("");
-  } catch (err) {
-    console.error("Erro inesperado chamando o Gemini:", err);
-    return res.status(502).json({ error: "ai_request_failed" });
-  }
-
-  // ── 4) Valida o que a IA devolveu antes de confiar nisso ──────
-  let parsed;
-  try {
-    const jsonMatch = raw.match(/\{[\s\S]*\}/);
-    parsed = JSON.parse(jsonMatch ? jsonMatch[0] : raw);
-  } catch (err) {
-    console.error("Resposta do Gemini não é um JSON válido:", raw);
-    return res.status(502).json({ error: "ai_bad_response" });
-  }
-
-  const validIds = new Set(categoryIds);
-  const type = parsed.type === "receita" ? "receita" : "despesa";
-  const amount = Math.round(Number(parsed.amount) * 100) / 100;
-  const categoryId = validIds.has(parsed.categoryId)
-    ? parsed.categoryId
-    : type === "receita" ? "outros_receita" : "outros";
-  const description = String(parsed.description || "").slice(0, 60).trim();
-  const date = /^\d{4}-\d{2}-\d{2}$/.test(parsed.date) ? parsed.date : todayIso;
-
-  if (!Number.isFinite(amount) || amount <= 0) {
-    return res.status(422).json({ error: "ai_invalid_amount" });
-  }
-
-  return res.status(200).json({ type, amount, categoryId, description, date });
+  return res.status(200).json(result.entry);
 };

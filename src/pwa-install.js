@@ -65,6 +65,8 @@
     btn.id = "pwaFixedInstallBtn";
     btn.type = "button";
     btn.className = "pwa-fixed-install-btn";
+    btn.setAttribute("aria-label", "Instalar app");
+    btn.setAttribute("title", "Instalar app");
     btn.innerHTML = `<span style="font-size:1.05rem">⬇️</span><span>Instalar app</span>`;
 
     btn.addEventListener("click", () => handleInstallClick(platform));
