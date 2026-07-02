@@ -69,8 +69,15 @@ function showSyncStatus(status) {
 }
 
 // ── Salva o state atual no Firestore (documento do usuário) ───
+// Guard triplo antes de qualquer escrita:
+// 1. currentUser existe (usuário logado)
+// 2. e-mail verificado (evita erros de permissão para contas não confirmadas)
+// 3. state existe e é um objeto válido
+// Sem esse guard, chamadas durante a inicialização (antes do onAuthStateChanged
+// terminar) disparavam "Erro ao salvar" mesmo sem nenhuma ação do usuário.
+let _syncRetries = 0;
 async function syncToServer() {
-  if (!currentUser || !state) return;
+  if (!currentUser || !currentUser.emailVerified || !state) return;
   showSyncStatus("saving");
   try {
     await setDoc(doc(db, "userData", currentUser.uid), {
@@ -80,9 +87,23 @@ async function syncToServer() {
     const key = getStorageKey();
     if (key) localStorage.setItem(key, JSON.stringify(state));
     showSyncStatus("saved");
+    _syncRetries = 0; // reset ao ter sucesso
   } catch (err) {
     console.error("Erro ao salvar no Firestore:", err);
-    showSyncStatus(navigator.onLine ? "error" : "offline");
+    if (!navigator.onLine) {
+      showSyncStatus("offline");
+      return;
+    }
+    // Retry com backoff exponencial (máx 3 tentativas, 2s/4s/8s)
+    if (_syncRetries < 3) {
+      _syncRetries++;
+      const delay = Math.pow(2, _syncRetries) * 1000;
+      showSyncStatus("saving"); // mantém "Salvando..." durante retry
+      setTimeout(syncToServer, delay);
+    } else {
+      _syncRetries = 0;
+      showSyncStatus("error");
+    }
   }
 }
 
@@ -803,7 +824,13 @@ function loadDefaultState() {
 function saveState() {
   const key = getStorageKey();
   if (key) localStorage.setItem(key, JSON.stringify(state));
-  scheduleSyncToServer();
+  // Só agenda sync se já temos usuário autenticado e verificado.
+  // Sem esse guard, calls do renderAll() durante inicialização
+  // disparavam syncToServer() sem currentUser, causando erro de
+  // permissão no Firestore e o banner "❌ Erro ao salvar".
+  if (currentUser && currentUser.emailVerified) {
+    scheduleSyncToServer();
+  }
 }
 
 
@@ -2036,24 +2063,341 @@ function zipFiles(filesObj) {
 
 // ── Ponto de entrada do botão Exportar ───────────────────────
 function exportMonthReport(monthKey) {
-  const entries = (state.finances || []).filter((f) => f.date.startsWith(monthKey));
+  const entries = (state.finances || []).filter((f) => f.date.startsWith(monthKey))
+    .sort((a, b) => a.date.localeCompare(b.date));
   if (!entries.length) {
     showToast("Nenhum lançamento no período para exportar.");
     return;
   }
-  try {
-    const blob = buildXlsxBlob(monthKey);
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement("a");
-    a.href     = url;
-    a.download = `relatorio-pulsénote-${monthKey}.xlsx`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 5000);
-    showToast("📊 Planilha exportada com sucesso!");
-  } catch (err) {
-    console.error("Erro ao gerar XLSX:", err);
-    showToast("Erro ao gerar a planilha. Tente novamente.");
+
+  const label    = finMonthLabel(monthKey);
+  const isClosed = isMonthClosed(monthKey);
+  const userName = (getUser()?.name || "Usuário").split(" ").slice(0, 2).join(" ");
+  const geradoEm = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "long", year: "numeric" }).format(new Date());
+
+  const receitas = entries.filter((f) => f.type === "receita").reduce((s, f) => s + f.amount, 0);
+  const despesas = entries.filter((f) => f.type === "despesa").reduce((s, f) => s + f.amount, 0);
+  const saldo    = receitas - despesas;
+  const savings  = receitas > 0 ? ((saldo / receitas) * 100).toFixed(1) : "0";
+  const usedPct  = receitas > 0 ? Math.min(100, Math.round((despesas / receitas) * 100)) : 0;
+
+  // Agrupamento por categoria (despesas)
+  const byCat = {};
+  entries.filter((f) => f.type === "despesa").forEach((f) => {
+    const cat = findCategory(f.category);
+    if (!byCat[f.category]) byCat[f.category] = { label: cat.label.replace(/^\S+\s*/, ""), icon: cat.label.split(" ")[0], color: cat.color, total: 0, count: 0 };
+    byCat[f.category].total += f.amount;
+    byCat[f.category].count++;
+  });
+  const catList = Object.values(byCat).sort((a, b) => b.total - a.total);
+
+  // Top 5 maiores transações
+  const topTx = [...entries].sort((a, b) => b.amount - a.amount).slice(0, 5);
+
+  // Histórico 6 meses (para o gráfico de barras SVG)
+  const months6 = [];
+  const [ay, am] = monthKey.split("-").map(Number);
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(ay, am - 1 - i, 1);
+    const mk = toLocalIso(d).slice(0, 7);
+    const me = (state.finances || []).filter((f) => f.date.startsWith(mk));
+    const mr = me.filter((f) => f.type === "receita").reduce((s, f) => s + f.amount, 0);
+    const md = me.filter((f) => f.type === "despesa").reduce((s, f) => s + f.amount, 0);
+    const lbl = new Intl.DateTimeFormat("pt-BR", { month: "short" }).format(d);
+    months6.push({ mk, lbl, r: mr, d: md });
   }
+  const maxVal = Math.max(...months6.flatMap((m) => [m.r, m.d]), 1);
+
+  // SVG do gráfico de barras
+  const barW = 28; const gap = 4; const gW = barW * 2 + gap; const pH = 120; const pPad = 16;
+  const svgBars = months6.map((m, i) => {
+    const x     = pPad + i * (gW + 14);
+    const rH    = Math.max(3, (m.r / maxVal) * pH);
+    const dH    = Math.max(3, (m.d / maxVal) * pH);
+    const isAct = m.mk === monthKey;
+    return `<rect x="${x}" y="${pH + pPad - rH}" width="${barW}" height="${rH}" rx="3" fill="${isAct ? "#34c759" : "#d1fae5"}"/>
+      <rect x="${x + barW + gap}" y="${pH + pPad - dH}" width="${barW}" height="${dH}" rx="3" fill="${isAct ? "#ff3b30" : "#fee2e2"}"/>
+      <text x="${x + barW}" y="${pH + pPad + 14}" text-anchor="middle" font-size="9" fill="#8a9bb0">${m.lbl}</text>`;
+  }).join("");
+  const chartSvg = `<svg viewBox="0 0 ${pPad*2 + months6.length*(gW+14)} ${pH+pPad+20}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto">${svgBars}</svg>`;
+
+  // Donut SVG (categorias)
+  let donutSvg = "";
+  if (catList.length && despesas > 0) {
+    const cx = 70; const cy = 70; const r = 55; const iR = 35;
+    let angle = -Math.PI / 2;
+    const segments = catList.slice(0, 6).map((c) => {
+      const slice = (c.total / despesas) * Math.PI * 2;
+      const x1 = cx + r * Math.cos(angle); const y1 = cy + r * Math.sin(angle);
+      const x2 = cx + r * Math.cos(angle + slice); const y2 = cy + r * Math.sin(angle + slice);
+      const xi1 = cx + iR * Math.cos(angle + slice); const yi1 = cy + iR * Math.sin(angle + slice);
+      const xi2 = cx + iR * Math.cos(angle); const yi2 = cy + iR * Math.sin(angle);
+      const large = slice > Math.PI ? 1 : 0;
+      const path = `M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2} L ${xi1} ${yi1} A ${iR} ${iR} 0 ${large} 0 ${xi2} ${yi2} Z`;
+      angle += slice;
+      return `<path d="${path}" fill="${c.color}"/>`;
+    }).join("");
+    donutSvg = `<svg viewBox="0 0 140 140" xmlns="http://www.w3.org/2000/svg" style="width:140px;height:140px">${segments}<text x="70" y="66" text-anchor="middle" font-size="10" fill="#8a9bb0">Total</text><text x="70" y="80" text-anchor="middle" font-size="12" font-weight="700" fill="#1a1f2e">${formatCurrency(despesas).replace("R$","")}</text></svg>`;
+  }
+
+  // Recorrentes do usuário para a seção de assinaturas
+  const recurrents = (state.finRecurrents || []).filter((r) => r.type === "despesa");
+
+  // Metas e quanto foi usado
+  const goals = (state.finGoals || []).map((g) => {
+    const cat = findCategory(g.categoryId);
+    const spent = byCat[g.categoryId]?.total || 0;
+    const pct = g.limit > 0 ? Math.min(150, Math.round((spent / g.limit) * 100)) : 0;
+    return { ...g, cat, spent, pct };
+  });
+
+  const htmlContent = `<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<title>Relatório PulseNote — ${label}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif;background:#fff;color:#1a1f2e;font-size:13px;line-height:1.5}
+  .page{max-width:900px;margin:0 auto;padding:40px 40px 60px}
+  /* Header */
+  .rpt-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px;padding-bottom:20px;border-bottom:3px solid #4f8ef7}
+  .rpt-brand{display:flex;align-items:center;gap:12px}
+  .rpt-brand-mark{width:44px;height:44px;border-radius:12px;background:linear-gradient(145deg,#4f8ef7,#af52de);display:grid;place-items:center;font-size:1.4rem}
+  .rpt-brand-name{font-size:1.2rem;font-weight:800;color:#1a1f2e}
+  .rpt-brand-sub{font-size:0.72rem;color:#8a9bb0;font-weight:600;text-transform:uppercase;letter-spacing:.05em}
+  .rpt-header-right{text-align:right}
+  .rpt-month{font-size:1.4rem;font-weight:800;color:#4f8ef7}
+  .rpt-meta{font-size:0.72rem;color:#8a9bb0;line-height:1.8}
+  /* Secção */
+  .section{margin-bottom:28px}
+  .section-title{font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#8a9bb0;margin-bottom:12px}
+  /* Resumo: 4 cards */
+  .summary-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:28px}
+  .summary-card{border:1.5px solid #e8ecf2;border-radius:14px;padding:14px 16px}
+  .summary-card .lbl{font-size:0.7rem;text-transform:uppercase;letter-spacing:.06em;font-weight:700;color:#8a9bb0;margin-bottom:4px}
+  .summary-card .val{font-size:1.35rem;font-weight:800;letter-spacing:-0.03em}
+  .green{color:#34c759}.red{color:#ff3b30}.blue{color:#4f8ef7}
+  /* Barra */
+  .bar-wrap{background:#f0f4f8;border-radius:999px;height:8px;overflow:hidden;margin:4px 0}
+  .bar-fill{height:100%;border-radius:inherit;transition:width .3s}
+  /* Gráfico 6 meses */
+  .chart-section{display:grid;grid-template-columns:1fr auto;gap:24px;align-items:center;margin-bottom:28px;border:1.5px solid #e8ecf2;border-radius:16px;padding:20px}
+  /* Categorias */
+  .cat-section{display:grid;grid-template-columns:140px 1fr;gap:20px;align-items:center;margin-bottom:28px;border:1.5px solid #e8ecf2;border-radius:16px;padding:20px}
+  .cat-list{display:grid;gap:8px}
+  .cat-row{display:flex;align-items:center;gap:8px}
+  .cat-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+  .cat-name{flex:1;font-size:0.82rem;font-weight:600}
+  .cat-pct{font-size:0.75rem;color:#8a9bb0;width:38px;text-align:right;flex-shrink:0}
+  .cat-val{font-size:0.82rem;font-weight:700;color:#ff3b30;width:78px;text-align:right;flex-shrink:0}
+  /* Tabela de lançamentos */
+  table{width:100%;border-collapse:collapse;font-size:0.8rem}
+  thead tr{background:#f0f4f8}
+  th{padding:8px 10px;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#8a9bb0}
+  td{padding:9px 10px;border-top:1px solid #f0f4f8}
+  .badge{display:inline-block;border-radius:999px;padding:2px 8px;font-size:0.68rem;font-weight:700}
+  .badge-r{background:#e5f9ec;color:#34c759}
+  .badge-d{background:#ffeeed;color:#ff3b30}
+  /* Metas */
+  .goal-row{margin-bottom:10px}
+  .goal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+  .goal-name{font-size:0.82rem;font-weight:600}
+  .goal-val{font-size:0.78rem;color:#8a9bb0}
+  .goal-val.over{color:#ff3b30;font-weight:700}
+  /* Recorrentes */
+  .recur-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .recur-card{border:1.5px solid #e8ecf2;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:4px}
+  .recur-card strong{font-size:0.88rem;font-weight:700}
+  .recur-card span{font-size:0.72rem;color:#8a9bb0}
+  .recur-card .rv{font-size:1rem;font-weight:800;color:#ff3b30}
+  /* Footer */
+  .rpt-footer{margin-top:36px;padding-top:16px;border-top:1px solid #e8ecf2;display:flex;justify-content:space-between;align-items:center;font-size:0.7rem;color:#8a9bb0}
+  /* Print */
+  @media print{
+    body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .page{padding:20px 24px 40px}
+    .summary-grid{grid-template-columns:repeat(4,1fr)}
+  }
+  @page{margin:15mm;size:A4}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- CABEÇALHO -->
+  <div class="rpt-header">
+    <div class="rpt-brand">
+      <div class="rpt-brand-mark">⚡</div>
+      <div>
+        <div class="rpt-brand-name">PulseNote</div>
+        <div class="rpt-brand-sub">Relatório Financeiro Mensal</div>
+      </div>
+    </div>
+    <div class="rpt-header-right">
+      <div class="rpt-month">${label}</div>
+      <div class="rpt-meta">
+        Titular <strong>${escapeHtml(userName)}</strong><br>
+        ${isClosed ? "✓ Mês fechado" : "Em aberto"} · Gerado em ${geradoEm}
+      </div>
+    </div>
+  </div>
+
+  <!-- RESUMO: 4 CARDS -->
+  <div class="summary-grid">
+    <div class="summary-card">
+      <div class="lbl">Saldo do mês</div>
+      <div class="val ${saldo >= 0 ? "green" : "red"}">${formatCurrency(saldo)}</div>
+    </div>
+    <div class="summary-card">
+      <div class="lbl">Receitas</div>
+      <div class="val green">${formatCurrency(receitas)}</div>
+    </div>
+    <div class="summary-card">
+      <div class="lbl">Despesas</div>
+      <div class="val red">${formatCurrency(despesas)}</div>
+    </div>
+    <div class="summary-card">
+      <div class="lbl">Taxa de poupança</div>
+      <div class="val blue">${savings}%</div>
+    </div>
+  </div>
+
+  <!-- GRÁFICO 6 MESES -->
+  <div class="section">
+    <div class="section-title">Receitas × Despesas — Últimos 6 meses</div>
+    <div class="chart-section">
+      <div style="flex:1">${chartSvg}</div>
+      <div style="display:grid;gap:8px">
+        <div style="display:flex;align-items:center;gap:6px;font-size:0.78rem">
+          <span style="width:12px;height:12px;border-radius:3px;background:#34c759;display:inline-block"></span> Receitas
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;font-size:0.78rem">
+          <span style="width:12px;height:12px;border-radius:3px;background:#ff3b30;display:inline-block"></span> Despesas
+        </div>
+        <div style="margin-top:8px;font-size:0.72rem;color:#8a9bb0">Mês atual destacado</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DISTRIBUIÇÃO POR CATEGORIA -->
+  ${catList.length ? `
+  <div class="section">
+    <div class="section-title">Para onde foi o dinheiro — R$ ${formatCurrency(despesas).replace("R$ ","")} em despesas</div>
+    <div class="cat-section">
+      <div>${donutSvg}</div>
+      <div class="cat-list">
+        ${catList.slice(0, 8).map((c) => {
+          const pct = despesas > 0 ? ((c.total / despesas) * 100).toFixed(1) : 0;
+          const barPct = Math.min(100, Math.round(c.total / despesas * 100));
+          return `<div class="cat-row">
+            <span class="cat-dot" style="background:${c.color}"></span>
+            <span class="cat-name">${c.icon} ${escapeHtml(c.label)}</span>
+            <span class="cat-pct">${pct}%</span>
+            <div style="flex:1;min-width:60px"><div class="bar-wrap"><div class="bar-fill" style="width:${barPct}%;background:${c.color}"></div></div></div>
+            <span class="cat-val">${formatCurrency(c.total)}</span>
+          </div>`;
+        }).join("")}
+      </div>
+    </div>
+  </div>` : ""}
+
+  <!-- METAS POR CATEGORIA -->
+  ${goals.length ? `
+  <div class="section">
+    <div class="section-title">Metas de gasto por categoria</div>
+    <div style="border:1.5px solid #e8ecf2;border-radius:16px;padding:20px">
+      ${goals.map((g) => {
+        const barColor = g.pct > 100 ? "#ff3b30" : g.pct > 80 ? "#ff9500" : "#34c759";
+        return `<div class="goal-row">
+          <div class="goal-header">
+            <span class="goal-name">${g.cat.label}</span>
+            <span class="goal-val ${g.pct > 100 ? "over" : ""}">${formatCurrency(g.spent)} / ${formatCurrency(g.limit)} (${g.pct}%)</span>
+          </div>
+          <div class="bar-wrap"><div class="bar-fill" style="width:${Math.min(100,g.pct)}%;background:${barColor}"></div></div>
+        </div>`;
+      }).join("")}
+    </div>
+  </div>` : ""}
+
+  <!-- TOP TRANSAÇÕES -->
+  <div class="section">
+    <div class="section-title">Maiores transações do mês</div>
+    <div style="border:1.5px solid #e8ecf2;border-radius:16px;overflow:hidden">
+      <table>
+        <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Tipo</th><th style="text-align:right">Valor</th></tr></thead>
+        <tbody>
+          ${topTx.map((f) => {
+            const cat = findCategory(f.category);
+            const isRec = f.type === "receita";
+            return `<tr>
+              <td>${formatDate(f.date)}</td>
+              <td style="font-weight:600">${escapeHtml(f.description || "")}</td>
+              <td>${cat.label}</td>
+              <td><span class="badge ${isRec ? "badge-r" : "badge-d"}">${isRec ? "Receita" : "Despesa"}</span></td>
+              <td style="text-align:right;font-weight:700;color:${isRec ? "#34c759" : "#ff3b30"}">${isRec ? "+" : "-"}${formatCurrency(f.amount)}</td>
+            </tr>`;
+          }).join("")}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- TODOS OS LANÇAMENTOS -->
+  <div class="section">
+    <div class="section-title">Todos os lançamentos (${entries.length})</div>
+    <div style="border:1.5px solid #e8ecf2;border-radius:16px;overflow:hidden">
+      <table>
+        <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Tipo</th><th style="text-align:right">Valor</th></tr></thead>
+        <tbody>
+          ${entries.map((f) => {
+            const cat = findCategory(f.category);
+            const isRec = f.type === "receita";
+            return `<tr>
+              <td>${formatDate(f.date)}</td>
+              <td>${escapeHtml(f.description || "")}</td>
+              <td>${cat.label.replace(/^\S+\s*/, "")}</td>
+              <td><span class="badge ${isRec ? "badge-r" : "badge-d"}">${isRec ? "R" : "D"}</span></td>
+              <td style="text-align:right;font-weight:700;color:${isRec ? "#34c759" : "#ff3b30"}">${isRec ? "+" : "-"}${formatCurrency(f.amount)}</td>
+            </tr>`;
+          }).join("")}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- RECORRENTES -->
+  ${recurrents.length ? `
+  <div class="section">
+    <div class="section-title">Lançamentos recorrentes cadastrados</div>
+    <div class="recur-grid">
+      ${recurrents.map((r) => {
+        const cat = findCategory(r.categoryId);
+        return `<div class="recur-card">
+          <strong>${escapeHtml(r.description)}</strong>
+          <span>${cat.label} · Dia ${r.day}</span>
+          <span class="rv">-${formatCurrency(r.amount)}/mês</span>
+        </div>`;
+      }).join("")}
+    </div>
+  </div>` : ""}
+
+  <!-- FOOTER -->
+  <div class="rpt-footer">
+    <span>PulseNote · pulsenote.app</span>
+    <span>Gerado em ${geradoEm}</span>
+  </div>
+
+</div>
+<script>window.onload = () => window.print();</script>
+</body>
+</html>`;
+
+  const blob = new Blob([htmlContent], { type: "text/html" });
+  const url  = URL.createObjectURL(blob);
+  window.open(url, "_blank");
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+  showToast("📄 Relatório gerado! Use Ctrl+P / salvar como PDF.");
 }
 
 // ============================================================

@@ -433,22 +433,59 @@
         </section>
 
         <!-- ===== FINANCES VIEW ===== -->
+        <!-- ===== FINANCES VIEW ===== -->
         <section id="financesView" class="view">
           <div class="fin-layout">
 
-            <!-- LEFT: Form + Summary -->
+            <!-- LEFT COLUMN -->
             <div class="fin-left">
 
-              <!-- Add transaction form -->
-              <div class="editor-panel fin-form-card">
-                <div class="form-heading">
-                  <div>
-                    <p class="eyebrow">Novo registro</p>
-                    <h2>Adicionar</h2>
-                  </div>
+              <!-- Navegador de mês -->
+              <div class="fin-month-nav">
+                <button class="fin-month-arrow" id="finMonthPrev">‹</button>
+                <div class="fin-month-center">
+                  <span id="finMonthLabel" class="fin-month-label">Julho 2026</span>
+                  <span id="finClosedBadge" class="fin-closed-badge" hidden>✓ Fechado</span>
                 </div>
+                <button class="fin-month-arrow" id="finMonthNext">›</button>
+              </div>
 
-                <!-- Lançamento por texto: IA (Gemini) com reconhecimento local como reserva -->
+              <!-- Ações do mês -->
+              <div class="fin-month-actions">
+                <button id="finCloseMonth" class="fin-action-btn close">🔒 Fechar mês</button>
+                <button id="finReopenMonth" class="fin-action-btn reopen" hidden>🔓 Reabrir</button>
+                <button id="finExportReport" class="fin-action-btn export">📄 Exportar</button>
+              </div>
+
+              <!-- Cards resumo -->
+              <div class="fin-summary-grid">
+                <div class="fin-summary-card receita">
+                  <span class="fin-sum-label">💰 Receitas</span>
+                  <strong id="finReceitas">R$ 0,00</strong>
+                </div>
+                <div class="fin-summary-card despesa">
+                  <span class="fin-sum-label">💸 Despesas</span>
+                  <strong id="finDespesas">R$ 0,00</strong>
+                </div>
+                <div class="fin-summary-card saldo" id="finSaldoCard">
+                  <span class="fin-sum-label">📊 Saldo</span>
+                  <strong id="finSaldo">R$ 0,00</strong>
+                </div>
+              </div>
+
+              <!-- Barra de orçamento -->
+              <div class="panel" style="padding:14px 16px;display:grid;gap:8px">
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                  <span style="font-weight:700;font-size:0.88rem">Uso do orçamento</span>
+                  <span id="finUsedLabel" style="font-size:0.78rem;color:var(--muted)">0% das receitas usadas</span>
+                </div>
+                <div class="progress-track" style="height:8px">
+                  <div id="finProgressBar" style="height:100%;border-radius:inherit;width:0%;transition:width 400ms;background:var(--green)"></div>
+                </div>
+              </div>
+
+              <!-- Formulário (IA + campos) -->
+              <div class="editor-panel fin-form-card">
                 <div class="ai-quick-entry">
                   <label for="aiQuickText" class="ai-quick-entry-label">✨ Lançar por texto</label>
                   <div class="ai-quick-entry-row">
@@ -457,134 +494,43 @@
                       <span id="aiQuickSubmitLabel">Preencher</span>
                     </button>
                   </div>
-                  <p id="aiQuickHint" class="ai-quick-entry-hint">Descreva o gasto ou recebimento numa frase — a IA preenche os campos abaixo para você revisar antes de salvar (se a IA estiver indisponível, usamos um reconhecimento local como reserva).</p>
                 </div>
-
-                <!-- Type toggle -->
                 <div class="fin-type-toggle">
-                  <button class="fin-type-btn active" data-fin-type="despesa">
-                    💸 Despesa
-                  </button>
-                  <button class="fin-type-btn" data-fin-type="receita">
-                    💰 Receita
-                  </button>
+                  <button class="fin-type-btn active" data-fin-type="despesa">💸 Despesa</button>
+                  <button class="fin-type-btn" data-fin-type="receita">💰 Receita</button>
                 </div>
-
                 <form id="expenseForm">
                   <input id="expenseId" type="hidden" value="" />
                   <input id="expenseType" type="hidden" value="despesa" />
-                  <div class="fin-amount-field">
-                    <span class="fin-currency-sign">R$</span>
-                    <input id="expenseAmount" type="text" inputmode="decimal" placeholder="0,00" required />
-                  </div>
-                  <label>
-                    Descrição
-                    <input id="expenseDescription" placeholder="Ex.: Almoço, Uber..." />
-                  </label>
-                  <label>
-                    <span id="expenseCategoryLabel">Categoria</span>
-                    <div class="fin-cat-select-row">
-                      <select id="expenseCategory">
-                        <option value="alimentacao">🍔 Alimentação</option>
-                        <option value="transporte">🚗 Transporte</option>
-                        <option value="saude">💊 Saúde</option>
-                        <option value="lazer">🎬 Lazer</option>
-                        <option value="educacao">📚 Educação</option>
-                        <option value="moradia">🏠 Moradia</option>
-                        <option value="roupas">👗 Roupas</option>
-                        <option value="assinaturas">🔁 Assinaturas</option>
-                        <option value="outros">📦 Outros</option>
-                      </select>
-                      <button type="button" id="newCategoryBtn" class="fin-cat-add-btn" title="Criar nova categoria">
-                        ＋
-                      </button>
+                  <div class="fin-form-row">
+                    <div class="fin-amount-field">
+                      <span class="fin-currency-sign">R$</span>
+                      <input id="expenseAmount" type="text" inputmode="decimal" placeholder="0,00" required />
                     </div>
-                  </label>
-                  <label>
-                    Data
-                    <input id="expenseDate" type="date" />
-                  </label>
-                  <button type="submit" class="primary-button" style="width:100%;justify-content:center;height:48px;font-size:1rem">
-                    ➕ Registrar
-                  </button>
-                  <button type="button" id="cancelEditExpense" hidden
-                    style="width:100%;justify-content:center;height:40px;font-size:0.88rem;
-                    margin-top:8px;border-radius:12px;border:1.5px solid var(--line);
-                    background:var(--surface2);color:var(--text2);cursor:pointer;font-weight:600">
-                    Cancelar edição
-                  </button>
+                    <input id="expenseDate" type="date" class="fin-date-input" />
+                  </div>
+                  <input id="expenseDescription" placeholder="Descrição (ex.: Almoço, Uber...)" />
+                  <div class="fin-cat-select-row">
+                    <select id="expenseCategory"><option value="alimentacao">🍔 Alimentação</option></select>
+                    <button type="button" id="newCategoryBtn" class="fin-cat-add-btn" title="Nova categoria">＋</button>
+                  </div>
+                  <button type="submit" class="primary-button" style="width:100%;justify-content:center;height:44px">➕ Registrar</button>
+                  <button type="button" id="cancelEditExpense" hidden style="width:100%;height:36px;border-radius:10px;border:1.5px solid var(--line);background:var(--surface2);color:var(--text2);cursor:pointer;font-weight:600;font-family:inherit;margin-top:6px">Cancelar edição</button>
                 </form>
               </div>
 
-              <!-- Navegador de mês + Fechamento + Exportação -->
-              <div class="fin-month-nav">
-                <button class="fin-month-arrow" id="finMonthPrev" title="Mês anterior">‹</button>
-                <div class="fin-month-center">
-                  <span id="finMonthLabel" class="fin-month-label">Junho 2026</span>
-                  <span id="finClosedBadge" class="fin-closed-badge" hidden>✓ Fechado</span>
-                </div>
-                <button class="fin-month-arrow" id="finMonthNext" title="Próximo mês">›</button>
-              </div>
-              <div class="fin-month-actions">
-                <button id="finCloseMonth" class="fin-action-btn close" title="Fechar o mês atual e arquivá-lo">
-                  🔒 Fechar mês
-                </button>
-                <button id="finReopenMonth" class="fin-action-btn reopen" hidden title="Reabrir mês fechado para edições">
-                  🔓 Reabrir
-                </button>
-                <button id="finExportReport" class="fin-action-btn export" title="Exportar relatório do mês em HTML">
-                  📄 Exportar
-                </button>
-              </div>
-
-              <!-- Summary cards -->
-              <div class="fin-summary-grid">
-                <div class="fin-summary-card receita">
-                  <span class="fin-sum-icon">💰</span>
-                  <span class="fin-sum-label">Receitas</span>
-                  <strong id="finReceitas">R$ 0,00</strong>
-                </div>
-                <div class="fin-summary-card despesa">
-                  <span class="fin-sum-icon">💸</span>
-                  <span class="fin-sum-label">Despesas</span>
-                  <strong id="finDespesas">R$ 0,00</strong>
-                </div>
-                <div class="fin-summary-card saldo" id="finSaldoCard">
-                  <span class="fin-sum-icon">📊</span>
-                  <span class="fin-sum-label">Saldo</span>
-                  <strong id="finSaldo">R$ 0,00</strong>
-                </div>
-              </div>
-
-              <!-- Budget bar -->
-              <div class="fin-budget-bar panel" style="padding:16px">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-                  <span style="font-weight:700;font-size:0.9rem">Uso do orçamento</span>
-                  <span id="finUsedLabel" style="font-size:0.8rem;color:var(--muted)">0%</span>
-                </div>
-                <div class="progress-track" style="height:10px">
-                  <div id="finProgressBar" style="width:0%;transition:width 400ms ease;background:var(--green)"></div>
-                </div>
-              </div>
-
-              <!-- Category breakdown -->
+              <!-- Por categoria -->
               <div class="panel">
                 <div class="panel-header">
-                  <div>
-                    <p class="eyebrow">Análise</p>
-                    <h2>Por categoria</h2>
-                  </div>
+                  <div><p class="eyebrow">Análise</p><h2>Por categoria</h2></div>
                 </div>
                 <div id="finCategories" class="fin-cat-list"></div>
               </div>
 
-              <!-- Metas por categoria -->
+              <!-- Metas de gasto -->
               <div class="panel">
                 <div class="panel-header">
-                  <div>
-                    <p class="eyebrow">Controle</p>
-                    <h2>Metas de gasto</h2>
-                  </div>
+                  <div><p class="eyebrow">Controle</p><h2>Metas de gasto</h2></div>
                   <button class="mini-button" id="finOpenGoalsModal">+ Meta</button>
                 </div>
                 <div id="finGoalsList" class="fin-goals-list">
@@ -595,40 +541,32 @@
               <!-- Recorrentes -->
               <div class="panel">
                 <div class="panel-header">
-                  <div>
-                    <p class="eyebrow">Automação</p>
-                    <h2>Recorrentes</h2>
-                  </div>
+                  <div><p class="eyebrow">Automação</p><h2>Recorrentes</h2></div>
                   <button class="mini-button" id="finOpenRecurModal">+ Novo</button>
                 </div>
                 <div id="finRecurList" class="fin-recur-list">
                   <div class="empty-state">Nenhum lançamento recorrente.<br>Adicione assinaturas, salário, aluguel…</div>
                 </div>
               </div>
-            </div>
 
-            <!-- RIGHT: Gráfico + Calendar + Transactions -->
+            </div><!-- /fin-left -->
+
+            <!-- RIGHT COLUMN -->
             <div class="fin-right">
 
-              <!-- Gráfico comparativo 6 meses -->
+              <!-- Gráfico 6 meses -->
               <div class="panel">
                 <div class="panel-header">
-                  <div>
-                    <p class="eyebrow">Histórico</p>
-                    <h2>Últimos 6 meses</h2>
-                  </div>
+                  <div><p class="eyebrow">Histórico</p><h2>Últimos 6 meses</h2></div>
                 </div>
                 <div id="finChart6m" class="fin-chart6m"></div>
               </div>
 
-              <!-- Financial Calendar -->
+              <!-- Calendário financeiro -->
               <div class="panel fin-calendar-card">
                 <div class="panel-header">
-                  <div>
-                    <p class="eyebrow">Calendário</p>
-                    <h2 id="finCalMonthLabel">Financeiro</h2>
-                  </div>
-                  <div style="display:flex;gap:6px">
+                  <div><p class="eyebrow">Calendário</p><h2 id="finCalMonthLabel">Financeiro</h2></div>
+                  <div style="display:flex;gap:6px;flex-wrap:wrap">
                     <span class="pill" style="background:var(--green-soft);color:var(--green);border-color:var(--green)">● Receita</span>
                     <span class="pill" style="background:var(--red-soft);color:var(--red);border-color:var(--red)">● Despesa</span>
                   </div>
@@ -636,18 +574,15 @@
                 <div id="finCalGrid" class="fin-cal-grid"></div>
               </div>
 
-              <!-- Transaction list -->
+              <!-- Transações -->
               <div class="panel">
                 <div class="panel-header">
-                  <div>
-                    <p class="eyebrow">Histórico</p>
-                    <h2>Transações</h2>
-                  </div>
+                  <div><p class="eyebrow">Histórico</p><h2>Transações</h2></div>
                 </div>
                 <div id="finTransactions" class="fin-tx-list"></div>
               </div>
-            </div>
 
+            </div><!-- /fin-right -->
           </div><!-- /fin-layout -->
         </section><!-- /financesView -->
 

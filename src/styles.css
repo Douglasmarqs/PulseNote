@@ -1525,22 +1525,40 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   .main-area { padding-bottom: var(--nav-height); }
 
   .topbar {
-    padding: 14px 16px;
-    flex-wrap: wrap;
+    padding: 12px 16px;
     gap: 10px;
+    /* Em mobile não pode ser flex-wrap porque o topbar é sticky e ficaria
+       muito alto — os itens se ajustam com gap menor */
+    min-height: var(--header-height, 60px);
+  }
+
+  /* todayLabel costumava transbordar em mobile (ex.: "Quarta-Feira, 01 De Julho")
+     porque é um texto longo e o topbar não tem espaço para ele + ações.
+     Resolvido com white-space:nowrap + overflow:hidden + text-overflow:ellipsis
+     no container principal, e um max-width para não empurrar os botões de ação. */
+  .topbar > div:first-child {
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  #todayLabel {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 220px;
+  }
+
+  #viewTitle {
+    font-size: 1.3rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 220px;
   }
 
   .topbar-actions {
-    width: 100%;
-    flex-wrap: wrap;
-    row-gap: 10px;
+    flex-shrink: 0;
   }
-  .search-box {
-    width: 100%;
-    flex: 1 1 100%;
-    order: 5; /* sempre na própria linha, abaixo de avatar/tema/+tarefa */
-  }
-  .primary-button { flex: 1 1 auto; justify-content: center; }
 
   /* Em formulários verticais (Tarefas/Metas), o botão não deve crescer em
      altura junto com os campos — só ocupar a largura total, mantendo a
@@ -1604,62 +1622,59 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
    FINANCES MODULE
    ============================================================ */
 
-/* Layout */
+/* Layout: 2 colunas em desktop, 1 coluna em mobile/tablet */
 .fin-layout {
   display: grid;
-  grid-template-columns: 380px 1fr;
+  grid-template-columns: 340px 1fr;
   gap: 20px;
   align-items: start;
   min-width: 0;
 }
 
-.fin-left, .fin-right { display: grid; gap: 16px; min-width: 0; }
+.fin-left, .fin-right { display: grid; gap: 14px; min-width: 0; }
 
-/* Correção definitiva: qualquer elemento dentro de Finanças que seja item de
-   flex/grid recebe min-width:auto por padrão do navegador, o que permite que
-   conteúdo (textos longos, números, emojis, fontes maiores por acessibilidade)
-   force a largura do card a ultrapassar a tela — fazendo a margem direita
-   "desaparecer". Zerando min-width em toda a árvore, garantimos que qualquer
-   filho sempre pode encolher/quebrar linha em vez de estourar o layout,
-   sem precisar caçar cada componente (calendário, transações, categorias...)
-   individualmente. */
-.fin-layout, .fin-layout * {
-  min-width: 0;
-}
+/* Proteção global contra overflow em Finanças */
+.fin-layout, .fin-layout * { min-width: 0; }
 
 /* Form card */
-.fin-form-card { gap: 14px; min-width: 0; transition: border-color 200ms ease, box-shadow 200ms ease; }
+.fin-form-card { gap: 12px; min-width: 0; transition: border-color 200ms ease, box-shadow 200ms ease; }
 .fin-form-card.is-receita { border-color: var(--green); box-shadow: 0 0 0 3px var(--green-soft); }
+.fin-form-card.month-closed { opacity: 0.6; pointer-events: none; position: relative; }
+.fin-form-card.month-closed::after {
+  content: "🔒 Mês fechado — reabra para editar";
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.88rem; font-weight: 700; color: var(--text2);
+  background: color-mix(in srgb, var(--surface) 80%, transparent);
+  border-radius: inherit; backdrop-filter: blur(4px);
+  pointer-events: all; cursor: not-allowed;
+}
 
-/* Categoria: select + botão de nova categoria.
-   min-width:0 é essencial aqui — sem isso, o <select> (especialmente em
-   iOS/Safari, que mede a opção mais longa com emoji) pode forçar o card
-   inteiro a ficar mais largo que a tela, empurrando tudo para fora do
-   centro. */
-.fin-cat-select-row {
-  display: flex;
+/* Linha valor + data no mesmo nível */
+.fin-form-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
   gap: 8px;
   align-items: stretch;
-  min-width: 0;
 }
-
-.fin-cat-select-row select {
-  flex: 1;
-  min-width: 0;
-}
-
-.fin-cat-add-btn {
-  flex-shrink: 0;
-  width: 42px;
-  border-radius: 12px;
+.fin-date-input {
+  height: 44px;
   border: 1.5px solid var(--line);
+  border-radius: 12px;
   background: var(--surface2);
-  color: var(--accent);
-  font-size: 1.2rem;
-  font-weight: 700;
-  cursor: pointer;
+  color: var(--text);
+  padding: 0 10px;
+  font: inherit;
+  font-size: 0.85rem;
+  width: 130px;
+  flex-shrink: 0;
 }
 
+/* Categoria: select + botão */
+.fin-cat-select-row { display: flex; gap: 6px; }
+.fin-cat-select-row select { flex: 1; height: 40px; border: 1.5px solid var(--line); border-radius: 12px; padding: 0 10px; background: var(--surface2); color: var(--text); font: inherit; }
+.fin-cat-add-btn { width: 40px; height: 40px; border-radius: 12px; border: 1.5px dashed var(--line); background: transparent; color: var(--muted); font-size: 1.2rem; cursor: pointer; flex-shrink: 0; transition: all 150ms; }
+.fin-cat-add-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 /* ---------- AI QUICK ENTRY (Finanças) ---------- */
 .ai-quick-entry {
   border: 1.5px solid transparent;
@@ -1886,29 +1901,6 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   border-color: var(--accent);
 }
 .fin-action-btn.export:hover { background: var(--accent); color: #fff; }
-
-/* Bloqueio visual do formulário em mês fechado */
-.fin-form-card.month-closed {
-  opacity: 0.6;
-  pointer-events: none;
-  position: relative;
-}
-.fin-form-card.month-closed::after {
-  content: "🔒 Mês fechado — reabra para editar";
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.9rem;
-  font-weight: 700;
-  color: var(--text2);
-  background: color-mix(in srgb, var(--surface) 75%, transparent);
-  border-radius: inherit;
-  backdrop-filter: blur(4px);
-  pointer-events: all;
-  cursor: not-allowed;
-}
 
 /* Summary cards */
 .fin-summary-grid {
@@ -2162,27 +2154,31 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 }
 
 @media (max-width: 720px) {
-  .fin-layout { grid-template-columns: 1fr; gap: 12px; }
-  .fin-left, .fin-right { gap: 12px; }
-  .fin-form-card { padding: 16px; gap: 11px; }
+  .fin-layout { grid-template-columns: 1fr; gap: 10px; }
+  .fin-left, .fin-right { gap: 10px; }
+  .fin-form-card { padding: 14px; gap: 10px; }
   .fin-amount-field input { font-size: 1.5rem; min-height: 46px; }
-  .fin-left .panel, .fin-right .panel, .fin-budget-bar.panel, .fin-calendar-card {
-    padding: 14px;
-  }
-  .fin-summary-card { padding: 12px 10px; gap: 2px; }
-  .fin-sum-icon { font-size: 1.2rem; margin-bottom: 0; }
+  .fin-form-row { grid-template-columns: 1fr; }
+  .fin-date-input { width: 100%; }
+  .fin-left .panel, .fin-right .panel, .fin-calendar-card { padding: 14px; }
+  .fin-summary-card { padding: 10px 10px; gap: 2px; }
+  .fin-sum-icon { display: none; }
   .fin-summary-card strong { font-size: 0.95rem; }
-  .fin-summary-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
-  .fin-summary-grid .fin-summary-card:last-child { grid-column: span 2; }
+  .fin-summary-grid { grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
   .fin-cal-grid { grid-template-columns: repeat(7, 1fr); gap: 3px; }
   .fin-cal-day { font-size: 0.7rem; border-radius: 8px; }
   .fin-cat-row { gap: 6px; }
   .fin-cat-info { min-width: 76px; font-size: 0.74rem; flex-shrink: 0; }
   .fin-cat-bar-wrap { min-width: 0; }
   .fin-cat-value { min-width: 56px; font-size: 0.74rem; flex-shrink: 0; }
+  .fin-month-actions { flex-wrap: wrap; }
+  .fin-action-btn { font-size: 0.78rem; padding: 0 10px; }
+  .fin-tx-actions .mini-button { width: 26px; height: 26px; }
 }
 
 @media (max-width: 380px) {
+  .fin-summary-grid { grid-template-columns: 1fr 1fr; gap: 6px; }
+  .fin-summary-grid .fin-summary-card:last-child { grid-column: span 2; }
   .fin-cat-info { min-width: 64px; font-size: 0.7rem; }
   .fin-cat-value { min-width: 48px; font-size: 0.7rem; }
 }
