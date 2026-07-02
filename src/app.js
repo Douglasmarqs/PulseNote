@@ -17,6 +17,53 @@ import {
   onSnapshot,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
+// ── Tema: Claro / Escuro / Sistema ─────────────────────────────
+// A escolha fica em localStorage (não depende de login/Firestore, então
+// funciona até na tela de login). Um script inline no <head> do HTML já
+// aplica isso antes da primeira pintura da tela, para nunca "piscar"
+// claro por engano; aqui só mantemos o valor sincronizado durante o uso
+// do app e ligamos os botões em Configurações > Aparência.
+const THEME_STORAGE_KEY = "pulsenote-theme";
+
+function applyTheme(choice) {
+  if (choice === "light" || choice === "dark") {
+    document.documentElement.setAttribute("data-theme", choice);
+  } else {
+    document.documentElement.removeAttribute("data-theme"); // = "sistema"
+  }
+}
+
+function getSavedTheme() {
+  try {
+    const t = localStorage.getItem(THEME_STORAGE_KEY);
+    return t === "light" || t === "dark" ? t : "system";
+  } catch { return "system"; }
+}
+
+function setTheme(choice) {
+  try { localStorage.setItem(THEME_STORAGE_KEY, choice); } catch { /* modo privado etc — segue só na sessão atual */ }
+  applyTheme(choice);
+}
+
+applyTheme(getSavedTheme()); // aplica assim que o script roda (reforça o que o <head> já fez)
+
+function bindThemeToggle() {
+  const group = document.getElementById("themeToggle");
+  if (!group) return;
+  const buttons = group.querySelectorAll("[data-theme-choice]");
+  function refreshActive() {
+    const current = getSavedTheme();
+    buttons.forEach((b) => b.classList.toggle("active", b.dataset.themeChoice === current));
+  }
+  buttons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      setTheme(btn.dataset.themeChoice);
+      refreshActive();
+    });
+  });
+  refreshActive();
+}
+
 const BASE_STORAGE_KEY = "pulsenote-state-v1";
 
 // Retorna a chave de cache ISOLADA para o usuário atual.
@@ -41,7 +88,11 @@ function getUser() {
 }
 
 // ── Indicador visual de status de sincronização ───────────────
-function showSyncStatus(status) {
+// Agora clicável: se a última sincronização falhou, tocar/clicar no
+// indicador tenta salvar de novo na hora (em vez de esperar o próximo
+// debounce, que só dispara com uma nova alteração do usuário).
+let _lastSyncStatus = "saved";
+function showSyncStatus(status, detail) {
   let el = document.getElementById("syncStatus");
   if (!el) {
     el = document.createElement("div");
@@ -49,23 +100,61 @@ function showSyncStatus(status) {
     el.style.cssText = `
       position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
       padding:7px 16px;border-radius:999px;font-size:0.78rem;font-weight:700;
-      z-index:9999;transition:opacity 300ms;pointer-events:none;
+      z-index:9999;transition:opacity 300ms;pointer-events:auto;
       background:var(--surface,#fff);border:1.5px solid var(--line,#e8ecf2);
       box-shadow:0 4px 16px rgba(0,0,0,0.1);color:var(--text2,#4a5568);
+      cursor:default;max-width:88vw;text-align:center;
     `;
+    el.addEventListener("click", () => {
+      if (_lastSyncStatus === "error" || _lastSyncStatus === "offline") {
+        _syncRetries = 0;
+        syncToServer();
+      }
+    });
     document.body.appendChild(el);
   }
+  _lastSyncStatus = status;
   const states = {
     saving:  { text: "⏳ Salvando...",          color: "var(--accent,#4f8ef7)" },
     saved:   { text: "✅ Salvo na nuvem",       color: "var(--green,#34c759)"  },
-    offline: { text: "📵 Sem conexão (local)",  color: "var(--orange,#ff9500)" },
-    error:   { text: "❌ Erro ao salvar",       color: "var(--red,#ff3b30)"    },
+    offline: { text: "📵 Sem conexão — toque para tentar de novo",  color: "var(--orange,#ff9500)" },
+    error:   { text: `❌ ${detail || "Erro ao salvar"} — toque para tentar de novo`, color: "var(--red,#ff3b30)" },
   };
   const s = states[status] || states.saved;
   el.textContent   = s.text;
   el.style.color   = s.color;
   el.style.opacity = "1";
+  el.style.cursor  = (status === "error" || status === "offline") ? "pointer" : "default";
   if (status === "saved") setTimeout(() => { el.style.opacity = "0"; }, 1800);
+}
+
+// Remove valores "undefined" em qualquer profundidade (objetos e arrays).
+// O Firestore rejeita "undefined" com um erro (invalid-argument) que,
+// sem essa limpeza, aparecia pro usuário só como "Erro ao salvar" genérico
+// — este helper evita que esse tipo de dado quebrado chegue a ser enviado.
+function stripUndefinedDeep(value) {
+  if (Array.isArray(value)) return value.map(stripUndefinedDeep);
+  if (value && typeof value === "object" && !(value instanceof Date)) {
+    const out = {};
+    for (const key of Object.keys(value)) {
+      const v = value[key];
+      if (v === undefined) continue;
+      out[key] = stripUndefinedDeep(v);
+    }
+    return out;
+  }
+  return value;
+}
+
+// Tradução de erros comuns do Firestore/Auth para algo que a pessoa
+// consiga entender e agir (em vez de "Erro ao salvar" sem contexto).
+function friendlySyncError(err) {
+  const code = err?.code || "";
+  if (code.includes("permission-denied")) return "Sem permissão para salvar. Faça login novamente";
+  if (code.includes("unauthenticated")) return "Sessão expirada. Faça login novamente";
+  if (code.includes("unavailable") || code.includes("network")) return "Sem conexão com o servidor";
+  if (code.includes("resource-exhausted") || err?.message?.includes("exceeds the maximum")) return "Dados grandes demais para salvar";
+  return "Erro ao salvar";
 }
 
 // ── Salva o state atual no Firestore (documento do usuário) ───
@@ -78,10 +167,24 @@ function showSyncStatus(status) {
 let _syncRetries = 0;
 async function syncToServer() {
   if (!currentUser || !currentUser.emailVerified || !state) return;
+
+  // Documento único por usuário: se ele crescer demais (fotos grandes,
+  // muitos anos de lançamentos), o Firestore recusa a escrita (limite de
+  // 1 MiB por documento). Detectamos isso ANTES de tentar gravar, para
+  // mostrar um aviso útil em vez de ficar tentando de novo sem sucesso.
+  const clean = stripUndefinedDeep(state);
+  const approxBytes = new Blob([JSON.stringify(clean)]).size;
+  if (approxBytes > 900_000) {
+    showSyncStatus("error", "Dados grandes demais para salvar (reduza a foto de perfil ou registros antigos)");
+    const key = getStorageKey();
+    if (key) localStorage.setItem(key, JSON.stringify(state));
+    return;
+  }
+
   showSyncStatus("saving");
   try {
     await setDoc(doc(db, "userData", currentUser.uid), {
-      data: state,
+      data: clean,
       updatedAt: new Date().toISOString(),
     });
     const key = getStorageKey();
@@ -90,6 +193,8 @@ async function syncToServer() {
     _syncRetries = 0; // reset ao ter sucesso
   } catch (err) {
     console.error("Erro ao salvar no Firestore:", err);
+    const key = getStorageKey();
+    if (key) localStorage.setItem(key, JSON.stringify(state)); // nunca perde o dado localmente
     if (!navigator.onLine) {
       showSyncStatus("offline");
       return;
@@ -102,7 +207,7 @@ async function syncToServer() {
       setTimeout(syncToServer, delay);
     } else {
       _syncRetries = 0;
-      showSyncStatus("error");
+      showSyncStatus("error", friendlySyncError(err));
     }
   }
 }
@@ -198,8 +303,11 @@ const appReady = new Promise((resolve) => {
         } else {
           // Documento ainda não existe no Firestore para este usuário
           // (primeiro login dele). Cria agora com os dados padrão/cache atual.
-          setDoc(userDocRef, { data: state, updatedAt: new Date().toISOString() })
-            .catch((err) => console.error("Erro ao criar documento inicial:", err));
+          setDoc(userDocRef, { data: stripUndefinedDeep(state), updatedAt: new Date().toISOString() })
+            .catch((err) => {
+              console.error("Erro ao criar documento inicial:", err);
+              showSyncStatus("error", friendlySyncError(err));
+            });
         }
 
         renderAll(); // re-renderiza com os dados confirmados do servidor
@@ -378,6 +486,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   bindForms();
   bindActions();
   bindSettingsView();
+  bindThemeToggle();
+  bindFinTabs();
   bindFinanceMonthControls();
   bindFinGoalsModal();
   bindFinRecurModal();
@@ -562,7 +672,7 @@ function renderProfileButton(user) {
 // vai junto com o resto dos dados do usuário, do mesmo jeito que notas e
 // tarefas, e sincroniza automaticamente entre dispositivos.
 function fileToCompressedDataUrl(file) {
-  const MAX_BYTES = 700_000; // bem abaixo do limite de 1 MB por documento do Firestore
+  const MAX_BYTES = 450_000; // bem abaixo do limite de 1 MB por documento do Firestore (o resto do documento — notas, tarefas, finanças — também ocupa espaço)
 
   function renderToDataUrl(image, maxDim, quality) {
     const ratio  = Math.min(1, maxDim / Math.max(image.width, image.height));
@@ -911,6 +1021,24 @@ function bindForms() {
       document.querySelector("#expenseType").value = btn.dataset.finType;
       populateCategorySelect(null, btn.dataset.finType);
       document.querySelector(".fin-form-card")?.classList.toggle("is-receita", btn.dataset.finType === "receita");
+    });
+  });
+}
+
+// ── Abas internas de Finanças (Lançamentos / Análise / Controle / Automação) ──
+function bindFinTabs() {
+  const tabs   = document.querySelectorAll(".fin-tab-btn");
+  const panels = document.querySelectorAll(".fin-tab-panel");
+  if (!tabs.length) return;
+  tabs.forEach((tab) => {
+    tab.addEventListener("click", () => {
+      const target = tab.dataset.finTab;
+      tabs.forEach((t) => {
+        const active = t === tab;
+        t.classList.toggle("active", active);
+        t.setAttribute("aria-selected", String(active));
+      });
+      panels.forEach((p) => { p.hidden = p.dataset.finPanel !== target; });
     });
   });
 }

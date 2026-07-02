@@ -67,21 +67,68 @@
   --header-height: 70px;
 }
 
-/* Tema escuro — ligado automaticamente ao sistema operacional do usuário
-   (Configurações > Aparência do celular/computador), sem nenhum botão ou
-   seletor manual no app. Antes existia um seletor de tema manual (com 5
-   opções de cor) que: (1) não acompanhava o modo escuro do sistema, então
-   o app ficava com fundo claro mesmo com o celular em modo escuro, e
-   (2) ocupava espaço na barra lateral e no topo da tela. Substituímos tudo
-   isso por só @media (prefers-color-scheme: dark) — o navegador troca de
-   tema instantaneamente, sem nenhuma configuração e sem "flash" de tela
-   clara antes do CSS carregar (já que é puro CSS, aplicado antes da
-   primeira pintura da página).
-   As superfícies têm degraus de luminosidade nítidos e a elevação dos
-   cards usa um brilho sutil no topo + sombra mais forte, que funciona de
-   verdade sobre fundo escuro (em vez de "achatar" os cards). */
+/* ---------- Tema: Claro / Escuro / Sistema ----------
+   Três opções, escolhidas em Configurações:
+   - "light"  → força claro, mesmo se o aparelho estiver em modo escuro
+   - "dark"   → força escuro (idêntico ao que já existia antes)
+   - "system" (padrão, sem atributo) → acompanha Configurações > Aparência
+     do celular/computador via @media (prefers-color-scheme: dark)
+   O atributo data-theme é aplicado no <html> o mais cedo possível (script
+   inline no <head>, antes do CSS pintar a tela) para não haver nenhum
+   "flash" de tema errado ao carregar a página. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0b0d12;
+  --bg2: #12151c;
+  --surface: #1a1d27;
+  --surface2: #20242f;
+  --text: #f4f6fb;
+  --text2: #b6c0d6;
+  --muted: #828ea3;
+  --line: #2e3342;
+  --accent: #5b9ef8;
+  --accent2: #4a8ef5;
+  --accent-soft: #1c2a44;
+  --green: #34d17a;
+  --green-soft: #123322;
+  --orange: #ffab40;
+  --orange-soft: #3a2710;
+  --red: #ff5b54;
+  --red-soft: #3a1614;
+  --purple: #c77dff;
+  --purple-soft: #2a1c40;
+  --pink: #ff5c8a;
+  --pink-soft: #3a1a26;
+  --teal: #5fd4ff;
+  --teal-soft: #133340;
+  --yellow: #ffd60a;
+  --yellow-soft: #3a3008;
+  --note-yellow: #2c2710;
+  --note-blue: #11202f;
+  --note-green: #102a1d;
+  --note-pink: #2c1320;
+  --note-purple: #211230;
+  --note-orange: #2c1c0d;
+  --note-teal: #0f2530;
+  --note-red: #2c1212;
+  --note-yellow-border: #6b5a18;
+  --note-blue-border: #2c5c86;
+  --note-green-border: #1f6b43;
+  --note-pink-border: #80324f;
+  --note-purple-border: #5c3786;
+  --note-orange-border: #7a4318;
+  --note-teal-border: #1d6f8c;
+  --note-red-border: #7a2a26;
+  --shadow-card: 0 1px 0 rgba(255,255,255,0.05) inset, 0 6px 18px rgba(0,0,0,0.55);
+  --shadow-card-hover: 0 1px 0 rgba(255,255,255,0.07) inset, 0 12px 32px rgba(0,0,0,0.65);
+  --shadow-float: 0 24px 70px rgba(0,0,0,0.7);
+}
+
+/* Modo "Sistema" (padrão — sem data-theme, ou data-theme="system"):
+   segue a aparência do aparelho, reaplicando os mesmos valores do
+   bloco acima, agora condicionados ao prefers-color-scheme. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]):not([data-theme="dark"]) {
     color-scheme: dark;
     --bg: #0b0d12;
     --bg2: #12151c;
@@ -128,6 +175,33 @@
     --shadow-card-hover: 0 1px 0 rgba(255,255,255,0.07) inset, 0 12px 32px rgba(0,0,0,0.65);
     --shadow-float: 0 24px 70px rgba(0,0,0,0.7);
   }
+}
+
+/* Modo "Claro" forçado — explícito para quando o aparelho está em modo
+   escuro mas a pessoa prefere claro mesmo assim (mesmos valores do :root
+   padrão, só que com prioridade garantida pelo atributo). */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f5f7fa;
+  --bg2: #eef1f6;
+  --surface: #ffffff;
+  --surface2: #f9fafc;
+  --text: #1a1f2e;
+  --text2: #4a5568;
+  --muted: #8a9bb0;
+  --line: #e8ecf2;
+  --accent: #4f8ef7;
+  --accent2: #3a7af0;
+  --accent-soft: #e8f0fe;
+  --green: #34c759;
+  --green-soft: #e5f9ec;
+  --orange: #ff9500;
+  --orange-soft: #fff3e0;
+  --red: #ff3b30;
+  --red-soft: #ffeeed;
+  --shadow-card: 0 2px 12px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.04);
+  --shadow-card-hover: 0 8px 28px rgba(0,0,0,0.10), 0 3px 8px rgba(0,0,0,0.06);
+  --shadow-float: 0 20px 60px rgba(0,0,0,0.12);
 }
 
 /* ---------- Reset & Base ---------- */
@@ -1622,6 +1696,72 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
    FINANCES MODULE
    ============================================================ */
 
+/* Cabeçalho fixo (mês + resumo), visível em todas as abas de Finanças */
+.fin-header { display: grid; gap: 14px; margin-bottom: 18px; }
+
+.fin-budget-bar { padding: 14px 16px; display: grid; gap: 8px; }
+
+/* Abas de Finanças: Lançamentos / Análise / Controle / Automação —
+   separam o fluxo de "registrar" (usado toda hora) dos painéis de
+   análise/controle/automação (consultados com menos frequência), para a
+   tela não ficar com tudo empilhado de uma vez. */
+.fin-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 5px;
+  margin-bottom: 18px;
+  background: var(--surface2);
+  border: 1.5px solid var(--line);
+  border-radius: 16px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.fin-tabs::-webkit-scrollbar { display: none; }
+
+.fin-tab-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  flex: 1 1 auto;
+  white-space: nowrap;
+  padding: 11px 14px;
+  border-radius: 12px;
+  border: none;
+  background: none;
+  color: var(--text2);
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 180ms ease;
+}
+
+.fin-tab-icon { font-size: 1rem; }
+
+.fin-tab-btn:hover { color: var(--text); }
+
+.fin-tab-btn.active {
+  background: var(--surface);
+  color: var(--accent);
+  box-shadow: var(--shadow-card);
+}
+
+.fin-tab-panel { animation: fadeUp 220ms ease; }
+
+/* Aba Análise: por categoria + gráfico dos últimos 6 meses lado a lado
+   em telas largas, empilhados em telas estreitas. */
+.fin-analise-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  align-items: start;
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .fin-analise-grid { grid-template-columns: 1fr; }
+}
+
 /* Layout: 2 colunas em desktop, 1 coluna em mobile/tablet */
 .fin-layout {
   display: grid;
@@ -1725,6 +1865,40 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   .ai-quick-entry-row { flex-direction: column; }
   .ai-quick-entry-row .primary-button { width: 100%; justify-content: center; }
 }
+
+/* Seletor de tema (Claro / Escuro / Sistema) — Configurações > Aparência */
+.theme-toggle {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.theme-toggle-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 16px 8px;
+  border-radius: var(--radius-btn);
+  border: 1.5px solid var(--line);
+  background: var(--surface2);
+  color: var(--text2);
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 180ms ease;
+}
+
+.theme-toggle-btn:hover { border-color: var(--accent); color: var(--text); }
+
+.theme-toggle-btn.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+.theme-toggle-icon { font-size: 1.3rem; }
 
 /* Type toggle */
 .fin-type-toggle {
@@ -2154,6 +2328,9 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 }
 
 @media (max-width: 720px) {
+  .fin-tabs { gap: 4px; padding: 4px; margin-bottom: 14px; }
+  .fin-tab-btn { padding: 9px 8px; font-size: 0.76rem; gap: 4px; }
+  .fin-tab-icon { font-size: 0.9rem; }
   .fin-layout { grid-template-columns: 1fr; gap: 10px; }
   .fin-left, .fin-right { gap: 10px; }
   .fin-form-card { padding: 14px; gap: 10px; }

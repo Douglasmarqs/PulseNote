@@ -5,6 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>PulseNote - Produtividade pessoal</title>
 
+    <!-- Aplica o tema (claro/escuro/sistema) ANTES da primeira pintura da
+         página, lendo a preferência salva localmente. Sem isso, a tela
+         "piscaria" clara por uma fração de segundo antes do JS principal
+         (app.js, que é um módulo e carrega depois) aplicar o tema certo. -->
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("pulsenote-theme");
+          if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+        } catch (e) {}
+      })();
+    </script>
+
     <!-- PWA: instalação e ícone na tela inicial -->
     <link rel="manifest" href="manifest.json" />
     <!-- A cor da barra do navegador/status bar agora acompanha o modo
@@ -435,91 +448,130 @@
         <!-- ===== FINANCES VIEW ===== -->
         <!-- ===== FINANCES VIEW ===== -->
         <section id="financesView" class="view">
-          <div class="fin-layout">
 
-            <!-- LEFT COLUMN -->
-            <div class="fin-left">
-
-              <!-- Navegador de mês -->
-              <div class="fin-month-nav">
-                <button class="fin-month-arrow" id="finMonthPrev">‹</button>
-                <div class="fin-month-center">
-                  <span id="finMonthLabel" class="fin-month-label">Julho 2026</span>
-                  <span id="finClosedBadge" class="fin-closed-badge" hidden>✓ Fechado</span>
-                </div>
-                <button class="fin-month-arrow" id="finMonthNext">›</button>
+          <!-- Cabeçalho fixo: mês ativo + resumo do período (contexto visível em todas as abas) -->
+          <div class="fin-header">
+            <div class="fin-month-nav">
+              <button class="fin-month-arrow" id="finMonthPrev">‹</button>
+              <div class="fin-month-center">
+                <span id="finMonthLabel" class="fin-month-label">Julho 2026</span>
+                <span id="finClosedBadge" class="fin-closed-badge" hidden>✓ Fechado</span>
               </div>
+              <button class="fin-month-arrow" id="finMonthNext">›</button>
+            </div>
 
-              <!-- Ações do mês -->
-              <div class="fin-month-actions">
-                <button id="finCloseMonth" class="fin-action-btn close">🔒 Fechar mês</button>
-                <button id="finReopenMonth" class="fin-action-btn reopen" hidden>🔓 Reabrir</button>
-                <button id="finExportReport" class="fin-action-btn export">📄 Exportar</button>
+            <div class="fin-month-actions">
+              <button id="finCloseMonth" class="fin-action-btn close">🔒 Fechar mês</button>
+              <button id="finReopenMonth" class="fin-action-btn reopen" hidden>🔓 Reabrir</button>
+              <button id="finExportReport" class="fin-action-btn export">📄 Exportar</button>
+            </div>
+
+            <div class="fin-summary-grid">
+              <div class="fin-summary-card receita">
+                <span class="fin-sum-label">💰 Receitas</span>
+                <strong id="finReceitas">R$ 0,00</strong>
               </div>
-
-              <!-- Cards resumo -->
-              <div class="fin-summary-grid">
-                <div class="fin-summary-card receita">
-                  <span class="fin-sum-label">💰 Receitas</span>
-                  <strong id="finReceitas">R$ 0,00</strong>
-                </div>
-                <div class="fin-summary-card despesa">
-                  <span class="fin-sum-label">💸 Despesas</span>
-                  <strong id="finDespesas">R$ 0,00</strong>
-                </div>
-                <div class="fin-summary-card saldo" id="finSaldoCard">
-                  <span class="fin-sum-label">📊 Saldo</span>
-                  <strong id="finSaldo">R$ 0,00</strong>
-                </div>
+              <div class="fin-summary-card despesa">
+                <span class="fin-sum-label">💸 Despesas</span>
+                <strong id="finDespesas">R$ 0,00</strong>
               </div>
-
-              <!-- Barra de orçamento -->
-              <div class="panel" style="padding:14px 16px;display:grid;gap:8px">
-                <div style="display:flex;justify-content:space-between;align-items:center">
-                  <span style="font-weight:700;font-size:0.88rem">Uso do orçamento</span>
-                  <span id="finUsedLabel" style="font-size:0.78rem;color:var(--muted)">0% das receitas usadas</span>
-                </div>
-                <div class="progress-track" style="height:8px">
-                  <div id="finProgressBar" style="height:100%;border-radius:inherit;width:0%;transition:width 400ms;background:var(--green)"></div>
-                </div>
+              <div class="fin-summary-card saldo" id="finSaldoCard">
+                <span class="fin-sum-label">📊 Saldo</span>
+                <strong id="finSaldo">R$ 0,00</strong>
               </div>
+            </div>
 
-              <!-- Formulário (IA + campos) -->
-              <div class="editor-panel fin-form-card">
-                <div class="ai-quick-entry">
-                  <label for="aiQuickText" class="ai-quick-entry-label">✨ Lançar por texto</label>
-                  <div class="ai-quick-entry-row">
-                    <input id="aiQuickText" type="text" placeholder="Ex.: almoço 32 reais ontem" maxlength="120" />
-                    <button type="button" id="aiQuickSubmit" class="primary-button">
-                      <span id="aiQuickSubmitLabel">Preencher</span>
-                    </button>
-                  </div>
-                </div>
-                <div class="fin-type-toggle">
-                  <button class="fin-type-btn active" data-fin-type="despesa">💸 Despesa</button>
-                  <button class="fin-type-btn" data-fin-type="receita">💰 Receita</button>
-                </div>
-                <form id="expenseForm">
-                  <input id="expenseId" type="hidden" value="" />
-                  <input id="expenseType" type="hidden" value="despesa" />
-                  <div class="fin-form-row">
-                    <div class="fin-amount-field">
-                      <span class="fin-currency-sign">R$</span>
-                      <input id="expenseAmount" type="text" inputmode="decimal" placeholder="0,00" required />
+            <div class="panel fin-budget-bar">
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <span style="font-weight:700;font-size:0.88rem">Uso do orçamento</span>
+                <span id="finUsedLabel" style="font-size:0.78rem;color:var(--muted)">0% das receitas usadas</span>
+              </div>
+              <div class="progress-track" style="height:8px">
+                <div id="finProgressBar" style="height:100%;border-radius:inherit;width:0%;transition:width 400ms;background:var(--green)"></div>
+              </div>
+            </div>
+          </div><!-- /fin-header -->
+
+          <!-- Abas: separam o lançamento do dia a dia da análise/controle/automação -->
+          <div class="fin-tabs" role="tablist" aria-label="Seções de Finanças">
+            <button class="fin-tab-btn active" data-fin-tab="lancamentos" role="tab" aria-selected="true">
+              <span class="fin-tab-icon">📝</span>Lançamentos
+            </button>
+            <button class="fin-tab-btn" data-fin-tab="analise" role="tab" aria-selected="false">
+              <span class="fin-tab-icon">📊</span>Análise
+            </button>
+            <button class="fin-tab-btn" data-fin-tab="controle" role="tab" aria-selected="false">
+              <span class="fin-tab-icon">🎯</span>Controle
+            </button>
+            <button class="fin-tab-btn" data-fin-tab="automacao" role="tab" aria-selected="false">
+              <span class="fin-tab-icon">🔁</span>Automação
+            </button>
+          </div>
+
+          <!-- ABA: LANÇAMENTOS — registrar + calendário + histórico do mês -->
+          <div class="fin-tab-panel" data-fin-panel="lancamentos" role="tabpanel">
+            <div class="fin-layout">
+              <div class="fin-left">
+                <div class="editor-panel fin-form-card">
+                  <div class="ai-quick-entry">
+                    <label for="aiQuickText" class="ai-quick-entry-label">✨ Lançar por texto</label>
+                    <div class="ai-quick-entry-row">
+                      <input id="aiQuickText" type="text" placeholder="Ex.: almoço 32 reais ontem" maxlength="120" />
+                      <button type="button" id="aiQuickSubmit" class="primary-button">
+                        <span id="aiQuickSubmitLabel">Preencher</span>
+                      </button>
                     </div>
-                    <input id="expenseDate" type="date" class="fin-date-input" />
                   </div>
-                  <input id="expenseDescription" placeholder="Descrição (ex.: Almoço, Uber...)" />
-                  <div class="fin-cat-select-row">
-                    <select id="expenseCategory"><option value="alimentacao">🍔 Alimentação</option></select>
-                    <button type="button" id="newCategoryBtn" class="fin-cat-add-btn" title="Nova categoria">＋</button>
+                  <div class="fin-type-toggle">
+                    <button class="fin-type-btn active" data-fin-type="despesa">💸 Despesa</button>
+                    <button class="fin-type-btn" data-fin-type="receita">💰 Receita</button>
                   </div>
-                  <button type="submit" class="primary-button" style="width:100%;justify-content:center;height:44px">➕ Registrar</button>
-                  <button type="button" id="cancelEditExpense" hidden style="width:100%;height:36px;border-radius:10px;border:1.5px solid var(--line);background:var(--surface2);color:var(--text2);cursor:pointer;font-weight:600;font-family:inherit;margin-top:6px">Cancelar edição</button>
-                </form>
-              </div>
+                  <form id="expenseForm">
+                    <input id="expenseId" type="hidden" value="" />
+                    <input id="expenseType" type="hidden" value="despesa" />
+                    <div class="fin-form-row">
+                      <div class="fin-amount-field">
+                        <span class="fin-currency-sign">R$</span>
+                        <input id="expenseAmount" type="text" inputmode="decimal" placeholder="0,00" required />
+                      </div>
+                      <input id="expenseDate" type="date" class="fin-date-input" />
+                    </div>
+                    <input id="expenseDescription" placeholder="Descrição (ex.: Almoço, Uber...)" />
+                    <div class="fin-cat-select-row">
+                      <select id="expenseCategory"><option value="alimentacao">🍔 Alimentação</option></select>
+                      <button type="button" id="newCategoryBtn" class="fin-cat-add-btn" title="Nova categoria">＋</button>
+                    </div>
+                    <button type="submit" class="primary-button" style="width:100%;justify-content:center;height:44px">➕ Registrar</button>
+                    <button type="button" id="cancelEditExpense" hidden style="width:100%;height:36px;border-radius:10px;border:1.5px solid var(--line);background:var(--surface2);color:var(--text2);cursor:pointer;font-weight:600;font-family:inherit;margin-top:6px">Cancelar edição</button>
+                  </form>
+                </div>
+              </div><!-- /fin-left -->
 
-              <!-- Por categoria -->
+              <div class="fin-right">
+                <div class="panel fin-calendar-card">
+                  <div class="panel-header">
+                    <div><p class="eyebrow">Calendário</p><h2 id="finCalMonthLabel">Financeiro</h2></div>
+                    <div style="display:flex;gap:6px;flex-wrap:wrap">
+                      <span class="pill" style="background:var(--green-soft);color:var(--green);border-color:var(--green)">● Receita</span>
+                      <span class="pill" style="background:var(--red-soft);color:var(--red);border-color:var(--red)">● Despesa</span>
+                    </div>
+                  </div>
+                  <div id="finCalGrid" class="fin-cal-grid"></div>
+                </div>
+
+                <div class="panel">
+                  <div class="panel-header">
+                    <div><p class="eyebrow">Histórico</p><h2>Transações</h2></div>
+                  </div>
+                  <div id="finTransactions" class="fin-tx-list"></div>
+                </div>
+              </div><!-- /fin-right -->
+            </div><!-- /fin-layout -->
+          </div><!-- /aba lançamentos -->
+
+          <!-- ABA: ANÁLISE — para onde o dinheiro está indo -->
+          <div class="fin-tab-panel" data-fin-panel="analise" role="tabpanel" hidden>
+            <div class="fin-analise-grid">
               <div class="panel">
                 <div class="panel-header">
                   <div><p class="eyebrow">Análise</p><h2>Por categoria</h2></div>
@@ -527,63 +579,41 @@
                 <div id="finCategories" class="fin-cat-list"></div>
               </div>
 
-              <!-- Metas de gasto -->
-              <div class="panel">
-                <div class="panel-header">
-                  <div><p class="eyebrow">Controle</p><h2>Metas de gasto</h2></div>
-                  <button class="mini-button" id="finOpenGoalsModal">+ Meta</button>
-                </div>
-                <div id="finGoalsList" class="fin-goals-list">
-                  <div class="empty-state">Nenhuma meta definida.<br>Adicione limites por categoria.</div>
-                </div>
-              </div>
-
-              <!-- Recorrentes -->
-              <div class="panel">
-                <div class="panel-header">
-                  <div><p class="eyebrow">Automação</p><h2>Recorrentes</h2></div>
-                  <button class="mini-button" id="finOpenRecurModal">+ Novo</button>
-                </div>
-                <div id="finRecurList" class="fin-recur-list">
-                  <div class="empty-state">Nenhum lançamento recorrente.<br>Adicione assinaturas, salário, aluguel…</div>
-                </div>
-              </div>
-
-            </div><!-- /fin-left -->
-
-            <!-- RIGHT COLUMN -->
-            <div class="fin-right">
-
-              <!-- Gráfico 6 meses -->
               <div class="panel">
                 <div class="panel-header">
                   <div><p class="eyebrow">Histórico</p><h2>Últimos 6 meses</h2></div>
                 </div>
                 <div id="finChart6m" class="fin-chart6m"></div>
               </div>
+            </div>
+          </div><!-- /aba análise -->
 
-              <!-- Calendário financeiro -->
-              <div class="panel fin-calendar-card">
-                <div class="panel-header">
-                  <div><p class="eyebrow">Calendário</p><h2 id="finCalMonthLabel">Financeiro</h2></div>
-                  <div style="display:flex;gap:6px;flex-wrap:wrap">
-                    <span class="pill" style="background:var(--green-soft);color:var(--green);border-color:var(--green)">● Receita</span>
-                    <span class="pill" style="background:var(--red-soft);color:var(--red);border-color:var(--red)">● Despesa</span>
-                  </div>
-                </div>
-                <div id="finCalGrid" class="fin-cal-grid"></div>
+          <!-- ABA: CONTROLE — metas de gasto por categoria -->
+          <div class="fin-tab-panel" data-fin-panel="controle" role="tabpanel" hidden>
+            <div class="panel">
+              <div class="panel-header">
+                <div><p class="eyebrow">Controle</p><h2>Metas de gasto</h2></div>
+                <button class="mini-button" id="finOpenGoalsModal">+ Meta</button>
               </div>
-
-              <!-- Transações -->
-              <div class="panel">
-                <div class="panel-header">
-                  <div><p class="eyebrow">Histórico</p><h2>Transações</h2></div>
-                </div>
-                <div id="finTransactions" class="fin-tx-list"></div>
+              <div id="finGoalsList" class="fin-goals-list">
+                <div class="empty-state">Nenhuma meta definida.<br>Adicione limites por categoria.</div>
               </div>
+            </div>
+          </div><!-- /aba controle -->
 
-            </div><!-- /fin-right -->
-          </div><!-- /fin-layout -->
+          <!-- ABA: AUTOMAÇÃO — lançamentos recorrentes -->
+          <div class="fin-tab-panel" data-fin-panel="automacao" role="tabpanel" hidden>
+            <div class="panel">
+              <div class="panel-header">
+                <div><p class="eyebrow">Automação</p><h2>Recorrentes</h2></div>
+                <button class="mini-button" id="finOpenRecurModal">+ Novo</button>
+              </div>
+              <div id="finRecurList" class="fin-recur-list">
+                <div class="empty-state">Nenhum lançamento recorrente.<br>Adicione assinaturas, salário, aluguel…</div>
+              </div>
+            </div>
+          </div><!-- /aba automação -->
+
         </section><!-- /financesView -->
 
         <!-- ===== SETTINGS VIEW ===== -->
@@ -611,6 +641,26 @@
                     <p>Processando imagem...</p>
                   </div>
                 </div>
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Preferências</p>
+                  <h2>Aparência</h2>
+                </div>
+              </div>
+              <div class="theme-toggle" id="themeToggle" role="radiogroup" aria-label="Tema do aplicativo">
+                <button type="button" class="theme-toggle-btn" data-theme-choice="light" role="radio">
+                  <span class="theme-toggle-icon">☀️</span><span>Claro</span>
+                </button>
+                <button type="button" class="theme-toggle-btn" data-theme-choice="dark" role="radio">
+                  <span class="theme-toggle-icon">🌙</span><span>Escuro</span>
+                </button>
+                <button type="button" class="theme-toggle-btn" data-theme-choice="system" role="radio">
+                  <span class="theme-toggle-icon">💻</span><span>Sistema</span>
+                </button>
               </div>
             </section>
 
