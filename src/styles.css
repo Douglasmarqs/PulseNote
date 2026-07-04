@@ -332,6 +332,12 @@ p, h1, h2, h3 { margin: 0; }
   flex-shrink: 0;
 }
 
+.nav-item .icon svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+
 .nav-item:hover {
   background: var(--surface2);
   color: var(--text);
@@ -1628,6 +1634,12 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
     transition: all 200ms;
   }
 
+  .bottom-nav-item .bn-icon svg {
+    width: 19px;
+    height: 19px;
+    display: block;
+  }
+
   .bottom-nav-item.active {
     color: var(--accent);
   }
@@ -1811,7 +1823,13 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   transition: all 180ms ease;
 }
 
-.fin-tab-icon { font-size: 1rem; }
+.fin-tab-icon {
+  display: inline-flex;
+  width: 17px;
+  height: 17px;
+}
+
+.fin-tab-icon svg { width: 100%; height: 100%; display: block; }
 
 .fin-tab-btn:hover { color: var(--text); }
 
@@ -1863,6 +1881,11 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   background: color-mix(in srgb, var(--surface) 80%, transparent);
   border-radius: inherit; backdrop-filter: blur(4px);
   pointer-events: all; cursor: not-allowed;
+}
+
+#expenseForm {
+  display: grid;
+  gap: 10px;
 }
 
 /* Linha valor + data no mesmo nível */
@@ -1987,6 +2010,10 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 }
 
 .fin-type-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   padding: 10px 6px;
   border-radius: 11px;
   font-size: 0.88rem;
@@ -1996,6 +2023,14 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   border: none;
   background: none;
 }
+
+.fin-type-icon {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+.fin-type-icon svg { width: 100%; height: 100%; display: block; }
 
 .fin-type-btn.active[data-fin-type="despesa"] {
   background: var(--red-soft);
@@ -2130,6 +2165,14 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   white-space: nowrap;
 }
 
+.fin-action-icon {
+  display: inline-flex;
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+}
+.fin-action-icon svg { width: 100%; height: 100%; display: block; }
+
 .fin-action-btn.close {
   background: var(--orange-soft);
   color: var(--orange);
@@ -2172,17 +2215,28 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 .fin-summary-card:hover { transform: translateY(-2px); }
 
 .fin-sum-icon {
-  font-size: 1.4rem;
-  margin-bottom: 2px;
+  display: inline-flex;
+  width: 15px;
+  height: 15px;
+  margin-right: 5px;
+  vertical-align: -2px;
 }
 
+.fin-sum-icon svg { width: 100%; height: 100%; display: block; }
+
 .fin-sum-label {
+  display: flex;
+  align-items: center;
   font-size: 0.75rem;
   font-weight: 600;
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
+
+.fin-summary-card.receita .fin-sum-icon { color: var(--green); }
+.fin-summary-card.despesa .fin-sum-icon { color: var(--red); }
+.fin-summary-card.saldo .fin-sum-icon   { color: var(--saldo-color, var(--green)); }
 
 .fin-summary-card strong {
   font-size: 1.05rem;
@@ -2194,6 +2248,12 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 .fin-summary-card.receita strong { color: var(--green); }
 .fin-summary-card.despesa strong { color: var(--red); }
 .fin-summary-card.saldo strong   { color: var(--saldo-color, var(--green)); }
+
+.fin-saldo-prev {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--muted);
+}
 
 /* Category breakdown */
 .fin-cat-list { display: grid; gap: 10px; }

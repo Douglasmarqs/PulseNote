@@ -26,10 +26,14 @@ import {
 const THEME_STORAGE_KEY = "pulsenote-theme";
 
 function syncThemeColorMeta(choice) {
-  const meta = document.getElementById("themeColorMeta");
-  if (!meta) return;
   const isDark = choice === "dark" || (choice !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
-  meta.setAttribute("content", isDark ? "#0b0d12" : "#f5f7fa");
+  const meta = document.getElementById("themeColorMeta");
+  if (meta) meta.setAttribute("content", isDark ? "#0b0d12" : "#f5f7fa");
+  // Mantém o <meta name="color-scheme"> alinhado ao tema escolhido, para que
+  // selects, calendário nativo, barra de rolagem etc. nunca fiquem brancos
+  // por cima de um app configurado como escuro (ver comentário no <head>).
+  const csMeta = document.getElementById("colorSchemeMeta");
+  if (csMeta) csMeta.setAttribute("content", isDark ? "dark" : "light");
 }
 
 function applyTheme(choice) {
@@ -1836,6 +1840,15 @@ function assertMonthNotClosed(monthKey) {
   return false;
 }
 
+// Soma o saldo (receitas - despesas) de todos os meses já fechados ANTES do
+// mês informado, para "arrastar" o saldo acumulado para o mês seguinte —
+// exatamente como um extrato bancário faz ao virar o mês.
+function getCarryOverBalance(monthKey) {
+  return (state.monthClosures || [])
+    .filter((c) => c.monthKey < monthKey)
+    .reduce((sum, c) => sum + c.saldo, 0);
+}
+
 // Registra o fechamento do mês ativo com um snapshot completo do período
 function closeMonth(monthKey) {
   if (!state.monthClosures) state.monthClosures = [];
@@ -1849,7 +1862,7 @@ function closeMonth(monthKey) {
     showToast("Nenhum lançamento no período para fechar.");
     return;
   }
-  if (!confirm(`Fechar ${finMonthLabel(monthKey)}?\nReceitas: ${formatCurrency(receitas)}\nDespesas: ${formatCurrency(despesas)}\nSaldo: ${formatCurrency(receitas - despesas)}\n\nDepois disso, não será possível adicionar ou editar lançamentos neste mês sem reabri-lo.`)) return;
+  if (!confirm(`Fechar ${finMonthLabel(monthKey)}?\nReceitas: ${formatCurrency(receitas)}\nDespesas: ${formatCurrency(despesas)}\nSaldo: ${formatCurrency(receitas - despesas)}\n\nEsse saldo será somado automaticamente ao mês seguinte. Depois de fechar, não será possível adicionar ou editar lançamentos neste mês sem reabri-lo.`)) return;
 
   state.monthClosures.push({
     monthKey,
@@ -3027,15 +3040,25 @@ function renderFinances() {
     });
   }
 
-  const receitas  = entries.filter((f) => f.type === "receita").reduce((s, f) => s + f.amount, 0);
-  const despesas  = entries.filter((f) => f.type === "despesa").reduce((s, f) => s + f.amount, 0);
-  const saldo     = receitas - despesas;
-  const usedPct   = receitas > 0 ? Math.min(100, Math.round((despesas / receitas) * 100)) : 0;
+  const receitas    = entries.filter((f) => f.type === "receita").reduce((s, f) => s + f.amount, 0);
+  const despesas    = entries.filter((f) => f.type === "despesa").reduce((s, f) => s + f.amount, 0);
+  const saldoAnterior = getCarryOverBalance(monthKey);
+  const saldo       = saldoAnterior + receitas - despesas;
+  const usedPct     = receitas > 0 ? Math.min(100, Math.round((despesas / receitas) * 100)) : 0;
 
   document.querySelector("#finReceitas").textContent  = formatCurrency(receitas);
   document.querySelector("#finDespesas").textContent  = formatCurrency(despesas);
   document.querySelector("#finSaldo").textContent     = formatCurrency(saldo);
   document.querySelector("#finSaldoCard").style.setProperty("--saldo-color", saldo >= 0 ? "var(--green)" : "var(--red)");
+  const saldoPrevEl = document.querySelector("#finSaldoPrev");
+  if (saldoPrevEl) {
+    if (saldoAnterior !== 0) {
+      saldoPrevEl.hidden = false;
+      saldoPrevEl.textContent = `${saldoAnterior >= 0 ? "+" : "-"} ${formatCurrency(Math.abs(saldoAnterior))} do mês anterior`;
+    } else {
+      saldoPrevEl.hidden = true;
+    }
+  }
   document.querySelector("#finProgressBar").style.width = `${usedPct}%`;
   document.querySelector("#finProgressBar").style.background = usedPct > 80 ? "var(--red)" : usedPct > 60 ? "var(--orange)" : "var(--green)";
   document.querySelector("#finUsedLabel").textContent = `${usedPct}% das receitas usadas`;
