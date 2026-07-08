@@ -1757,6 +1757,10 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   .search-all-btn .palette-kbd {
     display: none;
   }
+  /* No celular a busca por filtro some (regra acima) e o botão de busca
+     global vira ícone-apenas — precisa do seu próprio ícone pra não ficar
+     um botão vazio. */
+  .search-all-btn .icon { display: inline; }
 
   /* Botão de adicionar tarefa: só o ícone no mobile (mesma largura do
      avatar, formato consistente), o rótulo "Tarefa" some visualmente —
@@ -1903,8 +1907,28 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 20px;
-  align-items: start;
+  align-items: stretch;
   min-width: 0;
+}
+
+/* Os dois gráficos ficam lado a lado, com a mesma altura (align-items:
+   stretch acima), e o conteúdo do gráfico ocupa o espaço disponível em
+   vez de deixar sobra em branco — era isso que fazia a aba parecer
+   "esquisita"/desalinhada no desktop. */
+.fin-chart-panel {
+  display: flex;
+  flex-direction: column;
+}
+.fin-chart-panel .fin-chart6m {
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+.fin-chart-panel .fin-chart6m .empty-state {
+  width: 100%;
+}
+.fin-chart-panel .fin-chart6m svg {
+  width: 100%;
 }
 
 @media (max-width: 900px) {
@@ -2874,6 +2898,12 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   padding: 0 14px;
   white-space: nowrap;
 }
+/* No desktop já existe a lupa da busca por filtro (.search-box) logo ao
+   lado — a do botão "Tudo" ficava duplicada e parecia bug (duas lupas).
+   Como o botão já tem o rótulo "Tudo" + atalho ⌘K, o ícone próprio só
+   volta a aparecer no celular (regra em @media max-width:720px), onde
+   vira o único ícone da barra. */
+.search-all-btn .icon { display: none; }
 .palette-kbd {
   font-size: 0.65rem;
   font-weight: 700;

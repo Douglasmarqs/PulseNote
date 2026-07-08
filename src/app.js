@@ -3869,6 +3869,16 @@ function renderFinChart6m() {
     return { mk, lbl, r, d };
   });
 
+  // Sem nenhuma receita/despesa nos 6 meses, o gráfico de barras viraria
+  // só tracinhos mínimos no rodapé (altura mínima de 2px) com um enorme
+  // vazio em cima — parecia quebrado. Mostra um estado vazio, como já
+  // acontece na lista "Por categoria".
+  const totalMovimentado = data.reduce((s, d) => s + d.r + d.d, 0);
+  if (totalMovimentado === 0) {
+    el.innerHTML = `<div class="empty-state">Sem movimentações nos últimos 6 meses</div>`;
+    return;
+  }
+
   const maxVal = Math.max(...data.flatMap((d) => [d.r, d.d]), 1);
   const W = 100, H = 80, pad = 4, barW = 6, gap = 2;
   const groupW = barW * 2 + gap + 4;
@@ -3906,6 +3916,14 @@ function renderFinSaldoEvolution() {
   for (let i = 5; i >= 0; i--) {
     const d = new Date(ay, am - 1 - i, 1);
     months.push(toLocalIso(d).slice(0, 7));
+  }
+
+  // Sem nenhum lançamento no histórico inteiro, o saldo fica sempre em
+  // zero e a linha vira um traço reto colado embaixo do gráfico — parecia
+  // quebrado. Mostra um estado vazio em vez de um gráfico "fantasma".
+  if ((state.finances || []).length === 0) {
+    el.innerHTML = `<div class="empty-state">Sem dados suficientes para mostrar a evolução</div>`;
+    return;
   }
 
   const firstMonth = months[0];
