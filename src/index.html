@@ -123,12 +123,29 @@
               <span class="icon">🔍</span>
               <input id="globalSearch" type="text" inputmode="search" autocomplete="off" autocorrect="off" placeholder="Pesquisar..." />
             </label>
+            <button id="openGlobalPalette" class="mini-button" title="Busca global (Ctrl/Cmd+K)" style="height:38px;padding:0 12px;white-space:nowrap">🔎 Tudo <span class="palette-kbd">⌘K</span></button>
             <button id="quickAddTask" class="primary-button" aria-label="Adicionar tarefa" title="Adicionar tarefa">
               <span class="icon">＋</span>
               <span>Tarefa</span>
             </button>
           </div>
         </header>
+
+        <!-- Busca global (Ctrl/Cmd+K) — procura em notas, tarefas, agenda e
+             finanças ao mesmo tempo, diferente da busca do topo que só
+             filtra a lista da tela atual. -->
+        <div id="globalPaletteModal" class="modal-backdrop" hidden>
+          <div class="modal-card" style="max-width:520px">
+            <div class="modal-header">
+              <h2>Busca global</h2>
+              <button class="icon-button" id="closeGlobalPalette">✕</button>
+            </div>
+            <div class="modal-body" style="display:grid;gap:12px">
+              <input id="globalPaletteInput" type="text" placeholder="Buscar em notas, tarefas, agenda e finanças..." autocomplete="off" class="field-input" />
+              <div id="globalPaletteResults" style="display:grid;gap:6px;max-height:50vh;overflow:auto"></div>
+            </div>
+          </div>
+        </div>
 
         <!-- ===== DASHBOARD VIEW ===== -->
         <section id="dashboardView" class="view active-view">
@@ -156,6 +173,26 @@
               </div>
             </div>
           </section>
+
+          <!-- Resumo real do dia (dados de verdade, não gamificação) -->
+          <div class="today-summary-grid">
+            <div class="today-summary-card">
+              <span class="today-summary-label">Tarefas pendentes</span>
+              <strong class="today-summary-value" id="summaryTasksPending">0</strong>
+            </div>
+            <div class="today-summary-card">
+              <span class="today-summary-label">Saldo do mês</span>
+              <strong class="today-summary-value" id="summaryFinSaldo">R$ 0,00</strong>
+            </div>
+            <div class="today-summary-card">
+              <span class="today-summary-label">Próximo evento</span>
+              <strong class="today-summary-value" id="summaryNextEvent" style="font-size:0.92rem">Nenhum</strong>
+            </div>
+            <div class="today-summary-card">
+              <span class="today-summary-label">Meta em destaque</span>
+              <strong class="today-summary-value" id="summaryTopGoal" style="font-size:0.92rem">Nenhuma</strong>
+            </div>
+          </div>
 
           <!-- Metrics -->
           <div class="metric-grid">
@@ -423,6 +460,7 @@
                 <option value="15" selected>15 min antes</option>
                 <option value="30">30 min antes</option>
                 <option value="60">1 hora antes</option>
+                <option value="1440">1 dia antes</option>
               </select>
               <textarea id="eventNotes" rows="3" placeholder="Notas do compromisso"></textarea>
             </form>
@@ -502,7 +540,6 @@
               <div class="fin-summary-card saldo" id="finSaldoCard">
                 <span class="fin-sum-label"><span class="fin-sum-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="12.5" width="3.4" height="7.5" rx="1"/><rect x="10.3" y="7.5" width="3.4" height="12.5" rx="1"/><rect x="16.6" y="3.5" width="3.4" height="16.5" rx="1"/></svg></span>Saldo</span>
                 <strong id="finSaldo">R$ 0,00</strong>
-                <small id="finSaldoPrev" class="fin-saldo-prev" hidden></small>
               </div>
             </div>
 
@@ -610,6 +647,13 @@
                 </div>
                 <div id="finChart6m" class="fin-chart6m"></div>
               </div>
+
+              <div class="panel">
+                <div class="panel-header">
+                  <div><p class="eyebrow">Evolução</p><h2>Saldo acumulado</h2></div>
+                </div>
+                <div id="finSaldoEvolution" class="fin-chart6m"></div>
+              </div>
             </div>
           </div><!-- /aba análise -->
 
@@ -622,6 +666,15 @@
               </div>
               <div id="finGoalsList" class="fin-goals-list">
                 <div class="empty-state">Nenhuma meta definida.<br>Adicione limites por categoria.</div>
+              </div>
+            </div>
+
+            <div class="panel" style="margin-top:14px">
+              <div class="panel-header">
+                <div><p class="eyebrow">Histórico</p><h2>Meses fechados</h2></div>
+              </div>
+              <div id="finClosuresList" class="fin-closures-list">
+                <div class="empty-state">Nenhum mês fechado ainda.</div>
               </div>
             </div>
           </div><!-- /aba controle -->
@@ -734,12 +787,40 @@
             <section class="panel">
               <div class="panel-header">
                 <div>
+                  <p class="eyebrow">Seus dados</p>
+                  <h2>Backup</h2>
+                </div>
+              </div>
+              <p class="task-meta" style="margin-bottom:10px">Baixe uma cópia completa de tudo (notas, tarefas, agenda, metas e finanças) em um arquivo .json, ou restaure a partir de um backup anterior.</p>
+              <div class="form-actions" style="gap:8px">
+                <button id="settingsExportBackup" class="ghost-button"><span>⬇️</span><span>Exportar backup (.json)</span></button>
+                <button id="settingsImportBackup" class="ghost-button"><span>⬆️</span><span>Importar backup</span></button>
+                <input id="settingsImportFile" type="file" accept="application/json" hidden />
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <div>
                   <p class="eyebrow">Sessão</p>
                   <h2>Sair da conta</h2>
                 </div>
               </div>
               <button id="settingsLogoutBtn" class="ghost-button danger-button">
                 <span>🚪</span><span>Sair da conta</span>
+              </button>
+            </section>
+
+            <section class="panel" style="border-color:var(--red)">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow" style="color:var(--red)">Zona de perigo</p>
+                  <h2>Excluir conta</h2>
+                </div>
+              </div>
+              <p class="task-meta" style="margin-bottom:10px">Isso apaga permanentemente sua conta e todos os seus dados do PulseNote. Não tem como desfazer — considere exportar um backup antes.</p>
+              <button id="settingsDeleteAccountBtn" class="ghost-button danger-button">
+                <span>⚠️</span><span>Excluir minha conta</span>
               </button>
             </section>
 

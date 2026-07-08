@@ -752,6 +752,35 @@ p, h1, h2, h3 { margin: 0; }
 }
 .task-row-bottom .task-meta { margin-top: 0; }
 
+/* ── Checklist (subtarefas) ─────────────────────────────────── */
+.task-subtasks {
+  display: none;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px 2px 38px;
+  border-top: 1px dashed var(--line);
+  margin-top: 2px;
+}
+.task-subtasks.open { display: flex; }
+.task-subtask-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+}
+.task-subtask-row span.done { text-decoration: line-through; opacity: 0.55; }
+.task-subtask-check {
+  width: 20px; height: 20px; min-width: 20px;
+  border-radius: 6px;
+  border: 1.5px solid var(--line);
+  background: transparent;
+  display: grid; place-items: center;
+  font-size: 0.7rem;
+  color: var(--green);
+  flex-shrink: 0;
+}
+.task-subtask-check.done { background: var(--green); border-color: var(--green); color: #fff; }
+
 .task-check {
   width: 28px;
   height: 28px;
@@ -2210,9 +2239,24 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   gap: 4px;
   box-shadow: var(--shadow-card);
   transition: transform 180ms;
+  position: relative;
 }
 
 .fin-summary-card:hover { transform: translateY(-2px); }
+
+/* Bolinha discreta indicando que o saldo mostrado inclui valor transferido
+   do mês anterior — some ao passar o mouse/tocar (title nativo explica). */
+.fin-summary-card.has-carryover::after {
+  content: "";
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--surface);
+}
 
 .fin-sum-icon {
   display: inline-flex;
@@ -2248,12 +2292,6 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 .fin-summary-card.receita strong { color: var(--green); }
 .fin-summary-card.despesa strong { color: var(--red); }
 .fin-summary-card.saldo strong   { color: var(--saldo-color, var(--green)); }
-
-.fin-saldo-prev {
-  font-size: 0.68rem;
-  font-weight: 600;
-  color: var(--muted);
-}
 
 /* Category breakdown */
 .fin-cat-list { display: grid; gap: 10px; }
@@ -2551,6 +2589,27 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 .fin-goal-label { font-size: 0.88rem; font-weight: 700; color: var(--text); flex: 1; }
 .fin-goal-val   { font-size: 0.82rem; font-weight: 700; white-space: nowrap; }
 
+/* ─── Meses fechados ───────────────────────────────────────────── */
+.fin-closures-list { display: grid; gap: 10px; margin-top: 4px; }
+.fin-closure-row {
+  background: var(--surface2);
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: grid;
+  gap: 8px;
+}
+.fin-closure-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.fin-closure-label { font-size: 0.88rem; font-weight: 700; color: var(--text); text-transform: capitalize; }
+.fin-closure-val   { font-size: 0.88rem; font-weight: 700; white-space: nowrap; }
+.fin-closure-actions { display: flex; gap: 8px; }
+.fin-closure-actions .mini-button { flex: 1; text-align: center; }
+
 /* ─── Recorrentes ─────────────────────────────────────────────── */
 .fin-recur-list { display: grid; gap: 8px; }
 .fin-recur-row {
@@ -2562,6 +2621,7 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   border: 1.5px solid var(--line);
   border-radius: 12px;
 }
+.fin-recur-row.is-skipped { opacity: 0.55; }
 .fin-recur-icon {
   width: 36px; height: 36px;
   border-radius: 10px;
@@ -2750,3 +2810,65 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 @media (max-width: 720px) {
   .settings-layout { max-width: none; }
 }
+
+/* ── Busca global (Ctrl/Cmd+K) ──────────────────────────────── */
+.palette-kbd {
+  font-size: 0.65rem;
+  font-weight: 700;
+  opacity: 0.6;
+  margin-left: 2px;
+}
+.palette-result {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface2);
+  border: 1.5px solid transparent;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+}
+.palette-result:hover { border-color: var(--accent); }
+.palette-result-icon { flex-shrink: 0; font-size: 1rem; }
+.palette-result-text { flex: 1; min-width: 0; }
+.palette-result-title {
+  font-size: 0.86rem; font-weight: 700; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.palette-result-sub { font-size: 0.72rem; color: var(--muted); }
+mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border-radius: 3px; padding: 0 1px; }
+
+/* ── Resumo do dia (Início) ─────────────────────────────────── */
+.today-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 18px;
+}
+@media (max-width: 720px) {
+  .today-summary-grid { grid-template-columns: repeat(2, 1fr); }
+}
+.today-summary-card {
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  border-radius: 16px;
+  padding: 14px;
+  display: grid;
+  gap: 4px;
+  box-shadow: var(--shadow-card);
+}
+.today-summary-label { font-size: 0.7rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.today-summary-value { font-size: 1.15rem; font-weight: 800; color: var(--text); }
+
+/* ── Marcos de meta ──────────────────────────────────────────── */
+.goal-milestones { display: grid; gap: 6px; margin-top: 8px; }
+.goal-milestone-row { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; }
+.goal-milestone-check {
+  width: 18px; height: 18px; min-width: 18px; border-radius: 5px;
+  border: 1.5px solid var(--line); background: transparent;
+  display: grid; place-items: center; font-size: 0.65rem; color: var(--green);
+}
+.goal-milestone-check.done { background: var(--green); border-color: var(--green); color: #fff; }
+.goal-milestone-row span.done { text-decoration: line-through; opacity: 0.55; }

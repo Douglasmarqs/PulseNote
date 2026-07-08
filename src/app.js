@@ -10,10 +10,12 @@ import {
   reauthenticateWithCredential,
   EmailAuthProvider,
   sendEmailVerification,
+  deleteUser,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   doc,
   setDoc,
+  deleteDoc,
   onSnapshot,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
@@ -468,8 +470,19 @@ document.addEventListener("DOMContentLoaded", async () => {
   `;
   document.body.appendChild(overlay);
 
+  // Rede de segurança: se por algum motivo o Firebase/Firestore travar (rede
+  // muito lenta, etc.) e appReady nunca resolver, garante que o overlay some
+  // sozinho depois de um tempo em vez de prender o usuário numa tela de
+  // carregamento pra sempre.
+  const overlaySafetyTimer = setTimeout(() => {
+    overlay.style.transition = "opacity 300ms ease";
+    overlay.style.opacity = "0";
+    setTimeout(() => overlay.remove(), 320);
+  }, 9000);
+
   // Aguarda o Firebase confirmar sessão e carregar dados do Firestore
   await appReady;
+  clearTimeout(overlaySafetyTimer);
 
   // Remove overlay com fade suave
   overlay.style.transition = "opacity 300ms ease";
@@ -511,6 +524,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   bindFinanceMonthControls();
   bindFinGoalsModal();
   bindFinRecurModal();
+  bindGlobalPalette();
   autoApplyRecurrents();
   renderAll();
   handlePwaShortcutAction();
@@ -876,6 +890,82 @@ function bindSettingsView() {
     await syncToServer();
     await logout();
   });
+
+  // ── Backup: exportar tudo como .json ─────────────────────────────
+  document.getElementById("settingsExportBackup")?.addEventListener("click", () => {
+    const payload = {
+      pulsenoteBackup: true,
+      exportedAt: new Date().toISOString(),
+      data: state,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `pulsenote-backup-${todayIso}.json`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    showToast("⬇️ Backup exportado!");
+  });
+
+  // ── Backup: importar de um .json exportado anteriormente ─────────
+  document.getElementById("settingsImportBackup")?.addEventListener("click", () => {
+    document.getElementById("settingsImportFile")?.click();
+  });
+  document.getElementById("settingsImportFile")?.addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(reader.result);
+        const incoming = parsed?.data && parsed?.pulsenoteBackup ? parsed.data : parsed;
+        if (!incoming || typeof incoming !== "object") throw new Error("formato inválido");
+        if (!confirm("Isso vai SUBSTITUIR todos os seus dados atuais pelos do backup. Essa ação não pode ser desfeita. Continuar?")) return;
+        state = normalizeState(incoming);
+        saveState();
+        renderAll();
+        showSettingsMsg("✅ Backup importado com sucesso!", "success");
+        showToast("✅ Dados restaurados do backup!");
+      } catch (err) {
+        console.error("Erro ao importar backup:", err);
+        showSettingsMsg("Não foi possível ler esse arquivo. Confira se é um backup válido do PulseNote.", "error");
+      }
+    };
+    reader.readAsText(file);
+  });
+
+  // ── Excluir conta permanentemente ─────────────────────────────────
+  document.getElementById("settingsDeleteAccountBtn")?.addEventListener("click", async () => {
+    hideSettingsMsg();
+    if (!confirm("Tem certeza que quer excluir sua conta? Todos os seus dados (notas, tarefas, agenda, metas e finanças) serão apagados PERMANENTEMENTE. Essa ação não pode ser desfeita.")) return;
+
+    const pw = prompt("Por segurança, digite sua senha atual para confirmar a exclusão:");
+    if (!pw) return;
+
+    try {
+      const credential = EmailAuthProvider.credential(currentUser.email, pw);
+      await reauthenticateWithCredential(currentUser, credential);
+
+      await deleteDoc(doc(db, "userData", currentUser.uid)).catch((err) => {
+        console.warn("Não foi possível apagar os dados no Firestore (a conta será excluída mesmo assim):", err);
+      });
+
+      const key = getStorageKey();
+      if (key) localStorage.removeItem(key);
+
+      await deleteUser(currentUser);
+      window.location.replace("login.html");
+    } catch (err) {
+      const messages = {
+        "auth/wrong-password":        "Senha incorreta.",
+        "auth/invalid-credential":    "Senha incorreta.",
+        "auth/requires-recent-login": "Por segurança, saia e entre na conta novamente antes de excluí-la.",
+      };
+      showSettingsMsg(messages[err.code] || `Erro ao excluir conta: ${err.message}`, "error");
+    }
+  });
 }
 
 // Atualiza todos os pontos da UI que exibem o avatar do usuário.
@@ -931,6 +1021,11 @@ function normalizeState(parsed) {
   if (!parsed.finGoals) parsed.finGoals = [];
   if (!parsed.finRecurrents) parsed.finRecurrents = [];
   if (parsed.profilePhoto === undefined) parsed.profilePhoto = null;
+  // Retrocompatibilidade: lançamentos, tarefas e metas antigos não tinham
+  // esses campos — garantimos que existam pra não quebrar o restante do app.
+  parsed.tasks.forEach((t) => { if (!t.subtasks) t.subtasks = []; if (t.recurrence === undefined) t.recurrence = null; });
+  parsed.notes.forEach((n) => { if (!n.tags) n.tags = []; });
+  parsed.goals.forEach((g) => { if (!g.milestones) g.milestones = []; });
   return parsed;
 }
 
@@ -974,6 +1069,8 @@ function createTask(title, status = "Pendente", priority = "Media", dueDate = to
     createdAt: todayIso,
     completedAt,
     sourceNoteId: "",
+    subtasks: [],
+    recurrence: null,
   };
 }
 
@@ -1063,6 +1160,19 @@ function bindFinTabs() {
   });
 }
 
+// Pula direto para um mês específico na aba Lançamentos — usado na lista de
+// "Meses fechados" pra não precisar clicar em ‹ › várias vezes até achar o mês.
+function goToFinMonth(monthKey) {
+  finActiveMonth = monthKey;
+  document.querySelectorAll(".fin-tab-btn").forEach((t) => {
+    const active = t.dataset.finTab === "lancamentos";
+    t.classList.toggle("active", active);
+    t.setAttribute("aria-selected", String(active));
+  });
+  document.querySelectorAll(".fin-tab-panel").forEach((p) => { p.hidden = p.dataset.finPanel !== "lancamentos"; });
+  renderFinances();
+}
+
 function bindActions() {
   document.querySelectorAll("[data-calendar-mode]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -1083,6 +1193,106 @@ function bindActions() {
     });
   });
 }
+
+// ============================================================
+// BUSCA GLOBAL (Ctrl/Cmd+K) — procura em notas, tarefas, agenda
+// e finanças ao mesmo tempo, diferente da busca do topo que só
+// filtra a lista da seção atual.
+// ============================================================
+function searchEverything(query) {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+  const results = [];
+
+  (state.notes || []).forEach((n) => {
+    if (`${n.title} ${n.description}`.toLowerCase().includes(q)) {
+      results.push({ type: "notes", icon: "📝", title: n.title, sub: "Nota", id: n.id });
+    }
+  });
+  (state.tasks || []).forEach((t) => {
+    if (t.title.toLowerCase().includes(q)) {
+      results.push({ type: "tasks", icon: "✅", title: t.title, sub: `Tarefa · ${t.status}`, id: t.id });
+    }
+  });
+  (state.events || []).forEach((e) => {
+    if (`${e.title} ${e.location || ""}`.toLowerCase().includes(q)) {
+      results.push({ type: "calendar", icon: "📅", title: e.title, sub: `Agenda · ${formatDate(e.date)}`, id: e.id });
+    }
+  });
+  (state.finances || []).forEach((f) => {
+    if ((f.description || "").toLowerCase().includes(q)) {
+      results.push({ type: "finances", icon: "💰", title: f.description, sub: `Financas · ${formatCurrency(f.amount)}`, id: f.id });
+    }
+  });
+  (state.goals || []).forEach((g) => {
+    if (g.title.toLowerCase().includes(q)) {
+      results.push({ type: "goals", icon: "🎯", title: g.title, sub: "Meta", id: g.id });
+    }
+  });
+
+  return results.slice(0, 20);
+}
+
+function renderPaletteResults(query) {
+  const el = document.querySelector("#globalPaletteResults");
+  if (!el) return;
+  const results = searchEverything(query);
+  if (!query.trim()) {
+    el.innerHTML = `<div class="empty-state">Digite pra buscar em notas, tarefas, agenda, metas e finanças.</div>`;
+    return;
+  }
+  if (!results.length) {
+    el.innerHTML = `<div class="empty-state">Nada encontrado para "${escapeHtml(query)}".</div>`;
+    return;
+  }
+  el.innerHTML = results.map((r, i) => `
+    <button class="palette-result" onclick="openPaletteResult(${i})">
+      <span class="palette-result-icon">${r.icon}</span>
+      <span class="palette-result-text">
+        <span class="palette-result-title">${escapeHtml(r.title || "(sem título)")}</span><br>
+        <span class="palette-result-sub">${escapeHtml(r.sub)}</span>
+      </span>
+    </button>`).join("");
+  window.__paletteResults = results;
+}
+
+function openPaletteResult(i) {
+  const r = window.__paletteResults?.[i];
+  if (!r) return;
+  document.querySelector("#globalPaletteModal").hidden = true;
+  setView(r.type);
+}
+
+function bindGlobalPalette() {
+  const modal   = document.querySelector("#globalPaletteModal");
+  const input   = document.querySelector("#globalPaletteInput");
+  const openBtn = document.querySelector("#openGlobalPalette");
+  if (!modal) return;
+
+  function openPalette() {
+    modal.hidden = false;
+    input.value = "";
+    renderPaletteResults("");
+    setTimeout(() => input.focus(), 30);
+  }
+  function closePalette() { modal.hidden = true; }
+
+  openBtn?.addEventListener("click", openPalette);
+  document.querySelector("#closeGlobalPalette")?.addEventListener("click", closePalette);
+  modal.addEventListener("click", (e) => { if (e.target === modal) closePalette(); });
+  input?.addEventListener("input", () => renderPaletteResults(input.value));
+
+  document.addEventListener("keydown", (e) => {
+    const isK = e.key === "k" || e.key === "K";
+    if ((e.metaKey || e.ctrlKey) && isK) {
+      e.preventDefault();
+      modal.hidden ? openPalette() : closePalette();
+    } else if (e.key === "Escape" && !modal.hidden) {
+      closePalette();
+    }
+  });
+}
+window.openPaletteResult = openPaletteResult;
 
 function setView(view) {
   activeView = view;
@@ -1140,11 +1350,30 @@ function saveTask(event) {
 
 function saveEvent(event) {
   event.preventDefault();
+  const date = valueOf("#eventDate");
+  const time = valueOf("#eventTime");
+
+  // Detecta conflito de horário: outro compromisso no mesmo dia a menos de
+  // 30 minutos de distância. Não bloqueia (a pessoa pode querer mesmo assim,
+  // ex.: dois compromissos rápidos e próximos), só avisa antes de salvar.
+  if (date && time) {
+    const [h, m] = time.split(":").map(Number);
+    const newMinutes = h * 60 + m;
+    const conflict = state.events.find((e) => {
+      if (e.date !== date || !e.time) return false;
+      const [eh, em] = e.time.split(":").map(Number);
+      return Math.abs((eh * 60 + em) - newMinutes) < 30;
+    });
+    if (conflict) {
+      if (!confirm(`⚠️ Você já tem "${conflict.title}" às ${conflict.time} nesse dia, bem perto desse horário. Adicionar mesmo assim?`)) return;
+    }
+  }
+
   state.events.push({
     id: crypto.randomUUID(),
     title: valueOf("#eventTitle"),
-    date: valueOf("#eventDate"),
-    time: valueOf("#eventTime"),
+    date,
+    time,
     location: valueOf("#eventLocation") || "Sem local",
     reminder: Number(valueOf("#eventReminder")),
     notes: valueOf("#eventNotes"),
@@ -1163,12 +1392,44 @@ function saveGoal(event) {
     title: valueOf("#goalTitle"),
     target: Number(valueOf("#goalTarget") || 1),
     current: 0,
+    milestones: [],
   });
   event.target.reset();
   document.querySelector("#goalTarget").value = 5;
   saveState();
   renderAll();
   showToast("Meta criada.");
+}
+
+// ── Marcos/checkpoints de uma meta (ex.: "Correr 10km" → 3 marcos) ──
+function addGoalMilestone(id, event) {
+  event?.stopPropagation();
+  const title = prompt("Nome do marco (ex.: “Primeiros 3km”):");
+  if (!title || !title.trim()) return;
+  const goal = state.goals.find((g) => g.id === id);
+  if (!goal) return;
+  if (!goal.milestones) goal.milestones = [];
+  goal.milestones.push({ id: crypto.randomUUID(), title: title.trim(), done: false });
+  saveState();
+  renderGoals();
+}
+
+function toggleGoalMilestone(goalId, msId, event) {
+  event?.stopPropagation();
+  const goal = state.goals.find((g) => g.id === goalId);
+  if (!goal) return;
+  goal.milestones = (goal.milestones || []).map((m) => (m.id === msId ? { ...m, done: !m.done } : m));
+  saveState();
+  renderGoals();
+}
+
+function deleteGoalMilestone(goalId, msId, event) {
+  event?.stopPropagation();
+  const goal = state.goals.find((g) => g.id === goalId);
+  if (!goal) return;
+  goal.milestones = (goal.milestones || []).filter((m) => m.id !== msId);
+  saveState();
+  renderGoals();
 }
 
 function valueOf(selector) {
@@ -1274,6 +1535,26 @@ function renderDashboard() {
   const nextEvents = state.events.filter((event) => event.date >= todayIso && event.date <= offsetDate(7));
   const score = doneTotal * 25 + state.goals.reduce((sum, goal) => sum + goal.current * 10, 0);
 
+  // ── Resumo real do dia (sem gamificação) ──
+  const pendingTasks = state.tasks.filter((t) => t.status === "Pendente" || t.status === "Em andamento").length;
+  const monthKey = todayIso.slice(0, 7);
+  const monthEntries = (state.finances || []).filter((f) => f.date.startsWith(monthKey));
+  const monthReceitas = monthEntries.filter((f) => f.type === "receita").reduce((s, f) => s + f.amount, 0);
+  const monthDespesas = monthEntries.filter((f) => f.type === "despesa").reduce((s, f) => s + f.amount, 0);
+  const monthSaldo = getCarryOverBalance(monthKey) + monthReceitas - monthDespesas;
+  const upcomingSorted = [...state.events].filter((e) => e.date >= todayIso).sort(sortEvent);
+  const nextEvent = upcomingSorted[0];
+  const topGoal = [...state.goals].filter((g) => g.current < g.target).sort((a, b) => (b.current / b.target) - (a.current / a.target))[0];
+
+  const pendingEl = document.querySelector("#summaryTasksPending");
+  if (pendingEl) pendingEl.textContent = pendingTasks;
+  const saldoEl = document.querySelector("#summaryFinSaldo");
+  if (saldoEl) { saldoEl.textContent = formatCurrency(monthSaldo); saldoEl.style.color = monthSaldo >= 0 ? "var(--green)" : "var(--red)"; }
+  const eventEl = document.querySelector("#summaryNextEvent");
+  if (eventEl) eventEl.textContent = nextEvent ? `${nextEvent.title} · ${formatDate(nextEvent.date)}` : "Nenhum";
+  const goalEl = document.querySelector("#summaryTopGoal");
+  if (goalEl) goalEl.textContent = topGoal ? `${topGoal.title} (${Math.round((topGoal.current / topGoal.target) * 100)}%)` : "Nenhuma";
+
   document.querySelector("#doneMetric").textContent = doneToday;
   document.querySelector("#doneMetricDetail").textContent = `${doneTotal} no historico`;
   document.querySelector("#progressMetric").textContent = `${progress}%`;
@@ -1365,6 +1646,7 @@ function renderGoalSummary() {
 
 function renderNotes() {
   const filter = document.querySelector("#noteFilter").value;
+  const searchQuery = elements.globalSearch.value.trim();
   let notes = queryFilter(state.notes, ["title", "description", "category", "folder", "goal"]);
   if (filter === "favorite") notes = notes.filter((note) => note.favorite);
   if (["Alta", "Urgente"].includes(filter)) notes = notes.filter((note) => note.priority === filter);
@@ -1387,16 +1669,24 @@ function renderNotes() {
         ? `<div class="tag-list">${note.tags.slice(0,3).map((t) => `<span class="pill">#${escapeHtml(t)}</span>`).join("")}</div>`
         : "";
 
+      const words = (note.description || "").trim().split(/\s+/).filter(Boolean).length;
+      const readingMin = Math.max(1, Math.round(words / 200));
+      const wordCountHtml = words > 0 ? `<small class="task-meta" style="display:block;margin-top:2px">${words} palavras · ${readingMin} min de leitura</small>` : "";
+
+      const titleHtml = highlightMatch(escapeHtml(note.title), searchQuery);
+      const descHtml = note.description ? `<p>${highlightMatch(escapeHtml(note.description), searchQuery)}</p>` : "";
+
       return `
         <article class="note-card">
           <header>
             <div>
-              <h3>${escapeHtml(note.title)}</h3>
+              <h3>${titleHtml}</h3>
               <div class="note-meta">${escapeHtml(note.category)} · ${formatDate(note.createdAt)}</div>
             </div>
             <button class="mini-button" onclick="toggleFavorite('${note.id}')" title="Favoritar" style="font-size:1.1rem;background:none;border:none;padding:0;width:30px;height:30px;display:grid;place-items:center;flex-shrink:0;border-radius:50%;">${note.favorite ? "⭐" : "☆"}</button>
           </header>
-          ${note.description ? `<p>${escapeHtml(note.description)}</p>` : ""}
+          ${descHtml}
+          ${wordCountHtml}
           ${checklistHtml}
           ${tagsHtml}
           <div class="tag-list" style="margin-top:4px">
@@ -1405,6 +1695,7 @@ function renderNotes() {
           <div class="card-actions">
             <button onclick="editNote('${note.id}')">✏️ Editar</button>
             <button onclick="convertNoteToTask('${note.id}')">➡️ Tarefa</button>
+            <button onclick="exportNoteMarkdown('${note.id}')">⬇️ .md</button>
             <button onclick="deleteNote('${note.id}')">🗑️</button>
           </div>
         </article>
@@ -1412,6 +1703,34 @@ function renderNotes() {
     },
     "Nenhuma anotação encontrada. Crie a primeira! ✨"
   );
+}
+
+// Envolve trechos que batem com a busca em <mark>, pra destacar visualmente
+// onde o termo pesquisado aparece (só quando há uma busca ativa).
+function highlightMatch(safeHtml, query) {
+  const q = query.trim();
+  if (!q) return safeHtml;
+  const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return safeHtml.replace(new RegExp(`(${escaped})`, "ig"), "<mark class=\"pn-highlight\">$1</mark>");
+}
+
+// Exporta uma nota como arquivo Markdown (.md) pra guardar fora do app
+function exportNoteMarkdown(id) {
+  const note = state.notes.find((n) => n.id === id);
+  if (!note) return;
+  let md = `# ${note.title}\n\n`;
+  if (note.tags?.length) md += note.tags.map((t) => `#${t}`).join(" ") + "\n\n";
+  if (note.description) md += `${note.description}\n\n`;
+  if (note.checklist?.length) md += note.checklist.map((item) => `- [ ] ${item}`).join("\n") + "\n\n";
+  if (note.observations) md += `> ${note.observations}\n`;
+
+  const blob = new Blob([md], { type: "text/markdown" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${note.title.replace(/[^\w\-]+/g, "_") || "nota"}.md`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
 
 function editNote(id) {
@@ -1508,12 +1827,19 @@ function renderTasks() {
 
 function renderTaskRow(task) {
   const isDone = task.status === "Concluida";
+  const subtasks = task.subtasks || [];
+  const doneCount = subtasks.filter((s) => s.done).length;
+  const recIcon = task.recurrence ? "🔁" : "🔄";
+  const recTitle = task.recurrence
+    ? `Repete: ${{ diaria: "diariamente", semanal: "semanalmente", mensal: "mensalmente" }[task.recurrence]} (toque pra mudar)`
+    : "Sem repetição (toque pra ativar)";
   return `
     <article class="task-row" data-task-id="${task.id}" draggable="true" ondragstart="dragTask('${task.id}')">
       <div class="task-row-top">
         <button class="task-check" onclick="toggleTask('${task.id}')" title="Concluir" style="${isDone ? "background:var(--green);border-color:var(--green);color:#fff;" : ""}">${isDone ? "✓" : ""}</button>
-        <div class="task-title" style="${isDone ? "text-decoration:line-through;opacity:0.5;" : ""}">${escapeHtml(task.title)}</div>
+        <div class="task-title" style="${isDone ? "text-decoration:line-through;opacity:0.5;" : ""}" onclick="toggleTaskDetails('${task.id}', event)">${escapeHtml(task.title)}</div>
         <div class="task-row-actions">
+          <button class="mini-button" onclick="cycleTaskRecurrence('${task.id}', event)" title="${recTitle}" style="padding:0;width:28px;height:28px;${task.recurrence ? "color:var(--accent);" : ""}">${recIcon}</button>
           <button class="mini-button" onclick="openTaskMoveMenu('${task.id}', event)" title="Mover para outra coluna" style="padding:0;width:28px;height:28px;">↔️</button>
           <button class="mini-button" onclick="deleteTask('${task.id}')" title="Excluir" style="padding:0;width:28px;height:28px;">🗑️</button>
         </div>
@@ -1522,6 +1848,16 @@ function renderTaskRow(task) {
         <span class="task-meta">📅 ${formatDate(task.dueDate)}</span>
         <span class="priority-pill priority-${task.priority}">${escapeHtml(task.priority)}</span>
         <span class="status-pill status-${task.status.replace(" ", "-")}">${task.status}</span>
+        <button class="mini-button task-subtasks-toggle" onclick="toggleTaskDetails('${task.id}', event)" style="margin-left:auto;padding:2px 8px;font-size:0.7rem">☑ ${doneCount}/${subtasks.length}</button>
+      </div>
+      <div class="task-subtasks">
+        ${subtasks.map((s) => `
+          <div class="task-subtask-row">
+            <button class="task-subtask-check ${s.done ? "done" : ""}" onclick="toggleSubtask('${task.id}','${s.id}', event)">${s.done ? "✓" : ""}</button>
+            <span class="${s.done ? "done" : ""}">${escapeHtml(s.title)}</span>
+            <button class="mini-button" onclick="deleteSubtask('${task.id}','${s.id}', event)" style="padding:0;width:22px;height:22px;margin-left:auto">✕</button>
+          </div>`).join("") || `<div class="empty-state" style="padding:8px 0">Sem itens na checklist.</div>`}
+        <button class="mini-button" onclick="addSubtask('${task.id}', event)" style="width:100%;margin-top:4px">+ Item da checklist</button>
       </div>
     </article>
   `;
@@ -1603,7 +1939,78 @@ function updateTaskStatus(id, status) {
   renderAll();
   if (status === "Concluida" && previous !== "Concluida") {
     celebrate("Tarefa concluida. XP ganho.");
+    const task = state.tasks.find((t) => t.id === id);
+    if (task?.recurrence) spawnNextRecurringTask(task);
   }
+}
+
+// Cria automaticamente a próxima ocorrência de uma tarefa recorrente quando
+// a atual é concluída — igual já acontece com lançamentos financeiros.
+function spawnNextRecurringTask(task) {
+  const base = task.dueDate ? new Date(task.dueDate + "T00:00:00") : new Date();
+  const next = new Date(base);
+  if (task.recurrence === "diaria") next.setDate(next.getDate() + 1);
+  else if (task.recurrence === "semanal") next.setDate(next.getDate() + 7);
+  else if (task.recurrence === "mensal") next.setMonth(next.getMonth() + 1);
+  else return;
+
+  const newTask = createTask(task.title, "Pendente", task.priority, toLocalIso(next));
+  newTask.recurrence = task.recurrence;
+  newTask.subtasks = (task.subtasks || []).map((s) => ({ ...s, id: crypto.randomUUID(), done: false }));
+  state.tasks.unshift(newTask);
+  saveState();
+  renderAll();
+}
+
+// Alterna a recorrência de uma tarefa entre nenhuma → diária → semanal →
+// mensal → nenhuma, num único botão (sem precisar de um modal extra).
+function cycleTaskRecurrence(id, event) {
+  event?.stopPropagation();
+  const order = [null, "diaria", "semanal", "mensal"];
+  const task = state.tasks.find((t) => t.id === id);
+  if (!task) return;
+  const idx = order.indexOf(task.recurrence || null);
+  task.recurrence = order[(idx + 1) % order.length];
+  saveState();
+  renderTasks();
+  const labels = { diaria: "Repete diariamente", semanal: "Repete semanalmente", mensal: "Repete mensalmente" };
+  showToast(task.recurrence ? `🔁 ${labels[task.recurrence]}` : "Repetição desativada.");
+}
+
+// ── Subtarefas (checklist dentro da tarefa) ────────────────────
+function toggleTaskDetails(id, event) {
+  event?.stopPropagation();
+  document.querySelector(`.task-row[data-task-id="${id}"] .task-subtasks`)?.classList.toggle("open");
+}
+
+function addSubtask(id, event) {
+  event?.stopPropagation();
+  const title = prompt("Nome do item da checklist:");
+  if (!title || !title.trim()) return;
+  const task = state.tasks.find((t) => t.id === id);
+  if (!task) return;
+  if (!task.subtasks) task.subtasks = [];
+  task.subtasks.push({ id: crypto.randomUUID(), title: title.trim(), done: false });
+  saveState();
+  renderTasks();
+}
+
+function toggleSubtask(taskId, subId, event) {
+  event?.stopPropagation();
+  const task = state.tasks.find((t) => t.id === taskId);
+  if (!task) return;
+  task.subtasks = (task.subtasks || []).map((s) => (s.id === subId ? { ...s, done: !s.done } : s));
+  saveState();
+  renderTasks();
+}
+
+function deleteSubtask(taskId, subId, event) {
+  event?.stopPropagation();
+  const task = state.tasks.find((t) => t.id === taskId);
+  if (!task) return;
+  task.subtasks = (task.subtasks || []).filter((s) => s.id !== subId);
+  saveState();
+  renderTasks();
 }
 
 function deleteTask(id) {
@@ -1715,17 +2122,31 @@ function renderGoals() {
     (goal) => {
       const percent = Math.min(100, Math.round((goal.current / goal.target) * 100));
       const isComplete = goal.current >= goal.target;
+      const milestones = goal.milestones || [];
+      const msDone = milestones.filter((m) => m.done).length;
+      const milestonesHtml = milestones.length
+        ? `<div class="goal-milestones">
+            ${milestones.map((m) => `
+              <div class="goal-milestone-row">
+                <button class="goal-milestone-check ${m.done ? "done" : ""}" onclick="toggleGoalMilestone('${goal.id}','${m.id}', event)">${m.done ? "✓" : ""}</button>
+                <span class="${m.done ? "done" : ""}">${escapeHtml(m.title)}</span>
+                <button class="mini-button" onclick="deleteGoalMilestone('${goal.id}','${m.id}', event)" style="padding:0;width:20px;height:20px;margin-left:auto">✕</button>
+              </div>`).join("")}
+          </div>`
+        : "";
       return `
         <article class="goal-card" data-goal-id="${goal.id}" style="${isComplete ? "border-color:var(--green);background:var(--green-soft);" : ""}">
           <div>
             <h2>${escapeHtml(goal.title)}</h2>
-            <div class="task-meta">${goal.current}/${goal.target} etapas ${isComplete ? "🎉" : ""}</div>
+            <div class="task-meta">${goal.current}/${goal.target} etapas ${isComplete ? "🎉" : ""}${milestones.length ? ` · ${msDone}/${milestones.length} marcos` : ""}</div>
           </div>
           <div class="progress-track"><div style="width:${percent}%;background:${isComplete ? "var(--green)" : "linear-gradient(90deg,var(--accent),var(--purple))"}"></div></div>
+          ${milestonesHtml}
           <div class="goal-controls">
             <button class="mini-button" onclick="changeGoal('${goal.id}', -1)">−</button>
             <span class="pill" style="${isComplete ? "background:var(--green);color:#fff;border-color:var(--green);" : ""}">${percent}%</span>
             <button class="mini-button" onclick="changeGoal('${goal.id}', 1)">+</button>
+            <button class="mini-button" onclick="addGoalMilestone('${goal.id}', event)" title="Adicionar marco">🚩</button>
             <button class="mini-button" onclick="deleteGoal('${goal.id}')" style="margin-left:auto">🗑️</button>
           </div>
         </article>
@@ -1840,13 +2261,20 @@ function assertMonthNotClosed(monthKey) {
   return false;
 }
 
-// Soma o saldo (receitas - despesas) de todos os meses já fechados ANTES do
-// mês informado, para "arrastar" o saldo acumulado para o mês seguinte —
-// exatamente como um extrato bancário faz ao virar o mês.
+// Retorna a chave (AAAA-MM) do mês imediatamente anterior ao informado
+function getPreviousMonthKey(monthKey) {
+  const [y, m] = monthKey.split("-").map(Number);
+  const d = new Date(y, m - 2, 1); // m-1 = mês atual (índice 0), -1 = mês anterior
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+// Saldo que "sobrou" do mês imediatamente anterior, para entrar automaticamente
+// no mês seguinte — só entra 1x (no mês seguinte), e só se aquele mês anterior
+// estiver fechado. Se não houver fechamento anterior, não soma nada.
 function getCarryOverBalance(monthKey) {
-  return (state.monthClosures || [])
-    .filter((c) => c.monthKey < monthKey)
-    .reduce((sum, c) => sum + c.saldo, 0);
+  const prevKey = getPreviousMonthKey(monthKey);
+  const prevClosure = (state.monthClosures || []).find((c) => c.monthKey === prevKey);
+  return prevClosure ? prevClosure.saldo : 0;
 }
 
 // Registra o fechamento do mês ativo com um snapshot completo do período
@@ -1862,14 +2290,26 @@ function closeMonth(monthKey) {
     showToast("Nenhum lançamento no período para fechar.");
     return;
   }
-  if (!confirm(`Fechar ${finMonthLabel(monthKey)}?\nReceitas: ${formatCurrency(receitas)}\nDespesas: ${formatCurrency(despesas)}\nSaldo: ${formatCurrency(receitas - despesas)}\n\nEsse saldo será somado automaticamente ao mês seguinte. Depois de fechar, não será possível adicionar ou editar lançamentos neste mês sem reabri-lo.`)) return;
+
+  // Saldo que já vinha do mês anterior (se ele estiver fechado) + o resultado
+  // deste mês. É esse total acumulado que fica salvo e vai "carregar" para o
+  // mês seguinte quando ele for fechado.
+  const saldoAnterior = getCarryOverBalance(monthKey);
+  const saldoProprio  = receitas - despesas;
+  const saldoFinal    = saldoAnterior + saldoProprio;
+
+  const detalheSaldo = saldoAnterior !== 0
+    ? `Saldo do mês: ${formatCurrency(saldoProprio)}\nSaldo acumulado (com o mês anterior): ${formatCurrency(saldoFinal)}`
+    : `Saldo: ${formatCurrency(saldoProprio)}`;
+
+  if (!confirm(`Fechar ${finMonthLabel(monthKey)}?\nReceitas: ${formatCurrency(receitas)}\nDespesas: ${formatCurrency(despesas)}\n${detalheSaldo}\n\nEsse saldo será somado automaticamente ao mês seguinte. Depois de fechar, não será possível adicionar ou editar lançamentos neste mês sem reabri-lo.`)) return;
 
   state.monthClosures.push({
     monthKey,
     closedAt: new Date().toISOString(),
     receitas,
     despesas,
-    saldo: receitas - despesas,
+    saldo: saldoFinal, // acumulado — é o que entra no mês seguinte
     entriesCount: entries.length,
   });
   saveState();
@@ -2894,6 +3334,35 @@ function bindAiQuickEntry() {
   });
 }
 
+// Evita repetir o mesmo aviso de meta várias vezes na mesma sessão
+const shownFinGoalAlerts = new Set();
+
+// Depois de lançar uma despesa, verifica se a categoria bateu 90% ou 100%
+// da meta definida para ela naquele mês, e avisa com um toast (chega com
+// um pequeno atraso pra não sobrepor o toast de "Despesa registrada!").
+function checkFinGoalAlert(categoryId, monthKey) {
+  const goal = (state.finGoals || []).find((g) => g.categoryId === categoryId);
+  if (!goal || !goal.limit) return;
+
+  const spent = (state.finances || [])
+    .filter((f) => f.date.startsWith(monthKey) && f.type === "despesa" && f.category === categoryId)
+    .reduce((s, f) => s + f.amount, 0);
+  const pct = (spent / goal.limit) * 100;
+  const cat = findCategory(categoryId);
+  const label = cat.label.replace(/^\S+\s*/, "");
+
+  const key100 = `${monthKey}:${categoryId}:100`;
+  const key90  = `${monthKey}:${categoryId}:90`;
+
+  if (pct >= 100 && !shownFinGoalAlerts.has(key100)) {
+    shownFinGoalAlerts.add(key100);
+    window.setTimeout(() => showToast(`🚨 Meta de "${label}" ultrapassada: ${formatCurrency(spent)} de ${formatCurrency(goal.limit)}`), 2400);
+  } else if (pct >= 90 && !shownFinGoalAlerts.has(key90)) {
+    shownFinGoalAlerts.add(key90);
+    window.setTimeout(() => showToast(`⚠️ Você já usou ${Math.round(pct)}% da meta de "${label}"`), 2400);
+  }
+}
+
 function saveExpense(event) {
   event.preventDefault();
   const editId = valueOf("#expenseId");
@@ -2950,6 +3419,7 @@ function saveExpense(event) {
   saveState();
   renderFinances();
   resetExpenseForm();
+  if (type === "despesa") checkFinGoalAlert(categoryId, targetMonth);
 }
 
 function resetExpenseForm() {
@@ -3050,14 +3520,12 @@ function renderFinances() {
   document.querySelector("#finDespesas").textContent  = formatCurrency(despesas);
   document.querySelector("#finSaldo").textContent     = formatCurrency(saldo);
   document.querySelector("#finSaldoCard").style.setProperty("--saldo-color", saldo >= 0 ? "var(--green)" : "var(--red)");
-  const saldoPrevEl = document.querySelector("#finSaldoPrev");
-  if (saldoPrevEl) {
-    if (saldoAnterior !== 0) {
-      saldoPrevEl.hidden = false;
-      saldoPrevEl.textContent = `${saldoAnterior >= 0 ? "+" : "-"} ${formatCurrency(Math.abs(saldoAnterior))} do mês anterior`;
-    } else {
-      saldoPrevEl.hidden = true;
-    }
+  const saldoCardEl = document.querySelector("#finSaldoCard");
+  if (saldoCardEl) {
+    saldoCardEl.classList.toggle("has-carryover", saldoAnterior !== 0);
+    saldoCardEl.title = saldoAnterior !== 0
+      ? `Inclui ${formatCurrency(Math.abs(saldoAnterior))} ${saldoAnterior >= 0 ? "de saldo" : "de saldo negativo"} vindo do mês anterior`
+      : "";
   }
   document.querySelector("#finProgressBar").style.width = `${usedPct}%`;
   document.querySelector("#finProgressBar").style.background = usedPct > 80 ? "var(--red)" : usedPct > 60 ? "var(--orange)" : "var(--green)";
@@ -3098,7 +3566,9 @@ function renderFinances() {
 
   renderFinCalendar(monthKey, entries);
   renderFinChart6m();
+  renderFinSaldoEvolution();
   renderFinGoals();
+  renderFinClosures();
   renderFinRecurrents();
 }
 
@@ -3412,6 +3882,73 @@ function renderFinChart6m() {
   el.innerHTML = `<svg viewBox="0 0 ${totalW + pad * 2} ${H + pad * 2 + 22}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto">${bars}${legendLine}</svg>`;
 }
 
+// Gráfico de linha com o saldo acumulado (receitas - despesas de TODO o
+// histórico até cada mês) — mostra a tendência real da "vida financeira",
+// independente de o mês ter sido fechado ou não.
+function renderFinSaldoEvolution() {
+  const el = document.querySelector("#finSaldoEvolution");
+  if (!el) return;
+
+  const months = [];
+  const [ay, am] = finActiveMonth.split("-").map(Number);
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(ay, am - 1 - i, 1);
+    months.push(toLocalIso(d).slice(0, 7));
+  }
+
+  const firstMonth = months[0];
+  const baseline = (state.finances || [])
+    .filter((f) => f.date.slice(0, 7) < firstMonth)
+    .reduce((s, f) => s + (f.type === "receita" ? f.amount : -f.amount), 0);
+
+  let running = baseline;
+  const data = months.map((mk) => {
+    const entries = (state.finances || []).filter((f) => f.date.startsWith(mk));
+    const net = entries.reduce((s, f) => s + (f.type === "receita" ? f.amount : -f.amount), 0);
+    running += net;
+    const [y, m] = mk.split("-").map(Number);
+    const lbl = new Intl.DateTimeFormat("pt-BR", { month: "short" }).format(new Date(y, m - 1, 1));
+    return { mk, lbl, saldo: running };
+  });
+
+  const values = data.map((d) => d.saldo);
+  const maxVal = Math.max(...values, 0);
+  const minVal = Math.min(...values, 0);
+  const range  = Math.max(maxVal - minVal, 1);
+
+  const W = 100, H = 60, pad = 6;
+  const stepX = (W - pad * 2) / Math.max(data.length - 1, 1);
+  const zeroY = pad + H - ((0 - minVal) / range) * H;
+
+  const points = data.map((d, i) => ({
+    x: pad + i * stepX,
+    y: pad + H - ((d.saldo - minVal) / range) * H,
+    ...d,
+  }));
+
+  const pathD = points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(" ");
+  const last = points[points.length - 1];
+  const areaD = `${pathD} L ${last.x.toFixed(2)} ${(pad + H).toFixed(2)} L ${points[0].x.toFixed(2)} ${(pad + H).toFixed(2)} Z`;
+
+  const dots = points.map((p) => {
+    const isActive = p.mk === finActiveMonth;
+    const color = p.saldo >= 0 ? "var(--green)" : "var(--red)";
+    return `<circle cx="${p.x.toFixed(2)}" cy="${p.y.toFixed(2)}" r="${isActive ? 2.1 : 1.4}" fill="${color}" stroke="var(--surface)" stroke-width="0.6"/>`;
+  }).join("");
+
+  const labels = points.map((p) =>
+    `<text x="${p.x.toFixed(2)}" y="${(pad + H + 8).toFixed(2)}" text-anchor="middle" font-size="4.5" fill="var(--muted)" font-family="inherit">${p.lbl}</text>`
+  ).join("");
+
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H + pad * 2 + 10}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto">
+    <line x1="${pad}" y1="${zeroY.toFixed(2)}" x2="${W - pad}" y2="${zeroY.toFixed(2)}" stroke="var(--line)" stroke-width="0.5" stroke-dasharray="2,2"/>
+    <path d="${areaD}" fill="var(--accent-soft)" opacity="0.5"/>
+    <path d="${pathD}" fill="none" stroke="var(--accent)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+    ${dots}
+    ${labels}
+  </svg>`;
+}
+
 // ============================================================
 // METAS DE GASTO POR CATEGORIA
 // ============================================================
@@ -3447,6 +3984,29 @@ function renderFinGoals() {
         <span style="font-size:0.72rem;color:var(--muted)">${over ? "⚠️ Limite ultrapassado!" : `${pct}% usado`}</span>
       </div>`;
   }).join("");
+}
+
+// Lista os meses já fechados, com atalho pra revisar/editar ou reabrir
+// cada um sem precisar navegar mês a mês com as setas ‹ ›.
+function renderFinClosures() {
+  const el = document.querySelector("#finClosuresList");
+  if (!el) return;
+  const closures = [...(state.monthClosures || [])].sort((a, b) => b.monthKey.localeCompare(a.monthKey));
+  if (!closures.length) {
+    el.innerHTML = `<div class="empty-state">Nenhum mês fechado ainda.</div>`;
+    return;
+  }
+  el.innerHTML = closures.map((c) => `
+    <div class="fin-closure-row">
+      <div class="fin-closure-top">
+        <span class="fin-closure-label">${finMonthLabel(c.monthKey)}</span>
+        <span class="fin-closure-val" style="color:${c.saldo >= 0 ? "var(--green)" : "var(--red)"}">${formatCurrency(c.saldo)}</span>
+      </div>
+      <div class="fin-closure-actions">
+        <button class="mini-button" onclick="goToFinMonth('${c.monthKey}')">Ver / editar</button>
+        <button class="mini-button" onclick="reopenMonth('${c.monthKey}')">Reabrir</button>
+      </div>
+    </div>`).join("");
 }
 
 function deleteFinGoal(id) {
@@ -3501,22 +4061,48 @@ function renderFinRecurrents() {
     return;
   }
   el.innerHTML = recurrents.map((r) => {
-    const cat   = findCategory(r.categoryId);
-    const isRec = r.type === "receita";
+    const cat     = findCategory(r.categoryId);
+    const isRec   = r.type === "receita";
+    const skipped = isRecurrentSkipped(r, finActiveMonth);
     return `
-      <div class="fin-recur-row">
+      <div class="fin-recur-row${skipped ? " is-skipped" : ""}">
         <span class="fin-recur-icon" style="background:${cat.color}22;color:${cat.color}">${cat.label.split(" ")[0]}</span>
         <div class="fin-recur-info">
           <strong>${escapeHtml(r.description)}</strong>
-          <span class="task-meta">Dia ${r.day} · ${cat.label.replace(/^\S+\s*/, "")}</span>
+          <span class="task-meta">Dia ${r.day} · ${cat.label.replace(/^\S+\s*/, "")}${skipped ? ` · pulado em ${finMonthLabel(finActiveMonth)}` : ""}</span>
         </div>
         <span class="fin-recur-amount ${isRec ? "receita" : "despesa"}">${isRec ? "+" : "-"}${formatCurrency(r.amount)}</span>
         <div style="display:flex;gap:4px;flex-shrink:0">
           <button class="mini-button" onclick="applyRecurrent('${r.id}')" title="Lançar agora">▶</button>
+          <button class="mini-button" onclick="toggleSkipRecurrentMonth('${r.id}','${finActiveMonth}')" title="${skipped ? "Reativar neste mês" : "Pular este mês"}">${skipped ? "↩" : "⏭"}</button>
           <button class="mini-button" onclick="deleteRecurrent('${r.id}')" title="Remover">✕</button>
         </div>
       </div>`;
   }).join("");
+}
+
+// Verifica se um recorrente está marcado para NÃO lançar em um mês específico
+function isRecurrentSkipped(rec, monthKey) {
+  return (rec.skippedMonths || []).includes(monthKey);
+}
+
+// Pula (ou reativa) uma ocorrência específica de um recorrente, sem precisar
+// cancelar a recorrência inteira — útil pra, por exemplo, não lançar a
+// assinatura da academia no mês em que você já pagou fora do app.
+function toggleSkipRecurrentMonth(id, monthKey) {
+  const rec = (state.finRecurrents || []).find((r) => r.id === id);
+  if (!rec) return;
+  if (!rec.skippedMonths) rec.skippedMonths = [];
+  const idx = rec.skippedMonths.indexOf(monthKey);
+  if (idx >= 0) {
+    rec.skippedMonths.splice(idx, 1);
+    showToast(`↩️ "${rec.description}" volta a lançar em ${finMonthLabel(monthKey)}.`);
+  } else {
+    rec.skippedMonths.push(monthKey);
+    showToast(`⏭️ "${rec.description}" não será lançado em ${finMonthLabel(monthKey)}.`);
+  }
+  saveState();
+  renderFinRecurrents();
 }
 
 function deleteRecurrent(id) {
@@ -3530,6 +4116,10 @@ function applyRecurrent(id) {
   const rec = (state.finRecurrents || []).find((r) => r.id === id);
   if (!rec) return;
   if (!assertMonthNotClosed(finActiveMonth)) return;
+  if (isRecurrentSkipped(rec, finActiveMonth)) {
+    showToast(`"${rec.description}" está marcado para pular em ${finMonthLabel(finActiveMonth)}. Toque em ↩ pra reativar.`);
+    return;
+  }
 
   const [y, m] = finActiveMonth.split("-").map(Number);
   const day    = Math.min(rec.day, new Date(y, m, 0).getDate()); // ajusta para dias válidos do mês
@@ -3595,8 +4185,10 @@ function autoApplyRecurrents() {
   if (isMonthClosed(monthKey)) return;
   const [, , dd] = today.split("-").map(Number);
   let applied = false;
+  let toastDelay = 0;
   (state.finRecurrents || []).forEach((rec) => {
     if (rec.day !== dd) return;
+    if (isRecurrentSkipped(rec, monthKey)) return;
     const alreadyLaunched = (state.finances || []).some(
       (f) => f.date === today && f.description === rec.description && f.amount === rec.amount
     );
@@ -3610,7 +4202,10 @@ function autoApplyRecurrents() {
       date: today,
     });
     applied = true;
-    showToast(`🔁 Recorrente lançado: ${rec.description}`);
+    // Escalona os toasts quando mais de um recorrente cai no mesmo dia,
+    // já que só existe um toast na tela por vez.
+    window.setTimeout(() => showToast(`🔁 Recorrente lançado: ${rec.description}`), toastDelay);
+    toastDelay += 2400;
   });
   // Só sincroniza com o servidor se algo foi realmente adicionado —
   // a versão anterior sempre chamava saveState() mesmo sem lançar nada,
@@ -3624,17 +4219,29 @@ window.editNote = editNote;
 window.toggleFavorite = toggleFavorite;
 window.convertNoteToTask = convertNoteToTask;
 window.deleteNote = deleteNote;
+window.exportNoteMarkdown = exportNoteMarkdown;
 window.dragTask = dragTask;
 window.toggleTask = toggleTask;
 window.openTaskMoveMenu = openTaskMoveMenu;
 window.deleteTask = deleteTask;
+window.cycleTaskRecurrence = cycleTaskRecurrence;
+window.toggleTaskDetails = toggleTaskDetails;
+window.addSubtask = addSubtask;
+window.toggleSubtask = toggleSubtask;
+window.deleteSubtask = deleteSubtask;
 window.filterEventsByDate = filterEventsByDate;
 window.deleteEvent = deleteEvent;
 window.changeGoal = changeGoal;
 window.deleteGoal = deleteGoal;
+window.addGoalMilestone = addGoalMilestone;
+window.toggleGoalMilestone = toggleGoalMilestone;
+window.deleteGoalMilestone = deleteGoalMilestone;
 window.deleteFinance = deleteFinance;
 window.editFinance = editFinance;
 window.filterFinByDate = filterFinByDate;
 window.deleteFinGoal = deleteFinGoal;
 window.deleteRecurrent = deleteRecurrent;
 window.applyRecurrent = applyRecurrent;
+window.toggleSkipRecurrentMonth = toggleSkipRecurrentMonth;
+window.goToFinMonth = goToFinMonth;
+window.reopenMonth = reopenMonth;
