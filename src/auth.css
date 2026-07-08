@@ -38,7 +38,7 @@ body {
 
 .blob-1 {
   width: 400px; height: 400px;
-  background: radial-gradient(circle, #4f8ef7 0%, #c8a8ff 100%);
+  background: radial-gradient(circle, #6c5ce7 0%, #c8a8ff 100%);
   top: -100px; left: -80px;
   animation-delay: 0s;
 }
@@ -87,7 +87,7 @@ body {
   width: 52px;
   height: 52px;
   border-radius: 16px;
-  background: linear-gradient(145deg, #4f8ef7, #af52de);
+  background: linear-gradient(145deg, #6c5ce7, #af52de);
   display: grid;
   place-items: center;
   box-shadow: 0 6px 20px rgba(79, 142, 247, 0.35);
@@ -150,7 +150,7 @@ body {
 
 .auth-tab.active {
   background: #fff;
-  color: #4f8ef7;
+  color: #6c5ce7;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
@@ -224,7 +224,7 @@ body {
 
 .field-input:focus {
   outline: none;
-  border-color: #4f8ef7;
+  border-color: #6c5ce7;
   box-shadow: 0 0 0 3px rgba(79, 142, 247, 0.15);
   background: #fff;
 }
@@ -298,7 +298,7 @@ body {
   width: 100%;
   height: 52px;
   border-radius: 16px;
-  background: linear-gradient(135deg, #4f8ef7, #af52de);
+  background: linear-gradient(135deg, #6c5ce7, #af52de);
   color: #fff;
   font-size: 1rem;
   font-weight: 700;
@@ -364,7 +364,7 @@ body {
 .auth-link {
   background: none;
   border: none;
-  color: #4f8ef7;
+  color: #6c5ce7;
   font-size: 0.86rem;
   font-weight: 700;
   cursor: pointer;
@@ -373,7 +373,7 @@ body {
   font-family: inherit;
   transition: color 150ms;
 }
-.auth-link:hover { color: #3a7af0; text-decoration: underline; }
+.auth-link:hover { color: #5b4bd6; text-decoration: underline; }
 
 .auth-switch {
   text-align: center;
@@ -443,7 +443,7 @@ body {
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #4f8ef7, #af52de);
+  background: linear-gradient(135deg, #6c5ce7, #af52de);
   color: #fff;
   font-weight: 800;
   font-size: 0.95rem;
@@ -541,8 +541,8 @@ body {
   padding: 0 20px;
   border-radius: 999px;
   background: rgba(79, 142, 247, 0.1);
-  color: #4f8ef7;
-  border: 1.5px solid #4f8ef7;
+  color: #6c5ce7;
+  border: 1.5px solid #6c5ce7;
   font-size: 0.88rem;
   font-weight: 700;
   cursor: pointer;
@@ -550,7 +550,7 @@ body {
   font-family: inherit;
 }
 .pwa-fixed-install-btn:hover {
-  background: #4f8ef7;
+  background: #6c5ce7;
   color: #fff;
   transform: translateY(-1px);
 }
@@ -596,7 +596,7 @@ body {
   .auth-tab { color: #828ea3; }
   .auth-tab.active {
     background: #20242f;
-    color: #5b9ef8;
+    color: #8f7dfb;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
   }
 
@@ -610,7 +610,7 @@ body {
     color: #f4f6fb;
   }
   .field-input:focus {
-    border-color: #5b9ef8;
+    border-color: #8f7dfb;
     box-shadow: 0 0 0 3px rgba(91, 158, 248, 0.2);
     background: #181c26;
   }
@@ -637,7 +637,7 @@ body {
   .auth-divider { color: #5a6478; }
   .auth-divider::before, .auth-divider::after { background: #2e3342; }
 
-  .auth-link { color: #5b9ef8; }
+  .auth-link { color: #8f7dfb; }
   .auth-link:hover { color: #79b3ff; }
   .auth-switch { color: #828ea3; }
 
@@ -649,11 +649,11 @@ body {
 
   html:not([data-theme="light"]):not([data-theme="dark"]) .pwa-fixed-install-btn {
     background: rgba(91, 158, 248, 0.15);
-    color: #5b9ef8;
-    border-color: #5b9ef8;
+    color: #8f7dfb;
+    border-color: #8f7dfb;
   }
   html:not([data-theme="light"]):not([data-theme="dark"]) .pwa-fixed-install-btn:hover {
-    background: #5b9ef8;
+    background: #8f7dfb;
     color: #0b0d12;
   }
 }

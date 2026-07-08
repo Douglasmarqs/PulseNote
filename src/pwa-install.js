@@ -152,7 +152,7 @@
 
     const iconHtml = `
       <div style="width:46px;height:46px;border-radius:14px;flex-shrink:0;
-        background:linear-gradient(145deg,#4f8ef7,#af52de);
+        background:linear-gradient(145deg,#6c5ce7,#af52de);
         display:grid;place-items:center;box-shadow:0 4px 12px rgba(79,142,247,0.3)">
         <span style="color:#fff;font-size:1.3rem">⚡</span>
       </div>
@@ -166,7 +166,7 @@
           <span style="font-size:0.8rem;color:#8a9bb0">Acesso rápido direto da tela inicial</span>
         </div>
         <button id="pwaInstallBtn" style="flex-shrink:0;height:38px;padding:0 16px;border-radius:12px;
-          background:#4f8ef7;color:#fff;font-weight:700;font-size:0.85rem;
+          background:#6c5ce7;color:#fff;font-weight:700;font-size:0.85rem;
           border:none;cursor:pointer">Instalar</button>
         <button id="pwaDismissBtn" aria-label="Fechar" style="flex-shrink:0;width:28px;height:28px;
           border-radius:8px;background:#f5f7fa;border:none;

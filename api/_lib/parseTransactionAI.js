@@ -66,7 +66,7 @@ async function parseTransactionText({ text, categories, today }) {
           systemInstruction: { parts: [{ text: systemPrompt }] },
           contents: [{ parts: [{ text: text.trim().slice(0, 200) }] }],
           generationConfig: {
-            maxOutputTokens: 200,
+            maxOutputTokens: 350,
             responseMimeType: "application/json",
             responseSchema: {
               type: "object",

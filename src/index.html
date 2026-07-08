@@ -45,6 +45,15 @@
     <link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png" />
     <link rel="shortcut icon" href="favicon.ico" />
 
+    <!-- Abre a conexão (DNS + TLS) com o Firebase/Google cedo, em paralelo
+         com o resto do HTML — sem isso, essa conexão só começava quando
+         o app.js (carregado por último) chegava aos imports do Firebase,
+         o que deixava a entrada do app mais lenta do que precisava ser. -->
+    <link rel="preconnect" href="https://www.gstatic.com" crossorigin />
+    <link rel="preconnect" href="https://identitytoolkit.googleapis.com" />
+    <link rel="preconnect" href="https://firestore.googleapis.com" />
+    <link rel="dns-prefetch" href="https://www.gstatic.com" />
+
     <!-- iOS: ícone e comportamento de app instalado -->
     <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -123,7 +132,9 @@
               <span class="icon">🔍</span>
               <input id="globalSearch" type="text" inputmode="search" autocomplete="off" autocorrect="off" placeholder="Pesquisar..." />
             </label>
-            <button id="openGlobalPalette" class="mini-button" title="Busca global (Ctrl/Cmd+K)" style="height:38px;padding:0 12px;white-space:nowrap">🔎 Tudo <span class="palette-kbd">⌘K</span></button>
+            <button id="openGlobalPalette" class="mini-button search-all-btn" title="Buscar em tudo (Ctrl/Cmd+K)">
+              <span class="icon">🔎</span><span class="search-all-label">Tudo</span><span class="palette-kbd">⌘K</span>
+            </button>
             <button id="quickAddTask" class="primary-button" aria-label="Adicionar tarefa" title="Adicionar tarefa">
               <span class="icon">＋</span>
               <span>Tarefa</span>
@@ -174,58 +185,64 @@
             </div>
           </section>
 
-          <!-- Resumo real do dia (dados de verdade, não gamificação) -->
-          <div class="today-summary-grid">
-            <div class="today-summary-card">
-              <span class="today-summary-label">Tarefas pendentes</span>
-              <strong class="today-summary-value" id="summaryTasksPending">0</strong>
-            </div>
-            <div class="today-summary-card">
-              <span class="today-summary-label">Saldo do mês</span>
-              <strong class="today-summary-value" id="summaryFinSaldo">R$ 0,00</strong>
-            </div>
-            <div class="today-summary-card">
-              <span class="today-summary-label">Próximo evento</span>
-              <strong class="today-summary-value" id="summaryNextEvent" style="font-size:0.92rem">Nenhum</strong>
-            </div>
-            <div class="today-summary-card">
-              <span class="today-summary-label">Meta em destaque</span>
-              <strong class="today-summary-value" id="summaryTopGoal" style="font-size:0.92rem">Nenhuma</strong>
-            </div>
-          </div>
-
-          <!-- Metrics -->
-          <div class="metric-grid">
-            <article class="metric-panel">
-              <span class="metric-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 12.3l2.3 2.3L16 9.6"/></svg>
+          <!-- Visão geral do dia: um único grid coeso. Antes eram dois grids
+               empilhados com cartões parecidos e informação repetida
+               ("Compromissos" e "Próximo evento" diziam quase a mesma
+               coisa, e "Pontos XP" já aparece no card do topo) — daí a
+               sensação de bagunça. Agora cada card mostra um dado real e
+               distinto, com o mesmo estilo visual (ícone + valor + nota). -->
+          <div class="overview-grid">
+            <article class="overview-card">
+              <span class="overview-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
               </span>
-              <span>Tarefas concluídas</span>
-              <strong id="doneMetric">0</strong>
-              <small id="doneMetricDetail">Hoje</small>
+              <span class="overview-label">Tarefas pendentes</span>
+              <strong class="overview-value" id="summaryTasksPending">0</strong>
+              <small id="doneMetricDetail">0 concluídas hoje</small>
             </article>
-            <article class="metric-panel">
-              <span class="metric-icon" aria-hidden="true">
+
+            <article class="overview-card">
+              <span class="overview-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8a2 2 0 012-2h11a2 2 0 012 2"/><rect x="3" y="8" width="18" height="11" rx="2"/><path d="M16.3 13.2h1.7"/></svg>
+              </span>
+              <span class="overview-label">Saldo do mês</span>
+              <strong class="overview-value" id="summaryFinSaldo">R$ 0,00</strong>
+              <small>Receitas − despesas</small>
+            </article>
+
+            <article class="overview-card">
+              <span class="overview-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="12.5" width="3.4" height="7.5" rx="1"/><rect x="10.3" y="7.5" width="3.4" height="12.5" rx="1"/><rect x="16.6" y="3.5" width="3.4" height="16.5" rx="1"/></svg>
               </span>
-              <span>Progresso geral</span>
-              <strong id="progressMetric">0%</strong>
+              <span class="overview-label">Progresso geral</span>
+              <strong class="overview-value" id="progressMetric">0%</strong>
               <small>Notas, tarefas e metas</small>
             </article>
-            <article class="metric-panel">
-              <span class="metric-icon" aria-hidden="true">
+
+            <article class="overview-card">
+              <span class="overview-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17"/><path d="M8 3v4"/><path d="M16 3v4"/></svg>
               </span>
-              <span>Compromissos</span>
-              <strong id="eventMetric">0</strong>
-              <small>Próximos 7 dias</small>
+              <span class="overview-label">Próximo compromisso</span>
+              <strong class="overview-value overview-value-small" id="summaryNextEvent">Nenhum</strong>
+              <small id="eventMetric">0 nos próximos 7 dias</small>
             </article>
-            <article class="metric-panel">
-              <span class="metric-icon" aria-hidden="true">
+
+            <article class="overview-card">
+              <span class="overview-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.8"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/></svg>
+              </span>
+              <span class="overview-label">Meta em destaque</span>
+              <strong class="overview-value overview-value-small" id="summaryTopGoal">Nenhuma</strong>
+              <small>Foco da semana</small>
+            </article>
+
+            <article class="overview-card">
+              <span class="overview-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linejoin="round"><path d="M12 2.7l2.7 5.6 6.1.6-4.5 4.3 1.2 6.1-5.5-3-5.5 3 1.2-6.1-4.5-4.3 6.1-.6L12 2.7z"/></svg>
               </span>
-              <span>Pontos XP</span>
-              <strong id="scoreMetric">0</strong>
+              <span class="overview-label">Pontos XP</span>
+              <strong class="overview-value" id="scoreMetric">0</strong>
               <small id="levelMetric">Nível 1</small>
             </article>
           </div>
@@ -927,8 +944,8 @@
       </div>
     </div>
 
-    <script src="pwa-install.js"></script>
-    <script src="notifications.js"></script>
+    <script src="pwa-install.js" defer></script>
+    <script src="notifications.js" defer></script>
     <script type="module" src="app.js"></script>
   </body>
 </html>

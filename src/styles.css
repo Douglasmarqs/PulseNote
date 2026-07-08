@@ -12,17 +12,17 @@
 
 /* ---------- Design Tokens ---------- */
 :root {
-  --bg: #f5f7fa;
-  --bg2: #eef1f6;
+  --bg: #f6f5fb;
+  --bg2: #eeecf9;
   --surface: #ffffff;
-  --surface2: #f9fafc;
-  --text: #1a1f2e;
-  --text2: #4a5568;
-  --muted: #8a9bb0;
-  --line: #e8ecf2;
-  --accent: #4f8ef7;
-  --accent2: #3a7af0;
-  --accent-soft: #e8f0fe;
+  --surface2: #faf9fd;
+  --text: #1a1b2e;
+  --text2: #4a4a68;
+  --muted: #8b8aa8;
+  --line: #e7e5f4;
+  --accent: #6c5ce7;
+  --accent2: #5b4bd6;
+  --accent-soft: #ece9fc;
   --green: #34c759;
   --green-soft: #e5f9ec;
   --orange: #ff9500;
@@ -78,17 +78,17 @@
    "flash" de tema errado ao carregar a página. */
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #0b0d12;
-  --bg2: #12151c;
-  --surface: #1a1d27;
-  --surface2: #20242f;
-  --text: #f4f6fb;
-  --text2: #b6c0d6;
-  --muted: #828ea3;
-  --line: #2e3342;
-  --accent: #5b9ef8;
-  --accent2: #4a8ef5;
-  --accent-soft: #1c2a44;
+  --bg: #0a0a13;
+  --bg2: #100f1c;
+  --surface: #171625;
+  --surface2: #1e1c2f;
+  --text: #f3f2fb;
+  --text2: #b3b0cc;
+  --muted: #7d7a9c;
+  --line: #2c2a42;
+  --accent: #8f7dfb;
+  --accent2: #7a67f5;
+  --accent-soft: #241f42;
   --green: #34d17a;
   --green-soft: #123322;
   --orange: #ffab40;
@@ -130,17 +130,17 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]):not([data-theme="dark"]) {
     color-scheme: dark;
-    --bg: #0b0d12;
-    --bg2: #12151c;
-    --surface: #1a1d27;
-    --surface2: #20242f;
-    --text: #f4f6fb;
-    --text2: #b6c0d6;
-    --muted: #828ea3;
-    --line: #2e3342;
-    --accent: #5b9ef8;
-    --accent2: #4a8ef5;
-    --accent-soft: #1c2a44;
+    --bg: #0a0a13;
+    --bg2: #100f1c;
+    --surface: #171625;
+    --surface2: #1e1c2f;
+    --text: #f3f2fb;
+    --text2: #b3b0cc;
+    --muted: #7d7a9c;
+    --line: #2c2a42;
+    --accent: #8f7dfb;
+    --accent2: #7a67f5;
+    --accent-soft: #241f42;
     --green: #34d17a;
     --green-soft: #123322;
     --orange: #ffab40;
@@ -182,17 +182,17 @@
    padrão, só que com prioridade garantida pelo atributo). */
 :root[data-theme="light"] {
   color-scheme: light;
-  --bg: #f5f7fa;
-  --bg2: #eef1f6;
+  --bg: #f6f5fb;
+  --bg2: #eeecf9;
   --surface: #ffffff;
-  --surface2: #f9fafc;
-  --text: #1a1f2e;
-  --text2: #4a5568;
-  --muted: #8a9bb0;
-  --line: #e8ecf2;
-  --accent: #4f8ef7;
-  --accent2: #3a7af0;
-  --accent-soft: #e8f0fe;
+  --surface2: #faf9fd;
+  --text: #1a1b2e;
+  --text2: #4a4a68;
+  --muted: #8b8aa8;
+  --line: #e7e5f4;
+  --accent: #6c5ce7;
+  --accent2: #5b4bd6;
+  --accent-soft: #ece9fc;
   --green: #34c759;
   --green-soft: #e5f9ec;
   --orange: #ff9500;
@@ -575,29 +575,38 @@ p, h1, h2, h3 { margin: 0; }
 
 .mascot-card { display: none; }
 
-/* ---------- METRIC GRID ---------- */
-.metric-grid {
+/* ---------- OVERVIEW GRID ----------
+   Substitui os antigos .today-summary-grid + .metric-grid, que ficavam
+   empilhados e repetiam a mesma informação de formas diferentes (era essa
+   duplicação o principal motivo do dashboard parecer bagunçado). Agora é
+   um grid só, com 6 cartões do mesmo tamanho/estilo, cada um com um dado
+   único: tarefas, saldo, progresso, agenda, meta e XP. */
+.overview-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 14px;
   margin-bottom: 20px;
 }
 
-.metric-panel {
+.overview-card {
   background: var(--surface);
   border-radius: 20px;
-  padding: 18px;
+  padding: 16px;
   border: 1.5px solid var(--line);
   box-shadow: var(--shadow-card);
   display: grid;
-  gap: 6px;
+  gap: 4px;
+  align-content: start;
+  min-width: 0;
   transition: transform 180ms, box-shadow 180ms;
   animation: metricIn 520ms cubic-bezier(.22,1,.36,1) both;
 }
-.metric-panel:nth-child(1) { animation-delay: 20ms; }
-.metric-panel:nth-child(2) { animation-delay: 80ms; }
-.metric-panel:nth-child(3) { animation-delay: 140ms; }
-.metric-panel:nth-child(4) { animation-delay: 200ms; }
+.overview-card:nth-child(1) { animation-delay: 20ms; }
+.overview-card:nth-child(2) { animation-delay: 60ms; }
+.overview-card:nth-child(3) { animation-delay: 100ms; }
+.overview-card:nth-child(4) { animation-delay: 140ms; }
+.overview-card:nth-child(5) { animation-delay: 180ms; }
+.overview-card:nth-child(6) { animation-delay: 220ms; }
 
 @keyframes metricIn {
   from { opacity: 0; transform: translateY(10px) scale(0.96); }
@@ -605,53 +614,60 @@ p, h1, h2, h3 { margin: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .metric-panel { animation: none; }
+  .overview-card { animation: none; }
 }
 
-.metric-panel:hover { transform: translateY(-2px); box-shadow: var(--shadow-card-hover); }
+.overview-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-card-hover); }
 
-.metric-panel .metric-icon {
-  width: 42px;
-  height: 42px;
-  border-radius: 13px;
+.overview-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
   background: var(--accent-soft);
   color: var(--accent);
   display: grid;
   place-items: center;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
   transition: transform 260ms cubic-bezier(.34,1.56,.64,1);
 }
-.metric-panel .metric-icon svg {
-  width: 21px;
-  height: 21px;
-  transition: transform 220ms ease;
-}
-.metric-panel:hover .metric-icon { transform: scale(1.08) rotate(-4deg); }
+.overview-icon svg { width: 19px; height: 19px; }
+.overview-card:hover .overview-icon { transform: scale(1.08) rotate(-4deg); }
 
-.metric-panel:nth-child(1) .metric-icon {
-  background: linear-gradient(135deg, var(--green-soft), color-mix(in srgb, var(--green) 24%, var(--green-soft)));
-  color: var(--green);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--green) 14%, transparent) inset;
-}
-.metric-panel:nth-child(2) .metric-icon {
+.overview-card:nth-child(1) .overview-icon {
   background: linear-gradient(135deg, var(--accent-soft), color-mix(in srgb, var(--accent) 24%, var(--accent-soft)));
   color: var(--accent);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 14%, transparent) inset;
 }
-.metric-panel:nth-child(3) .metric-icon {
+.overview-card:nth-child(2) .overview-icon {
+  background: linear-gradient(135deg, var(--green-soft), color-mix(in srgb, var(--green) 24%, var(--green-soft)));
+  color: var(--green);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--green) 14%, transparent) inset;
+}
+.overview-card:nth-child(3) .overview-icon {
+  background: linear-gradient(135deg, var(--teal-soft), color-mix(in srgb, var(--teal) 24%, var(--teal-soft)));
+  color: var(--teal);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--teal) 14%, transparent) inset;
+}
+.overview-card:nth-child(4) .overview-icon {
   background: linear-gradient(135deg, var(--orange-soft), color-mix(in srgb, var(--orange) 24%, var(--orange-soft)));
   color: var(--orange);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--orange) 14%, transparent) inset;
 }
-.metric-panel:nth-child(4) .metric-icon {
+.overview-card:nth-child(5) .overview-icon {
   background: linear-gradient(135deg, var(--purple-soft), color-mix(in srgb, var(--purple) 24%, var(--purple-soft)));
   color: var(--purple);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--purple) 14%, transparent) inset;
 }
+.overview-card:nth-child(6) .overview-icon {
+  background: linear-gradient(135deg, var(--yellow-soft), color-mix(in srgb, var(--yellow) 24%, var(--yellow-soft)));
+  color: var(--yellow);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--yellow) 14%, transparent) inset;
+}
 
-.metric-panel > span { font-size: 0.82rem; color: var(--muted); font-weight: 500; }
-.metric-panel strong { font-size: 2rem; font-weight: 800; letter-spacing: -0.04em; color: var(--text); }
-.metric-panel small { font-size: 0.78rem; color: var(--muted); }
+.overview-label { font-size: 0.78rem; color: var(--muted); font-weight: 600; }
+.overview-value { font-size: 1.7rem; font-weight: 800; letter-spacing: -0.03em; color: var(--text); line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.overview-value-small { font-size: 1rem; }
+.overview-card small { font-size: 0.74rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ---------- DASHBOARD LAYOUT ---------- */
 .dashboard-layout {
@@ -1604,7 +1620,7 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   .nav-item { justify-content: center; padding: 12px; width: 50px; border-radius: 14px; }
   .nav-item .icon { margin: 0; }
 
-  .metric-grid { grid-template-columns: repeat(2, 1fr); }
+  .overview-grid { grid-template-columns: repeat(3, 1fr); }
   .dashboard-layout { grid-template-columns: 1fr 1fr; }
   .task-board { grid-template-columns: repeat(2, 1fr); }
 
@@ -1714,24 +1730,33 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   }
 
   .topbar-actions {
-    /* Antes tinha flex-shrink:0, e a busca (.search-box) tinha 240px
-       fixos vindos do desktop — a soma (avatar + busca + botão) nunca
-       cabia na largura do celular, e o botão "+" era empurrado/cortado
-       para fora da tela à direita. Agora o grupo pode encolher, e é a
-       busca quem cede espaço (regras logo abaixo). */
+    /* Antes a busca de filtro (.search-box) E o botão de busca global
+       ficavam lado a lado, ambos espremidos — dava a impressão de duas
+       lupas quebradas ("Pe" cortado + "Tudo ⌘K" cortado). Agora só a
+       busca global aparece no celular, como um único ícone claro. */
     flex-shrink: 1;
     min-width: 0;
   }
 
-  /* A busca vira flexível em vez de ter 240px fixos — ela que absorve a
-     falta de espaço, nunca o avatar ou o botão de adicionar. */
-  .search-box {
-    width: auto;
-    flex: 1 1 auto;
-    min-width: 0;
-    padding: 0 10px;
+  /* Busca por filtro (por tela) só faz sentido com espaço de sobra —
+     no celular ela some e sobra só a busca global (search-all-btn),
+     que já procura em notas, tarefas, agenda e finanças de uma vez. */
+  .search-box { display: none; }
+
+  /* Busca global vira um botão só de ícone, do mesmo tamanho e estilo
+     dos outros botões da barra (avatar, "+ Tarefa") — uma lupa só,
+     sem texto cortado nem atalho de teclado (que não existe no celular). */
+  .search-all-btn {
+    flex-shrink: 0;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    justify-content: center;
   }
-  .search-box input { min-width: 0; }
+  .search-all-label,
+  .search-all-btn .palette-kbd {
+    display: none;
+  }
 
   /* Botão de adicionar tarefa: só o ícone no mobile (mesma largura do
      avatar, formato consistente), o rótulo "Tarefa" some visualmente —
@@ -1772,9 +1797,11 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   .daily-hero { padding: 20px; }
   .daily-hero h2 { font-size: 1.3rem; }
 
-  /* Mobile metric grid */
-  .metric-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
-  .metric-panel strong { font-size: 1.6rem; }
+  /* Mobile overview grid: 2 colunas, cartões compactos */
+  .overview-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .overview-card { padding: 14px; }
+  .overview-value { font-size: 1.35rem; }
+  .overview-value-small { font-size: 0.88rem; }
 
   /* Mobile dashboard */
   .dashboard-layout { grid-template-columns: 1fr; }
@@ -1805,7 +1832,7 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 /* Note grid já se adapta sozinha em telas grandes via auto-fill */
 @media (min-width: 1400px) {
   .dashboard-layout { grid-template-columns: repeat(3, 1fr); }
-  .metric-grid { grid-template-columns: repeat(4, 1fr); }
+  .overview-grid { grid-template-columns: repeat(6, 1fr); }
 }
 
 /* ============================================================
@@ -1950,7 +1977,7 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   margin-bottom: 16px;
   background:
     linear-gradient(var(--surface2), var(--surface2)) padding-box,
-    linear-gradient(120deg, #4f8ef7, #af52de) border-box;
+    linear-gradient(120deg, #6c5ce7, #af52de) border-box;
 }
 
 .ai-quick-entry-label {
@@ -1978,7 +2005,7 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 .ai-quick-entry-row .primary-button {
   flex-shrink: 0;
   height: 44px;
-  background: linear-gradient(120deg, #4f8ef7, #af52de);
+  background: linear-gradient(120deg, #6c5ce7, #af52de);
 }
 
 .ai-quick-entry-hint {
@@ -2722,7 +2749,7 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   width: 100%;
   height: 100%;
   border-radius: 50%;
-  background: linear-gradient(135deg, #4f8ef7, #af52de);
+  background: linear-gradient(135deg, #6c5ce7, #af52de);
   color: #fff;
   font-size: 2rem;
   font-weight: 800;
@@ -2809,9 +2836,44 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 
 @media (max-width: 720px) {
   .settings-layout { max-width: none; }
+
+  /* Perfil/Configurações no celular: os botões de ação (Salvar nome,
+     Alterar senha, Exportar/Importar backup) ocupam a largura toda em
+     vez de ficarem lado a lado se espremendo — evita texto cortado ou
+     botões "quebrados" visualmente em telas estreitas. */
+  #settingsView .form-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  #settingsView .form-actions .primary-button,
+  #settingsView .form-actions .ghost-button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* Foto de perfil + nome/e-mail: centraliza quando quebra linha, em vez
+     de ficar desalinhado à esquerda com espaço vazio do lado. */
+  .avatar-upload { justify-content: center; text-align: center; }
+  .avatar-upload-info { justify-items: center; }
+}
+
+@media (max-width: 380px) {
+  /* Seletor de tema (Claro/Escuro/Sistema): reduz padding e fonte para o
+     rótulo "Sistema" nunca quebrar linha dentro do botão nesses aparelhos
+     bem estreitos (era isso que parecia "bugado" nas telas menores). */
+  .theme-toggle-btn { padding: 12px 4px; font-size: 0.74rem; gap: 4px; }
+  .theme-toggle-icon { font-size: 1.1rem; }
 }
 
 /* ── Busca global (Ctrl/Cmd+K) ──────────────────────────────── */
+.search-all-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 44px;
+  padding: 0 14px;
+  white-space: nowrap;
+}
 .palette-kbd {
   font-size: 0.65rem;
   font-weight: 700;
@@ -2840,27 +2902,6 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 .palette-result-sub { font-size: 0.72rem; color: var(--muted); }
 mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border-radius: 3px; padding: 0 1px; }
 
-/* ── Resumo do dia (Início) ─────────────────────────────────── */
-.today-summary-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 10px;
-  margin-bottom: 18px;
-}
-@media (max-width: 720px) {
-  .today-summary-grid { grid-template-columns: repeat(2, 1fr); }
-}
-.today-summary-card {
-  background: var(--surface);
-  border: 1.5px solid var(--line);
-  border-radius: 16px;
-  padding: 14px;
-  display: grid;
-  gap: 4px;
-  box-shadow: var(--shadow-card);
-}
-.today-summary-label { font-size: 0.7rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
-.today-summary-value { font-size: 1.15rem; font-weight: 800; color: var(--text); }
 
 /* ── Marcos de meta ──────────────────────────────────────────── */
 .goal-milestones { display: grid; gap: 6px; margin-top: 8px; }

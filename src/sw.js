@@ -2,7 +2,7 @@
 // Necessário para o app ser "instalável" (PWA) no Android/Chrome,
 // funcionar parcialmente offline, e exibir notificações do sistema.
 
-const CACHE_NAME = "pulsenote-v4";
+const CACHE_NAME = "pulsenote-v5";
 
 // Arquivos essenciais para o app abrir mesmo sem internet.
 // Usamos os caminhos REAIS (dentro de /src/), não os caminhos "bonitos"
@@ -45,8 +45,14 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
-// Estratégia: tenta a rede primeiro (sempre dados atualizados);
-// se falhar (offline), usa o cache como fallback.
+// Estratégia: "stale-while-revalidate" — responde IMEDIATAMENTE com a
+// versão em cache (se existir), o que faz o app abrir na hora em vez de
+// esperar a rede toda vez, e por trás dos panos busca uma versão nova na
+// rede para deixar pronta na próxima abertura. Se não houver cache ainda
+// (primeira visita), espera a rede normalmente. Isso resolve a demora na
+// abertura sem sacrificar atualizações — o app só fica "um passo atrás"
+// entre uma versão nova ser publicada e o cache ser atualizado, o que
+// acontece sozinho logo na primeira abertura seguinte.
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   const url = new URL(request.url);
@@ -62,16 +68,26 @@ self.addEventListener("fetch", (event) => {
   }
 
   event.respondWith(
-    fetch(request)
-      .then((response) => {
-        // Só cacheia respostas válidas (200 OK), nunca erros ou redirects
-        if (response && response.status === 200) {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
-        }
-        return response;
-      })
-      .catch(() => caches.match(request))
+    caches.open(CACHE_NAME).then(async (cache) => {
+      const cached = await cache.match(request);
+
+      const networkFetch = fetch(request)
+        .then((response) => {
+          if (response && response.status === 200) cache.put(request, response.clone());
+          return response;
+        })
+        .catch(() => undefined);
+
+      // Já tem em cache? Devolve na hora e atualiza em segundo plano.
+      if (cached) {
+        networkFetch; // deixa rodando sem bloquear a resposta
+        return cached;
+      }
+
+      // Sem cache (primeira visita a esse arquivo): espera a rede, e cai
+      // pro cache só se a rede falhar (ex.: sem internet).
+      return (await networkFetch) || cached || Response.error();
+    })
   );
 });
 

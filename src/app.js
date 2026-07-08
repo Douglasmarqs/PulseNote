@@ -137,7 +137,7 @@ function showSyncStatus(status, detail) {
   }
   _lastSyncStatus = status;
   const states = {
-    saving:  { text: "⏳ Salvando...",          color: "var(--accent,#4f8ef7)" },
+    saving:  { text: "⏳ Salvando...",          color: "var(--accent,#6c5ce7)" },
     saved:   { text: "✅ Salvo na nuvem",       color: "var(--green,#34c759)"  },
     offline: { text: "📵 Sem conexão — toque para tentar de novo",  color: "var(--orange,#ff9500)" },
     error:   { text: `❌ ${detail || "Erro ao salvar"} — toque para tentar de novo`, color: "var(--red,#ff3b30)" },
@@ -454,7 +454,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     <div style="position:fixed;inset:0;z-index:9998;background:var(--bg,#f5f7fa);
       display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px">
       <div style="width:52px;height:52px;border-radius:16px;
-        background:linear-gradient(145deg,#4f8ef7,#af52de);
+        background:linear-gradient(145deg,#6c5ce7,#af52de);
         display:grid;place-items:center;font-size:1.5rem;
         box-shadow:0 6px 20px rgba(79,142,247,0.35)">⚡</div>
       <strong style="font-size:1.1rem;font-weight:800;color:var(--text,#1a1f2e);
@@ -462,7 +462,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       <div style="width:32px;height:3px;border-radius:999px;
         background:var(--line,#e8ecf2);overflow:hidden">
         <div style="height:100%;border-radius:inherit;
-          background:linear-gradient(90deg,#4f8ef7,#af52de);
+          background:linear-gradient(90deg,#6c5ce7,#af52de);
           animation:loadingBar 1.2s ease-in-out infinite alternate;width:60%"></div>
       </div>
     </div>
@@ -633,7 +633,7 @@ function renderProfileButton(user) {
   dropdown.hidden = true;
   dropdown.innerHTML = `
     <div class="user-dropdown-header" style="display:flex;align-items:center;gap:12px">
-      <div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#4f8ef7,#af52de);
+      <div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#6c5ce7,#af52de);
         color:#fff;font-weight:800;font-size:1rem;display:grid;place-items:center;
         flex-shrink:0;overflow:hidden">
         ${photoURL
@@ -1555,10 +1555,12 @@ function renderDashboard() {
   const goalEl = document.querySelector("#summaryTopGoal");
   if (goalEl) goalEl.textContent = topGoal ? `${topGoal.title} (${Math.round((topGoal.current / topGoal.target) * 100)}%)` : "Nenhuma";
 
-  document.querySelector("#doneMetric").textContent = doneToday;
-  document.querySelector("#doneMetricDetail").textContent = `${doneTotal} no historico`;
+  // "Tarefas concluídas hoje" virou o detalhe do card de "Tarefas pendentes"
+  // em vez de um card próprio — evita repetir a mesma ideia de tarefas
+  // duas vezes lado a lado no dashboard.
+  document.querySelector("#doneMetricDetail").textContent = `${doneToday} concluída${doneToday === 1 ? "" : "s"} hoje · ${doneTotal} no histórico`;
   document.querySelector("#progressMetric").textContent = `${progress}%`;
-  document.querySelector("#eventMetric").textContent = nextEvents.length;
+  document.querySelector("#eventMetric").textContent = `${nextEvents.length} nos próximos 7 dias`;
   document.querySelector("#scoreMetric").textContent = score;
   const level = Math.max(1, Math.floor(score / 150) + 1);
   const levelProgress = Math.min(100, Math.round(((score % 150) / 150) * 100));
@@ -2758,13 +2760,13 @@ function exportMonthReport(monthKey) {
   body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif;background:#fff;color:#1a1f2e;font-size:13px;line-height:1.5}
   .page{max-width:900px;margin:0 auto;padding:40px 40px 60px}
   /* Header */
-  .rpt-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px;padding-bottom:20px;border-bottom:3px solid #4f8ef7}
+  .rpt-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px;padding-bottom:20px;border-bottom:3px solid #6c5ce7}
   .rpt-brand{display:flex;align-items:center;gap:12px}
-  .rpt-brand-mark{width:44px;height:44px;border-radius:12px;background:linear-gradient(145deg,#4f8ef7,#af52de);display:grid;place-items:center;font-size:1.4rem}
+  .rpt-brand-mark{width:44px;height:44px;border-radius:12px;background:linear-gradient(145deg,#6c5ce7,#af52de);display:grid;place-items:center;font-size:1.4rem}
   .rpt-brand-name{font-size:1.2rem;font-weight:800;color:#1a1f2e}
   .rpt-brand-sub{font-size:0.72rem;color:#8a9bb0;font-weight:600;text-transform:uppercase;letter-spacing:.05em}
   .rpt-header-right{text-align:right}
-  .rpt-month{font-size:1.4rem;font-weight:800;color:#4f8ef7}
+  .rpt-month{font-size:1.4rem;font-weight:800;color:#6c5ce7}
   .rpt-meta{font-size:0.72rem;color:#8a9bb0;line-height:1.8}
   /* Secção */
   .section{margin-bottom:28px}
@@ -2774,7 +2776,7 @@ function exportMonthReport(monthKey) {
   .summary-card{border:1.5px solid #e8ecf2;border-radius:14px;padding:14px 16px}
   .summary-card .lbl{font-size:0.7rem;text-transform:uppercase;letter-spacing:.06em;font-weight:700;color:#8a9bb0;margin-bottom:4px}
   .summary-card .val{font-size:1.35rem;font-weight:800;letter-spacing:-0.03em}
-  .green{color:#34c759}.red{color:#ff3b30}.blue{color:#4f8ef7}
+  .green{color:#34c759}.red{color:#ff3b30}.blue{color:#6c5ce7}
   /* Barra */
   .bar-wrap{background:#f0f4f8;border-radius:999px;height:8px;overflow:hidden;margin:4px 0}
   .bar-fill{height:100%;border-radius:inherit;transition:width .3s}
@@ -3274,6 +3276,16 @@ function bindAiQuickEntry() {
     const text = input.value.trim();
     if (text.length < 3) {
       showToast('Descreva um pouco melhor o lançamento (ex.: "almoço 32 reais ontem").');
+      return;
+    }
+
+    // Sem nenhum número no texto, não tem valor pra registrar — nem a IA
+    // nem o reconhecimento local têm como saber quanto foi gasto/recebido,
+    // e antes isso resultava em preencher o valor sozinho, sem quando o
+    // usuário digitava algo como só "almoço" (sem preço nenhum). Agora
+    // pedimos o valor antes de tentar, em vez de preencher algo incompleto.
+    if (!/\d/.test(text)) {
+      showToast('Inclua o valor no texto (ex.: "almoço 32 reais") para eu conseguir preencher o lançamento.');
       return;
     }
 
