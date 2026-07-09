@@ -29,10 +29,10 @@
       (function () {
         try {
           var t = localStorage.getItem("pulsenote-theme");
-          var isDark = t === "dark" || (t !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
-          if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+          var isDark = t === "aurora" || ((t !== "light") && window.matchMedia("(prefers-color-scheme: dark)").matches);
+          if (t === "light" || t === "aurora") document.documentElement.setAttribute("data-theme", t);
           var meta = document.getElementById("themeColorMeta");
-          if (meta) meta.setAttribute("content", isDark ? "#0b0d12" : "#f5f7fa");
+          if (meta) meta.setAttribute("content", isDark ? "#060a18" : "#f5f7fa");
           var csMeta = document.getElementById("colorSchemeMeta");
           if (csMeta) csMeta.setAttribute("content", isDark ? "dark" : "light");
         } catch (e) {}
@@ -128,13 +128,10 @@
             <!-- O botão "Instalar app" é inserido aqui pelo pwa-install.js,
                  apenas se o navegador permitir instalação como PWA -->
             <div data-pwa-install-slot></div>
-            <label class="search-box">
+            <label class="search-box" title="Filtra esta tela — aperte Enter para buscar em tudo (ou Ctrl/Cmd+K)">
               <span class="icon">🔍</span>
-              <input id="globalSearch" type="text" inputmode="search" autocomplete="off" autocorrect="off" placeholder="Pesquisar..." />
+              <input id="globalSearch" type="text" inputmode="search" autocomplete="off" autocorrect="off" placeholder="Pesquisar... (Enter busca tudo)" />
             </label>
-            <button id="openGlobalPalette" class="mini-button search-all-btn" title="Buscar em tudo (Ctrl/Cmd+K)">
-              <span class="icon">🔎</span><span class="search-all-label">Tudo</span><span class="palette-kbd">⌘K</span>
-            </button>
             <button id="quickAddTask" class="primary-button" aria-label="Adicionar tarefa" title="Adicionar tarefa">
               <span class="icon">＋</span>
               <span>Tarefa</span>
@@ -750,11 +747,11 @@
                 <button type="button" class="theme-toggle-btn" data-theme-choice="light" role="radio">
                   <span class="theme-toggle-icon">☀️</span><span>Claro</span>
                 </button>
-                <button type="button" class="theme-toggle-btn" data-theme-choice="dark" role="radio">
-                  <span class="theme-toggle-icon">🌙</span><span>Escuro</span>
+                <button type="button" class="theme-toggle-btn" data-theme-choice="aurora" role="radio">
+                  <span class="theme-toggle-icon">🌌</span><span>Aurora</span>
                 </button>
                 <button type="button" class="theme-toggle-btn" data-theme-choice="system" role="radio">
-                  <span class="theme-toggle-icon">💻</span><span>Sistema</span>
+                  <span class="theme-toggle-icon">💻</span><span>Automático</span>
                 </button>
               </div>
             </section>

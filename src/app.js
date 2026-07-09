@@ -19,18 +19,20 @@ import {
   onSnapshot,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-// ── Tema: Claro / Escuro / Sistema ─────────────────────────────
+// ── Tema: Claro / Aurora / Automático ─────────────────────────────
 // A escolha fica em localStorage (não depende de login/Firestore, então
 // funciona até na tela de login). Um script inline no <head> do HTML já
 // aplica isso antes da primeira pintura da tela, para nunca "piscar"
 // claro por engano; aqui só mantemos o valor sincronizado durante o uso
 // do app e ligamos os botões em Configurações > Aparência.
+// Obs.: o antigo tema "Escuro" foi removido (não estava funcionando bem)
+// — "Automático" em modo escuro agora usa a mesma paleta do "Aurora".
 const THEME_STORAGE_KEY = "pulsenote-theme";
 
 function syncThemeColorMeta(choice) {
-  const isDark = choice === "dark" || (choice !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  const isDark = choice === "aurora" || (choice !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
   const meta = document.getElementById("themeColorMeta");
-  if (meta) meta.setAttribute("content", isDark ? "#0b0d12" : "#f5f7fa");
+  if (meta) meta.setAttribute("content", isDark ? "#060a18" : "#f5f7fa");
   // Mantém o <meta name="color-scheme"> alinhado ao tema escolhido, para que
   // selects, calendário nativo, barra de rolagem etc. nunca fiquem brancos
   // por cima de um app configurado como escuro (ver comentário no <head>).
@@ -39,16 +41,17 @@ function syncThemeColorMeta(choice) {
 }
 
 function applyTheme(choice) {
-  if (choice === "light" || choice === "dark") {
+  if (choice === "light" || choice === "aurora") {
     document.documentElement.setAttribute("data-theme", choice);
   } else {
-    document.documentElement.removeAttribute("data-theme"); // = "sistema"
+    document.documentElement.removeAttribute("data-theme"); // = "automático"
   }
   syncThemeColorMeta(choice);
 }
 
-// Em modo "Sistema", se a pessoa mudar o tema do aparelho com o app aberto
-// (sem tocar em nada dentro do PulseNote), a status bar nativa acompanha.
+// Em modo "Automático", se a pessoa mudar o tema do aparelho com o app
+// aberto (sem tocar em nada dentro do PulseNote), a status bar nativa
+// acompanha.
 try {
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
     if (getSavedTheme() === "system") syncThemeColorMeta("system");
@@ -58,7 +61,10 @@ try {
 function getSavedTheme() {
   try {
     const t = localStorage.getItem(THEME_STORAGE_KEY);
-    return t === "light" || t === "dark" ? t : "system";
+    // Valor antigo "dark", de quem já tinha escolhido o extinto tema
+    // "Escuro", cai automaticamente em "system" (que agora é o Aurora
+    // quando o aparelho está escuro) — sem quebrar nada pra quem já usava.
+    return t === "light" || t === "aurora" ? t : "system";
   } catch { return "system"; }
 }
 
@@ -1266,7 +1272,6 @@ function openPaletteResult(i) {
 function bindGlobalPalette() {
   const modal   = document.querySelector("#globalPaletteModal");
   const input   = document.querySelector("#globalPaletteInput");
-  const openBtn = document.querySelector("#openGlobalPalette");
   if (!modal) return;
 
   function openPalette() {
@@ -1277,10 +1282,22 @@ function bindGlobalPalette() {
   }
   function closePalette() { modal.hidden = true; }
 
-  openBtn?.addEventListener("click", openPalette);
   document.querySelector("#closeGlobalPalette")?.addEventListener("click", closePalette);
   modal.addEventListener("click", (e) => { if (e.target === modal) closePalette(); });
   input?.addEventListener("input", () => renderPaletteResults(input.value));
+
+  // A busca do topo (search-box) só filtra a lista da tela atual — pra
+  // realmente "buscar em tudo" a partir dela, sem precisar saber que
+  // ⌘K existe, um Enter nela abre a busca global já com o mesmo termo.
+  const topSearch = document.querySelector("#globalSearch");
+  topSearch?.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    modal.hidden = false;
+    input.value = topSearch.value;
+    renderPaletteResults(input.value);
+    setTimeout(() => input.focus(), 30);
+  });
 
   document.addEventListener("keydown", (e) => {
     const isK = e.key === "k" || e.key === "K";

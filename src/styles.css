@@ -67,113 +67,150 @@
   --header-height: 70px;
 }
 
-/* ---------- Tema: Claro / Escuro / Sistema ----------
+/* ---------- Tema: Claro / Aurora / Automático ----------
    Três opções, escolhidas em Configurações:
    - "light"  → força claro, mesmo se o aparelho estiver em modo escuro
-   - "dark"   → força escuro (idêntico ao que já existia antes)
+   - "aurora" → força o escuro "Aurora" (azul-noite + violeta/ciano),
+     mesmo se o aparelho estiver em modo claro
    - "system" (padrão, sem atributo) → acompanha Configurações > Aparência
-     do celular/computador via @media (prefers-color-scheme: dark)
+     do celular/computador via @media (prefers-color-scheme: dark); quando
+     o aparelho está em modo escuro, usa a mesma paleta do Aurora acima
+   O antigo tema "Escuro" (cinza-chumbo neutro) foi removido — o Aurora
+   ocupa esse lugar com uma paleta mais rica e funcionando corretamente.
    O atributo data-theme é aplicado no <html> o mais cedo possível (script
    inline no <head>, antes do CSS pintar a tela) para não haver nenhum
    "flash" de tema errado ao carregar a página. */
-:root[data-theme="dark"] {
+
+/* Modo "Aurora" — escuro azul-noite profundo + violeta/ciano, com um
+   brilho sutil (glow) nas sombras dos cartões e no hero, em vez do
+   cinza-chumbo neutro do antigo tema "Escuro" (removido por não estar
+   funcionando direito). */
+:root[data-theme="aurora"] {
   color-scheme: dark;
-  --bg: #0a0a13;
-  --bg2: #100f1c;
-  --surface: #171625;
-  --surface2: #1e1c2f;
-  --text: #f3f2fb;
-  --text2: #b3b0cc;
-  --muted: #7d7a9c;
-  --line: #2c2a42;
-  --accent: #8f7dfb;
-  --accent2: #7a67f5;
-  --accent-soft: #241f42;
-  --green: #34d17a;
-  --green-soft: #123322;
-  --orange: #ffab40;
-  --orange-soft: #3a2710;
-  --red: #ff5b54;
-  --red-soft: #3a1614;
-  --purple: #c77dff;
-  --purple-soft: #2a1c40;
-  --pink: #ff5c8a;
-  --pink-soft: #3a1a26;
-  --teal: #5fd4ff;
-  --teal-soft: #133340;
-  --yellow: #ffd60a;
-  --yellow-soft: #3a3008;
-  --note-yellow: #2c2710;
-  --note-blue: #11202f;
-  --note-green: #102a1d;
-  --note-pink: #2c1320;
-  --note-purple: #211230;
-  --note-orange: #2c1c0d;
-  --note-teal: #0f2530;
-  --note-red: #2c1212;
+  --bg: #060a18;
+  --bg2: #0a1024;
+  --surface: #10142c;
+  --surface2: #161b3a;
+  --text: #f1f3ff;
+  --text2: #b8c0e8;
+  --muted: #7c84b8;
+  --line: #262c52;
+  --accent: #7c6cff;
+  --accent2: #6456f0;
+  --accent-soft: #241f4e;
+  --green: #2fe0b0;
+  --green-soft: #0e2f38;
+  --orange: #ffb454;
+  --orange-soft: #3a2812;
+  --red: #ff6b8b;
+  --red-soft: #3a1830;
+  --purple: #c07dff;
+  --purple-soft: #2c1c4e;
+  --pink: #ff7fc4;
+  --pink-soft: #3a1a38;
+  --teal: #4fe0ff;
+  --teal-soft: #0e2c40;
+  --yellow: #ffe066;
+  --yellow-soft: #362c0c;
+  --note-yellow: #302a12;
+  --note-blue: #0f2038;
+  --note-green: #0d2c2a;
+  --note-pink: #301230;
+  --note-purple: #221238;
+  --note-orange: #2e1c0e;
+  --note-teal: #0c2838;
+  --note-red: #301220;
   --note-yellow-border: #6b5a18;
-  --note-blue-border: #2c5c86;
-  --note-green-border: #1f6b43;
-  --note-pink-border: #80324f;
-  --note-purple-border: #5c3786;
-  --note-orange-border: #7a4318;
-  --note-teal-border: #1d6f8c;
-  --note-red-border: #7a2a26;
-  --shadow-card: 0 1px 0 rgba(255,255,255,0.05) inset, 0 6px 18px rgba(0,0,0,0.55);
-  --shadow-card-hover: 0 1px 0 rgba(255,255,255,0.07) inset, 0 12px 32px rgba(0,0,0,0.65);
-  --shadow-float: 0 24px 70px rgba(0,0,0,0.7);
+  --note-blue-border: #2c5c9a;
+  --note-green-border: #1f8f76;
+  --note-pink-border: #9a3286;
+  --note-purple-border: #6c3ca0;
+  --note-orange-border: #a05a20;
+  --note-teal-border: #1d8fa8;
+  --note-red-border: #a02a5a;
+  --shadow-card: 0 1px 0 rgba(255,255,255,0.06) inset, 0 8px 24px rgba(2,4,16,0.65);
+  --shadow-card-hover: 0 1px 0 rgba(255,255,255,0.09) inset, 0 14px 38px color-mix(in srgb, var(--accent) 22%, rgba(2,4,16,0.7));
+  --shadow-float: 0 26px 80px rgba(2,4,16,0.8);
 }
 
-/* Modo "Sistema" (padrão — sem data-theme, ou data-theme="system"):
-   segue a aparência do aparelho, reaplicando os mesmos valores do
-   bloco acima, agora condicionados ao prefers-color-scheme. */
+/* Aurora: hero e "linha do topo" ganham o gradiente de três cores que dá
+   nome ao tema (índigo → violeta → ciano), em vez do gradiente simples de
+   duas cores usado nos outros temas. Vale tanto para o Aurora forçado
+   quanto para o modo Automático quando o aparelho está escuro (ambos
+   compartilham a mesma aparência). */
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]):not([data-theme="dark"]) {
+  :root:not([data-theme="light"]):not([data-theme="aurora"]) .daily-hero {
+    background: linear-gradient(120deg, #5546e0 0%, #8451e6 45%, #29b6d8 100%);
+    box-shadow: 0 16px 46px rgba(84, 70, 224, 0.35), 0 4px 16px rgba(41, 182, 216, 0.18);
+  }
+}
+:root[data-theme="aurora"] .daily-hero {
+  background: linear-gradient(120deg, #5546e0 0%, #8451e6 45%, #29b6d8 100%);
+  box-shadow: 0 16px 46px rgba(84, 70, 224, 0.35), 0 4px 16px rgba(41, 182, 216, 0.18);
+}
+:root[data-theme="aurora"] .daily-hero::before {
+  background: radial-gradient(circle, rgba(79, 224, 255, 0.25), transparent 70%);
+  width: 260px;
+  height: 260px;
+}
+:root[data-theme="aurora"] ::selection { background: color-mix(in srgb, var(--accent) 45%, transparent); }
+
+/* Modo "Automático" (padrão — sem data-theme, ou data-theme="system"):
+   segue a aparência do aparelho. Quando o aparelho está em modo escuro,
+   usa a MESMA paleta do Aurora (em vez do antigo "Escuro" neutro), já
+   que essa é a versão escura que realmente ficou boa. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):not([data-theme="aurora"]) {
     color-scheme: dark;
-    --bg: #0a0a13;
-    --bg2: #100f1c;
-    --surface: #171625;
-    --surface2: #1e1c2f;
-    --text: #f3f2fb;
-    --text2: #b3b0cc;
-    --muted: #7d7a9c;
-    --line: #2c2a42;
-    --accent: #8f7dfb;
-    --accent2: #7a67f5;
-    --accent-soft: #241f42;
-    --green: #34d17a;
-    --green-soft: #123322;
-    --orange: #ffab40;
-    --orange-soft: #3a2710;
-    --red: #ff5b54;
-    --red-soft: #3a1614;
-    --purple: #c77dff;
-    --purple-soft: #2a1c40;
-    --pink: #ff5c8a;
-    --pink-soft: #3a1a26;
-    --teal: #5fd4ff;
-    --teal-soft: #133340;
-    --yellow: #ffd60a;
-    --yellow-soft: #3a3008;
-    --note-yellow: #2c2710;
-    --note-blue: #11202f;
-    --note-green: #102a1d;
-    --note-pink: #2c1320;
-    --note-purple: #211230;
-    --note-orange: #2c1c0d;
-    --note-teal: #0f2530;
-    --note-red: #2c1212;
+    --bg: #060a18;
+    --bg2: #0a1024;
+    --surface: #10142c;
+    --surface2: #161b3a;
+    --text: #f1f3ff;
+    --text2: #b8c0e8;
+    --muted: #7c84b8;
+    --line: #262c52;
+    --accent: #7c6cff;
+    --accent2: #6456f0;
+    --accent-soft: #241f4e;
+    --green: #2fe0b0;
+    --green-soft: #0e2f38;
+    --orange: #ffb454;
+    --orange-soft: #3a2812;
+    --red: #ff6b8b;
+    --red-soft: #3a1830;
+    --purple: #c07dff;
+    --purple-soft: #2c1c4e;
+    --pink: #ff7fc4;
+    --pink-soft: #3a1a38;
+    --teal: #4fe0ff;
+    --teal-soft: #0e2c40;
+    --yellow: #ffe066;
+    --yellow-soft: #362c0c;
+    --note-yellow: #302a12;
+    --note-blue: #0f2038;
+    --note-green: #0d2c2a;
+    --note-pink: #301230;
+    --note-purple: #221238;
+    --note-orange: #2e1c0e;
+    --note-teal: #0c2838;
+    --note-red: #301220;
     --note-yellow-border: #6b5a18;
-    --note-blue-border: #2c5c86;
-    --note-green-border: #1f6b43;
-    --note-pink-border: #80324f;
-    --note-purple-border: #5c3786;
-    --note-orange-border: #7a4318;
-    --note-teal-border: #1d6f8c;
-    --note-red-border: #7a2a26;
-    --shadow-card: 0 1px 0 rgba(255,255,255,0.05) inset, 0 6px 18px rgba(0,0,0,0.55);
-    --shadow-card-hover: 0 1px 0 rgba(255,255,255,0.07) inset, 0 12px 32px rgba(0,0,0,0.65);
-    --shadow-float: 0 24px 70px rgba(0,0,0,0.7);
+    --note-blue-border: #2c5c9a;
+    --note-green-border: #1f8f76;
+    --note-pink-border: #9a3286;
+    --note-purple-border: #6c3ca0;
+    --note-orange-border: #a05a20;
+    --note-teal-border: #1d8fa8;
+    --note-red-border: #a02a5a;
+    --shadow-card: 0 1px 0 rgba(255,255,255,0.06) inset, 0 8px 24px rgba(2,4,16,0.65);
+    --shadow-card-hover: 0 1px 0 rgba(255,255,255,0.09) inset, 0 14px 38px color-mix(in srgb, var(--accent) 22%, rgba(2,4,16,0.7));
+    --shadow-float: 0 26px 80px rgba(2,4,16,0.8);
+  }
+  :root:not([data-theme="light"]):not([data-theme="aurora"]) .daily-hero::before {
+    background: radial-gradient(circle, rgba(79, 224, 255, 0.25), transparent 70%);
+    width: 260px;
+    height: 260px;
   }
 }
 
@@ -673,6 +710,12 @@ p, h1, h2, h3 { margin: 0; }
 .dashboard-layout {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
+  /* "dense" faz o grid preencher automaticamente qualquer buraco deixado
+     por um cartão "wide" (2 colunas) — sem isso, o painel "Finanças do
+     mês" (1 coluna) ficava sozinho na última linha, com um vão vazio de
+     2 colunas do lado dele. Com dense, o próximo cartão de 1 coluna
+     "sobe" pra preencher esse espaço, sem precisar mudar a ordem no HTML. */
+  grid-auto-flow: dense;
   gap: 16px;
 }
 
@@ -1613,7 +1656,6 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 
   .brand > div:not(.brand-mark),
   .nav-item span:last-child,
-  .ghost-button span,
   .streak-box { display: none; }
 
   .sidebar { align-items: center; padding: 20px 10px; gap: 4px; }
@@ -1730,37 +1772,25 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   }
 
   .topbar-actions {
-    /* Antes a busca de filtro (.search-box) E o botão de busca global
-       ficavam lado a lado, ambos espremidos — dava a impressão de duas
-       lupas quebradas ("Pe" cortado + "Tudo ⌘K" cortado). Agora só a
-       busca global aparece no celular, como um único ícone claro. */
+    /* Antes existiam duas "barras" de busca lado a lado no celular (a de
+       filtro + o botão "Tudo ⌘K"), ambas espremidas — dava a impressão de
+       duas lupas quebradas. Agora só existe UMA busca no app inteiro, que
+       preenche o espaço que sobrar entre o avatar/instalar PWA e o botão
+       de adicionar tarefa. */
     flex-shrink: 1;
     min-width: 0;
   }
 
-  /* Busca por filtro (por tela) só faz sentido com espaço de sobra —
-     no celular ela some e sobra só a busca global (search-all-btn),
-     que já procura em notas, tarefas, agenda e finanças de uma vez. */
-  .search-box { display: none; }
-
-  /* Busca global vira um botão só de ícone, do mesmo tamanho e estilo
-     dos outros botões da barra (avatar, "+ Tarefa") — uma lupa só,
-     sem texto cortado nem atalho de teclado (que não existe no celular). */
-  .search-all-btn {
-    flex-shrink: 0;
-    width: 44px;
-    height: 44px;
-    padding: 0;
-    justify-content: center;
+  /* Única busca do app: no celular ela vira flexível (em vez da largura
+     fixa de 240px do desktop) para caber ao lado dos outros botões sem
+     cortar texto nem empurrar nada pra fora da tela. */
+  .search-box {
+    flex: 1 1 auto;
+    min-width: 0;
+    width: auto;
+    padding: 0 10px;
   }
-  .search-all-label,
-  .search-all-btn .palette-kbd {
-    display: none;
-  }
-  /* No celular a busca por filtro some (regra acima) e o botão de busca
-     global vira ícone-apenas — precisa do seu próprio ícone pra não ficar
-     um botão vazio. */
-  .search-all-btn .icon { display: inline; }
+  .search-box input { min-width: 0; }
 
   /* Botão de adicionar tarefa: só o ícone no mobile (mesma largura do
      avatar, formato consistente), o rótulo "Tarefa" some visualmente —
@@ -2044,7 +2074,7 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   .ai-quick-entry-row .primary-button { width: 100%; justify-content: center; }
 }
 
-/* Seletor de tema (Claro / Escuro / Sistema) — Configurações > Aparência */
+/* Seletor de tema (Claro / Aurora / Automático) — Configurações > Aparência */
 .theme-toggle {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -2882,34 +2912,18 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 }
 
 @media (max-width: 380px) {
-  /* Seletor de tema (Claro/Escuro/Sistema): reduz padding e fonte para o
-     rótulo "Sistema" nunca quebrar linha dentro do botão nesses aparelhos
-     bem estreitos (era isso que parecia "bugado" nas telas menores). */
+  /* Seletor de tema: reduz padding e fonte para o rótulo "Automático" nunca
+     quebrar linha dentro do botão nesses aparelhos bem estreitos (era
+     isso que parecia "bugado" nas telas menores). */
   .theme-toggle-btn { padding: 12px 4px; font-size: 0.74rem; gap: 4px; }
   .theme-toggle-icon { font-size: 1.1rem; }
 }
 
 /* ── Busca global (Ctrl/Cmd+K) ──────────────────────────────── */
-.search-all-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  height: 44px;
-  padding: 0 14px;
-  white-space: nowrap;
-}
-/* No desktop já existe a lupa da busca por filtro (.search-box) logo ao
-   lado — a do botão "Tudo" ficava duplicada e parecia bug (duas lupas).
-   Como o botão já tem o rótulo "Tudo" + atalho ⌘K, o ícone próprio só
-   volta a aparecer no celular (regra em @media max-width:720px), onde
-   vira o único ícone da barra. */
-.search-all-btn .icon { display: none; }
-.palette-kbd {
-  font-size: 0.65rem;
-  font-weight: 700;
-  opacity: 0.6;
-  margin-left: 2px;
-}
+/* A busca de tudo agora vive dentro da própria .search-box (Enter nela
+   abre os resultados) e no atalho de teclado Ctrl/Cmd+K — não existe
+   mais um botão/lupa separado pra isso, então não há mais estilo de
+   botão aqui, só o modal de resultados abaixo. */
 .palette-result {
   display: flex;
   align-items: center;
