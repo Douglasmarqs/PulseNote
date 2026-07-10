@@ -1125,12 +1125,18 @@ function bindForms() {
   if (expForm) expForm.addEventListener("submit", saveExpense);
   bindAiQuickEntry();
 
-  // Popula o select de categorias (fixas + customizadas) na primeira carga
+  // Popula o select (oculto) de categorias e sincroniza o botão visível
+  // na primeira carga
   populateCategorySelect();
 
-  // Botão "+ Nova categoria"
+  // Botão de categoria visível — abre o picker com busca/criação em vez do
+  // <select> nativo escondido por trás dele
+  const catTrigger = document.querySelector("#expenseCategoryTrigger");
+  if (catTrigger) catTrigger.addEventListener("click", () => openCategoryPicker());
+
+  // Botão "+ Nova categoria" (atalho direto, sem passar pelo picker)
   const newCatBtn = document.querySelector("#newCategoryBtn");
-  if (newCatBtn) newCatBtn.addEventListener("click", openNewCategoryPrompt);
+  if (newCatBtn) newCatBtn.addEventListener("click", () => openNewCategoryPrompt());
 
   // Botão "Cancelar edição" (some quando não está editando)
   const cancelEditBtn = document.querySelector("#cancelEditExpense");
@@ -3673,17 +3679,23 @@ function filterFinByDate(date) {
   document.querySelector("#finTransactions").innerHTML = listHtml;
 }
 
-// Preenche o <select> de categorias com as fixas + customizadas do usuário.
-// Se selectedId for passado, marca essa opção como selecionada.
+// Preenche o <select> (oculto, mantido só por compatibilidade/valueOf) de
+// categorias com as fixas + customizadas do usuário. Se selectedId for
+// passado, marca essa opção como selecionada. Depois sincroniza o botão
+// visível (#expenseCategoryTrigger) que o usuário realmente vê e toca.
 function populateCategorySelect(selectedId, type = document.querySelector("#expenseType")?.value || "despesa") {
   const select = document.querySelector("#expenseCategory");
   if (!select) return;
   const current = selectedId || (select.dataset.type === type ? select.value : null);
   select.dataset.type = type;
   select.innerHTML = getAllCategories(type)
-    .map((cat) => `<option value="${cat.id}">${cat.label}</option>`)
+    .map((cat) => `<option value="${escapeHtml(cat.id)}">${escapeHtml(cat.label)}</option>`)
     .join("");
   if (current) select.value = current;
+  // Se a categoria selecionada anteriormente não existir mais nesse tipo
+  // (ex.: foi excluída, ou trocou de despesa pra receita), o <select> volta
+  // sozinho pra primeira opção — sincroniza o botão com esse valor real.
+  syncCategoryTrigger();
 
   // Texto e atalhos mudam de cara para deixar claro que "categoria de receita"
   // não é a mesma coisa que "categoria de despesa"
@@ -3693,7 +3705,191 @@ function populateCategorySelect(selectedId, type = document.querySelector("#expe
   if (description) description.placeholder = type === "receita" ? "Ex.: Salário de junho, Venda do sofá..." : "Ex.: Almoço, Uber...";
 }
 
-function openNewCategoryPrompt() {
+// Atualiza o texto/ícone do botão visível de categoria a partir do valor
+// atual do <select> oculto — chamado sempre que esse valor muda (seleção
+// manual no picker, preenchimento por IA, edição de lançamento existente).
+function syncCategoryTrigger() {
+  const select = document.querySelector("#expenseCategory");
+  const trigger = document.querySelector("#expenseCategoryTrigger");
+  if (!select || !trigger) return;
+  const cat = findCategory(select.value);
+  const iconEl = trigger.querySelector("#expenseCategoryTriggerIcon");
+  const labelEl = trigger.querySelector("#expenseCategoryTriggerLabel");
+  if (iconEl) iconEl.textContent = cat.label.split(" ")[0];
+  if (labelEl) labelEl.textContent = cat.label.replace(/^\S+\s*/, "");
+}
+
+// Remove acentos e caixa para permitir busca "solta" (ex.: "cafe" encontra
+// "Café", "alimentacao" encontra "Alimentação") — usado só na busca do
+// picker de categorias, nunca para salvar dados.
+function normalizeForSearch(value) {
+  return String(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+// Exclui uma categoria criada pelo usuário (nunca uma categoria fixa do
+// app). Lançamentos já registrados nela continuam existindo — só a opção
+// some da lista; se a categoria excluída for a que está selecionada no
+// formulário agora, o formulário volta pra "Outros" daquele tipo.
+function deleteCustomCategory(catId, onDone) {
+  const cat = (state.customCategories || []).find((c) => c.id === catId);
+  if (!cat) return;
+  const cleanName = cat.label.replace(/^\S+\s*/, "");
+  if (!confirm(`Excluir a categoria "${cleanName}"?\n\nLançamentos já registrados nela continuam salvos, só a opção some da lista.`)) return;
+
+  state.customCategories = state.customCategories.filter((c) => c.id !== catId);
+  saveState();
+
+  const select = document.querySelector("#expenseCategory");
+  const type = document.querySelector("#expenseType")?.value || "despesa";
+  if (select && select.value === catId) {
+    populateCategorySelect(type === "receita" ? "outros_receita" : "outros", type);
+  }
+  showToast(`🗑️ Categoria "${cleanName}" excluída.`);
+  onDone?.();
+}
+
+// Sheet de seleção de categoria: busca em tempo real pelas categorias já
+// existentes (fixas + criadas pelo usuário) e, se o texto digitado não
+// corresponder a nenhuma, oferece criar uma categoria nova com esse nome já
+// preenchido — assim o usuário nunca fica "preso" às categorias prontas e
+// consegue detalhar exatamente o que quer, no menor número de toques.
+function openCategoryPicker() {
+  document.getElementById("categoryPickerModal")?.remove();
+
+  const type = document.querySelector("#expenseType")?.value || "despesa";
+  const currentId = document.querySelector("#expenseCategory")?.value;
+  const trigger = document.querySelector("#expenseCategoryTrigger");
+  trigger?.setAttribute("aria-expanded", "true");
+
+  const modal = document.createElement("div");
+  modal.id = "categoryPickerModal";
+  modal.style.cssText = `position:fixed;inset:0;z-index:600;background:rgba(0,0,0,0.45);
+    backdrop-filter:blur(6px);display:grid;place-items:center;padding:20px`;
+
+  modal.innerHTML = `
+    <div style="background:var(--surface);border-radius:24px;padding:22px;width:100%;max-width:380px;
+      box-shadow:0 20px 60px rgba(0,0,0,0.25);animation:fadeUp 200ms ease;
+      max-height:85dvh;display:flex;flex-direction:column">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-shrink:0">
+        <div>
+          <h2 style="font-size:1.1rem;font-weight:800;color:var(--text)">${type === "receita" ? "De onde veio" : "Categoria"}</h2>
+          <p style="font-size:0.78rem;color:var(--muted);margin-top:2px">Busque, escolha ou crie a categoria exata que você quer</p>
+        </div>
+        <button id="closeCategoryPicker" style="width:30px;height:30px;border-radius:10px;
+          background:var(--surface2);border:none;font-size:1rem;cursor:pointer;color:var(--text2);flex-shrink:0">✕</button>
+      </div>
+
+      <input id="categoryPickerSearch" placeholder="Buscar ou digitar uma categoria nova..." autocomplete="off" maxlength="24"
+        style="width:100%;min-height:46px;border:1.5px solid var(--line);border-radius:14px;
+        padding:8px 14px;background:var(--surface2);color:var(--text);font-size:0.92rem;font:inherit;
+        margin-bottom:12px;flex-shrink:0"/>
+
+      <div id="categoryPickerList" style="display:grid;gap:6px;overflow-y:auto;padding-right:2px"></div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  const listEl = modal.querySelector("#categoryPickerList");
+  const searchEl = modal.querySelector("#categoryPickerSearch");
+
+  function closePicker() {
+    trigger?.setAttribute("aria-expanded", "false");
+    modal.remove();
+  }
+
+  function selectCategory(catId) {
+    const select = document.querySelector("#expenseCategory");
+    select.value = catId;
+    select.dispatchEvent(new Event("change"));
+    syncCategoryTrigger();
+    closePicker();
+  }
+
+  function render(query) {
+    const q = normalizeForSearch(query || "");
+    const all = getAllCategories(type);
+    const filtered = q ? all.filter((cat) => normalizeForSearch(cat.label).includes(q)) : all;
+    const hasExactMatch = all.some((cat) => normalizeForSearch(cat.label.replace(/^\S+\s*/, "")) === q);
+
+    const rowsHtml = filtered.map((cat) => {
+      const isSelected = cat.id === currentId;
+      const isCustom = cat.id.startsWith("custom_");
+      const cleanLabel = cat.label.replace(/^\S+\s*/, "");
+      return `
+        <div class="cat-picker-row" data-cat-id="${escapeHtml(cat.id)}"
+          style="display:flex;align-items:center;gap:10px;padding:11px 12px;border-radius:14px;cursor:pointer;
+          border:1.5px solid ${isSelected ? "var(--accent)" : "var(--line)"};
+          background:${isSelected ? "var(--accent-soft)" : "var(--surface2)"}">
+          <span style="width:8px;height:8px;border-radius:50%;background:${cat.color};flex-shrink:0"></span>
+          <span style="font-size:1.05rem;flex-shrink:0">${cat.label.split(" ")[0]}</span>
+          <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+            font-weight:600;font-size:0.9rem;color:${isSelected ? "var(--accent)" : "var(--text)"}">${escapeHtml(cleanLabel)}</span>
+          ${isSelected ? `<span style="color:var(--accent);font-weight:800;flex-shrink:0">✓</span>` : ""}
+          ${isCustom ? `<button type="button" class="cat-picker-delete" data-del-id="${escapeHtml(cat.id)}" title="Excluir categoria"
+            style="width:28px;height:28px;border-radius:8px;border:none;background:transparent;color:var(--muted);
+            font-size:0.85rem;cursor:pointer;flex-shrink:0">🗑️</button>` : ""}
+        </div>`;
+    }).join("");
+
+    const emptyHtml = filtered.length ? "" : `
+      <div style="text-align:center;padding:20px 10px;color:var(--muted);font-size:0.85rem">
+        Nenhuma categoria encontrada.
+      </div>`;
+
+    const createHtml = (query || "").trim() && !hasExactMatch ? `
+      <button type="button" id="categoryPickerCreate" data-name="${escapeHtml(query.trim())}"
+        style="display:flex;align-items:center;gap:10px;padding:12px;border-radius:14px;cursor:pointer;
+        border:1.5px dashed var(--accent);background:var(--accent-soft);color:var(--accent);
+        font-weight:700;font-size:0.88rem;margin-top:2px;width:100%;text-align:left;font-family:inherit">
+        <span style="font-size:1.1rem;flex-shrink:0">➕</span>
+        <span>Criar categoria "${escapeHtml(query.trim())}"</span>
+      </button>` : "";
+
+    listEl.innerHTML = rowsHtml + emptyHtml + createHtml;
+
+    listEl.querySelectorAll(".cat-picker-row").forEach((row) => {
+      row.addEventListener("click", (e) => {
+        if (e.target.closest(".cat-picker-delete")) return;
+        selectCategory(row.dataset.catId);
+      });
+    });
+    listEl.querySelectorAll(".cat-picker-delete").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        deleteCustomCategory(btn.dataset.delId, () => render(searchEl.value));
+      });
+    });
+    listEl.querySelector("#categoryPickerCreate")?.addEventListener("click", (e) => {
+      const name = e.currentTarget.dataset.name;
+      closePicker();
+      openNewCategoryPrompt(name);
+    });
+  }
+
+  render("");
+  searchEl.addEventListener("input", () => render(searchEl.value));
+  searchEl.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    // Enter com resultado único visível seleciona direto; senão, se houver
+    // opção de criar categoria nova, cria; economiza toques no celular.
+    const rows = listEl.querySelectorAll(".cat-picker-row");
+    const createBtn = listEl.querySelector("#categoryPickerCreate");
+    if (rows.length === 1 && !createBtn) selectCategory(rows[0].dataset.catId);
+    else createBtn?.click();
+  });
+  searchEl.focus();
+
+  modal.querySelector("#closeCategoryPicker").addEventListener("click", closePicker);
+  modal.addEventListener("click", (e) => { if (e.target === modal) closePicker(); });
+}
+
+function openNewCategoryPrompt(prefillName) {
   const modal = document.createElement("div");
   modal.id = "newCategoryModal";
   modal.style.cssText = `position:fixed;inset:0;z-index:600;background:rgba(0,0,0,0.45);
@@ -3702,19 +3898,25 @@ function openNewCategoryPrompt() {
   const colorOptions = ["#ff9500","#5ac8fa","#ff3b30","#af52de","#34c759","#ff6b6b","#ff2d55","#5856d6","#00c7be","#8a9bb0"];
   const emojiOptions  = ["🔁","💡","🎮","🐾","✈️","🎁","🏋️","📱","🧾","🛠️","🍷","🚀"];
 
+  const activeTypeForTitle = document.querySelector("#expenseType")?.value || "despesa";
+
   modal.innerHTML = `
     <div style="background:var(--surface);border-radius:24px;padding:26px;width:100%;max-width:380px;
       box-shadow:0 20px 60px rgba(0,0,0,0.25);animation:fadeUp 200ms ease;
       max-height:90dvh;overflow-y:auto">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
         <h2 style="font-size:1.1rem;font-weight:800;color:var(--text)">Nova categoria</h2>
         <button id="closeNewCategory" style="width:30px;height:30px;border-radius:10px;
           background:var(--surface2);border:none;font-size:1rem;cursor:pointer;color:var(--text2)">✕</button>
       </div>
+      <p style="font-size:0.8rem;color:var(--muted);margin-bottom:16px">
+        Crie exatamente a categoria que você precisa, com o nome, ícone e cor que fizerem sentido pra você.
+        Vai valer só para ${activeTypeForTitle === "receita" ? "receitas" : "despesas"}.
+      </p>
 
       <label style="display:grid;gap:5px;font-size:0.82rem;font-weight:600;color:var(--muted);margin-bottom:12px">
         Nome da categoria
-        <input id="newCatName" placeholder="Ex.: Assinaturas" maxlength="24"
+        <input id="newCatName" placeholder="Ex.: Assinaturas" maxlength="24" value="${escapeHtml(prefillName || "")}"
           style="min-height:44px;border:1.5px solid var(--line);border-radius:12px;
           padding:8px 12px;background:var(--surface2);color:var(--text);font-size:0.92rem;width:100%"/>
       </label>
@@ -3772,17 +3974,37 @@ function openNewCategoryPrompt() {
   document.getElementById("closeNewCategory").addEventListener("click", () => modal.remove());
   modal.addEventListener("click", (e) => { if (e.target === modal) modal.remove(); });
 
+  const nameInput = document.getElementById("newCatName");
+  nameInput.focus();
+  nameInput.setSelectionRange(nameInput.value.length, nameInput.value.length);
+  nameInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); document.getElementById("saveNewCategory").click(); }
+  });
+
   document.getElementById("saveNewCategory").addEventListener("click", () => {
-    const name = document.getElementById("newCatName").value.trim();
+    const name = nameInput.value.trim();
     const errEl = document.getElementById("newCategoryError");
+    const showError = (msg) => { errEl.textContent = msg; errEl.style.display = "block"; };
+
     if (!name) {
-      errEl.textContent = "Digite um nome para a categoria.";
-      errEl.style.display = "block";
+      showError("Digite um nome para a categoria.");
+      return;
+    }
+
+    const activeType = document.querySelector("#expenseType")?.value || "despesa";
+
+    // Evita duas categorias iguais (mesmo nome, mesmo tipo) — compara sem
+    // acento/caixa pra pegar "Mercado" vs "mercado" também.
+    const normalizedName = normalizeForSearch(name);
+    const alreadyExists = getAllCategories(activeType).some(
+      (cat) => normalizeForSearch(cat.label.replace(/^\S+\s*/, "")) === normalizedName
+    );
+    if (alreadyExists) {
+      showError(`Já existe uma categoria "${name}" nesse tipo. Escolha outro nome ou use a existente.`);
       return;
     }
 
     const id = "custom_" + name.toLowerCase().replace(/[^a-z0-9]+/g, "_").slice(0, 24) + "_" + Date.now().toString(36);
-    const activeType = document.querySelector("#expenseType")?.value || "despesa";
 
     if (!state.customCategories) state.customCategories = [];
     state.customCategories.push({

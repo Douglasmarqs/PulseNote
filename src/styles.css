@@ -2018,11 +2018,48 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   flex-shrink: 0;
 }
 
-/* Categoria: select + botão */
+/* Categoria: botão seletor customizado (abre o picker) + botão "+" */
 .fin-cat-select-row { display: flex; gap: 6px; }
 .fin-cat-select-row select { flex: 1; height: 40px; border: 1.5px solid var(--line); border-radius: 12px; padding: 0 10px; background: var(--surface2); color: var(--text); font: inherit; }
 .fin-cat-add-btn { width: 40px; height: 40px; border-radius: 12px; border: 1.5px dashed var(--line); background: transparent; color: var(--muted); font-size: 1.2rem; cursor: pointer; flex-shrink: 0; transition: all 150ms; }
 .fin-cat-add-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+
+.fin-cat-trigger {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 40px;
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  padding: 0 12px;
+  background: var(--surface2);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
+}
+.fin-cat-trigger:hover { border-color: var(--accent); }
+.fin-cat-trigger:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.fin-cat-trigger-icon { font-size: 1.05rem; flex-shrink: 0; line-height: 1; }
+.fin-cat-trigger-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fin-cat-trigger-chevron { flex-shrink: 0; color: var(--muted); transition: transform 150ms ease; }
+.fin-cat-trigger[aria-expanded="true"] .fin-cat-trigger-chevron { transform: rotate(180deg); }
+
+/* ---------- CATEGORY PICKER (sheet de seleção/criação de categoria) ---------- */
+.cat-picker-row { transition: border-color 150ms ease, background 150ms ease; }
+.cat-picker-row:hover { border-color: var(--accent) !important; }
+.cat-picker-delete { transition: all 150ms ease; }
+.cat-picker-delete:hover { background: var(--red-soft) !important; color: var(--red) !important; }
+#categoryPickerCreate { transition: filter 150ms ease, transform 150ms ease; }
+#categoryPickerCreate:hover { filter: brightness(1.08); transform: translateY(-1px); }
+#categoryPickerSearch:focus { border-color: var(--accent) !important; box-shadow: 0 0 0 3px var(--accent-soft); }
+#categoryPickerList::-webkit-scrollbar { width: 6px; }
+#categoryPickerList::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
 /* ---------- AI QUICK ENTRY (Finanças) ---------- */
 .ai-quick-entry {
   border: 1.5px solid transparent;

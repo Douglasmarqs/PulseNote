@@ -614,7 +614,12 @@
                     </div>
                     <input id="expenseDescription" placeholder="Descrição (ex.: Almoço, Uber...)" />
                     <div class="fin-cat-select-row">
-                      <select id="expenseCategory"><option value="alimentacao">🍔 Alimentação</option></select>
+                      <button type="button" id="expenseCategoryTrigger" class="fin-cat-trigger" aria-haspopup="true">
+                        <span id="expenseCategoryTriggerIcon" class="fin-cat-trigger-icon">🍔</span>
+                        <span id="expenseCategoryTriggerLabel" class="fin-cat-trigger-label">Alimentação</span>
+                        <svg class="fin-cat-trigger-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+                      </button>
+                      <select id="expenseCategory" hidden aria-hidden="true" tabindex="-1"><option value="alimentacao">🍔 Alimentação</option></select>
                       <button type="button" id="newCategoryBtn" class="fin-cat-add-btn" title="Nova categoria">＋</button>
                     </div>
                     <button type="submit" class="primary-button" style="width:100%;justify-content:center;height:44px">➕ Registrar</button>
