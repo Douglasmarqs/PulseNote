@@ -2651,6 +2651,128 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   .fin-cat-value { min-width: 48px; font-size: 0.7rem; }
 }
 
+/* ---- Modal "Nova categoria": ícones agrupados por tema + paleta ampla ----
+   Trocado de estilos inline soltos por classes, com grid responsivo (em vez
+   de flex-wrap com tamanho fixo) — assim o picker cresce em ícones sem
+   nunca ultrapassar a largura do modal, nem em telas pequenas. */
+.new-category-card {
+  width: 100%;
+  max-width: 400px;
+  max-height: 88dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.new-category-body {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.new-category-hint {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin: 0 0 14px;
+  line-height: 1.4;
+}
+.new-category-field {
+  display: grid;
+  gap: 5px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 14px;
+}
+.new-category-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--muted);
+  margin: 0 0 8px;
+}
+.new-category-tabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+  margin-bottom: 10px;
+}
+.new-category-tabs::-webkit-scrollbar { display: none; }
+.new-category-tab {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1.5px solid var(--line);
+  background: var(--surface2);
+  color: var(--text2);
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 160ms ease;
+}
+.new-category-tab:hover { color: var(--text); }
+.new-category-tab.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.new-category-emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+  margin-bottom: 18px;
+}
+.cat-emoji-btn {
+  aspect-ratio: 1;
+  width: 100%;
+  min-height: 38px;
+  border-radius: 10px;
+  font-size: 1.1rem;
+  border: 2px solid var(--line);
+  background: var(--surface2);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+.cat-emoji-btn.active { border-color: var(--accent); background: var(--accent-soft); }
+.new-category-color-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.cat-color-btn {
+  width: 28px;
+  height: 28px;
+  min-height: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  padding: 0;
+  border: 3px solid transparent;
+  flex-shrink: 0;
+}
+.cat-color-btn.active { border-color: var(--text); }
+.new-category-error {
+  color: var(--red, #ff3b30);
+  font-size: 0.84rem;
+  font-weight: 600;
+  display: none;
+  background: var(--red-soft, #ffeeed);
+  padding: 10px 12px;
+  border-radius: 10px;
+  margin-bottom: 12px;
+}
+.new-category-save {
+  height: 48px;
+  width: 100%;
+  justify-content: center;
+}
+@media (max-width: 380px) {
+  .new-category-emoji-grid { grid-template-columns: repeat(5, 1fr); }
+}
+
 /* ---- Botão de nova categoria e cancelar edição ---- */
 #newCategoryBtn:hover {
   background: var(--accent-soft) !important;
@@ -2754,6 +2876,34 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 .fin-recur-amount { font-size: 0.88rem; font-weight: 800; white-space: nowrap; flex-shrink: 0; }
 .fin-recur-amount.receita { color: var(--green); }
 .fin-recur-amount.despesa { color: var(--red); }
+
+/* Os 3 botões de ação (lançar/pular/remover) tinham largura "automática"
+   (padding 0 10px + texto do ícone) e nunca encolhiam (flex-shrink:0 no
+   wrapper) — em telas estreitas, a soma de ícone + nome + valor + 3
+   botões passava da largura do card e "vazava" pra fora da tela (cortando
+   o último botão). Agora os botões têm tamanho quadrado fixo e pequeno,
+   como os outros grupos de ações do app (ex.: editar/excluir lançamento),
+   então o total nunca ultrapassa a largura disponível. */
+.fin-recur-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.fin-recur-actions .mini-button {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  font-size: 0.78rem;
+}
+@media (max-width: 380px) {
+  .fin-recur-row { gap: 6px; padding: 9px 10px; }
+  .fin-recur-icon { width: 30px; height: 30px; font-size: 0.9rem; }
+  .fin-recur-amount { font-size: 0.8rem; }
+  .fin-recur-actions .mini-button { width: 25px; height: 25px; }
+}
 
 /* ─── Modais genéricos ────────────────────────────────────────── */
 .modal-backdrop {

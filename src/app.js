@@ -362,15 +362,49 @@ const viewTitles = {
   settings: "Configurações",
 };
 
+// Catálogo padrão de categorias — cobre os casos mais comuns de despesa
+// pessoal (moradia, contas, alimentação, saúde, lazer, família, finanças...)
+// pra ninguém precisar criar categoria manual pra coisa básica. A lista do
+// picker já é buscável e rolável, então mais opções aqui não bagunça a UI —
+// só torna a busca mais provável de já ter o que a pessoa precisa.
 const expenseCategories = [
-  { id: "alimentacao", label: "🍔 Alimentação",  color: "#ff9500" },
+  // Casa & contas
+  { id: "moradia",     label: "🏠 Moradia",           color: "#ff6b6b" },
+  { id: "contas",      label: "💡 Contas e Utilidades", color: "#ffd60a" },
+  { id: "manutencao",  label: "🔧 Manutenção e Reparos",            color: "#8a9bb0" },
+  // Alimentação
+  { id: "alimentacao", label: "🍔 Restaurante/Delivery", color: "#ff9500" },
+  { id: "mercado",     label: "🛒 Mercado",              color: "#ff9f0a" },
+  // Transporte
   { id: "transporte",  label: "🚗 Transporte",   color: "#5ac8fa" },
-  { id: "saude",       label: "💊 Saúde",        color: "#ff3b30" },
-  { id: "lazer",       label: "🎬 Lazer",        color: "#af52de" },
+  { id: "combustivel", label: "⛽ Combustível",  color: "#0a84ff" },
+  // Saúde & bem-estar
+  { id: "saude",       label: "💊 Saúde",                    color: "#ff3b30" },
+  { id: "academia",    label: "🏋️ Academia e Esportes",      color: "#ff453a" },
+  { id: "beleza",      label: "💅 Beleza e Cuidados pessoais", color: "#ff6482" },
+  // Educação & trabalho
   { id: "educacao",    label: "📚 Educação",     color: "#34c759" },
-  { id: "moradia",     label: "🏠 Moradia",      color: "#ff6b6b" },
-  { id: "roupas",      label: "👗 Roupas",       color: "#ff2d55" },
+  // Lazer & social
+  { id: "lazer",       label: "🎬 Lazer",           color: "#af52de" },
+  { id: "eventos",     label: "🎉 Festas e Eventos", color: "#bf5af2" },
+  { id: "presentes",   label: "🎁 Presentes",       color: "#ff2d55" },
+  // Compras
+  { id: "roupas",      label: "👗 Roupas e Acessórios", color: "#ff2d55" },
+  { id: "tecnologia",  label: "📱 Tecnologia e Eletrônicos", color: "#64d2ff" },
+  // Assinaturas
   { id: "assinaturas", label: "🔁 Assinaturas",  color: "#5856d6" },
+  // Família & pets
+  { id: "familia",     label: "👶 Filhos e Família", color: "#ffd60a" },
+  { id: "pet",         label: "🐾 Pet",              color: "#30b0c7" },
+  // Viagem
+  { id: "viagem",      label: "✈️ Viagem", color: "#00c7be" },
+  // Finanças
+  { id: "investimentos_desp", label: "💰 Investimentos e Poupança", color: "#30d158" },
+  { id: "emprestimos", label: "🏦 Empréstimos e Dívidas", color: "#a2845e" },
+  { id: "impostos",    label: "🧾 Impostos e Taxas",      color: "#8e8e93" },
+  { id: "seguros",     label: "🛡️ Seguros",               color: "#5e5ce6" },
+  { id: "doacoes",     label: "🎗️ Doações",               color: "#ff375f" },
+  // Outros
   { id: "outros",      label: "📦 Outros",       color: "#8a9bb0" },
 ];
 
@@ -381,7 +415,11 @@ const incomeCategories = [
   { id: "freelance",    label: "💻 Freelance/Bico",  color: "#5ac8fa" },
   { id: "investimentos",label: "📈 Investimentos",   color: "#af52de" },
   { id: "vendas",       label: "🏷️ Vendas",          color: "#ff9500" },
+  { id: "aluguel_receb",label: "🏠 Aluguel recebido", color: "#ff6b6b" },
   { id: "reembolso",    label: "↩️ Reembolso",        color: "#00c7be" },
+  { id: "premio",       label: "🏆 Prêmio/Sorte",     color: "#ffd60a" },
+  { id: "emprestimo_receb", label: "🤝 Empréstimo recebido", color: "#a2845e" },
+  { id: "pensao",       label: "👨‍👩‍👧 Pensão/Auxílio",  color: "#5e5ce6" },
   { id: "presente",     label: "🎁 Presente/Bônus",   color: "#ff2d55" },
   { id: "outros_receita", label: "📦 Outros",         color: "#8a9bb0" },
 ];
@@ -3889,84 +3927,117 @@ function openCategoryPicker() {
   modal.addEventListener("click", (e) => { if (e.target === modal) closePicker(); });
 }
 
+// Catálogo de ícones do "Nova categoria", organizado em grupos temáticos
+// (em vez de uma lista única de 12 emojis soltos) — assim dá pra oferecer
+// muito mais opções sem virar bagunça: a pessoa navega por abas curtas
+// (Casa, Comida, Transporte...) em vez de rolar uma parede de emoji.
+const NEW_CATEGORY_ICON_GROUPS = [
+  { key: "casa",       label: "🏠 Casa",       icons: ["🏠","💡","🚿","🔑","🛋️","🧹","🪴","📺","🧺","🛏️"] },
+  { key: "comida",     label: "🍔 Comida",     icons: ["🍔","🛒","🍕","☕","🍷","🍺","🍰","🥗","🍣","🥪"] },
+  { key: "transporte", label: "🚗 Transporte", icons: ["🚗","⛽","🚕","🚌","🚲","🛵","🅿️","🚆","🚉","🛣️"] },
+  { key: "saude",      label: "💊 Saúde",      icons: ["💊","🏋️","🧘","💅","🦷","👓","🩺","🧴","🧠","😷"] },
+  { key: "trabalho",   label: "💼 Trabalho",   icons: ["💼","🎓","💻","🖊️","📈","📊","🗂️","📎","🧑‍💻","📚"] },
+  { key: "lazer",      label: "🎬 Lazer",      icons: ["🎬","🎮","🎉","🎵","📷","⚽","🎲","🎨","🎤","🍿"] },
+  { key: "compras",    label: "🛍️ Compras",    icons: ["👗","👟","💍","🛍️","📱","🧸","👜","🕶️","👔","🎒"] },
+  { key: "familia",    label: "👶 Família",    icons: ["👶","🐾","🐶","🐱","👨‍👩‍👧","🍼","🧸","🎠","🏫","🧑‍🍼"] },
+  { key: "financas",   label: "💰 Finanças",   icons: ["💰","🏦","🧾","🛡️","💳","📉","🎗️","🪙","📑","💸"] },
+  { key: "viagem",     label: "✈️ Viagem",     icons: ["✈️","🧳","🗺️","🏖️","🏨","🚢","🏔️","🗽","🚀","🌍"] },
+  { key: "outros",     label: "📦 Outros",     icons: ["📦","🔁","🔧","❓","⭐","🔖","🎁","✨","🚀","🧩"] },
+];
+
+const NEW_CATEGORY_COLOR_OPTIONS = [
+  "#ff9500","#ff9f0a","#ffd60a","#ff6b6b","#ff3b30","#ff375f","#ff2d55","#ff6482",
+  "#bf5af2","#af52de","#5e5ce6","#5856d6","#0a84ff","#5ac8fa","#64d2ff","#30b0c7",
+  "#00c7be","#30d158","#34c759","#a2845e","#8e8e93","#8a9bb0",
+];
+
 function openNewCategoryPrompt(prefillName) {
   const modal = document.createElement("div");
   modal.id = "newCategoryModal";
-  modal.style.cssText = `position:fixed;inset:0;z-index:600;background:rgba(0,0,0,0.45);
-    backdrop-filter:blur(6px);display:grid;place-items:center;padding:20px`;
+  modal.className = "modal-backdrop new-category-backdrop";
+  modal.hidden = false;
 
-  const colorOptions = ["#ff9500","#5ac8fa","#ff3b30","#af52de","#34c759","#ff6b6b","#ff2d55","#5856d6","#00c7be","#8a9bb0"];
-  const emojiOptions  = ["🔁","💡","🎮","🐾","✈️","🎁","🏋️","📱","🧾","🛠️","🍷","🚀"];
-
+  const groups = NEW_CATEGORY_ICON_GROUPS;
+  const colorOptions = NEW_CATEGORY_COLOR_OPTIONS;
   const activeTypeForTitle = document.querySelector("#expenseType")?.value || "despesa";
 
   modal.innerHTML = `
-    <div style="background:var(--surface);border-radius:24px;padding:26px;width:100%;max-width:380px;
-      box-shadow:0 20px 60px rgba(0,0,0,0.25);animation:fadeUp 200ms ease;
-      max-height:90dvh;overflow-y:auto">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-        <h2 style="font-size:1.1rem;font-weight:800;color:var(--text)">Nova categoria</h2>
-        <button id="closeNewCategory" style="width:30px;height:30px;border-radius:10px;
-          background:var(--surface2);border:none;font-size:1rem;cursor:pointer;color:var(--text2)">✕</button>
+    <div class="modal-card new-category-card">
+      <div class="modal-header">
+        <h2>Nova categoria</h2>
+        <button class="icon-button" id="closeNewCategory">✕</button>
       </div>
-      <p style="font-size:0.8rem;color:var(--muted);margin-bottom:16px">
-        Crie exatamente a categoria que você precisa, com o nome, ícone e cor que fizerem sentido pra você.
-        Vai valer só para ${activeTypeForTitle === "receita" ? "receitas" : "despesas"}.
-      </p>
+      <div class="modal-body new-category-body">
+        <p class="new-category-hint">
+          Crie exatamente a categoria que você precisa, com o nome, ícone e cor que fizerem sentido pra você.
+          Vai valer só para ${activeTypeForTitle === "receita" ? "receitas" : "despesas"}.
+        </p>
 
-      <label style="display:grid;gap:5px;font-size:0.82rem;font-weight:600;color:var(--muted);margin-bottom:12px">
-        Nome da categoria
-        <input id="newCatName" placeholder="Ex.: Assinaturas" maxlength="24" value="${escapeHtml(prefillName || "")}"
-          style="min-height:44px;border:1.5px solid var(--line);border-radius:12px;
-          padding:8px 12px;background:var(--surface2);color:var(--text);font-size:0.92rem;width:100%"/>
-      </label>
+        <label class="new-category-field">
+          Nome da categoria
+          <input id="newCatName" placeholder="Ex.: Assinaturas" maxlength="24" value="${escapeHtml(prefillName || "")}" class="field-input"/>
+        </label>
 
-      <p style="font-size:0.8rem;font-weight:600;color:var(--muted);margin-bottom:8px">Ícone</p>
-      <div id="emojiPicker" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px">
-        ${emojiOptions.map((e, i) => `
-          <button class="cat-emoji-btn ${i === 0 ? "active" : ""}" data-emoji="${e}"
-            style="width:38px;height:38px;border-radius:10px;font-size:1.1rem;
-            border:2px solid ${i === 0 ? "var(--accent)" : "var(--line)"};
-            background:var(--surface2);cursor:pointer">${e}</button>
-        `).join("")}
+        <p class="new-category-label">Ícone</p>
+        <div id="emojiGroupTabs" class="new-category-tabs">
+          ${groups.map((g, i) => `
+            <button type="button" class="new-category-tab${i === 0 ? " active" : ""}" data-group="${g.key}">${g.label}</button>
+          `).join("")}
+        </div>
+        <div id="emojiPicker" class="new-category-emoji-grid"></div>
+
+        <p class="new-category-label">Cor</p>
+        <div id="colorPicker" class="new-category-color-grid">
+          ${colorOptions.map((c, i) => `
+            <button type="button" class="cat-color-btn${i === 0 ? " active" : ""}" data-color="${c}" style="background:${c}"></button>
+          `).join("")}
+        </div>
+
+        <div id="newCategoryError" class="new-category-error"></div>
+
+        <button id="saveNewCategory" class="primary-button new-category-save">
+          Criar categoria
+        </button>
       </div>
-
-      <p style="font-size:0.8rem;font-weight:600;color:var(--muted);margin-bottom:8px">Cor</p>
-      <div id="colorPicker" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px">
-        ${colorOptions.map((c, i) => `
-          <button class="cat-color-btn ${i === 0 ? "active" : ""}" data-color="${c}"
-            style="width:30px;height:30px;border-radius:50%;background:${c};cursor:pointer;
-            border:3px solid ${i === 0 ? "var(--text)" : "transparent"}"></button>
-        `).join("")}
-      </div>
-
-      <div id="newCategoryError" style="color:var(--red,#ff3b30);font-size:0.84rem;font-weight:600;
-        display:none;background:var(--red-soft,#ffeeed);padding:10px 12px;border-radius:10px;margin-bottom:12px"></div>
-
-      <button id="saveNewCategory" style="height:48px;border-radius:14px;background:var(--accent);
-        color:#fff;font-weight:700;font-size:0.95rem;border:none;cursor:pointer;width:100%">
-        Criar categoria
-      </button>
     </div>
   `;
 
   document.body.appendChild(modal);
 
-  let selectedEmoji = emojiOptions[0];
+  let selectedEmoji = groups[0].icons[0];
   let selectedColor = colorOptions[0];
+  let activeGroupKey = groups[0].key;
 
-  modal.querySelectorAll(".cat-emoji-btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      modal.querySelectorAll(".cat-emoji-btn").forEach((b) => b.style.borderColor = "var(--line)");
-      btn.style.borderColor = "var(--accent)";
-      selectedEmoji = btn.dataset.emoji;
+  const emojiPickerEl = modal.querySelector("#emojiPicker");
+
+  function renderEmojiGrid() {
+    const group = groups.find((g) => g.key === activeGroupKey) || groups[0];
+    emojiPickerEl.innerHTML = group.icons.map((e) => `
+      <button type="button" class="cat-emoji-btn${e === selectedEmoji ? " active" : ""}" data-emoji="${e}">${e}</button>
+    `).join("");
+    emojiPickerEl.querySelectorAll(".cat-emoji-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        selectedEmoji = btn.dataset.emoji;
+        emojiPickerEl.querySelectorAll(".cat-emoji-btn").forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+      });
+    });
+  }
+  renderEmojiGrid();
+
+  modal.querySelectorAll(".new-category-tab").forEach((tab) => {
+    tab.addEventListener("click", () => {
+      activeGroupKey = tab.dataset.group;
+      modal.querySelectorAll(".new-category-tab").forEach((t) => t.classList.remove("active"));
+      tab.classList.add("active");
+      renderEmojiGrid();
     });
   });
 
   modal.querySelectorAll(".cat-color-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
-      modal.querySelectorAll(".cat-color-btn").forEach((b) => b.style.borderColor = "transparent");
-      btn.style.borderColor = "var(--text)";
+      modal.querySelectorAll(".cat-color-btn").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
       selectedColor = btn.dataset.color;
     });
   });
@@ -4341,7 +4412,7 @@ function renderFinRecurrents() {
           <span class="task-meta">Dia ${r.day} · ${cat.label.replace(/^\S+\s*/, "")}${skipped ? ` · pulado em ${finMonthLabel(finActiveMonth)}` : ""}</span>
         </div>
         <span class="fin-recur-amount ${isRec ? "receita" : "despesa"}">${isRec ? "+" : "-"}${formatCurrency(r.amount)}</span>
-        <div style="display:flex;gap:4px;flex-shrink:0">
+        <div class="fin-recur-actions">
           <button class="mini-button" onclick="applyRecurrent('${r.id}')" title="Lançar agora">▶</button>
           <button class="mini-button" onclick="toggleSkipRecurrentMonth('${r.id}','${finActiveMonth}')" title="${skipped ? "Reativar neste mês" : "Pular este mês"}">${skipped ? "↩" : "⏭"}</button>
           <button class="mini-button" onclick="deleteRecurrent('${r.id}')" title="Remover">✕</button>
