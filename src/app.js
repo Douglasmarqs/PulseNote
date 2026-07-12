@@ -4980,9 +4980,9 @@ function fitFinanceCards(){
  const values=document.querySelectorAll("#finReceitas,#finDespesas,#finSaldo");
  values.forEach(el=>{
    if(!el)return;
-   let size=23;
+   let size=30;
    el.style.fontSize=size+"px";
-   while(el.scrollWidth>el.clientWidth && size>11){
+   while(el.scrollWidth>el.clientWidth && size>16){
       size--;
       el.style.fontSize=size+"px";
    }

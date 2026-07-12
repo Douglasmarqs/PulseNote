@@ -2483,8 +2483,8 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 .fin-summary-grid{
 display:grid;
 grid-template-columns:repeat(3,minmax(0,1fr));
-gap:10px;
-width:100%;
+gap:14px;
+align-items:stretch;
 }
 
 .fin-summary-card{
@@ -2506,6 +2506,14 @@ width:100%;
 
 min-width:0;
 width:100%;
+overflow:hidden;
+
+min-height:96px;
+padding:16px 14px;
+display:flex;
+flex-direction:column;
+justify-content:center;
+gap:8px;
 overflow:hidden;
 }
 
@@ -2565,22 +2573,16 @@ overflow:hidden;
 .fin-summary-card.saldo .fin-sum-icon   { color: var(--saldo-color, var(--green)); }
 
 .fin-summary-card strong{
-display:flex;
-align-items:center;
-justify-content:flex-start;
+display:block;
 width:100%;
-min-width:0;
-max-width:100%;
-overflow:hidden;
-white-space:nowrap;
-text-overflow:clip;
 font-weight:800;
+font-size:clamp(1.05rem,2.2vw,1.9rem);
+line-height:1.15;
+letter-spacing:-0.02em;
+white-space:nowrap;
+overflow:hidden;
+text-overflow:ellipsis;
 font-variant-numeric:tabular-nums;
-letter-spacing:-0.03em;
-line-height:1;
-font-size:clamp(.70rem,1.45vw,1.45rem);
-transform-origin:left center;
-transition:font-size .15s ease;
 }
 
 .fin-summary-card.receita strong { color: var(--green); }
@@ -2794,8 +2796,8 @@ transition:font-size .15s ease;
   .fin-summary-grid{
 display:grid;
 grid-template-columns:repeat(3,minmax(0,1fr));
-gap:10px;
-width:100%;
+gap:14px;
+align-items:stretch;
 }
 }
 
@@ -2820,13 +2822,21 @@ width:100%;
 min-width:0;
 width:100%;
 overflow:hidden;
+
+min-height:96px;
+padding:16px 14px;
+display:flex;
+flex-direction:column;
+justify-content:center;
+gap:8px;
+overflow:hidden;
 }
   .fin-sum-icon { display: none; }
   .fin-summary-grid{
 display:grid;
 grid-template-columns:repeat(3,minmax(0,1fr));
-gap:10px;
-width:100%;
+gap:14px;
+align-items:stretch;
 }
   .fin-cal-grid { grid-template-columns: repeat(7, 1fr); gap: 3px; }
   .fin-cal-day { font-size: 0.7rem; border-radius: 8px; }
