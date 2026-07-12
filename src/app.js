@@ -2881,28 +2881,50 @@ function exportMonthReport(monthKey) {
   .cat-name{flex:1;font-size:0.82rem;font-weight:600}
   .cat-pct{font-size:0.75rem;color:#8a9bb0;width:38px;text-align:right;flex-shrink:0}
   .cat-val{font-size:0.82rem;font-weight:700;color:#ff3b30;width:78px;text-align:right;flex-shrink:0}
-  /* Tabela de lançamentos */
-  table{width:100%;border-collapse:collapse;font-size:0.8rem}
+  /* Tabela de lançamentos: o wrapper (.tbl-scroll) rola na horizontal em
+     telas estreitas em vez de deixar a tabela espremer/cortar conteúdo —
+     min-width garante que colunas não fiquem ilegíveis nem quebrem linha
+     no meio de um valor, mas a descrição trunca com "..." se for longa. */
+  .tbl-scroll{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  table{width:100%;min-width:520px;border-collapse:collapse;font-size:0.8rem}
   thead tr{background:#f0f4f8}
-  th{padding:8px 10px;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#8a9bb0}
+  th{padding:8px 10px;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#8a9bb0;white-space:nowrap}
   td{padding:9px 10px;border-top:1px solid #f0f4f8}
-  .badge{display:inline-block;border-radius:999px;padding:2px 8px;font-size:0.68rem;font-weight:700}
+  td:nth-child(2){max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  td:last-child, th:last-child{white-space:nowrap}
+  .badge{display:inline-block;border-radius:999px;padding:2px 8px;font-size:0.68rem;font-weight:700;white-space:nowrap}
   .badge-r{background:#e5f9ec;color:#34c759}
   .badge-d{background:#ffeeed;color:#ff3b30}
   /* Metas */
   .goal-row{margin-bottom:10px}
-  .goal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
-  .goal-name{font-size:0.82rem;font-weight:600}
-  .goal-val{font-size:0.78rem;color:#8a9bb0}
+  .goal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;gap:10px}
+  .goal-name{font-size:0.82rem;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .goal-val{font-size:0.78rem;color:#8a9bb0;white-space:nowrap;flex-shrink:0}
   .goal-val.over{color:#ff3b30;font-weight:700}
   /* Recorrentes */
-  .recur-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-  .recur-card{border:1.5px solid #e8ecf2;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:4px}
-  .recur-card strong{font-size:0.88rem;font-weight:700}
-  .recur-card span{font-size:0.72rem;color:#8a9bb0}
+  .recur-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+  .recur-card{border:1.5px solid #e8ecf2;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:4px;min-width:0}
+  .recur-card strong{font-size:0.88rem;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .recur-card span{font-size:0.72rem;color:#8a9bb0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .recur-card .rv{font-size:1rem;font-weight:800;color:#ff3b30}
   /* Footer */
-  .rpt-footer{margin-top:36px;padding-top:16px;border-top:1px solid #e8ecf2;display:flex;justify-content:space-between;align-items:center;font-size:0.7rem;color:#8a9bb0}
+  .rpt-footer{margin-top:36px;padding-top:16px;border-top:1px solid #e8ecf2;display:flex;justify-content:space-between;align-items:center;font-size:0.7rem;color:#8a9bb0;flex-wrap:wrap;gap:8px}
+
+  /* ---- Responsivo: relatório aberto/impresso a partir do celular ---- */
+  @media (max-width: 680px) {
+    .page{padding:24px 16px 40px}
+    .rpt-header{flex-direction:column;gap:14px}
+    .rpt-header-right{text-align:left}
+    .summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .chart-section{grid-template-columns:1fr}
+    .cat-section{grid-template-columns:1fr}
+    .recur-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+    td:nth-child(2){max-width:140px}
+  }
+  @media (max-width: 420px) {
+    .summary-grid{grid-template-columns:1fr}
+    .recur-grid{grid-template-columns:1fr}
+  }
   /* Print */
   @media print{
     body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
@@ -3014,6 +3036,7 @@ function exportMonthReport(monthKey) {
   <div class="section">
     <div class="section-title">Maiores transações do mês</div>
     <div style="border:1.5px solid #e8ecf2;border-radius:16px;overflow:hidden">
+      <div class="tbl-scroll">
       <table>
         <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Tipo</th><th style="text-align:right">Valor</th></tr></thead>
         <tbody>
@@ -3030,6 +3053,7 @@ function exportMonthReport(monthKey) {
           }).join("")}
         </tbody>
       </table>
+      </div>
     </div>
   </div>
 
@@ -3037,6 +3061,7 @@ function exportMonthReport(monthKey) {
   <div class="section">
     <div class="section-title">Todos os lançamentos (${entries.length})</div>
     <div style="border:1.5px solid #e8ecf2;border-radius:16px;overflow:hidden">
+      <div class="tbl-scroll">
       <table>
         <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Tipo</th><th style="text-align:right">Valor</th></tr></thead>
         <tbody>
@@ -3053,6 +3078,7 @@ function exportMonthReport(monthKey) {
           }).join("")}
         </tbody>
       </table>
+      </div>
     </div>
   </div>
 
@@ -3991,22 +4017,106 @@ function openCategoryPicker() {
 }
 
 // Catálogo de ícones do "Nova categoria", organizado em grupos temáticos
-// (em vez de uma lista única de 12 emojis soltos) — assim dá pra oferecer
+// (em vez de uma lista única de emojis soltos) — assim dá pra oferecer
 // muito mais opções sem virar bagunça: a pessoa navega por abas curtas
-// (Casa, Comida, Transporte...) em vez de rolar uma parede de emoji.
+// (Casa, Alimentação, Transporte...) em vez de rolar uma parede de emoji,
+// ou digita no campo de busca e encontra o ícone certo na hora.
+// Cada ícone carrega um nome pesquisável (em português, sem acento na hora
+// da comparação) — é o que permite a busca por texto funcionar de verdade.
 const NEW_CATEGORY_ICON_GROUPS = [
-  { key: "casa",       label: "🏠 Casa",       icons: ["🏠","💡","🚿","🔑","🛋️","🧹","🪴","📺","🧺","🛏️"] },
-  { key: "comida",     label: "🍔 Comida",     icons: ["🍔","🛒","🍕","☕","🍷","🍺","🍰","🥗","🍣","🥪"] },
-  { key: "transporte", label: "🚗 Transporte", icons: ["🚗","⛽","🚕","🚌","🚲","🛵","🅿️","🚆","🚉","🛣️"] },
-  { key: "saude",      label: "💊 Saúde",      icons: ["💊","🏋️","🧘","💅","🦷","👓","🩺","🧴","🧠","😷"] },
-  { key: "trabalho",   label: "💼 Trabalho",   icons: ["💼","🎓","💻","🖊️","📈","📊","🗂️","📎","🧑‍💻","📚"] },
-  { key: "lazer",      label: "🎬 Lazer",      icons: ["🎬","🎮","🎉","🎵","📷","⚽","🎲","🎨","🎤","🍿"] },
-  { key: "compras",    label: "🛍️ Compras",    icons: ["👗","👟","💍","🛍️","📱","🧸","👜","🕶️","👔","🎒"] },
-  { key: "familia",    label: "👶 Família",    icons: ["👶","🐾","🐶","🐱","👨‍👩‍👧","🍼","🧸","🎠","🏫","🧑‍🍼"] },
-  { key: "financas",   label: "💰 Finanças",   icons: ["💰","🏦","🧾","🛡️","💳","📉","🎗️","🪙","📑","💸"] },
-  { key: "viagem",     label: "✈️ Viagem",     icons: ["✈️","🧳","🗺️","🏖️","🏨","🚢","🏔️","🗽","🚀","🌍"] },
-  { key: "outros",     label: "📦 Outros",     icons: ["📦","🔁","🔧","❓","⭐","🔖","🎁","✨","🚀","🧩"] },
+  { key: "casa", label: "🏠 Casa", icons: [
+    ["🏠","casa"], ["💡","luz energia"], ["🚿","chuveiro água"], ["🔑","chave aluguel"],
+    ["🛋️","sofá móveis"], ["🧹","limpeza faxina"], ["🪴","planta jardim"], ["📺","tv televisão"],
+    ["🧺","lavanderia roupa"], ["🛏️","cama quarto"], ["🔥","gás fogão"], ["🧯","manutenção reforma"],
+    ["🪑","cadeira mobília"], ["🚪","porta condomínio"],
+  ]},
+  { key: "alimentacao", label: "🍔 Alimentação", icons: [
+    ["🍔","lanche hambúrguer"], ["🛒","mercado supermercado"], ["🍕","pizza"], ["☕","café"],
+    ["🍷","vinho bebida"], ["🍺","cerveja bar"], ["🍰","doce sobremesa"], ["🥗","salada saudável"],
+    ["🍣","sushi japonês"], ["🥪","sanduíche"], ["🍜","macarrão comida"], ["🍳","comida caseira ovo"],
+    ["🧃","suco bebida"], ["🍽️","restaurante refeição"],
+  ]},
+  { key: "transporte", label: "🚗 Transporte", icons: [
+    ["🚗","carro"], ["⛽","combustível gasolina"], ["🚕","táxi"], ["🚌","ônibus"],
+    ["🚲","bicicleta"], ["🛵","moto"], ["🅿️","estacionamento"], ["🚆","trem"],
+    ["🚉","metrô estação"], ["🛣️","estrada pedágio"], ["🚙","carro suv"], ["🔧","manutenção mecânico"],
+  ]},
+  { key: "saude", label: "💊 Saúde", icons: [
+    ["💊","remédio farmácia"], ["🏋️","academia treino"], ["🧘","yoga bem-estar"], ["💅","estética beleza"],
+    ["🦷","dentista"], ["👓","óculos"], ["🩺","médico consulta"], ["🧴","cuidados higiene"],
+    ["🧠","psicólogo terapia"], ["😷","saúde remédio"], ["🩹","farmácia curativo"], ["🏥","hospital plano"],
+  ]},
+  { key: "lazer", label: "🎬 Lazer", icons: [
+    ["🎬","cinema filme"], ["🎮","jogo videogame"], ["🎉","festa evento"], ["🎵","música show"],
+    ["📷","fotografia hobby"], ["⚽","esporte futebol"], ["🎲","jogo tabuleiro"], ["🎨","arte hobby"],
+    ["🎤","show karaokê"], ["🍿","cinema pipoca"], ["🎳","boliche lazer"], ["🎯","hobby diversão"],
+  ]},
+  { key: "educacao", label: "🎓 Educação", icons: [
+    ["🎓","faculdade formatura"], ["📚","livros estudo"], ["✏️","material escolar"], ["🖊️","caneta escrita"],
+    ["🏫","escola curso"], ["🧑‍🏫","aula professor"], ["💻","curso online"], ["📖","leitura livro"],
+    ["🧮","matemática cálculo"], ["🔬","ciência laboratório"],
+  ]},
+  { key: "trabalho", label: "💼 Trabalho", icons: [
+    ["💼","trabalho emprego"], ["💻","computador notebook"], ["📈","investimento gráfico"], ["📊","relatório análise"],
+    ["🗂️","documentos arquivo"], ["📎","escritório material"], ["🧑‍💻","home office"], ["🖨️","impressora"],
+    ["📅","agenda reunião"], ["✉️","email correspondência"],
+  ]},
+  { key: "compras", label: "🛍️ Compras", icons: [
+    ["👗","roupa vestido"], ["👟","tênis calçado"], ["💍","joia presente"], ["🛍️","compras loja"],
+    ["📱","celular eletrônico"], ["🧸","brinquedo"], ["👜","bolsa acessório"], ["🕶️","óculos acessório"],
+    ["👔","roupa social"], ["🎒","mochila"], ["🛋️","móveis decoração"], ["🧴","cosmético beleza"],
+  ]},
+  { key: "tecnologia", label: "💻 Tecnologia", icons: [
+    ["💻","notebook computador"], ["📱","celular smartphone"], ["🖥️","monitor desktop"], ["🎧","fone áudio"],
+    ["⌨️","teclado periférico"], ["🖱️","mouse periférico"], ["🔌","carregador cabo"], ["📷","câmera equipamento"],
+    ["🕹️","controle videogame"], ["📡","internet wifi"],
+  ]},
+  { key: "pets", label: "🐾 Pets", icons: [
+    ["🐾","pet animal"], ["🐶","cachorro"], ["🐱","gato"], ["🦴","ração petisco"],
+    ["🐠","peixe aquário"], ["🐦","pássaro"], ["🏥","veterinário"], ["🛁","banho tosa"],
+  ]},
+  { key: "familia", label: "👶 Família", icons: [
+    ["👶","bebê filho"], ["👨‍👩‍👧","família"], ["🍼","mamadeira bebê"], ["🧸","brinquedo criança"],
+    ["🎠","criança lazer"], ["🧑‍🍼","cuidados bebê"], ["🏫","escola filho"], ["👵","idoso avó"],
+  ]},
+  { key: "presentes", label: "🎁 Presentes", icons: [
+    ["🎁","presente"], ["🎂","aniversário bolo"], ["💐","flores"], ["🎈","festa balão"],
+    ["🎊","comemoração"], ["💝","presente carinho"], ["🎉","celebração"],
+  ]},
+  { key: "financas", label: "💰 Finanças", icons: [
+    ["💰","dinheiro poupança"], ["🏦","banco"], ["🧾","conta boleto"], ["🛡️","seguro proteção"],
+    ["💳","cartão crédito"], ["📉","gasto queda"], ["🎗️","doação"], ["🪙","moeda economia"],
+    ["📑","imposto documento"], ["💸","gasto dinheiro"],
+  ]},
+  { key: "investimentos", label: "📈 Investimentos", icons: [
+    ["📈","investimento alta"], ["📊","ações gráfico"], ["🏦","renda fixa banco"], ["🪙","criptomoeda moeda"],
+    ["💹","bolsa mercado"], ["🏠","imóvel patrimônio"], ["💎","patrimônio valor"],
+  ]},
+  { key: "contas", label: "🧾 Contas", icons: [
+    ["🧾","boleto conta"], ["💡","luz energia"], ["🚿","água"], ["📶","internet telefone"],
+    ["📄","documento cobrança"], ["🏢","condomínio"], ["🔥","gás"],
+  ]},
+  { key: "assinaturas", label: "🔁 Assinaturas", icons: [
+    ["🔁","assinatura recorrente"], ["📺","streaming vídeo"], ["🎵","streaming música"], ["📰","jornal revista"],
+    ["☁️","nuvem armazenamento"], ["🎮","assinatura jogos"], ["📦","clube assinatura"],
+  ]},
+  { key: "viagem", label: "✈️ Viagem", icons: [
+    ["✈️","viagem avião"], ["🧳","mala bagagem"], ["🗺️","turismo mapa"], ["🏖️","praia férias"],
+    ["🏨","hotel hospedagem"], ["🚢","cruzeiro navio"], ["🏔️","montanha trilha"], ["🗽","turismo passeio"],
+    ["🚀","aventura viagem"], ["🌍","mundo internacional"],
+  ]},
+  { key: "outros", label: "📦 Outros", icons: [
+    ["📦","outros geral"], ["🔧","manutenção reparo"], ["❓","diverso"], ["⭐","favorito especial"],
+    ["🔖","etiqueta marcador"], ["✨","especial diverso"], ["🧩","diverso variado"], ["📌","importante fixo"],
+  ]},
 ];
+
+// Achata o catálogo acima numa lista única de { emoji, name, groupKey } —
+// usada pela busca, que precisa procurar em todos os grupos de uma vez
+// (a pessoa não deveria ter que adivinhar em qual aba está o ícone certo).
+const NEW_CATEGORY_ICON_FLAT = NEW_CATEGORY_ICON_GROUPS.flatMap((g) =>
+  g.icons.map(([emoji, name]) => ({ emoji, name, groupKey: g.key }))
+);
 
 const NEW_CATEGORY_COLOR_OPTIONS = [
   "#ff9500","#ff9f0a","#ffd60a","#ff6b6b","#ff3b30","#ff375f","#ff2d55","#ff6482",
@@ -4053,12 +4163,17 @@ function openNewCategoryPrompt(prefillName) {
         </label>
 
         <p class="new-category-label">Ícone</p>
+        <label class="new-category-icon-search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+          <input type="text" id="emojiSearchInput" placeholder="Pesquisar ícone... (ex.: mercado, carro, saúde)" autocomplete="off" />
+        </label>
         <div id="emojiGroupTabs" class="new-category-tabs">
           ${groups.map((g, i) => `
             <button type="button" class="new-category-tab${i === 0 ? " active" : ""}" data-group="${g.key}">${g.label}</button>
           `).join("")}
         </div>
         <div id="emojiPicker" class="new-category-emoji-grid"></div>
+        <p id="emojiNoResults" class="new-category-empty" hidden>Nenhum ícone encontrado. Tente outro termo.</p>
 
         <p class="new-category-label">Cor da categoria</p>
         <div id="colorPicker" class="new-category-color-grid">
@@ -4091,11 +4206,15 @@ function openNewCategoryPrompt(prefillName) {
 
   document.body.appendChild(modal);
 
-  let selectedEmoji = groups[0].icons[0];
+  let selectedEmoji = groups[0].icons[0][0];
   let selectedColor = colorOptions[0];
   let activeGroupKey = groups[0].key;
+  let searchQuery = "";
 
   const emojiPickerEl = modal.querySelector("#emojiPicker");
+  const emojiNoResultsEl = modal.querySelector("#emojiNoResults");
+  const emojiTabsEl = modal.querySelector("#emojiGroupTabs");
+  const emojiSearchInput = modal.querySelector("#emojiSearchInput");
   const previewIconEl = modal.querySelector("#newCategoryPreviewIcon");
   const previewNameEl = modal.querySelector("#newCategoryPreviewName");
 
@@ -4109,10 +4228,25 @@ function openNewCategoryPrompt(prefillName) {
     previewNameEl.textContent = name || "Nome da categoria";
   }
 
+  // Renderiza o grid de ícones: em modo normal mostra o grupo/aba ativa;
+  // enquanto a pessoa digita na busca, ignora as abas e mostra o resultado
+  // filtrado em todos os grupos de uma vez (por emoji + nome, sem acento).
   function renderEmojiGrid() {
-    const group = groups.find((g) => g.key === activeGroupKey) || groups[0];
-    emojiPickerEl.innerHTML = group.icons.map((e) => `
-      <button type="button" class="cat-emoji-btn${e === selectedEmoji ? " active" : ""}" data-emoji="${e}">${e}</button>
+    let icons;
+    if (searchQuery) {
+      const q = normalizeForSearch(searchQuery);
+      icons = NEW_CATEGORY_ICON_FLAT.filter((it) => normalizeForSearch(it.name).includes(q))
+        .map((it) => [it.emoji, it.name]);
+    } else {
+      const group = groups.find((g) => g.key === activeGroupKey) || groups[0];
+      icons = group.icons;
+    }
+
+    emojiNoResultsEl.hidden = icons.length > 0;
+    emojiPickerEl.hidden = icons.length === 0;
+
+    emojiPickerEl.innerHTML = icons.map(([emoji, name]) => `
+      <button type="button" class="cat-emoji-btn${emoji === selectedEmoji ? " active" : ""}" data-emoji="${emoji}" title="${escapeHtml(name)}" aria-label="${escapeHtml(name)}">${emoji}</button>
     `).join("");
     emojiPickerEl.querySelectorAll(".cat-emoji-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -4130,8 +4264,22 @@ function openNewCategoryPrompt(prefillName) {
       activeGroupKey = tab.dataset.group;
       modal.querySelectorAll(".new-category-tab").forEach((t) => t.classList.remove("active"));
       tab.classList.add("active");
+      // Escolher uma aba sempre volta pro modo "navegação por categoria",
+      // mesmo que a pessoa tivesse digitado algo na busca antes.
+      if (searchQuery) { searchQuery = ""; emojiSearchInput.value = ""; }
+      emojiTabsEl.classList.remove("is-hidden");
+      emojiPickerEl.scrollTo({ top: 0, behavior: "smooth" });
       renderEmojiGrid();
     });
+  });
+
+  // Busca: filtra ícones de todos os grupos por nome (ex.: "mercado",
+  // "carro"); some com as abas enquanto há texto, pra deixar claro que a
+  // busca cobre tudo, não só o grupo selecionado.
+  emojiSearchInput.addEventListener("input", () => {
+    searchQuery = emojiSearchInput.value;
+    emojiTabsEl.classList.toggle("is-hidden", Boolean(searchQuery));
+    renderEmojiGrid();
   });
 
   modal.querySelectorAll(".cat-color-btn").forEach((btn) => {
