@@ -558,12 +558,12 @@
             </div>
 
             <div class="panel fin-budget-bar">
-              <div style="display:flex;justify-content:space-between;align-items:center">
-                <span style="font-weight:700;font-size:0.88rem">Uso do orçamento</span>
-                <span id="finUsedLabel" style="font-size:0.78rem;color:var(--muted)">0% das receitas usadas</span>
+              <div class="fin-budget-bar-top">
+                <span class="fin-budget-bar-title">Uso do orçamento</span>
+                <span id="finUsedLabel" class="fin-budget-bar-label">0% das receitas usadas</span>
               </div>
-              <div class="progress-track" style="height:8px">
-                <div id="finProgressBar" style="height:100%;border-radius:inherit;width:0%;transition:width 400ms;background:var(--green)"></div>
+              <div class="progress-track fin-budget-track">
+                <div id="finProgressBar" class="fin-budget-fill" style="width:0%"></div>
               </div>
             </div>
           </div><!-- /fin-header -->

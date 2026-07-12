@@ -1796,6 +1796,14 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
      avatar, formato consistente), o rótulo "Tarefa" some visualmente —
      a ação continua identificável via aria-label no HTML. O botão de
      instalar PWA (quando aparece) recebe o mesmo tratamento. */
+  /* Alinha o avatar com a mesma altura da busca e do botão "+" (44px),
+     em vez do tamanho de 40px herdado do desktop — evita que o avatar
+     pareça "flutuar" um pouco acima/abaixo dos outros elementos da barra. */
+  .topbar-actions .user-avatar-btn {
+    width: 44px;
+    height: 44px;
+  }
+
   #quickAddTask.primary-button,
   .pwa-fixed-install-btn {
     flex-shrink: 0;
@@ -1876,7 +1884,21 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 /* Cabeçalho fixo (mês + resumo), visível em todas as abas de Finanças */
 .fin-header { display: grid; gap: 14px; margin-bottom: 18px; }
 
-.fin-budget-bar { padding: 14px 16px; display: grid; gap: 8px; }
+.fin-budget-bar { padding: 16px 18px; display: grid; gap: 10px; }
+.fin-budget-bar-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.fin-budget-bar-title { font-weight: 700; font-size: 0.88rem; color: var(--text); }
+.fin-budget-bar-label { font-size: 0.8rem; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
+.fin-budget-track {
+  height: 12px;
+  background: var(--surface2);
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.08);
+}
+.fin-budget-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--green);
+  transition: width 500ms cubic-bezier(0.22, 1, 0.36, 1), background 300ms ease;
+}
 
 /* Abas de Finanças: Lançamentos / Análise / Controle / Automação —
    separam o fluxo de "registrar" (usado toda hora) dos painéis de
@@ -1925,11 +1947,28 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 .fin-tab-icon svg { width: 100%; height: 100%; display: block; }
 
 .fin-tab-btn:hover { color: var(--text); }
+.fin-tab-btn:active { transform: scale(0.97); }
 
 .fin-tab-btn.active {
   background: var(--surface);
   color: var(--accent);
   box-shadow: var(--shadow-card);
+  position: relative;
+}
+.fin-tab-btn.active::after {
+  content: "";
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 4px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--accent);
+  animation: finTabUnderline 220ms ease;
+}
+@keyframes finTabUnderline {
+  from { transform: scaleX(0); opacity: 0; }
+  to { transform: scaleX(1); opacity: 1; }
 }
 
 .fin-tab-panel { animation: fadeUp 220ms ease; }
@@ -2323,44 +2362,53 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   align-items: center;
   justify-content: space-between;
   background: var(--surface);
-  border-radius: 16px;
+  border-radius: 18px;
   border: 1.5px solid var(--line);
-  padding: 10px 14px;
-  gap: 8px;
+  padding: 8px;
+  gap: 6px;
   margin-top: 4px;
+  box-shadow: var(--shadow-card);
 }
 
+/* Área clicável maior (44px, alvo de toque confortável em mobile),
+   texto e chevron centralizados, transição suave nos estados —
+   inspirado no seletor de mês do calendário nativo do iOS. */
 .fin-month-arrow {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
   background: var(--surface2);
   border: 1.5px solid var(--line);
   color: var(--text2);
-  font-size: 1.35rem;
+  font-size: 1.3rem;
   font-weight: 700;
   cursor: pointer;
   display: grid;
   place-items: center;
-  transition: all 150ms;
+  transition: background 160ms ease, color 160ms ease, border-color 160ms ease, transform 160ms ease;
   flex-shrink: 0;
 }
 .fin-month-arrow:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.fin-month-arrow:active { transform: scale(0.92); }
 
 .fin-month-center {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 4px;
   flex: 1;
+  min-height: 44px;
 }
 
 .fin-month-label {
-  font-size: 1rem;
+  font-size: 1.05rem;
   font-weight: 800;
   color: var(--text);
   text-transform: capitalize;
   letter-spacing: -0.02em;
+  text-align: center;
+  transition: opacity 160ms ease;
 }
 
 .fin-closed-badge {
@@ -2384,46 +2432,52 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 .fin-action-btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  height: 36px;
-  padding: 0 14px;
-  border-radius: 10px;
-  font-size: 0.82rem;
+  justify-content: center;
+  gap: 7px;
+  height: 42px;
+  flex: 1;
+  min-width: 0;
+  padding: 0 16px;
+  border-radius: 13px;
+  font-size: 0.84rem;
   font-weight: 700;
   cursor: pointer;
   border: 1.5px solid transparent;
-  transition: all 150ms;
+  transition: background 160ms ease, color 160ms ease, box-shadow 160ms ease, transform 120ms ease;
   white-space: nowrap;
 }
+.fin-action-btn:active { transform: translateY(1px) scale(0.99); }
 
 .fin-action-icon {
   display: inline-flex;
   width: 15px;
   height: 15px;
   flex-shrink: 0;
+  transition: transform 160ms ease;
 }
 .fin-action-icon svg { width: 100%; height: 100%; display: block; }
+.fin-action-btn:hover .fin-action-icon { transform: scale(1.1); }
 
 .fin-action-btn.close {
   background: var(--orange-soft);
   color: var(--orange);
   border-color: var(--orange);
 }
-.fin-action-btn.close:hover { background: var(--orange); color: #fff; }
+.fin-action-btn.close:hover { background: var(--orange); color: #fff; box-shadow: 0 6px 16px color-mix(in srgb, var(--orange) 35%, transparent); }
 
 .fin-action-btn.reopen {
   background: var(--green-soft);
   color: var(--green);
   border-color: var(--green);
 }
-.fin-action-btn.reopen:hover { background: var(--green); color: #fff; }
+.fin-action-btn.reopen:hover { background: var(--green); color: #fff; box-shadow: 0 6px 16px color-mix(in srgb, var(--green) 35%, transparent); }
 
 .fin-action-btn.export {
   background: var(--accent-soft);
   color: var(--accent);
   border-color: var(--accent);
 }
-.fin-action-btn.export:hover { background: var(--accent); color: #fff; }
+.fin-action-btn.export:hover { background: var(--accent); color: #fff; box-shadow: 0 6px 16px color-mix(in srgb, var(--accent) 35%, transparent); }
 
 /* Summary cards */
 .fin-summary-grid {
@@ -2438,13 +2492,25 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   border: 1.5px solid var(--line);
   padding: 16px 14px;
   display: grid;
-  gap: 4px;
+  gap: 6px;
   box-shadow: var(--shadow-card);
-  transition: transform 180ms;
+  transition: transform 180ms ease, box-shadow 180ms ease;
   position: relative;
+  overflow: hidden;
 }
 
-.fin-summary-card:hover { transform: translateY(-2px); }
+.fin-summary-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0.05;
+  pointer-events: none;
+}
+.fin-summary-card.receita::before { background: radial-gradient(120px 60px at 100% 0%, var(--green), transparent); }
+.fin-summary-card.despesa::before { background: radial-gradient(120px 60px at 100% 0%, var(--red), transparent); }
+.fin-summary-card.saldo::before   { background: radial-gradient(120px 60px at 100% 0%, var(--saldo-color, var(--green)), transparent); }
+
+.fin-summary-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-card-hover); }
 
 /* Bolinha discreta indicando que o saldo mostrado inclui valor transferido
    do mês anterior — some ao passar o mouse/tocar (title nativo explica). */
@@ -2485,7 +2551,7 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 .fin-summary-card.saldo .fin-sum-icon   { color: var(--saldo-color, var(--green)); }
 
 .fin-summary-card strong {
-  font-size: 1.05rem;
+  font-size: 1.2rem;
   font-weight: 800;
   letter-spacing: -0.02em;
   color: var(--text);
@@ -2726,7 +2792,7 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   .fin-left .panel, .fin-right .panel, .fin-calendar-card { padding: 14px; }
   .fin-summary-card { padding: 10px 10px; gap: 2px; }
   .fin-sum-icon { display: none; }
-  .fin-summary-card strong { font-size: 0.95rem; }
+  .fin-summary-card strong { font-size: 1.05rem; }
   .fin-summary-grid { grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
   .fin-cal-grid { grid-template-columns: repeat(7, 1fr); gap: 3px; }
   .fin-cal-day { font-size: 0.7rem; border-radius: 8px; }
@@ -2758,25 +2824,84 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   flex-direction: column;
   overflow: hidden;
 }
+.new-category-header {
+  justify-content: flex-end;
+  border-bottom: none;
+  padding-bottom: 0;
+}
 .new-category-body {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 4px;
+  padding-top: 0;
 }
+.new-category-intro {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+.new-category-icon-badge {
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  background: var(--accent-soft);
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+.new-category-icon-badge svg { width: 26px; height: 26px; }
+.new-category-intro h2 { font-size: 1.15rem; font-weight: 800; color: var(--text); margin: 0; }
 .new-category-hint {
-  font-size: 0.8rem;
+  font-size: 0.82rem;
   color: var(--muted);
-  margin: 0 0 14px;
+  margin: 0;
   line-height: 1.4;
+  max-width: 320px;
+}
+.new-category-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  padding: 5px 12px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.74rem;
+  font-weight: 700;
 }
 .new-category-field {
   display: grid;
-  gap: 5px;
+  gap: 6px;
   font-size: 0.82rem;
   font-weight: 600;
   color: var(--muted);
-  margin-bottom: 14px;
+  margin-bottom: 16px;
+}
+.new-category-field-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.new-category-count {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.new-category-name-input {
+  height: 46px;
+  border-radius: 12px;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+.new-category-name-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 .new-category-label {
   font-size: 0.8rem;
@@ -2830,25 +2955,82 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   display: grid;
   place-items: center;
   padding: 0;
+  transition: all 140ms ease;
 }
-.cat-emoji-btn.active { border-color: var(--accent); background: var(--accent-soft); }
+.cat-emoji-btn.active { border-color: var(--accent); background: var(--accent-soft); transform: scale(1.06); }
 .new-category-color-grid {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 10px;
   margin-bottom: 20px;
 }
 .cat-color-btn {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   min-height: 0;
   border-radius: 50%;
   cursor: pointer;
   padding: 0;
   border: 3px solid transparent;
   flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  transition: all 140ms ease;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
 }
-.cat-color-btn.active { border-color: var(--text); }
+.cat-color-check {
+  width: 15px;
+  height: 15px;
+  color: #fff;
+  opacity: 0;
+  transform: scale(0.5);
+  transition: all 140ms ease;
+  filter: drop-shadow(0 1px 1px rgba(0,0,0,0.35));
+}
+.cat-color-btn.active {
+  border-color: var(--surface);
+  box-shadow: 0 0 0 2px currentColor, 0 2px 8px rgba(0,0,0,0.2);
+}
+.cat-color-btn.active .cat-color-check { opacity: 1; transform: scale(1); }
+.new-category-preview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--surface2);
+  border: 1.5px solid var(--line);
+  margin-bottom: 18px;
+}
+.new-category-preview-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  font-size: 1.1rem;
+  flex-shrink: 0;
+  transition: all 160ms ease;
+}
+.new-category-preview-info {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+.new-category-preview-info strong {
+  font-size: 0.9rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.new-category-preview-amount {
+  font-weight: 800;
+  font-size: 0.88rem;
+  flex-shrink: 0;
+}
+.new-category-preview-amount.receita { color: var(--green); }
+.new-category-preview-amount.despesa { color: var(--red); }
 .new-category-error {
   color: var(--red, #ff3b30);
   font-size: 0.84rem;
@@ -2863,7 +3045,21 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   height: 48px;
   width: 100%;
   justify-content: center;
+  gap: 8px;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  transition: transform 140ms ease, box-shadow 140ms ease, opacity 140ms ease;
 }
+.new-category-save:active { transform: translateY(1px) scale(0.99); }
+.new-category-save-icon { font-size: 1.05rem; line-height: 1; }
+.new-category-save.is-loading { opacity: 0.75; cursor: default; }
+.new-category-save.is-loading .new-category-save-icon {
+  display: inline-block;
+  animation: newCategorySpin 700ms linear infinite;
+}
+.new-category-save.is-loading .new-category-save-label::after { content: "..."; }
+@keyframes newCategorySpin { to { transform: rotate(360deg); } }
 @media (max-width: 380px) {
   .new-category-emoji-grid { grid-template-columns: repeat(5, 1fr); }
 }
@@ -2951,53 +3147,95 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 12px;
+  padding: 12px;
   background: var(--surface2);
   border: 1.5px solid var(--line);
-  border-radius: 12px;
+  border-radius: 14px;
+  transition: border-color 160ms ease, transform 160ms ease;
 }
+.fin-recur-row:hover { border-color: var(--line); transform: translateY(-1px); }
 .fin-recur-row.is-skipped { opacity: 0.55; }
 .fin-recur-icon {
-  width: 36px; height: 36px;
-  border-radius: 10px;
+  width: 40px; height: 40px;
+  border-radius: 12px;
   display: grid; place-items: center;
-  font-size: 1rem; flex-shrink: 0;
+  font-size: 1.1rem; flex-shrink: 0;
 }
 .fin-recur-info { flex: 1; min-width: 0; }
 .fin-recur-info strong {
-  display: block; font-size: 0.88rem; font-weight: 700;
+  display: block; font-size: 0.9rem; font-weight: 700;
   color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .fin-recur-amount { font-size: 0.88rem; font-weight: 800; white-space: nowrap; flex-shrink: 0; }
 .fin-recur-amount.receita { color: var(--green); }
 .fin-recur-amount.despesa { color: var(--red); }
 
-/* Os 3 botões de ação (lançar/pular/remover) tinham largura "automática"
-   (padding 0 10px + texto do ícone) e nunca encolhiam (flex-shrink:0 no
-   wrapper) — em telas estreitas, a soma de ícone + nome + valor + 3
-   botões passava da largura do card e "vazava" pra fora da tela (cortando
-   o último botão). Agora os botões têm tamanho quadrado fixo e pequeno,
-   como os outros grupos de ações do app (ex.: editar/excluir lançamento),
-   então o total nunca ultrapassa a largura disponível. */
-.fin-recur-actions {
-  display: flex;
-  gap: 4px;
-  flex-shrink: 0;
+/* Indicador discreto de status (ativo/pulado neste mês) — some no lugar
+   dos textos extras, um ponto colorido já comunica o estado de relance. */
+.fin-recur-status { flex-shrink: 0; display: flex; align-items: center; }
+.fin-recur-status-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--green);
 }
-.fin-recur-actions .mini-button {
-  width: 28px;
-  height: 28px;
-  padding: 0;
+.fin-recur-status-dot.skipped { background: var(--muted); }
+
+/* Os antigos 3 botões de ação (▶ ⏭ ✕) lado a lado ocupavam espaço demais,
+   poluíam o card e quebravam alinhamento em telas estreitas. Agora existe
+   apenas UM botão "•••" por card, que abre um menu contextual flutuante
+   com as mesmas ações — lista muito mais limpa e sem risco de overflow. */
+.fin-recur-menu-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
   display: grid;
   place-items: center;
   flex-shrink: 0;
-  font-size: 0.78rem;
+  cursor: pointer;
+  transition: all 140ms ease;
 }
+.fin-recur-menu-btn svg { width: 18px; height: 18px; }
+.fin-recur-menu-btn:hover { background: var(--line); color: var(--text); }
+
+.fin-recur-menu {
+  position: absolute;
+  z-index: 2000;
+  min-width: 190px;
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  border-radius: 14px;
+  box-shadow: var(--shadow-float);
+  animation: finRecurMenuIn 140ms ease;
+}
+@keyframes finRecurMenuIn {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.fin-recur-menu button {
+  all: unset;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 9px 10px;
+  border-radius: 9px;
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+.fin-recur-menu button:hover { background: var(--accent-soft); color: var(--accent); }
+.fin-recur-menu button.danger:hover { background: var(--red-soft); color: var(--red); }
+
 @media (max-width: 380px) {
-  .fin-recur-row { gap: 6px; padding: 9px 10px; }
-  .fin-recur-icon { width: 30px; height: 30px; font-size: 0.9rem; }
+  .fin-recur-row { gap: 8px; padding: 10px; }
+  .fin-recur-icon { width: 34px; height: 34px; font-size: 0.95rem; }
   .fin-recur-amount { font-size: 0.8rem; }
-  .fin-recur-actions .mini-button { width: 25px; height: 25px; }
+  .fin-recur-menu-btn { width: 28px; height: 28px; }
 }
 
 /* ─── Modais genéricos ────────────────────────────────────────── */

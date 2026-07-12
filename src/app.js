@@ -4024,21 +4024,32 @@ function openNewCategoryPrompt(prefillName) {
   const colorOptions = NEW_CATEGORY_COLOR_OPTIONS;
   const activeTypeForTitle = document.querySelector("#expenseType")?.value || "despesa";
 
+  const isReceita = activeTypeForTitle === "receita";
+  const nameMax = 30;
+
   modal.innerHTML = `
     <div class="modal-card new-category-card">
-      <div class="modal-header">
-        <h2>Nova categoria</h2>
-        <button class="icon-button" id="closeNewCategory">✕</button>
+      <div class="modal-header new-category-header">
+        <button class="icon-button" id="closeNewCategory" aria-label="Fechar">✕</button>
       </div>
       <div class="modal-body new-category-body">
-        <p class="new-category-hint">
-          Crie exatamente a categoria que você precisa, com o nome, ícone e cor que fizerem sentido pra você.
-          Vai valer só para ${activeTypeForTitle === "receita" ? "receitas" : "despesas"}.
-        </p>
+        <div class="new-category-intro">
+          <span class="new-category-icon-badge" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 3.9 4.3.5-3.1 3 .8 4.3L12 12.6 8.2 14.7l.8-4.3-3.1-3 4.3-.5z"/><circle cx="12" cy="10" r="6.6"/></svg>
+          </span>
+          <h2>Nova categoria</h2>
+          <p class="new-category-hint">
+            Crie exatamente a categoria que você precisa, com o nome, ícone e cor que fizerem sentido pra você.
+          </p>
+          <span class="new-category-badge">ℹ️ Vai valer apenas para ${isReceita ? "receitas" : "despesas"}</span>
+        </div>
 
         <label class="new-category-field">
-          Nome da categoria
-          <input id="newCatName" placeholder="Ex.: Assinaturas" maxlength="24" value="${escapeHtml(prefillName || "")}" class="field-input"/>
+          <span class="new-category-field-top">
+            <span>Nome da categoria</span>
+            <span id="newCatNameCount" class="new-category-count">0/${nameMax}</span>
+          </span>
+          <input id="newCatName" placeholder="Ex.: Assinaturas, Transporte..." maxlength="${nameMax}" value="${escapeHtml(prefillName || "")}" class="field-input new-category-name-input"/>
         </label>
 
         <p class="new-category-label">Ícone</p>
@@ -4049,17 +4060,30 @@ function openNewCategoryPrompt(prefillName) {
         </div>
         <div id="emojiPicker" class="new-category-emoji-grid"></div>
 
-        <p class="new-category-label">Cor</p>
+        <p class="new-category-label">Cor da categoria</p>
         <div id="colorPicker" class="new-category-color-grid">
           ${colorOptions.map((c, i) => `
-            <button type="button" class="cat-color-btn${i === 0 ? " active" : ""}" data-color="${c}" style="background:${c}"></button>
+            <button type="button" class="cat-color-btn${i === 0 ? " active" : ""}" data-color="${c}" style="background:${c}" aria-label="Cor ${c}">
+              <svg class="cat-color-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
+            </button>
           `).join("")}
+        </div>
+
+        <p class="new-category-label">Prévia da categoria</p>
+        <div id="newCategoryPreview" class="new-category-preview">
+          <span id="newCategoryPreviewIcon" class="new-category-preview-icon"></span>
+          <div class="new-category-preview-info">
+            <strong id="newCategoryPreviewName">Nome da categoria</strong>
+            <span class="task-meta">${isReceita ? "Receita" : "Despesa"}</span>
+          </div>
+          <span id="newCategoryPreviewAmount" class="new-category-preview-amount ${isReceita ? "receita" : "despesa"}">${isReceita ? "+" : "-"}R$ 0,00</span>
         </div>
 
         <div id="newCategoryError" class="new-category-error"></div>
 
         <button id="saveNewCategory" class="primary-button new-category-save">
-          Criar categoria
+          <span class="new-category-save-icon" aria-hidden="true">＋</span>
+          <span class="new-category-save-label">Criar categoria</span>
         </button>
       </div>
     </div>
@@ -4072,6 +4096,18 @@ function openNewCategoryPrompt(prefillName) {
   let activeGroupKey = groups[0].key;
 
   const emojiPickerEl = modal.querySelector("#emojiPicker");
+  const previewIconEl = modal.querySelector("#newCategoryPreviewIcon");
+  const previewNameEl = modal.querySelector("#newCategoryPreviewName");
+
+  // Preview em tempo real: reflete nome, ícone e cor conforme a pessoa
+  // escolhe, pra ela ver exatamente como a categoria vai ficar antes de criar.
+  function updatePreview() {
+    previewIconEl.textContent = selectedEmoji;
+    previewIconEl.style.background = `${selectedColor}22`;
+    previewIconEl.style.color = selectedColor;
+    const name = nameInput?.value.trim();
+    previewNameEl.textContent = name || "Nome da categoria";
+  }
 
   function renderEmojiGrid() {
     const group = groups.find((g) => g.key === activeGroupKey) || groups[0];
@@ -4083,6 +4119,7 @@ function openNewCategoryPrompt(prefillName) {
         selectedEmoji = btn.dataset.emoji;
         emojiPickerEl.querySelectorAll(".cat-emoji-btn").forEach((b) => b.classList.remove("active"));
         btn.classList.add("active");
+        updatePreview();
       });
     });
   }
@@ -4102,6 +4139,7 @@ function openNewCategoryPrompt(prefillName) {
       modal.querySelectorAll(".cat-color-btn").forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
       selectedColor = btn.dataset.color;
+      updatePreview();
     });
   });
 
@@ -4109,13 +4147,21 @@ function openNewCategoryPrompt(prefillName) {
   modal.addEventListener("click", (e) => { if (e.target === modal) modal.remove(); });
 
   const nameInput = document.getElementById("newCatName");
+  const nameCountEl = document.getElementById("newCatNameCount");
+  function updateNameCount() {
+    nameCountEl.textContent = `${nameInput.value.length}/${nameMax}`;
+  }
   nameInput.focus();
   nameInput.setSelectionRange(nameInput.value.length, nameInput.value.length);
+  nameInput.addEventListener("input", () => { updateNameCount(); updatePreview(); });
   nameInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter") { e.preventDefault(); document.getElementById("saveNewCategory").click(); }
   });
+  updateNameCount();
+  updatePreview();
 
-  document.getElementById("saveNewCategory").addEventListener("click", () => {
+  const saveBtn = document.getElementById("saveNewCategory");
+  saveBtn.addEventListener("click", () => {
     const name = nameInput.value.trim();
     const errEl = document.getElementById("newCategoryError");
     const showError = (msg) => { errEl.textContent = msg; errEl.style.display = "block"; };
@@ -4138,6 +4184,7 @@ function openNewCategoryPrompt(prefillName) {
       return;
     }
 
+    errEl.style.display = "none";
     const id = "custom_" + name.toLowerCase().replace(/[^a-z0-9]+/g, "_").slice(0, 24) + "_" + Date.now().toString(36);
 
     if (!state.customCategories) state.customCategories = [];
@@ -4149,9 +4196,15 @@ function openNewCategoryPrompt(prefillName) {
     });
     saveState();
 
-    populateCategorySelect(id, activeType);
-    modal.remove();
-    showToast(`✅ Categoria "${name}" criada!`);
+    // Pequeno feedback de "salvando → salvo" antes de fechar, pra deixar
+    // claro que a ação foi concluída (em vez do modal simplesmente sumir).
+    saveBtn.classList.add("is-loading");
+    saveBtn.disabled = true;
+    setTimeout(() => {
+      populateCategorySelect(id, activeType);
+      modal.remove();
+      showToast(`✅ Categoria "${name}" criada!`);
+    }, 260);
   });
 }
 
@@ -4468,20 +4521,79 @@ function renderFinRecurrents() {
     const isRec   = r.type === "receita";
     const skipped = isRecurrentSkipped(r, finActiveMonth);
     return `
-      <div class="fin-recur-row${skipped ? " is-skipped" : ""}">
+      <div class="fin-recur-row${skipped ? " is-skipped" : ""}" data-recur-id="${r.id}">
         <span class="fin-recur-icon" style="background:${cat.color}22;color:${cat.color}">${cat.label.split(" ")[0]}</span>
         <div class="fin-recur-info">
           <strong>${escapeHtml(r.description)}</strong>
           <span class="task-meta">Dia ${r.day} · ${cat.label.replace(/^\S+\s*/, "")}${skipped ? ` · pulado em ${finMonthLabel(finActiveMonth)}` : ""}</span>
         </div>
         <span class="fin-recur-amount ${isRec ? "receita" : "despesa"}">${isRec ? "+" : "-"}${formatCurrency(r.amount)}</span>
-        <div class="fin-recur-actions">
-          <button class="mini-button" onclick="applyRecurrent('${r.id}')" title="Lançar agora">▶</button>
-          <button class="mini-button" onclick="toggleSkipRecurrentMonth('${r.id}','${finActiveMonth}')" title="${skipped ? "Reativar neste mês" : "Pular este mês"}">${skipped ? "↩" : "⏭"}</button>
-          <button class="mini-button" onclick="deleteRecurrent('${r.id}')" title="Remover">✕</button>
-        </div>
+        <div class="fin-recur-status" aria-hidden="true">${skipped ? '<span class="fin-recur-status-dot skipped"></span>' : '<span class="fin-recur-status-dot"></span>'}</div>
+        <button class="fin-recur-menu-btn" type="button" data-recur-menu="${r.id}" aria-haspopup="true" aria-label="Mais ações">
+          <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="19" cy="12" r="1.9"/></svg>
+        </button>
       </div>`;
   }).join("");
+
+  // Único botão de menu por card em vez de 3 botões lado a lado — ao tocar,
+  // mostra as ações (Lançar agora / Pular ou reativar / Remover) num
+  // pequeno menu contextual, mantendo a lista limpa e alinhada.
+  el.querySelectorAll("[data-recur-menu]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const id = btn.dataset.recurMenu;
+      openRecurrentActionMenu(btn, id);
+    });
+  });
+}
+
+// Menu contextual (estilo "•••") das recorrências: substitui os antigos
+// três botões (▶ ⏭ ✕) por uma única ação que abre um pequeno menu flutuante.
+let activeRecurMenuEl = null;
+function closeRecurrentActionMenu() {
+  activeRecurMenuEl?.remove();
+  activeRecurMenuEl = null;
+  document.removeEventListener("click", closeRecurrentActionMenu);
+}
+function openRecurrentActionMenu(anchorBtn, id) {
+  closeRecurrentActionMenu();
+  const rec = (state.finRecurrents || []).find((r) => r.id === id);
+  if (!rec) return;
+  const skipped = isRecurrentSkipped(rec, finActiveMonth);
+
+  const menu = document.createElement("div");
+  menu.className = "fin-recur-menu";
+  menu.innerHTML = `
+    <button type="button" data-action="apply">▶ Lançar agora</button>
+    <button type="button" data-action="toggleSkip">${skipped ? "↩ Reativar neste mês" : "⏭ Pular este mês"}</button>
+    <button type="button" data-action="delete" class="danger">✕ Excluir recorrência</button>
+  `;
+  document.body.appendChild(menu);
+
+  const rect = anchorBtn.getBoundingClientRect();
+  const menuWidth = menu.offsetWidth || 200;
+  const left = Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - 8);
+  menu.style.top = `${rect.bottom + 6 + window.scrollY}px`;
+  menu.style.left = `${Math.max(8, left) + window.scrollX}px`;
+
+  menu.querySelector('[data-action="apply"]').addEventListener("click", (e) => {
+    e.stopPropagation();
+    applyRecurrent(id);
+    closeRecurrentActionMenu();
+  });
+  menu.querySelector('[data-action="toggleSkip"]').addEventListener("click", (e) => {
+    e.stopPropagation();
+    toggleSkipRecurrentMonth(id, finActiveMonth);
+    closeRecurrentActionMenu();
+  });
+  menu.querySelector('[data-action="delete"]').addEventListener("click", (e) => {
+    e.stopPropagation();
+    deleteRecurrent(id);
+    closeRecurrentActionMenu();
+  });
+
+  activeRecurMenuEl = menu;
+  setTimeout(() => document.addEventListener("click", closeRecurrentActionMenu), 0);
 }
 
 // Verifica se um recorrente está marcado para NÃO lançar em um mês específico
