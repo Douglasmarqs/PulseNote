@@ -1892,6 +1892,8 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   border-radius: 16px;
   overflow-x: auto;
   scrollbar-width: none;
+  scroll-snap-type: x proximity;
+  position: relative;
 }
 .fin-tabs::-webkit-scrollbar { display: none; }
 
@@ -1911,6 +1913,7 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   font-weight: 700;
   cursor: pointer;
   transition: all 180ms ease;
+  scroll-snap-align: center;
 }
 
 .fin-tab-icon {
@@ -2051,15 +2054,96 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 .fin-cat-trigger[aria-expanded="true"] .fin-cat-trigger-chevron { transform: rotate(180deg); }
 
 /* ---------- CATEGORY PICKER (sheet de seleção/criação de categoria) ---------- */
-.cat-picker-row { transition: border-color 150ms ease, background 150ms ease; }
-.cat-picker-row:hover { border-color: var(--accent) !important; }
-.cat-picker-delete { transition: all 150ms ease; }
-.cat-picker-delete:hover { background: var(--red-soft) !important; color: var(--red) !important; }
+
+/* Seções (grupos temáticos + "Mais usadas") dentro do picker */
+.cat-picker-section + .cat-picker-section { margin-top: 14px; }
+.cat-picker-section-title {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 6px 4px;
+}
+.cat-picker-section:first-child .cat-picker-section-title { margin-top: 0; }
+
+/* Cada linha de categoria: ícone num badge colorido (mesma linguagem visual
+   dos widgets do dashboard) + nome + check quando selecionada. */
+.cat-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 10px;
+  border-radius: 14px;
+  cursor: pointer;
+  border: 1.5px solid transparent;
+  background: var(--surface2);
+  margin-bottom: 4px;
+  transition: border-color 150ms ease, background 150ms ease, transform 150ms ease;
+}
+.cat-picker-row:hover { border-color: color-mix(in srgb, var(--cat-color, var(--accent)) 45%, transparent); transform: translateX(2px); }
+.cat-picker-row.is-selected {
+  border-color: var(--cat-color, var(--accent));
+  background: color-mix(in srgb, var(--cat-color, var(--accent)) 12%, var(--surface2));
+}
+
+.cat-picker-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  font-size: 1.05rem;
+  line-height: 1;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--cat-color, var(--accent)) 18%, transparent);
+}
+
+.cat-picker-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+.cat-picker-row.is-selected .cat-picker-label { color: var(--text); font-weight: 700; }
+
+.cat-picker-check {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--cat-color, var(--accent));
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.cat-picker-delete {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 150ms ease;
+}
+.cat-picker-delete:hover { background: var(--red-soft); color: var(--red); }
+
 #categoryPickerCreate { transition: filter 150ms ease, transform 150ms ease; }
 #categoryPickerCreate:hover { filter: brightness(1.08); transform: translateY(-1px); }
 #categoryPickerSearch:focus { border-color: var(--accent) !important; box-shadow: 0 0 0 3px var(--accent-soft); }
 #categoryPickerList::-webkit-scrollbar { width: 6px; }
 #categoryPickerList::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+
 /* ---------- AI QUICK ENTRY (Finanças) ---------- */
 .ai-quick-entry {
   border: 1.5px solid transparent;
@@ -2405,6 +2489,11 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   font-weight: 800;
   letter-spacing: -0.02em;
   color: var(--text);
+  /* Sem isso, o hífen de valores negativos ("-R$ 222,47") é tratado como
+     ponto de quebra de linha válido em cards estreitos, e o "-" pula
+     sozinho pra linha de cima, separado do resto do valor. */
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .fin-summary-card.receita strong { color: var(--green); }
@@ -2619,9 +2708,15 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 }
 
 @media (max-width: 720px) {
-  .fin-tabs { gap: 4px; padding: 4px; margin-bottom: 14px; }
-  .fin-tab-btn { padding: 9px 8px; font-size: 0.76rem; gap: 4px; }
-  .fin-tab-icon { font-size: 0.9rem; }
+  .fin-tabs {
+    gap: 3px;
+    padding: 4px;
+    margin-bottom: 14px;
+    -webkit-mask-image: linear-gradient(to right, transparent 0, black 14px, black calc(100% - 14px), transparent 100%);
+    mask-image: linear-gradient(to right, transparent 0, black 14px, black calc(100% - 14px), transparent 100%);
+  }
+  .fin-tab-btn { padding: 8px 6px; font-size: 0.72rem; gap: 3px; }
+  .fin-tab-icon { width: 14px; height: 14px; }
   .fin-layout { grid-template-columns: 1fr; gap: 10px; }
   .fin-left, .fin-right { gap: 10px; }
   .fin-form-card { padding: 14px; gap: 10px; }

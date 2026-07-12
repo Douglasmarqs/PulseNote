@@ -369,59 +369,59 @@ const viewTitles = {
 // só torna a busca mais provável de já ter o que a pessoa precisa.
 const expenseCategories = [
   // Casa & contas
-  { id: "moradia",     label: "🏠 Moradia",           color: "#ff6b6b" },
-  { id: "contas",      label: "💡 Contas e Utilidades", color: "#ffd60a" },
-  { id: "manutencao",  label: "🔧 Manutenção e Reparos",            color: "#8a9bb0" },
+  { id: "moradia",     label: "🏠 Moradia",             color: "#ff6b6b", group: "Casa & contas" },
+  { id: "contas",      label: "💡 Contas e Utilidades", color: "#ffd60a", group: "Casa & contas" },
+  { id: "manutencao",  label: "🔧 Manutenção e Reparos", color: "#8a9bb0", group: "Casa & contas" },
   // Alimentação
-  { id: "alimentacao", label: "🍔 Restaurante/Delivery", color: "#ff9500" },
-  { id: "mercado",     label: "🛒 Mercado",              color: "#ff9f0a" },
+  { id: "alimentacao", label: "🍔 Restaurante/Delivery", color: "#ff9500", group: "Alimentação" },
+  { id: "mercado",     label: "🛒 Mercado",              color: "#ff9f0a", group: "Alimentação" },
   // Transporte
-  { id: "transporte",  label: "🚗 Transporte",   color: "#5ac8fa" },
-  { id: "combustivel", label: "⛽ Combustível",  color: "#0a84ff" },
+  { id: "transporte",  label: "🚗 Transporte",   color: "#5ac8fa", group: "Transporte" },
+  { id: "combustivel", label: "⛽ Combustível",  color: "#0a84ff", group: "Transporte" },
   // Saúde & bem-estar
-  { id: "saude",       label: "💊 Saúde",                    color: "#ff3b30" },
-  { id: "academia",    label: "🏋️ Academia e Esportes",      color: "#ff453a" },
-  { id: "beleza",      label: "💅 Beleza e Cuidados pessoais", color: "#ff6482" },
+  { id: "saude",       label: "💊 Saúde",                    color: "#ff3b30", group: "Saúde & bem-estar" },
+  { id: "academia",    label: "🏋️ Academia e Esportes",      color: "#ff453a", group: "Saúde & bem-estar" },
+  { id: "beleza",      label: "💅 Beleza e Cuidados pessoais", color: "#ff6482", group: "Saúde & bem-estar" },
   // Educação & trabalho
-  { id: "educacao",    label: "📚 Educação",     color: "#34c759" },
+  { id: "educacao",    label: "📚 Educação",     color: "#34c759", group: "Educação & trabalho" },
   // Lazer & social
-  { id: "lazer",       label: "🎬 Lazer",           color: "#af52de" },
-  { id: "eventos",     label: "🎉 Festas e Eventos", color: "#bf5af2" },
-  { id: "presentes",   label: "🎁 Presentes",       color: "#ff2d55" },
+  { id: "lazer",       label: "🎬 Lazer",           color: "#af52de", group: "Lazer & social" },
+  { id: "eventos",     label: "🎉 Festas e Eventos", color: "#bf5af2", group: "Lazer & social" },
+  { id: "presentes",   label: "🎁 Presentes",       color: "#ff2d55", group: "Lazer & social" },
   // Compras
-  { id: "roupas",      label: "👗 Roupas e Acessórios", color: "#ff2d55" },
-  { id: "tecnologia",  label: "📱 Tecnologia e Eletrônicos", color: "#64d2ff" },
+  { id: "roupas",      label: "👗 Roupas e Acessórios", color: "#ff2d55", group: "Compras" },
+  { id: "tecnologia",  label: "📱 Tecnologia e Eletrônicos", color: "#64d2ff", group: "Compras" },
   // Assinaturas
-  { id: "assinaturas", label: "🔁 Assinaturas",  color: "#5856d6" },
+  { id: "assinaturas", label: "🔁 Assinaturas",  color: "#5856d6", group: "Assinaturas" },
   // Família & pets
-  { id: "familia",     label: "👶 Filhos e Família", color: "#ffd60a" },
-  { id: "pet",         label: "🐾 Pet",              color: "#30b0c7" },
+  { id: "familia",     label: "👶 Filhos e Família", color: "#ffd60a", group: "Família & pets" },
+  { id: "pet",         label: "🐾 Pet",              color: "#30b0c7", group: "Família & pets" },
   // Viagem
-  { id: "viagem",      label: "✈️ Viagem", color: "#00c7be" },
+  { id: "viagem",      label: "✈️ Viagem", color: "#00c7be", group: "Viagem" },
   // Finanças
-  { id: "investimentos_desp", label: "💰 Investimentos e Poupança", color: "#30d158" },
-  { id: "emprestimos", label: "🏦 Empréstimos e Dívidas", color: "#a2845e" },
-  { id: "impostos",    label: "🧾 Impostos e Taxas",      color: "#8e8e93" },
-  { id: "seguros",     label: "🛡️ Seguros",               color: "#5e5ce6" },
-  { id: "doacoes",     label: "🎗️ Doações",               color: "#ff375f" },
+  { id: "investimentos_desp", label: "💰 Investimentos e Poupança", color: "#30d158", group: "Finanças" },
+  { id: "emprestimos", label: "🏦 Empréstimos e Dívidas", color: "#a2845e", group: "Finanças" },
+  { id: "impostos",    label: "🧾 Impostos e Taxas",      color: "#8e8e93", group: "Finanças" },
+  { id: "seguros",     label: "🛡️ Seguros",               color: "#5e5ce6", group: "Finanças" },
+  { id: "doacoes",     label: "🎗️ Doações",               color: "#ff375f", group: "Finanças" },
   // Outros
-  { id: "outros",      label: "📦 Outros",       color: "#8a9bb0" },
+  { id: "outros",      label: "📦 Outros",       color: "#8a9bb0", group: "Outros" },
 ];
 
 // Receita tem uma natureza diferente de despesa — "de onde o dinheiro veio",
 // não "em que foi gasto" — por isso usa sua própria lista de categorias.
 const incomeCategories = [
-  { id: "salario",      label: "💼 Salário",         color: "#34c759" },
-  { id: "freelance",    label: "💻 Freelance/Bico",  color: "#5ac8fa" },
-  { id: "investimentos",label: "📈 Investimentos",   color: "#af52de" },
-  { id: "vendas",       label: "🏷️ Vendas",          color: "#ff9500" },
-  { id: "aluguel_receb",label: "🏠 Aluguel recebido", color: "#ff6b6b" },
-  { id: "reembolso",    label: "↩️ Reembolso",        color: "#00c7be" },
-  { id: "premio",       label: "🏆 Prêmio/Sorte",     color: "#ffd60a" },
-  { id: "emprestimo_receb", label: "🤝 Empréstimo recebido", color: "#a2845e" },
-  { id: "pensao",       label: "👨‍👩‍👧 Pensão/Auxílio",  color: "#5e5ce6" },
-  { id: "presente",     label: "🎁 Presente/Bônus",   color: "#ff2d55" },
-  { id: "outros_receita", label: "📦 Outros",         color: "#8a9bb0" },
+  { id: "salario",      label: "💼 Salário",         color: "#34c759", group: "Trabalho" },
+  { id: "freelance",    label: "💻 Freelance/Bico",  color: "#5ac8fa", group: "Trabalho" },
+  { id: "investimentos",label: "📈 Investimentos",   color: "#af52de", group: "Investimentos" },
+  { id: "vendas",       label: "🏷️ Vendas",          color: "#ff9500", group: "Vendas" },
+  { id: "aluguel_receb",label: "🏠 Aluguel recebido", color: "#ff6b6b", group: "Recebimentos" },
+  { id: "reembolso",    label: "↩️ Reembolso",        color: "#00c7be", group: "Recebimentos" },
+  { id: "emprestimo_receb", label: "🤝 Empréstimo recebido", color: "#a2845e", group: "Recebimentos" },
+  { id: "pensao",       label: "👨‍👩‍👧 Pensão/Auxílio",  color: "#5e5ce6", group: "Recebimentos" },
+  { id: "premio",       label: "🏆 Prêmio/Sorte",     color: "#ffd60a", group: "Presentes & prêmios" },
+  { id: "presente",     label: "🎁 Presente/Bônus",   color: "#ff2d55", group: "Presentes & prêmios" },
+  { id: "outros_receita", label: "📦 Outros",         color: "#8a9bb0", group: "Outros" },
 ];
 
 // Retorna categorias fixas + categorias criadas pelo usuário, filtradas pelo
@@ -440,6 +440,32 @@ function buildCategoryPayload() {
   const despesa = getAllCategories("despesa").map((c) => ({ id: c.id, type: "despesa", label: c.label }));
   const receita = getAllCategories("receita").map((c) => ({ id: c.id, type: "receita", label: c.label }));
   return [...despesa, ...receita];
+}
+
+// Categorias mais usadas nos últimos 90 dias, por frequência real de uso —
+// aparecem no topo do picker pra quem lança sempre nas mesmas 3-4
+// categorias não precisar rolar/buscar toda vez. Só entra na lista quem
+// foi usada 2+ vezes (evita "mais usada" ridícula com uso único), e o
+// corte de 90 dias evita que uma categoria antiga que a pessoa não usa
+// mais fique presa no topo pra sempre.
+function getMostUsedCategoryIds(type, limit = 4) {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 90);
+  const cutoffIso = cutoff.toISOString().slice(0, 10);
+
+  const counts = {};
+  (state.finances || []).forEach((tx) => {
+    if ((tx.type || "despesa") !== type) return;
+    if (tx.date && tx.date < cutoffIso) return;
+    if (!tx.category) return;
+    counts[tx.category] = (counts[tx.category] || 0) + 1;
+  });
+
+  return Object.entries(counts)
+    .filter(([, count]) => count >= 2)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([id]) => id);
 }
 
 function findCategory(catId) {
@@ -1206,6 +1232,10 @@ function bindFinTabs() {
         t.setAttribute("aria-selected", String(active));
       });
       panels.forEach((p) => { p.hidden = p.dataset.finPanel !== target; });
+      // Garante que a aba clicada fique 100% visível — sem isso, em
+      // telas estreitas onde as 4 abas não cabem, a aba podia ficar
+      // cortada na borda do scroll horizontal.
+      tab.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
     });
   });
 }
@@ -3854,25 +3884,58 @@ function openCategoryPicker() {
     const filtered = q ? all.filter((cat) => normalizeForSearch(cat.label).includes(q)) : all;
     const hasExactMatch = all.some((cat) => normalizeForSearch(cat.label.replace(/^\S+\s*/, "")) === q);
 
-    const rowsHtml = filtered.map((cat) => {
+    function rowHtml(cat) {
       const isSelected = cat.id === currentId;
       const isCustom = cat.id.startsWith("custom_");
       const cleanLabel = cat.label.replace(/^\S+\s*/, "");
+      const emoji = cat.label.split(" ")[0];
       return `
-        <div class="cat-picker-row" data-cat-id="${escapeHtml(cat.id)}"
-          style="display:flex;align-items:center;gap:10px;padding:11px 12px;border-radius:14px;cursor:pointer;
-          border:1.5px solid ${isSelected ? "var(--accent)" : "var(--line)"};
-          background:${isSelected ? "var(--accent-soft)" : "var(--surface2)"}">
-          <span style="width:8px;height:8px;border-radius:50%;background:${cat.color};flex-shrink:0"></span>
-          <span style="font-size:1.05rem;flex-shrink:0">${cat.label.split(" ")[0]}</span>
-          <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-            font-weight:600;font-size:0.9rem;color:${isSelected ? "var(--accent)" : "var(--text)"}">${escapeHtml(cleanLabel)}</span>
-          ${isSelected ? `<span style="color:var(--accent);font-weight:800;flex-shrink:0">✓</span>` : ""}
-          ${isCustom ? `<button type="button" class="cat-picker-delete" data-del-id="${escapeHtml(cat.id)}" title="Excluir categoria"
-            style="width:28px;height:28px;border-radius:8px;border:none;background:transparent;color:var(--muted);
-            font-size:0.85rem;cursor:pointer;flex-shrink:0">🗑️</button>` : ""}
+        <div class="cat-picker-row${isSelected ? " is-selected" : ""}" data-cat-id="${escapeHtml(cat.id)}"
+          style="--cat-color:${cat.color}">
+          <span class="cat-picker-icon">${emoji}</span>
+          <span class="cat-picker-label">${escapeHtml(cleanLabel)}</span>
+          ${isSelected ? `<span class="cat-picker-check">✓</span>` : ""}
+          ${isCustom ? `<button type="button" class="cat-picker-delete" data-del-id="${escapeHtml(cat.id)}" title="Excluir categoria">🗑️</button>` : ""}
         </div>`;
-    }).join("");
+    }
+
+    let bodyHtml;
+
+    if (q) {
+      // Buscando: lista simples e achatada, sem seções — o que importa
+      // aqui é achar rápido, agrupar só atrapalharia o escaneio.
+      bodyHtml = filtered.map(rowHtml).join("");
+    } else {
+      // Sem busca: "Mais usadas" (baseado no histórico real) primeiro,
+      // depois o resto organizado por grupo temático — muito mais fácil
+      // de escanear do que uma parede de 26 categorias soltas.
+      const mostUsedIds = getMostUsedCategoryIds(type);
+      const mostUsed = mostUsedIds.map((id) => all.find((c) => c.id === id)).filter(Boolean);
+      const mostUsedSet = new Set(mostUsedIds);
+
+      const groups = new Map();
+      all.forEach((cat) => {
+        if (mostUsedSet.has(cat.id)) return; // já apareceu em "Mais usadas"
+        const groupName = cat.group || (cat.id.startsWith("custom_") ? "Personalizadas" : "Outros");
+        if (!groups.has(groupName)) groups.set(groupName, []);
+        groups.get(groupName).push(cat);
+      });
+
+      const sectionsHtml = [];
+      if (mostUsed.length) {
+        sectionsHtml.push(`<div class="cat-picker-section">
+          <p class="cat-picker-section-title">⭐ Mais usadas</p>
+          ${mostUsed.map(rowHtml).join("")}
+        </div>`);
+      }
+      groups.forEach((cats, groupName) => {
+        sectionsHtml.push(`<div class="cat-picker-section">
+          <p class="cat-picker-section-title">${escapeHtml(groupName)}</p>
+          ${cats.map(rowHtml).join("")}
+        </div>`);
+      });
+      bodyHtml = sectionsHtml.join("");
+    }
 
     const emptyHtml = filtered.length ? "" : `
       <div style="text-align:center;padding:20px 10px;color:var(--muted);font-size:0.85rem">
@@ -3888,7 +3951,7 @@ function openCategoryPicker() {
         <span>Criar categoria "${escapeHtml(query.trim())}"</span>
       </button>` : "";
 
-    listEl.innerHTML = rowsHtml + emptyHtml + createHtml;
+    listEl.innerHTML = bodyHtml + emptyHtml + createHtml;
 
     listEl.querySelectorAll(".cat-picker-row").forEach((row) => {
       row.addEventListener("click", (e) => {

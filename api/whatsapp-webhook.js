@@ -151,11 +151,19 @@ async function appendFinanceEntry(fb, uid, entry) {
     const current = snap.exists ? snap.data() : { data: {} };
     const state = current.data || {};
     const finances = Array.isArray(state.finances) ? state.finances : [];
+    // IMPORTANTE: o app guarda a categoria no campo "category" (não
+    // "categoryId" — esse é só o nome usado durante o parsing da IA).
+    // Sem esse mapeamento, o lançamento aparece "sem categoria" em
+    // gráficos, metas e no detalhamento por categoria dentro do app.
     finances.unshift({
       id: `wa_${Date.now()}`,
       source: "whatsapp",
       createdAt: new Date().toISOString(),
-      ...entry,
+      type: entry.type,
+      amount: entry.amount,
+      category: entry.categoryId,
+      description: entry.description,
+      date: entry.date,
     });
     tx.set(ref, { data: { ...state, finances }, updatedAt: new Date().toISOString() }, { merge: true });
   });
