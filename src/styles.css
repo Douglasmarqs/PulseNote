@@ -2565,10 +2565,15 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 .fin-summary-card.saldo .fin-sum-icon   { color: var(--saldo-color, var(--green)); }
 
 .fin-summary-card strong {
-  /* Escala com a largura do card (unidade de container query), com um
-     piso e um teto em rem — nunca fica pequeno demais nem grande demais,
-     e nunca ultrapassa a borda do card em nenhuma resolução. */
-  font-size: clamp(0.86rem, 10cqi, 1.2rem);
+  /* Escala com a largura do card (unidade de container query). O piso
+     antigo (0.86rem) era alto demais pra 3 colunas em telas estreitas:
+     valores como "R$ 2.927,31" não cabiam e cortavam em "R$ 2.927,...".
+     O piso agora é bem mais baixo — quem garante que o valor não fica
+     minúsculo à toa é o autofit em JS (ver fitCurrencyValues em app.js),
+     que mede o texto de verdade e escolhe o MAIOR tamanho que ainda cabe
+     inteiro no card. Este clamp é só o ponto de partida antes do JS
+     rodar (e uma rede de segurança caso o JS não rode por algum motivo). */
+  font-size: clamp(0.62rem, 10cqi, 1.2rem);
   font-weight: 800;
   letter-spacing: -0.02em;
   color: var(--text);
@@ -3209,7 +3214,7 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 .fin-closure-actions .mini-button { flex: 1; text-align: center; }
 
 /* ─── Recorrentes ─────────────────────────────────────────────── */
-.fin-recur-list { display: grid; gap: 8px; }
+.fin-recur-list { display: grid; gap: 8px; min-width: 0; overflow: hidden; }
 .fin-recur-row {
   display: flex;
   align-items: center;
@@ -3219,6 +3224,8 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   border: 1.5px solid var(--line);
   border-radius: 14px;
   transition: border-color 160ms ease, transform 160ms ease;
+  min-width: 0;
+  max-width: 100%;
 }
 .fin-recur-row:hover { border-color: var(--line); transform: translateY(-1px); }
 .fin-recur-row.is-skipped { opacity: 0.55; }
@@ -3299,10 +3306,11 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 .fin-recur-menu button.danger:hover { background: var(--red-soft); color: var(--red); }
 
 @media (max-width: 380px) {
-  .fin-recur-row { gap: 8px; padding: 10px; }
+  .fin-recur-row { gap: 6px; padding: 10px; }
   .fin-recur-icon { width: 34px; height: 34px; font-size: 0.95rem; }
   .fin-recur-amount { font-size: 0.8rem; }
-  .fin-recur-menu-btn { width: 28px; height: 28px; }
+  .fin-recur-menu-btn { width: 26px; height: 26px; }
+  .fin-recur-status { display: none; }
 }
 
 /* ─── Modais genéricos ────────────────────────────────────────── */

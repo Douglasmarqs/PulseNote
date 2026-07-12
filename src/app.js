@@ -3602,6 +3602,43 @@ function formatCurrency(value) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 }
 
+// Autofit dos valores dos cards de resumo (Receitas/Despesas/Saldo): em vez
+// de confiar só no clamp() em CSS (que precisa "adivinhar" um piso de
+// tamanho que sirva pra qualquer valor, e acabava cortando valores maiores
+// tipo "R$ 2.927,31" em 3 colunas numa tela estreita), aqui a gente mede o
+// tamanho REAL do texto renderizado e reduz a fonte só o necessário até
+// caber inteiro — funciona pra qualquer quantidade de dígitos, em
+// qualquer largura de tela, sem cortar nada.
+function fitCurrencyValues(...ids) {
+  // Duplo rAF: espera o layout do frame atual (novo texto já aplicado)
+  // assentar antes de medir — medir cedo demais pode pegar larguras de
+  // antes do texto novo entrar, e a fonte fica maior do que deveria.
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    ids.forEach((id) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const maxPx = 19.2; // 1.2rem — teto do design original
+      const minPx = 9.5;  // nunca fica ilegível, mesmo em telas minúsculas
+      el.style.fontSize = `${maxPx}px`;
+      // Card ainda não está visível (ex.: outra aba ativa) — sem largura
+      // real pra medir agora; deixa o CSS/clamp cuidar até a próxima vez
+      // que essa função rodar com o card visível.
+      if (el.clientWidth === 0) return;
+      let fontPx = maxPx;
+      while (el.scrollWidth > el.clientWidth + 0.5 && fontPx > minPx) {
+        fontPx -= 0.5;
+        el.style.fontSize = `${fontPx}px`;
+      }
+    });
+  }));
+}
+
+window.addEventListener("resize", () => {
+  if (document.querySelector("#financesView.active-view")) {
+    fitCurrencyValues("finReceitas", "finDespesas", "finSaldo");
+  }
+});
+
 function renderFinances() {
   if (!document.querySelector("#financesView")) return;
   if (!state.finances) state.finances = [];
@@ -3649,6 +3686,7 @@ function renderFinances() {
   document.querySelector("#finDespesas").textContent  = formatCurrency(despesas);
   document.querySelector("#finSaldo").textContent     = formatCurrency(saldo);
   document.querySelector("#finSaldoCard").style.setProperty("--saldo-color", saldo >= 0 ? "var(--green)" : "var(--red)");
+  fitCurrencyValues("finReceitas", "finDespesas", "finSaldo");
   const saldoCardEl = document.querySelector("#finSaldoCard");
   if (saldoCardEl) {
     saldoCardEl.classList.toggle("has-carryover", saldoAnterior !== 0);
@@ -4217,6 +4255,10 @@ function openNewCategoryPrompt(prefillName) {
   const emojiSearchInput = modal.querySelector("#emojiSearchInput");
   const previewIconEl = modal.querySelector("#newCategoryPreviewIcon");
   const previewNameEl = modal.querySelector("#newCategoryPreviewName");
+  // Declarado aqui (antes de ser usado) — antes vinha só lá embaixo, então
+  // updatePreview() ficava com nameInput undefined na primeira renderização
+  // e o ícone/cor de prévia não aparecia até a pessoa clicar em algo.
+  const nameInput = modal.querySelector("#newCatName");
 
   // Preview em tempo real: reflete nome, ícone e cor conforme a pessoa
   // escolhe, pra ela ver exatamente como a categoria vai ficar antes de criar.
@@ -4258,6 +4300,7 @@ function openNewCategoryPrompt(prefillName) {
     });
   }
   renderEmojiGrid();
+  updatePreview();
 
   modal.querySelectorAll(".new-category-tab").forEach((tab) => {
     tab.addEventListener("click", () => {
@@ -4294,7 +4337,6 @@ function openNewCategoryPrompt(prefillName) {
   document.getElementById("closeNewCategory").addEventListener("click", () => modal.remove());
   modal.addEventListener("click", (e) => { if (e.target === modal) modal.remove(); });
 
-  const nameInput = document.getElementById("newCatName");
   const nameCountEl = document.getElementById("newCatNameCount");
   function updateNameCount() {
     nameCountEl.textContent = `${nameInput.value.length}/${nameMax}`;
