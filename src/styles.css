@@ -2515,6 +2515,10 @@ flex-direction:column;
 justify-content:center;
 gap:8px;
 overflow:hidden;
+
+min-height:92px;
+padding:16px;
+overflow:hidden;
 }
 
 .fin-summary-card::before {
@@ -2573,15 +2577,16 @@ overflow:hidden;
 .fin-summary-card.saldo .fin-sum-icon   { color: var(--saldo-color, var(--green)); }
 
 .fin-summary-card strong{
-display:block;
+display:flex;
+align-items:center;
 width:100%;
-font-weight:800;
-font-size:clamp(1.05rem,2.2vw,1.9rem);
-line-height:1.15;
-letter-spacing:-0.02em;
-white-space:nowrap;
+min-width:0;
 overflow:hidden;
-text-overflow:ellipsis;
+white-space:nowrap;
+font-weight:800;
+font-size:clamp(1.05rem,2.8vw,1.45rem);
+line-height:1.05;
+letter-spacing:-0.02em;
 font-variant-numeric:tabular-nums;
 }
 
