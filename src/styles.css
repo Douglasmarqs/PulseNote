@@ -2480,18 +2480,14 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 .fin-action-btn.export:hover { background: var(--accent); color: #fff; box-shadow: 0 6px 16px color-mix(in srgb, var(--accent) 35%, transparent); }
 
 /* Summary cards */
-.fin-summary-grid {
-  display: grid;
-  /* minmax(0, 1fr) em vez de 1fr puro: por padrão uma coluna de grid não
-     encolhe além do min-content do que está dentro dela, então um valor
-     grande (ex. "-R$ 2.927,35") empurrava o card pra fora do container.
-     Com minmax(0, 1fr) a coluna pode encolher livremente e é o conteúdo
-     interno (ver .fin-summary-card strong) que se adapta, não o card. */
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+.fin-summary-grid{
+display:grid;
+grid-template-columns:repeat(3,minmax(0,1fr));
+gap:10px;
+width:100%;
 }
 
-.fin-summary-card {
+.fin-summary-card{
   background: var(--surface);
   border-radius: 18px;
   border: 1.5px solid var(--line);
@@ -2507,6 +2503,10 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
      próprio card (não do viewport), então funciona igual em 2 ou 3
      colunas, mobile ou desktop, sem precisar de breakpoints manuais. */
   container-type: inline-size;
+
+min-width:0;
+width:100%;
+overflow:hidden;
 }
 
 .fin-summary-card::before {
@@ -2564,35 +2564,23 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 .fin-summary-card.despesa .fin-sum-icon { color: var(--red); }
 .fin-summary-card.saldo .fin-sum-icon   { color: var(--saldo-color, var(--green)); }
 
-.fin-summary-card strong {
-  /* Escala com a largura do card (unidade de container query). O piso
-     antigo (0.86rem) era alto demais pra 3 colunas em telas estreitas:
-     valores como "R$ 2.927,31" não cabiam e cortavam em "R$ 2.927,...".
-     O piso agora é bem mais baixo — quem garante que o valor não fica
-     minúsculo à toa é o autofit em JS (ver fitCurrencyValues em app.js),
-     que mede o texto de verdade e escolhe o MAIOR tamanho que ainda cabe
-     inteiro no card. Este clamp é só o ponto de partida antes do JS
-     rodar (e uma rede de segurança caso o JS não rode por algum motivo). */
-  font-size: clamp(0.56rem, 10cqi, 1.2rem);
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
-  display: block;
-  max-width: 100%;
-  /* Antes ficava sempre numa linha só (nowrap + ellipsis), então valores
-     que não cabiam nem na fonte mínima do autofit eram cortados tipo
-     "R$ 2.6...". Isso quebrava a promessa de "ver o valor completo" com
-     3 colunas numa tela estreita. Agora, como último recurso (depois do
-     autofit já ter encolhido a fonte o quanto der), o valor pode quebrar
-     em duas linhas. overflow-wrap:anywhere (mais forte que break-word)
-     garante a quebra mesmo que o texto não tenha um espaço "normal" pra
-     quebrar — o que passou a ser o caso depois de trocarmos o espaço não-
-     quebrável (\00A0) que o Intl usa por um espaço comum só nesses cards
-     (ver formatCurrencyWrappable em app.js). */
-  white-space: normal;
-  overflow-wrap: anywhere;
-  line-height: 1.15;
+.fin-summary-card strong{
+display:flex;
+align-items:center;
+justify-content:flex-start;
+width:100%;
+min-width:0;
+max-width:100%;
+overflow:hidden;
+white-space:nowrap;
+text-overflow:clip;
+font-weight:800;
+font-variant-numeric:tabular-nums;
+letter-spacing:-0.03em;
+line-height:1;
+font-size:clamp(.70rem,1.45vw,1.45rem);
+transform-origin:left center;
+transition:font-size .15s ease;
 }
 
 .fin-summary-card.receita strong { color: var(--green); }
@@ -2803,7 +2791,12 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 /* ---- Finance responsive ---- */
 @media (max-width: 1100px) {
   .fin-layout { grid-template-columns: 1fr; }
-  .fin-summary-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .fin-summary-grid{
+display:grid;
+grid-template-columns:repeat(3,minmax(0,1fr));
+gap:10px;
+width:100%;
+}
 }
 
 @media (max-width: 720px) {
@@ -2823,9 +2816,18 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   .fin-form-row { grid-template-columns: 1fr; }
   .fin-date-input { width: 100%; }
   .fin-left .panel, .fin-right .panel, .fin-calendar-card { padding: 14px; }
-  .fin-summary-card { padding: 8px 6px; gap: 2px; min-width: 0; }
+  .fin-summary-card{ padding: 8px 6px; gap: 2px; min-width: 0; 
+min-width:0;
+width:100%;
+overflow:hidden;
+}
   .fin-sum-icon { display: none; }
-  .fin-summary-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .fin-summary-grid{
+display:grid;
+grid-template-columns:repeat(3,minmax(0,1fr));
+gap:10px;
+width:100%;
+}
   .fin-cal-grid { grid-template-columns: repeat(7, 1fr); gap: 3px; }
   .fin-cal-day { font-size: 0.7rem; border-radius: 8px; }
   .fin-cat-row { gap: 6px; }

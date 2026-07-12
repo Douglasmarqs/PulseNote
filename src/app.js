@@ -4974,3 +4974,19 @@ window.applyRecurrent = applyRecurrent;
 window.toggleSkipRecurrentMonth = toggleSkipRecurrentMonth;
 window.goToFinMonth = goToFinMonth;
 window.reopenMonth = reopenMonth;
+
+
+function fitFinanceCards(){
+ const values=document.querySelectorAll("#finReceitas,#finDespesas,#finSaldo");
+ values.forEach(el=>{
+   if(!el)return;
+   let size=23;
+   el.style.fontSize=size+"px";
+   while(el.scrollWidth>el.clientWidth && size>11){
+      size--;
+      el.style.fontSize=size+"px";
+   }
+ });
+}
+window.addEventListener('resize',fitFinanceCards);
+requestAnimationFrame(fitFinanceCards);
