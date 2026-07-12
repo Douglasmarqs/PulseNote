@@ -2573,19 +2573,24 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
      que mede o texto de verdade e escolhe o MAIOR tamanho que ainda cabe
      inteiro no card. Este clamp é só o ponto de partida antes do JS
      rodar (e uma rede de segurança caso o JS não rode por algum motivo). */
-  font-size: clamp(0.62rem, 10cqi, 1.2rem);
+  font-size: clamp(0.6rem, 10cqi, 1.2rem);
   font-weight: 800;
   letter-spacing: -0.02em;
   color: var(--text);
-  /* Sem isso, o hífen de valores negativos ("-R$ 222,47") é tratado como
-     ponto de quebra de linha válido em cards estreitos, e o "-" pula
-     sozinho pra linha de cima, separado do resto do valor. */
-  white-space: nowrap;
   font-variant-numeric: tabular-nums;
   display: block;
   max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  /* Antes ficava sempre numa linha só (nowrap + ellipsis), então valores
+     que não cabiam nem na fonte mínima do autofit eram cortados tipo
+     "R$ 2.6...". Isso quebrava a promessa de "ver o valor completo" com
+     3 colunas numa tela estreita. Agora, como último recurso (depois do
+     autofit já ter encolhido a fonte o quanto der), o valor pode quebrar
+     em duas linhas — "R$" numa e o número na outra — em vez de cortar.
+     O único espaço no texto formatado é bem esse, entre "R$" e o número,
+     então o sinal de "-" (quando negativo) nunca fica sozinho numa linha. */
+  white-space: normal;
+  overflow-wrap: break-word;
+  line-height: 1.15;
 }
 
 .fin-summary-card.receita strong { color: var(--green); }
@@ -2816,7 +2821,7 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   .fin-form-row { grid-template-columns: 1fr; }
   .fin-date-input { width: 100%; }
   .fin-left .panel, .fin-right .panel, .fin-calendar-card { padding: 14px; }
-  .fin-summary-card { padding: 10px 10px; gap: 2px; min-width: 0; }
+  .fin-summary-card { padding: 8px 6px; gap: 2px; min-width: 0; }
   .fin-sum-icon { display: none; }
   .fin-summary-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
   .fin-cal-grid { grid-template-columns: repeat(7, 1fr); gap: 3px; }
@@ -2831,8 +2836,6 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 }
 
 @media (max-width: 380px) {
-  .fin-summary-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px; }
-  .fin-summary-grid .fin-summary-card:last-child { grid-column: span 2; }
   .fin-cat-info { min-width: 64px; font-size: 0.7rem; }
   .fin-cat-value { min-width: 48px; font-size: 0.7rem; }
 }
@@ -3005,22 +3008,24 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 }
 .new-category-emoji-grid {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 6px;
+  /* Antes eram 6 colunas com botão de 38px (abaixo do alvo de toque
+     recomendado de 44px) e altura travada em 224px com scroll próprio.
+     Esse scroll aninhado dentro do corpo do modal (que já rola sozinho)
+     é um padrão que o Safari do iOS às vezes falha em renderizar — a
+     grade fica com altura 0 e os ícones somem visualmente, mesmo
+     existindo no DOM. Removendo o scroll/altura fixos daqui, a grade
+     cresce naturalmente dentro do scroll único do modal, sem esse risco. */
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
   margin-bottom: 18px;
-  max-height: 224px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scroll-behavior: smooth;
   padding-right: 2px;
-  align-content: start;
 }
 .cat-emoji-btn {
   aspect-ratio: 1;
   width: 100%;
-  min-height: 38px;
+  min-height: 44px;
   border-radius: 10px;
-  font-size: 1.1rem;
+  font-size: 1.3rem;
   border: 2px solid var(--line);
   background: var(--surface2);
   cursor: pointer;

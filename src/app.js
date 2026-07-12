@@ -1400,6 +1400,14 @@ function setView(view) {
   elements.viewTitle.textContent = viewTitles[view];
   // Scroll to top on mobile
   window.scrollTo({ top: 0, behavior: "smooth" });
+  // A primeira renderização dos cards de Receitas/Despesas/Saldo geralmente
+  // acontece com a aba Finanças ainda escondida (clientWidth 0), então o
+  // autofit em fitCurrencyValues() desiste sem ajustar o tamanho da fonte
+  // (ver função abaixo) e o valor fica com a fonte grande demais do CSS,
+  // cortando em "R$ 2.6..." em vez de mostrar o valor inteiro. Ao entrar
+  // de fato na aba (aqui, com o card já visível e com largura real), a
+  // gente reexecuta o autofit pra medir e ajustar certo.
+  if (view === "finances") fitCurrencyValues("finReceitas", "finDespesas", "finSaldo");
 }
 
 function saveNote(event) {
@@ -3619,6 +3627,11 @@ function fitCurrencyValues(...ids) {
       if (!el) return;
       const maxPx = 19.2; // 1.2rem — teto do design original
       const minPx = 9.5;  // nunca fica ilegível, mesmo em telas minúsculas
+      // Mede sempre numa linha só (nowrap), senão o CSS já quebraria o
+      // texto sozinho e o scrollWidth pareceria "cabendo" mesmo quando dá
+      // pra reduzir a fonte e caber tudo numa linha. white-space volta a
+      // "normal" (permite quebrar) só como último recurso lá embaixo.
+      el.style.whiteSpace = "nowrap";
       el.style.fontSize = `${maxPx}px`;
       // Card ainda não está visível (ex.: outra aba ativa) — sem largura
       // real pra medir agora; deixa o CSS/clamp cuidar até a próxima vez
@@ -3628,6 +3641,13 @@ function fitCurrencyValues(...ids) {
       while (el.scrollWidth > el.clientWidth + 0.5 && fontPx > minPx) {
         fontPx -= 0.5;
         el.style.fontSize = `${fontPx}px`;
+      }
+      // Mesmo na fonte mínima o valor não coube numa linha só (ex.: "-R$
+      // 2.927,35" em 3 colunas numa tela bem estreita) — em vez de cortar
+      // com "...", deixa quebrar em duas linhas ("R$" / "2.927,35") pra
+      // garantir que o valor inteiro sempre fique visível.
+      if (el.scrollWidth > el.clientWidth + 0.5) {
+        el.style.whiteSpace = "normal";
       }
     });
   }));
@@ -4311,7 +4331,7 @@ function openNewCategoryPrompt(prefillName) {
       // mesmo que a pessoa tivesse digitado algo na busca antes.
       if (searchQuery) { searchQuery = ""; emojiSearchInput.value = ""; }
       emojiTabsEl.classList.remove("is-hidden");
-      emojiPickerEl.scrollTo({ top: 0, behavior: "smooth" });
+      emojiPickerEl.scrollIntoView({ block: "nearest", behavior: "smooth" });
       renderEmojiGrid();
     });
   });
