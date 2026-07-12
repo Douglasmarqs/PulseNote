@@ -1839,11 +1839,22 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   .daily-hero { padding: 20px; }
   .daily-hero h2 { font-size: 1.3rem; }
 
-  /* Mobile overview grid: 2 colunas, cartões compactos */
-  .overview-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
-  .overview-card { padding: 14px; }
-  .overview-value { font-size: 1.35rem; }
-  .overview-value-small { font-size: 0.88rem; }
+  /* Mobile overview grid: 3 colunas (2 linhas em vez de 3) — cartões bem
+     mais compactos pra Home não ficar tão comprida rolando pra baixo. */
+  .overview-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .overview-card { padding: 10px 8px; gap: 2px; border-radius: 16px; }
+  .overview-icon { width: 28px; height: 28px; border-radius: 9px; margin-bottom: 0; }
+  .overview-icon svg { width: 14px; height: 14px; }
+  .overview-label { font-size: 0.62rem; letter-spacing: 0; }
+  .overview-value { font-size: 1.05rem; }
+  .overview-value-small { font-size: 0.72rem; }
+  .overview-card small { font-size: 0.6rem; }
+
+  @media (max-width: 380px) {
+    .overview-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+  .overview-grid { margin-bottom: 14px; }
+  .daily-hero { margin-bottom: 4px; }
 
   /* Mobile dashboard */
   .dashboard-layout { grid-template-columns: 1fr; }
@@ -2048,22 +2059,27 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   align-items: stretch;
 }
 .fin-date-input {
-  height: 44px;
+  height: 100%;
+  min-height: 44px;
   border: 1.5px solid var(--line);
-  border-radius: 12px;
+  border-radius: 14px;
   background: var(--surface2);
   color: var(--text);
   padding: 0 10px;
   font: inherit;
-  font-size: 0.85rem;
-  width: 130px;
+  font-size: 0.82rem;
+  width: 116px;
   flex-shrink: 0;
+}
+
+@media (max-width: 360px) {
+  .fin-date-input { width: 100px; font-size: 0.74rem; padding: 0 6px; }
 }
 
 /* Categoria: botão seletor customizado (abre o picker) + botão "+" */
 .fin-cat-select-row { display: flex; gap: 6px; }
-.fin-cat-select-row select { flex: 1; height: 40px; border: 1.5px solid var(--line); border-radius: 12px; padding: 0 10px; background: var(--surface2); color: var(--text); font: inherit; }
-.fin-cat-add-btn { width: 40px; height: 40px; border-radius: 12px; border: 1.5px dashed var(--line); background: transparent; color: var(--muted); font-size: 1.2rem; cursor: pointer; flex-shrink: 0; transition: all 150ms; }
+.fin-cat-select-row select { flex: 1; height: 42px; border: 1.5px solid var(--line); border-radius: 12px; padding: 0 10px; background: var(--surface2); color: var(--text); font: inherit; }
+.fin-cat-add-btn { width: 42px; height: 42px; border-radius: 12px; border: 1.5px dashed var(--line); background: transparent; color: var(--muted); font-size: 1.2rem; cursor: pointer; flex-shrink: 0; transition: all 150ms; }
 .fin-cat-add-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 
 .fin-cat-trigger {
@@ -2072,7 +2088,7 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   align-items: center;
   gap: 8px;
   min-width: 0;
-  height: 40px;
+  height: 42px;
   border: 1.5px solid var(--line);
   border-radius: 12px;
   padding: 0 12px;
@@ -2320,9 +2336,9 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   align-items: center;
   gap: 6px;
   background: var(--surface2);
-  border: 2px solid var(--line);
-  border-radius: 16px;
-  padding: 4px 16px;
+  border: 1.5px solid var(--line);
+  border-radius: 14px;
+  padding: 4px 14px;
   transition: border-color 200ms, box-shadow 200ms;
 }
 
@@ -2479,34 +2495,37 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 }
 .fin-action-btn.export:hover { background: var(--accent); color: #fff; box-shadow: 0 6px 16px color-mix(in srgb, var(--accent) 35%, transparent); }
 
-/* Summary cards */
+/* Summary cards
+   Receitas e Despesas dividem uma linha de 2 colunas; Saldo (o valor que
+   mais varia de tamanho — pode ficar negativo, com milhar, etc.) ganha uma
+   linha inteira só pra ele (.fin-summary-card.full). Isso dá a cada card
+   quase o dobro da largura que tinha no grid de 3 colunas antigo, então
+   valores grandes cabem numa fonte confortável sem precisar de trechos de
+   JS medindo texto pra encolher fonte em tempo real. */
 .fin-summary-grid {
   display: grid;
-  /* minmax(0, 1fr) em vez de 1fr puro: por padrão uma coluna de grid não
-     encolhe além do min-content do que está dentro dela, então um valor
-     grande (ex. "-R$ 2.927,35") empurrava o card pra fora do container.
-     Com minmax(0, 1fr) a coluna pode encolher livremente e é o conteúdo
-     interno (ver .fin-summary-card strong) que se adapta, não o card. */
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
+}
+
+.fin-summary-card.full {
+  grid-column: 1 / -1;
 }
 
 .fin-summary-card {
   background: var(--surface);
   border-radius: 18px;
   border: 1.5px solid var(--line);
-  padding: 16px 14px;
-  display: grid;
-  gap: 6px;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   box-shadow: var(--shadow-card);
   transition: transform 180ms ease, box-shadow 180ms ease;
   position: relative;
   overflow: hidden;
   min-width: 0;
-  /* Container query: o tamanho do valor abaixo escala com a largura do
-     próprio card (não do viewport), então funciona igual em 2 ou 3
-     colunas, mobile ou desktop, sem precisar de breakpoints manuais. */
-  container-type: inline-size;
 }
 
 .fin-summary-card::before {
@@ -2538,6 +2557,7 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 
 .fin-sum-icon {
   display: inline-flex;
+  flex-shrink: 0;
   width: 15px;
   height: 15px;
   margin-right: 5px;
@@ -2549,15 +2569,13 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 .fin-sum-label {
   display: flex;
   align-items: center;
-  font-size: 0.75rem;
+  flex-shrink: 0;
+  font-size: 0.72rem;
   font-weight: 600;
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
 }
 
 .fin-summary-card.receita .fin-sum-icon { color: var(--green); }
@@ -2565,39 +2583,74 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 .fin-summary-card.saldo .fin-sum-icon   { color: var(--saldo-color, var(--green)); }
 
 .fin-summary-card strong {
-  /* Escala com a largura do card (unidade de container query). O piso
-     antigo (0.86rem) era alto demais pra 3 colunas em telas estreitas:
-     valores como "R$ 2.927,31" não cabiam e cortavam em "R$ 2.927,...".
-     O piso agora é bem mais baixo — quem garante que o valor não fica
-     minúsculo à toa é o autofit em JS (ver fitCurrencyValues em app.js),
-     que mede o texto de verdade e escolhe o MAIOR tamanho que ainda cabe
-     inteiro no card. Este clamp é só o ponto de partida antes do JS
-     rodar (e uma rede de segurança caso o JS não rode por algum motivo). */
-  font-size: clamp(0.56rem, 10cqi, 1.2rem);
+  /* Ícone/rótulo ficam à esquerda com largura fixa; o valor ocupa o
+     espaço restante à direita. Com Receitas/Despesas dividindo 2 colunas
+     (em vez de 3) e Saldo numa linha só pra ele, sobra largura de verdade
+     pra qualquer valor — negativo, com milhar, etc. — sem precisar medir
+     texto em JS pra encolher a fonte. white-space:normal +
+     overflow-wrap:anywhere seguem aqui só como rede de segurança para
+     telas muito estreitas. */
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: right;
+  font-size: 1.15rem;
   font-weight: 800;
   letter-spacing: -0.02em;
   color: var(--text);
   font-variant-numeric: tabular-nums;
-  display: block;
-  max-width: 100%;
-  /* Antes ficava sempre numa linha só (nowrap + ellipsis), então valores
-     que não cabiam nem na fonte mínima do autofit eram cortados tipo
-     "R$ 2.6...". Isso quebrava a promessa de "ver o valor completo" com
-     3 colunas numa tela estreita. Agora, como último recurso (depois do
-     autofit já ter encolhido a fonte o quanto der), o valor pode quebrar
-     em duas linhas. overflow-wrap:anywhere (mais forte que break-word)
-     garante a quebra mesmo que o texto não tenha um espaço "normal" pra
-     quebrar — o que passou a ser o caso depois de trocarmos o espaço não-
-     quebrável (\00A0) que o Intl usa por um espaço comum só nesses cards
-     (ver formatCurrencyWrappable em app.js). */
   white-space: normal;
   overflow-wrap: anywhere;
   line-height: 1.15;
 }
 
+.fin-summary-card.full strong { font-size: 1.4rem; }
+
 .fin-summary-card.receita strong { color: var(--green); }
 .fin-summary-card.despesa strong { color: var(--red); }
 .fin-summary-card.saldo strong   { color: var(--saldo-color, var(--green)); }
+
+/* Mini resumo financeiro no dashboard (Home) */
+.dash-fin-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.dash-fin-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  background: var(--surface2);
+  border: 1.5px solid var(--line);
+  border-radius: 14px;
+  padding: 10px 12px;
+}
+.dash-fin-item.full { grid-column: 1 / -1; }
+.dash-fin-item span {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+.dash-fin-item strong {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: right;
+  font-size: 1rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.15;
+}
+.dash-fin-item.full strong { font-size: 1.2rem; }
+.dash-fin-item.receita strong { color: var(--green); }
+.dash-fin-item.despesa strong { color: var(--red); }
+.dash-fin-progress { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
 
 /* Category breakdown */
 .fin-cat-list { display: grid; gap: 10px; }
@@ -2803,7 +2856,6 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 /* ---- Finance responsive ---- */
 @media (max-width: 1100px) {
   .fin-layout { grid-template-columns: 1fr; }
-  .fin-summary-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
 @media (max-width: 720px) {
@@ -2819,13 +2871,14 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   .fin-layout { grid-template-columns: 1fr; gap: 10px; }
   .fin-left, .fin-right { gap: 10px; }
   .fin-form-card { padding: 14px; gap: 10px; }
-  .fin-amount-field input { font-size: 1.5rem; min-height: 46px; }
-  .fin-form-row { grid-template-columns: 1fr; }
-  .fin-date-input { width: 100%; }
+  .fin-amount-field input { font-size: 1.5rem; min-height: 44px; }
   .fin-left .panel, .fin-right .panel, .fin-calendar-card { padding: 14px; }
-  .fin-summary-card { padding: 8px 6px; gap: 2px; min-width: 0; }
-  .fin-sum-icon { display: none; }
-  .fin-summary-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .fin-summary-card { padding: 10px 12px; gap: 6px; min-width: 0; }
+  .fin-sum-icon { width: 13px; height: 13px; }
+  .fin-sum-label { font-size: 0.66rem; }
+  .fin-summary-card strong { font-size: 1rem; }
+  .fin-summary-card.full strong { font-size: 1.25rem; }
+  .fin-summary-grid { gap: 8px; }
   .fin-cal-grid { grid-template-columns: repeat(7, 1fr); gap: 3px; }
   .fin-cal-day { font-size: 0.7rem; border-radius: 8px; }
   .fin-cat-row { gap: 6px; }

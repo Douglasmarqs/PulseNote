@@ -1400,14 +1400,6 @@ function setView(view) {
   elements.viewTitle.textContent = viewTitles[view];
   // Scroll to top on mobile
   window.scrollTo({ top: 0, behavior: "smooth" });
-  // A primeira renderização dos cards de Receitas/Despesas/Saldo geralmente
-  // acontece com a aba Finanças ainda escondida (clientWidth 0), então o
-  // autofit em fitCurrencyValues() desiste sem ajustar o tamanho da fonte
-  // (ver função abaixo) e o valor fica com a fonte grande demais do CSS,
-  // cortando em "R$ 2.6..." em vez de mostrar o valor inteiro. Ao entrar
-  // de fato na aba (aqui, com o card já visível e com largura real), a
-  // gente reexecuta o autofit pra medir e ajustar certo.
-  if (view === "finances") fitCurrencyValues("finReceitas", "finDespesas", "finSaldo");
 }
 
 function saveNote(event) {
@@ -1688,12 +1680,12 @@ function renderDashFinance() {
   const saldo = receitas - despesas;
   const usedPct = receitas > 0 ? Math.min(100, Math.round((despesas / receitas) * 100)) : 0;
   el.innerHTML = `
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px">
-      <div style="text-align:center"><div style="font-size:0.75rem;color:var(--muted);font-weight:600;margin-bottom:2px">Receitas</div><strong style="color:var(--green);font-size:1rem;font-weight:800">${formatCurrency(receitas)}</strong></div>
-      <div style="text-align:center"><div style="font-size:0.75rem;color:var(--muted);font-weight:600;margin-bottom:2px">Despesas</div><strong style="color:var(--red);font-size:1rem;font-weight:800">${formatCurrency(despesas)}</strong></div>
-      <div style="text-align:center"><div style="font-size:0.75rem;color:var(--muted);font-weight:600;margin-bottom:2px">Saldo</div><strong style="color:${saldo >= 0 ? "var(--green)" : "var(--red)"};font-size:1rem;font-weight:800">${formatCurrency(saldo)}</strong></div>
+    <div class="dash-fin-summary">
+      <div class="dash-fin-item receita"><span>Receitas</span><strong>${formatCurrencyWrappable(receitas)}</strong></div>
+      <div class="dash-fin-item despesa"><span>Despesas</span><strong>${formatCurrencyWrappable(despesas)}</strong></div>
+      <div class="dash-fin-item saldo full"><span>Saldo</span><strong style="color:${saldo >= 0 ? "var(--green)" : "var(--red)"}">${formatCurrencyWrappable(saldo)}</strong></div>
     </div>
-    <div style="display:flex;align-items:center;gap:8px">
+    <div class="dash-fin-progress">
       <div class="progress-track" style="flex:1;height:8px"><div style="width:${usedPct}%;height:100%;border-radius:999px;background:${usedPct > 80 ? "var(--red)" : usedPct > 60 ? "var(--orange)" : "var(--green)"};transition:width 400ms"></div></div>
       <span style="font-size:0.8rem;font-weight:700;color:var(--muted)">${usedPct}%</span>
     </div>
@@ -3628,48 +3620,6 @@ function formatCurrencyWrappable(value) {
 // tamanho REAL do texto renderizado e reduz a fonte só o necessário até
 // caber inteiro — funciona pra qualquer quantidade de dígitos, em
 // qualquer largura de tela, sem cortar nada.
-function fitCurrencyValues(...ids) {
-  // Duplo rAF: espera o layout do frame atual (novo texto já aplicado)
-  // assentar antes de medir — medir cedo demais pode pegar larguras de
-  // antes do texto novo entrar, e a fonte fica maior do que deveria.
-  requestAnimationFrame(() => requestAnimationFrame(() => {
-    ids.forEach((id) => {
-      const el = document.getElementById(id);
-      if (!el) return;
-      const maxPx = 19.2; // 1.2rem — teto do design original
-      const minPx = 9.5;  // nunca fica ilegível, mesmo em telas minúsculas
-      // Mede sempre numa linha só (nowrap), senão o CSS já quebraria o
-      // texto sozinho e o scrollWidth pareceria "cabendo" mesmo quando dá
-      // pra reduzir a fonte e caber tudo numa linha. white-space volta a
-      // "normal" (permite quebrar) só como último recurso lá embaixo.
-      el.style.whiteSpace = "nowrap";
-      el.style.fontSize = `${maxPx}px`;
-      // Card ainda não está visível (ex.: outra aba ativa) — sem largura
-      // real pra medir agora; deixa o CSS/clamp cuidar até a próxima vez
-      // que essa função rodar com o card visível.
-      if (el.clientWidth === 0) return;
-      let fontPx = maxPx;
-      while (el.scrollWidth > el.clientWidth + 0.5 && fontPx > minPx) {
-        fontPx -= 0.5;
-        el.style.fontSize = `${fontPx}px`;
-      }
-      // Mesmo na fonte mínima o valor não coube numa linha só (ex.: "-R$
-      // 2.927,35" em 3 colunas numa tela bem estreita) — em vez de cortar
-      // com "...", deixa quebrar em duas linhas ("R$" / "2.927,35") pra
-      // garantir que o valor inteiro sempre fique visível.
-      if (el.scrollWidth > el.clientWidth + 0.5) {
-        el.style.whiteSpace = "normal";
-      }
-    });
-  }));
-}
-
-window.addEventListener("resize", () => {
-  if (document.querySelector("#financesView.active-view")) {
-    fitCurrencyValues("finReceitas", "finDespesas", "finSaldo");
-  }
-});
-
 function renderFinances() {
   if (!document.querySelector("#financesView")) return;
   if (!state.finances) state.finances = [];
@@ -3717,7 +3667,6 @@ function renderFinances() {
   document.querySelector("#finDespesas").textContent  = formatCurrencyWrappable(despesas);
   document.querySelector("#finSaldo").textContent     = formatCurrencyWrappable(saldo);
   document.querySelector("#finSaldoCard").style.setProperty("--saldo-color", saldo >= 0 ? "var(--green)" : "var(--red)");
-  fitCurrencyValues("finReceitas", "finDespesas", "finSaldo");
   const saldoCardEl = document.querySelector("#finSaldoCard");
   if (saldoCardEl) {
     saldoCardEl.classList.toggle("has-carryover", saldoAnterior !== 0);
