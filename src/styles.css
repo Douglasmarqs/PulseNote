@@ -2573,7 +2573,7 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
      que mede o texto de verdade e escolhe o MAIOR tamanho que ainda cabe
      inteiro no card. Este clamp é só o ponto de partida antes do JS
      rodar (e uma rede de segurança caso o JS não rode por algum motivo). */
-  font-size: clamp(0.6rem, 10cqi, 1.2rem);
+  font-size: clamp(0.56rem, 10cqi, 1.2rem);
   font-weight: 800;
   letter-spacing: -0.02em;
   color: var(--text);
@@ -2585,11 +2585,13 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
      "R$ 2.6...". Isso quebrava a promessa de "ver o valor completo" com
      3 colunas numa tela estreita. Agora, como último recurso (depois do
      autofit já ter encolhido a fonte o quanto der), o valor pode quebrar
-     em duas linhas — "R$" numa e o número na outra — em vez de cortar.
-     O único espaço no texto formatado é bem esse, entre "R$" e o número,
-     então o sinal de "-" (quando negativo) nunca fica sozinho numa linha. */
+     em duas linhas. overflow-wrap:anywhere (mais forte que break-word)
+     garante a quebra mesmo que o texto não tenha um espaço "normal" pra
+     quebrar — o que passou a ser o caso depois de trocarmos o espaço não-
+     quebrável (\00A0) que o Intl usa por um espaço comum só nesses cards
+     (ver formatCurrencyWrappable em app.js). */
   white-space: normal;
-  overflow-wrap: break-word;
+  overflow-wrap: anywhere;
   line-height: 1.15;
 }
 
@@ -2969,17 +2971,9 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 }
 .new-category-icon-search input::placeholder { color: var(--muted); font-weight: 500; }
 
-.new-category-tabs {
-  display: flex;
-  gap: 6px;
-  overflow-x: auto;
-  scrollbar-width: none;
-  padding-bottom: 2px;
-  margin-bottom: 10px;
-  transition: opacity 140ms ease;
+.new-category-icon-list {
+  margin-bottom: 4px;
 }
-.new-category-tabs::-webkit-scrollbar { display: none; }
-.new-category-tabs.is-hidden { display: none; }
 .new-category-empty {
   text-align: center;
   font-size: 0.82rem;
@@ -2987,34 +2981,23 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   padding: 24px 12px;
   margin: 0 0 18px;
 }
-.new-category-tab {
-  flex: 0 0 auto;
-  white-space: nowrap;
-  padding: 8px 12px;
-  border-radius: 10px;
-  border: 1.5px solid var(--line);
-  background: var(--surface2);
-  color: var(--text2);
-  font-size: 0.78rem;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 160ms ease;
-}
-.new-category-tab:hover { color: var(--text); }
-.new-category-tab.active {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-  color: var(--accent);
+.new-category-icon-section + .new-category-icon-section { margin-top: 14px; }
+.new-category-icon-section-title {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 8px 2px;
 }
 .new-category-emoji-grid {
   display: grid;
   /* Antes eram 6 colunas com botão de 38px (abaixo do alvo de toque
-     recomendado de 44px) e altura travada em 224px com scroll próprio.
-     Esse scroll aninhado dentro do corpo do modal (que já rola sozinho)
-     é um padrão que o Safari do iOS às vezes falha em renderizar — a
-     grade fica com altura 0 e os ícones somem visualmente, mesmo
-     existindo no DOM. Removendo o scroll/altura fixos daqui, a grade
-     cresce naturalmente dentro do scroll único do modal, sem esse risco. */
+     recomendado de 44px), navegadas por abas horizontais que em alguns
+     celulares renderizavam em branco (bug de scroll aninhado no Safari
+     do iOS). Agora todos os grupos aparecem em sequência, cada um com
+     seu próprio título, dentro do único scroll do modal — sem abas
+     escondidas que possam falhar em aparecer. */
   grid-template-columns: repeat(5, 1fr);
   gap: 8px;
   margin-bottom: 18px;

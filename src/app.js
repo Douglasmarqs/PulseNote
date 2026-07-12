@@ -3610,6 +3610,17 @@ function formatCurrency(value) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 }
 
+// Mesma formatação, mas com espaço comum em vez do espaço não-quebrável
+// (U+00A0) que o Intl usa entre "R$" e o número. Nos cards de resumo
+// (Receitas/Despesas/Saldo) esse NBSP impedia qualquer quebra de linha
+// ali — mesmo com white-space:normal no CSS, um espaço não-quebrável não
+// conta como ponto de quebra, então o autofit em JS não tinha pra onde
+// quebrar como último recurso e o valor ficava cortado pelo overflow:
+// hidden do card. Usada só onde precisamos que o valor possa quebrar.
+function formatCurrencyWrappable(value) {
+  return formatCurrency(value).replace(/\u00A0/g, " ");
+}
+
 // Autofit dos valores dos cards de resumo (Receitas/Despesas/Saldo): em vez
 // de confiar só no clamp() em CSS (que precisa "adivinhar" um piso de
 // tamanho que sirva pra qualquer valor, e acabava cortando valores maiores
@@ -3702,9 +3713,9 @@ function renderFinances() {
   const saldo       = saldoAnterior + receitas - despesas;
   const usedPct     = receitas > 0 ? Math.min(100, Math.round((despesas / receitas) * 100)) : 0;
 
-  document.querySelector("#finReceitas").textContent  = formatCurrency(receitas);
-  document.querySelector("#finDespesas").textContent  = formatCurrency(despesas);
-  document.querySelector("#finSaldo").textContent     = formatCurrency(saldo);
+  document.querySelector("#finReceitas").textContent  = formatCurrencyWrappable(receitas);
+  document.querySelector("#finDespesas").textContent  = formatCurrencyWrappable(despesas);
+  document.querySelector("#finSaldo").textContent     = formatCurrencyWrappable(saldo);
   document.querySelector("#finSaldoCard").style.setProperty("--saldo-color", saldo >= 0 ? "var(--green)" : "var(--red)");
   fitCurrencyValues("finReceitas", "finDespesas", "finSaldo");
   const saldoCardEl = document.querySelector("#finSaldoCard");
@@ -4225,12 +4236,7 @@ function openNewCategoryPrompt(prefillName) {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
           <input type="text" id="emojiSearchInput" placeholder="Pesquisar ícone... (ex.: mercado, carro, saúde)" autocomplete="off" />
         </label>
-        <div id="emojiGroupTabs" class="new-category-tabs">
-          ${groups.map((g, i) => `
-            <button type="button" class="new-category-tab${i === 0 ? " active" : ""}" data-group="${g.key}">${g.label}</button>
-          `).join("")}
-        </div>
-        <div id="emojiPicker" class="new-category-emoji-grid"></div>
+        <div id="emojiPicker" class="new-category-icon-list"></div>
         <p id="emojiNoResults" class="new-category-empty" hidden>Nenhum ícone encontrado. Tente outro termo.</p>
 
         <p class="new-category-label">Cor da categoria</p>
@@ -4266,12 +4272,10 @@ function openNewCategoryPrompt(prefillName) {
 
   let selectedEmoji = groups[0].icons[0][0];
   let selectedColor = colorOptions[0];
-  let activeGroupKey = groups[0].key;
   let searchQuery = "";
 
   const emojiPickerEl = modal.querySelector("#emojiPicker");
   const emojiNoResultsEl = modal.querySelector("#emojiNoResults");
-  const emojiTabsEl = modal.querySelector("#emojiGroupTabs");
   const emojiSearchInput = modal.querySelector("#emojiSearchInput");
   const previewIconEl = modal.querySelector("#newCategoryPreviewIcon");
   const previewNameEl = modal.querySelector("#newCategoryPreviewName");
@@ -4290,26 +4294,41 @@ function openNewCategoryPrompt(prefillName) {
     previewNameEl.textContent = name || "Nome da categoria";
   }
 
-  // Renderiza o grid de ícones: em modo normal mostra o grupo/aba ativa;
-  // enquanto a pessoa digita na busca, ignora as abas e mostra o resultado
-  // filtrado em todos os grupos de uma vez (por emoji + nome, sem acento).
+  // Renderiza a lista de ícones como seções com título (🏠 Casa, 🍔
+  // Alimentação...), tudo dentro do mesmo scroll do modal — sem abas
+  // escondidas pra trocar de grupo. É o mesmo padrão já usado (e já
+  // comprovadamente confiável) no picker de categoria existente
+  // (ver openCategoryPicker / .cat-picker-section). As abas horizontais
+  // que existiam antes aqui renderizavam em branco em alguns celulares
+  // (bug de scroll aninhado no Safari do iOS) — uma lista única elimina
+  // esse risco de vez, ao custo de precisar rolar mais pra ver tudo, o
+  // que a busca por texto resolve pra quem já sabe o que quer.
   function renderEmojiGrid() {
-    let icons;
+    let sections;
     if (searchQuery) {
       const q = normalizeForSearch(searchQuery);
-      icons = NEW_CATEGORY_ICON_FLAT.filter((it) => normalizeForSearch(it.name).includes(q))
-        .map((it) => [it.emoji, it.name]);
+      const matches = NEW_CATEGORY_ICON_FLAT.filter((it) => normalizeForSearch(it.name).includes(q));
+      sections = matches.length
+        ? [{ label: "🔎 Resultados", icons: matches.map((it) => [it.emoji, it.name]) }]
+        : [];
     } else {
-      const group = groups.find((g) => g.key === activeGroupKey) || groups[0];
-      icons = group.icons;
+      sections = groups;
     }
 
-    emojiNoResultsEl.hidden = icons.length > 0;
-    emojiPickerEl.hidden = icons.length === 0;
+    emojiNoResultsEl.hidden = sections.length > 0;
+    emojiPickerEl.hidden = sections.length === 0;
 
-    emojiPickerEl.innerHTML = icons.map(([emoji, name]) => `
-      <button type="button" class="cat-emoji-btn${emoji === selectedEmoji ? " active" : ""}" data-emoji="${emoji}" title="${escapeHtml(name)}" aria-label="${escapeHtml(name)}">${emoji}</button>
+    emojiPickerEl.innerHTML = sections.map((section) => `
+      <div class="new-category-icon-section">
+        <p class="new-category-icon-section-title">${section.label}</p>
+        <div class="new-category-emoji-grid">
+          ${section.icons.map(([emoji, name]) => `
+            <button type="button" class="cat-emoji-btn${emoji === selectedEmoji ? " active" : ""}" data-emoji="${emoji}" title="${escapeHtml(name)}" aria-label="${escapeHtml(name)}">${emoji}</button>
+          `).join("")}
+        </div>
+      </div>
     `).join("");
+
     emojiPickerEl.querySelectorAll(".cat-emoji-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
         selectedEmoji = btn.dataset.emoji;
@@ -4322,26 +4341,11 @@ function openNewCategoryPrompt(prefillName) {
   renderEmojiGrid();
   updatePreview();
 
-  modal.querySelectorAll(".new-category-tab").forEach((tab) => {
-    tab.addEventListener("click", () => {
-      activeGroupKey = tab.dataset.group;
-      modal.querySelectorAll(".new-category-tab").forEach((t) => t.classList.remove("active"));
-      tab.classList.add("active");
-      // Escolher uma aba sempre volta pro modo "navegação por categoria",
-      // mesmo que a pessoa tivesse digitado algo na busca antes.
-      if (searchQuery) { searchQuery = ""; emojiSearchInput.value = ""; }
-      emojiTabsEl.classList.remove("is-hidden");
-      emojiPickerEl.scrollIntoView({ block: "nearest", behavior: "smooth" });
-      renderEmojiGrid();
-    });
-  });
-
   // Busca: filtra ícones de todos os grupos por nome (ex.: "mercado",
-  // "carro"); some com as abas enquanto há texto, pra deixar claro que a
-  // busca cobre tudo, não só o grupo selecionado.
+  // "carro") e mostra um resultado único, em vez de navegar grupo por
+  // grupo — cobre tudo de uma vez.
   emojiSearchInput.addEventListener("input", () => {
     searchQuery = emojiSearchInput.value;
-    emojiTabsEl.classList.toggle("is-hidden", Boolean(searchQuery));
     renderEmojiGrid();
   });
 
