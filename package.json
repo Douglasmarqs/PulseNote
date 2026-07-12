@@ -2,11 +2,25 @@
   "name": "pulsenote",
   "private": true,
   "version": "1.0.0",
-  "description": "PulseNote — notas, tarefas, finanças e metas com sincronização na nuvem.",
+  "type": "commonjs",
+
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+
   "engines": {
     "node": "20.x"
   },
+
   "dependencies": {
-    "firebase-admin": "^12.7.0"
+    "@vitejs/plugin-react": "^4.3.1",
+    "firebase": "^11.0.0",
+    "firebase-admin": "^12.7.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "vite": "^5.4.0",
+    "vite-plugin-pwa": "^0.20.5"
   }
 }
