@@ -4,10 +4,35 @@
 (function () {
   "use strict";
 
-  // ── Registra o Service Worker ──────────────────────────────────
+  // ── Registra o Service Worker e garante que atualizações realmente
+  //    apareçam ────────────────────────────────────────────────────
+  // Problema que isso resolve: bumpar CACHE_NAME (ex.: v6 → v7) faz o
+  // navegador instalar o novo Service Worker em segundo plano, mas isso
+  // sozinho NÃO recarrega o JS/CSS já carregado na aba aberta — a pessoa
+  // continuava vendo o app.js/styles.css antigos até fechar e reabrir o
+  // app várias vezes (às vezes nem isso resolvia, por causa do cache
+  // HTTP normal do navegador por baixo do cache do Service Worker).
+  // Com o listener de "controllerchange" abaixo, assim que o novo SW
+  // assume o controle da página, a gente recarrega automaticamente —
+  // dessa forma toda atualização aparece na primeira visita depois do
+  // deploy, sem exigir nenhuma ação manual da pessoa.
   if ("serviceWorker" in navigator) {
+    let reloadedForUpdate = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (reloadedForUpdate) return; // nunca recarrega em loop
+      reloadedForUpdate = true;
+      window.location.reload();
+    });
+
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("/sw.js").catch((err) => {
+      navigator.serviceWorker.register("/sw.js").then((reg) => {
+        // Além de reagir a atualizações que cheguem sozinhas, força uma
+        // checagem ativa por uma versão nova toda vez que o app abre —
+        // sem isso, o navegador só reverifica o sw.js periodicamente por
+        // conta própria (pode levar até 24h), então um redeploy recente
+        // podia demorar bastante pra ser notado.
+        reg.update().catch(() => {});
+      }).catch((err) => {
         console.warn("Service Worker não registrado:", err);
       });
     });
