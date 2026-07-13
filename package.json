@@ -6,12 +6,12 @@
 
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "echo 'PulseNote é um site estático + funções serverless — nenhum build é necessário.'",
     "preview": "vite preview"
   },
 
   "engines": {
-    "node": "20.x"
+    "node": "24.x"
   },
 
   "dependencies": {

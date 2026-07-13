@@ -4,21 +4,20 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#14182B" />
-    <meta name="description" content="BookVerse — o app que torna a leitura um hábito diário." />
-    <link rel="icon" type="image/png" href="/favicon.png" />
-    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <title>BookVerse</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap"
-      rel="stylesheet"
-    />
+    <title>PulseNote</title>
+    <!--
+      Este é o alvo do rewrite "catch-all" em vercel.json ("/(.*)" -> "/index.html").
+      Qualquer caminho que não bata com nenhuma rota conhecida (/login, /app,
+      /forgot-password, /privacy, arquivos estáticos) cai aqui. Como o PulseNote
+      não é uma SPA de verdade (é HTML/JS puro por página, servido de src/),
+      este arquivo só existe pra mandar a pessoa pro lugar certo — quem não
+      estiver logado já é redirecionado pro /login de dentro do próprio
+      onAuthStateChanged em src/app.js quando chega em /app.
+    -->
+    <meta http-equiv="refresh" content="0; url=/app" />
+    <script>window.location.replace("/app");</script>
   </head>
   <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
+    <p>Redirecionando para o PulseNote… <a href="/app">clique aqui</a> se não acontecer automaticamente.</p>
   </body>
 </html>
