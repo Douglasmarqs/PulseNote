@@ -1171,6 +1171,12 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 .note-more-details > label { margin-top: 10px; }
 
 .note-save-btn { flex: 1; justify-content: center; height: 46px; font-size: 0.95rem; }
+
+/* Botão "Salvar compromisso" — mesmo tratamento do botão de notas: fica
+   no final do formulário (depois de todos os campos), ocupando a largura
+   toda, em vez de ficar isolado ao lado do título antes de qualquer campo
+   preenchido (posição antiga, confusa e inconsistente com Notas/Tarefas). */
+.event-save-btn { width: 100%; justify-content: center; height: 46px; font-size: 0.95rem; }
 .form-actions .ghost-button { flex: 0 0 auto; width: auto; padding: 10px 18px; }
 
 /* Note filters */
@@ -1605,6 +1611,40 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 }
 .toast.show { opacity: 1; transform: translateY(0); }
 
+/* ---------- SYNC STATUS PILL ---------- */
+/* Antes era criado só com estilo inline (JS), então não dava pra reposicionar
+   no mobile — ficava fixo a 24px do fundo e acabava sobrepondo a barra de
+   navegação inferior, cobrindo o rótulo da aba ativa (parecia que a barra
+   "quebrou"/mudou de nome). Agora é uma classe de verdade, então o media
+   query abaixo consegue subir o indicador para cima da barra. */
+.sync-status {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 7px 16px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  z-index: 998;
+  transition: opacity 300ms;
+  pointer-events: auto;
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+  color: var(--text2);
+  cursor: default;
+  max-width: 88vw;
+  text-align: center;
+  opacity: 0;
+}
+.sync-status.is-visible { opacity: 1; }
+.sync-status.is-actionable { cursor: pointer; }
+.sync-status[data-status="saving"]  { color: var(--accent); }
+.sync-status[data-status="saved"]   { color: var(--green); }
+.sync-status[data-status="offline"] { color: var(--orange); }
+.sync-status[data-status="error"]   { color: var(--red); }
+
 /* ---------- CELEBRATION ---------- */
 .celebration-burst { position: fixed; inset: 0; z-index: 100; pointer-events: none; }
 .celebration-burst span {
@@ -1855,7 +1895,19 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 
   /* Mobile tasks */
   .board-toolbar { flex-direction: column; }
-  .inline-form { flex-direction: column; }
+  .inline-form {
+    flex-direction: column;
+    background: var(--surface);
+    border: 1.5px solid var(--line);
+    border-radius: 20px;
+    padding: 16px;
+    box-shadow: var(--shadow-card);
+  }
+  .inline-form .primary-button {
+    width: 100%;
+    justify-content: center;
+    height: 46px;
+  }
   .task-board { grid-template-columns: 1fr; }
 
   /* Mobile calendar */
@@ -1867,8 +1919,52 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   /* Toast above nav */
   .toast { bottom: calc(var(--nav-height) + 12px); right: 16px; left: 16px; text-align: center; }
 
+  /* Indicador de sincronização também acima da barra — e mais alto ainda
+     que o toast, para nunca sobrepor um ao outro quando os dois aparecem
+     ao mesmo tempo (ex.: "Tarefa adicionada" + "Salvando..."). */
+  .sync-status { bottom: calc(var(--nav-height) + 62px); z-index: 90; }
+
   /* Form grid 1 col on mobile */
   .form-grid { grid-template-columns: 1fr; }
+
+  /* Nota — linha de prioridade/checklist: em telas estreitas, 3 pílulas
+     cabiam numa linha e a 4ª ("Urgente") sobrava sozinha embaixo, e o botão
+     "Checklist" ficava boiando numa 3ª linha isolada. Em vez de depender de
+     quebra automática (flex-wrap), a prioridade vira uma grade de 4 colunas
+     iguais — sempre cabe tudo numa linha só — e o checklist fica em sua
+     própria linha, ocupando a largura toda, como uma ação separada e clara. */
+  .note-quick-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .note-priority-picker {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    width: 100%;
+  }
+  .note-priority-dot {
+    justify-content: center;
+    padding: 8px 4px;
+    font-size: 0.72rem;
+    gap: 4px;
+  }
+  .note-checklist-toggle {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+  }
+
+  /* Cartão de anotação — os 4 botões de ação (Editar/Tarefa/.md/Excluir)
+     quebravam de forma imprevisível (3 numa linha + o excluir sozinho
+     embaixo). Uma grade fixa de 3 colunas + 1 coluna estreita para o ícone
+     de excluir garante a mesma organização sempre, em qualquer nota. */
+  .note-card .card-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr auto;
+  }
+  .note-card .card-actions button {
+    padding: 0 6px;
+  }
 }
 
 /* Note grid já se adapta sozinha em telas grandes via auto-fill */
@@ -2491,34 +2587,23 @@ align-items:stretch;
   background: var(--surface);
   border-radius: 18px;
   border: 1.5px solid var(--line);
-  padding: 16px 14px;
-  display: grid;
-  gap: 6px;
   box-shadow: var(--shadow-card);
   transition: transform 180ms ease, box-shadow 180ms ease;
   position: relative;
-  overflow: hidden;
-  min-width: 0;
   /* Container query: o tamanho do valor abaixo escala com a largura do
      próprio card (não do viewport), então funciona igual em 2 ou 3
      colunas, mobile ou desktop, sem precisar de breakpoints manuais. */
   container-type: inline-size;
 
-min-width:0;
-width:100%;
-overflow:hidden;
-
-min-height:96px;
-padding:16px 14px;
-display:flex;
-flex-direction:column;
-justify-content:center;
-gap:8px;
-overflow:hidden;
-
-min-height:92px;
-padding:16px;
-overflow:hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px;
+  min-height: 92px;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .fin-summary-card::before {
@@ -2823,19 +2908,17 @@ align-items:stretch;
   .fin-form-row { grid-template-columns: 1fr; }
   .fin-date-input { width: 100%; }
   .fin-left .panel, .fin-right .panel, .fin-calendar-card { padding: 14px; }
-  .fin-summary-card{ padding: 8px 6px; gap: 2px; min-width: 0; 
-min-width:0;
-width:100%;
-overflow:hidden;
-
-min-height:96px;
-padding:16px 14px;
-display:flex;
-flex-direction:column;
-justify-content:center;
-gap:8px;
-overflow:hidden;
-}
+  .fin-summary-card{
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 10px 8px;
+    gap: 4px;
+    min-height: 76px;
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
+  }
   .fin-sum-icon { display: none; }
   .fin-summary-grid{
 display:grid;

@@ -125,14 +125,7 @@ function showSyncStatus(status, detail) {
   if (!el) {
     el = document.createElement("div");
     el.id = "syncStatus";
-    el.style.cssText = `
-      position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
-      padding:7px 16px;border-radius:999px;font-size:0.78rem;font-weight:700;
-      z-index:9999;transition:opacity 300ms;pointer-events:auto;
-      background:var(--surface,#fff);border:1.5px solid var(--line,#e8ecf2);
-      box-shadow:0 4px 16px rgba(0,0,0,0.1);color:var(--text2,#4a5568);
-      cursor:default;max-width:88vw;text-align:center;
-    `;
+    el.className = "sync-status";
     el.addEventListener("click", () => {
       if (_lastSyncStatus === "error" || _lastSyncStatus === "offline") {
         _syncRetries = 0;
@@ -143,17 +136,20 @@ function showSyncStatus(status, detail) {
   }
   _lastSyncStatus = status;
   const states = {
-    saving:  { text: "⏳ Salvando...",          color: "var(--accent,#6c5ce7)" },
-    saved:   { text: "✅ Salvo na nuvem",       color: "var(--green,#34c759)"  },
-    offline: { text: "📵 Sem conexão — toque para tentar de novo",  color: "var(--orange,#ff9500)" },
-    error:   { text: `❌ ${detail || "Erro ao salvar"} — toque para tentar de novo`, color: "var(--red,#ff3b30)" },
+    saving:  { text: "⏳ Salvando..." },
+    saved:   { text: "✅ Salvo na nuvem" },
+    offline: { text: "📵 Sem conexão — toque para tentar de novo" },
+    error:   { text: `❌ ${detail || "Erro ao salvar"} — toque para tentar de novo` },
   };
   const s = states[status] || states.saved;
-  el.textContent   = s.text;
-  el.style.color   = s.color;
-  el.style.opacity = "1";
-  el.style.cursor  = (status === "error" || status === "offline") ? "pointer" : "default";
-  if (status === "saved") setTimeout(() => { el.style.opacity = "0"; }, 1800);
+  el.textContent = s.text;
+  el.dataset.status = status;
+  el.classList.add("is-visible");
+  el.classList.toggle("is-actionable", status === "error" || status === "offline");
+  clearTimeout(showSyncStatus._hideTimer);
+  if (status === "saved") {
+    showSyncStatus._hideTimer = setTimeout(() => el.classList.remove("is-visible"), 1800);
+  }
 }
 
 // Remove valores "undefined" em qualquer profundidade (objetos e arrays).
@@ -182,7 +178,12 @@ function friendlySyncError(err) {
   if (code.includes("unauthenticated")) return "Sessão expirada. Faça login novamente";
   if (code.includes("unavailable") || code.includes("network")) return "Sem conexão com o servidor";
   if (code.includes("resource-exhausted") || err?.message?.includes("exceeds the maximum")) return "Dados grandes demais para salvar";
-  return "Erro ao salvar";
+  // Antes caía sempre em "Erro ao salvar" genérico, sem pista nenhuma do que
+  // houve — quem visse o aviso não tinha como saber se era regra do
+  // Firestore, dado inválido, etc. Agora mostra o motivo cru (código ou
+  // mensagem original) junto, pra dar algo concreto para investigar.
+  const raw = code || err?.message;
+  return raw ? `Erro ao salvar (${raw})` : "Erro ao salvar";
 }
 
 // ── Salva o state atual no Firestore (documento do usuário) ───
@@ -344,7 +345,7 @@ const appReady = new Promise((resolve) => {
       },
       (err) => {
         console.error("Erro ao escutar Firestore:", err);
-        showSyncStatus("error");
+        showSyncStatus("error", friendlySyncError(err));
         if (!resolved) { resolved = true; resolve(); } // segue com cache local/defaults
       }
     );
@@ -1408,6 +1409,7 @@ function setView(view) {
   // de fato na aba (aqui, com o card já visível e com largura real), a
   // gente reexecuta o autofit pra medir e ajustar certo.
   if (view === "finances") fitCurrencyValues("finReceitas", "finDespesas", "finSaldo");
+  if (view === "dashboard") fitCurrencyValues("summaryFinSaldo", "dashFinReceitas", "dashFinDespesas", "dashFinSaldo");
 }
 
 function saveNote(event) {
@@ -1648,7 +1650,8 @@ function renderDashboard() {
   const pendingEl = document.querySelector("#summaryTasksPending");
   if (pendingEl) pendingEl.textContent = pendingTasks;
   const saldoEl = document.querySelector("#summaryFinSaldo");
-  if (saldoEl) { saldoEl.textContent = formatCurrency(monthSaldo); saldoEl.style.color = monthSaldo >= 0 ? "var(--green)" : "var(--red)"; }
+  if (saldoEl) { saldoEl.textContent = formatCurrencyWrappable(monthSaldo); saldoEl.style.color = monthSaldo >= 0 ? "var(--green)" : "var(--red)"; }
+  fitCurrencyValues("summaryFinSaldo");
   const eventEl = document.querySelector("#summaryNextEvent");
   if (eventEl) eventEl.textContent = nextEvent ? `${nextEvent.title} · ${formatDate(nextEvent.date)}` : "Nenhum";
   const goalEl = document.querySelector("#summaryTopGoal");
@@ -1689,9 +1692,9 @@ function renderDashFinance() {
   const usedPct = receitas > 0 ? Math.min(100, Math.round((despesas / receitas) * 100)) : 0;
   el.innerHTML = `
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px">
-      <div style="text-align:center"><div style="font-size:0.75rem;color:var(--muted);font-weight:600;margin-bottom:2px">Receitas</div><strong style="color:var(--green);font-size:1rem;font-weight:800">${formatCurrency(receitas)}</strong></div>
-      <div style="text-align:center"><div style="font-size:0.75rem;color:var(--muted);font-weight:600;margin-bottom:2px">Despesas</div><strong style="color:var(--red);font-size:1rem;font-weight:800">${formatCurrency(despesas)}</strong></div>
-      <div style="text-align:center"><div style="font-size:0.75rem;color:var(--muted);font-weight:600;margin-bottom:2px">Saldo</div><strong style="color:${saldo >= 0 ? "var(--green)" : "var(--red)"};font-size:1rem;font-weight:800">${formatCurrency(saldo)}</strong></div>
+      <div style="text-align:center;min-width:0;overflow:hidden"><div style="font-size:0.75rem;color:var(--muted);font-weight:600;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Receitas</div><strong id="dashFinReceitas" style="display:block;color:var(--green);font-size:1rem;font-weight:800;white-space:nowrap">${formatCurrencyWrappable(receitas)}</strong></div>
+      <div style="text-align:center;min-width:0;overflow:hidden"><div style="font-size:0.75rem;color:var(--muted);font-weight:600;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Despesas</div><strong id="dashFinDespesas" style="display:block;color:var(--red);font-size:1rem;font-weight:800;white-space:nowrap">${formatCurrencyWrappable(despesas)}</strong></div>
+      <div style="text-align:center;min-width:0;overflow:hidden"><div style="font-size:0.75rem;color:var(--muted);font-weight:600;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Saldo</div><strong id="dashFinSaldo" style="display:block;color:${saldo >= 0 ? "var(--green)" : "var(--red)"};font-size:1rem;font-weight:800;white-space:nowrap">${formatCurrencyWrappable(saldo)}</strong></div>
     </div>
     <div style="display:flex;align-items:center;gap:8px">
       <div class="progress-track" style="flex:1;height:8px"><div style="width:${usedPct}%;height:100%;border-radius:999px;background:${usedPct > 80 ? "var(--red)" : usedPct > 60 ? "var(--orange)" : "var(--green)"};transition:width 400ms"></div></div>
@@ -1703,6 +1706,7 @@ function renderDashFinance() {
       return `<div class="connector-row"><span style="font-size:0.88rem;font-weight:600">${isReceita ? "💰" : cat.label.split(" ")[0]} ${escapeHtml(f.description)}</span><span style="font-weight:800;color:${isReceita ? "var(--green)" : "var(--red)"}">${isReceita ? "+" : "-"}${formatCurrency(f.amount)}</span></div>`;
     }).join("")}
   `;
+  fitCurrencyValues("dashFinReceitas", "dashFinDespesas", "dashFinSaldo");
 }
 
 function calculateStreak() {
@@ -3636,8 +3640,14 @@ function fitCurrencyValues(...ids) {
     ids.forEach((id) => {
       const el = document.getElementById(id);
       if (!el) return;
-      const maxPx = 19.2; // 1.2rem — teto do design original
-      const minPx = 9.5;  // nunca fica ilegível, mesmo em telas minúsculas
+      // Teto = o tamanho de fonte que o CSS já definiria naturalmente pra
+      // esse elemento (clamp() do Financeiro, 1.7rem do card do dashboard,
+      // etc.). Lendo isso em vez de usar um valor fixo, a mesma função
+      // serve pra cards de tamanhos diferentes sem encolher um valor que
+      // já cabia perfeitamente do jeito dele.
+      el.style.fontSize = "";
+      const maxPx = parseFloat(getComputedStyle(el).fontSize) || 19.2;
+      const minPx = Math.min(9.5, maxPx); // nunca fica ilegível, mesmo em telas minúsculas
       // Mede sempre numa linha só (nowrap), senão o CSS já quebraria o
       // texto sozinho e o scrollWidth pareceria "cabendo" mesmo quando dá
       // pra reduzir a fonte e caber tudo numa linha. white-space volta a
@@ -3667,6 +3677,9 @@ function fitCurrencyValues(...ids) {
 window.addEventListener("resize", () => {
   if (document.querySelector("#financesView.active-view")) {
     fitCurrencyValues("finReceitas", "finDespesas", "finSaldo");
+  }
+  if (document.querySelector("#dashboardView.active-view")) {
+    fitCurrencyValues("summaryFinSaldo", "dashFinReceitas", "dashFinDespesas", "dashFinSaldo");
   }
 });
 
@@ -4974,19 +4987,3 @@ window.applyRecurrent = applyRecurrent;
 window.toggleSkipRecurrentMonth = toggleSkipRecurrentMonth;
 window.goToFinMonth = goToFinMonth;
 window.reopenMonth = reopenMonth;
-
-
-function fitFinanceCards(){
- const values=document.querySelectorAll("#finReceitas,#finDespesas,#finSaldo");
- values.forEach(el=>{
-   if(!el)return;
-   let size=24;
-   el.style.fontSize=size+"px";
-   while(el.scrollWidth>el.clientWidth && size>15){
-      size--;
-      el.style.fontSize=size+"px";
-   }
- });
-}
-window.addEventListener('resize',fitFinanceCards);
-requestAnimationFrame(fitFinanceCards);
