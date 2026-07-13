@@ -1800,8 +1800,7 @@ function renderNotes() {
           <div class="card-actions">
             <button onclick="editNote('${note.id}')">✏️ Editar</button>
             <button onclick="convertNoteToTask('${note.id}')">➡️ Tarefa</button>
-            <button onclick="exportNoteMarkdown('${note.id}')">⬇️ .md</button>
-            <button onclick="deleteNote('${note.id}')">🗑️</button>
+            <button class="danger-action" onclick="deleteNote('${note.id}')" title="Excluir" aria-label="Excluir">🗑️</button>
           </div>
         </article>
       `;
