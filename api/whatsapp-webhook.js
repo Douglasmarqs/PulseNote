@@ -12,12 +12,12 @@
 //      publicado, ex.: https://seu-dominio.app/api/whatsapp-webhook)
 //      como Webhook lá, junto com WHATSAPP_VERIFY_TOKEN.
 //
-//   2) DECISÃO DE PRODUTO PENDENTE — como vincular o número de WhatsApp
-//      à conta do PulseNote? Este arquivo já espera uma coleção
-//      `whatsappLinks/{numero} → { uid }` no Firestore, mas a tela em
-//      Configurações para gerar esse vínculo (ex.: um código de 6
-//      dígitos que a pessoa manda uma vez pelo WhatsApp) ainda não
-//      existe — é o próximo passo, fora do escopo deste arquivo.
+//   2) VINCULAÇÃO — implementada. A tela Configurações > Integrações >
+//      WhatsApp (src/index.html + src/app.js) gera um código de 6
+//      dígitos, válido por 10 min, salvo em
+//      userData/{uid}.data.whatsappLinkCode. A pessoa manda
+//      "vincular 123456" pra este número, o handleLinkCommand() abaixo
+//      confirma e cria whatsappLinks/{numero} → { uid }.
 //
 //   3) Hoje só entende TEXTO. Foto de cupom e áudio têm TODO marcado
 //      abaixo — o mesmo Gemini aceita imagem/áudio, só muda o que é
@@ -114,10 +114,90 @@ async function sendWhatsAppMessage(to, body) {
   }
 }
 
-// Ver TODO #2 no topo — hoje só funciona se este documento já existir.
+// Só retorna algo depois que handleLinkCommand() já criou o vínculo.
 async function findUidForPhone(fb, phone) {
   const snap = await fb.firestore().collection("whatsappLinks").doc(phone).get();
   return snap.exists ? snap.data().uid : null;
+}
+
+// Grava o vínculo confirmado (mesma técnica em duas escritas de
+// appendFinanceEntry: lê o doc inteiro, mescla só os campos do vínculo,
+// escreve de volta o objeto "data" inteiro — evita apagar outros campos
+// que porventura não estejam carregados aqui).
+async function confirmWhatsAppLink(fb, uid, phone) {
+  const ref = fb.firestore().collection("userData").doc(uid);
+  await fb.firestore().runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const current = snap.exists ? snap.data() : { data: {} };
+    const state = current.data || {};
+    tx.set(
+      ref,
+      {
+        data: {
+          ...state,
+          whatsappLinkCode: null,
+          whatsappLinkCodeExpiresAt: null,
+          whatsappLinkedPhone: phone,
+        },
+        updatedAt: new Date().toISOString(),
+      },
+      { merge: true }
+    );
+  });
+}
+
+// Trata "vincular 123456" — o único jeito de um número NOVO (ainda sem
+// doc em whatsappLinks) virar conhecido pelo webhook. Ver tela
+// Configurações > Integrações > WhatsApp em src/index.html, que gera
+// esse código de 6 dígitos e grava em userData/{uid}.data.whatsappLinkCode
+// (válido por 10 min).
+async function handleLinkCommand(fb, phone, text) {
+  const match = text.trim().match(/^vincular\s+(\d{4,8})$/i);
+  const code = match?.[1];
+  if (!code) {
+    await sendWhatsAppMessage(phone, 'Pra vincular, mande exatamente: "vincular" seguido do código de 6 dígitos que aparece em Configurações no PulseNote.');
+    return;
+  }
+
+  const db = fb.firestore();
+
+  const existingLink = await db.collection("whatsappLinks").doc(phone).get();
+  if (existingLink.exists) {
+    await sendWhatsAppMessage(phone, "Esse número já está vinculado a uma conta do PulseNote ✅");
+    return;
+  }
+
+  // Índice de campo único (data.whatsappLinkCode) é automático no
+  // Firestore — não precisa criar índice composto pra essa query.
+  const snap = await db.collection("userData").where("data.whatsappLinkCode", "==", code).get();
+  if (snap.empty) {
+    await sendWhatsAppMessage(phone, "Código inválido ou já usado. Gere um novo em Configurações > Integrações no PulseNote.");
+    return;
+  }
+
+  // Extremamente improvável, mas por segurança: se por coincidência mais
+  // de uma pessoa tiver esse código pendente ao mesmo tempo, fica com
+  // quem gerou por último (expiresAt mais distante no futuro).
+  let matchUid = null;
+  let matchExpiresAt = 0;
+  const now = Date.now();
+  snap.forEach((docSnap) => {
+    const s = docSnap.data().data || {};
+    const expiresAt = s.whatsappLinkCodeExpiresAt ? new Date(s.whatsappLinkCodeExpiresAt).getTime() : 0;
+    if (expiresAt > now && expiresAt > matchExpiresAt) {
+      matchUid = docSnap.id;
+      matchExpiresAt = expiresAt;
+    }
+  });
+
+  if (!matchUid) {
+    await sendWhatsAppMessage(phone, "Esse código expirou (validade de 10 min). Gere um novo em Configurações > Integrações no PulseNote.");
+    return;
+  }
+
+  await db.collection("whatsappLinks").doc(phone).set({ uid: matchUid, linkedAt: new Date().toISOString() });
+  await confirmWhatsAppLink(fb, matchUid, phone);
+  await sendWhatsAppMessage(phone, '✅ Vinculado! Agora é só mandar uma mensagem tipo "gastei 45 no mercado" que eu lanço direto em Finanças.');
 }
 
 // Categorias fixas + as que o usuário criou (state.customCategories),
@@ -193,6 +273,15 @@ module.exports = async (req, res) => {
 
     const fromPhone = message.from; // formato E.164 sem "+", ex: "5511999999999"
     const fb = getFirebaseAdmin();
+
+    // "vincular 123456" precisa ser tratado ANTES de checar se o número já
+    // é conhecido — é justamente para números novos, ainda sem vínculo,
+    // que esse comando existe.
+    if (message.type === "text" && /^vincular\s+\d{4,8}$/i.test(message.text.body.trim())) {
+      await handleLinkCommand(fb, fromPhone, message.text.body);
+      return res.status(200).end();
+    }
+
     const uid = await findUidForPhone(fb, fromPhone);
 
     if (!uid) {

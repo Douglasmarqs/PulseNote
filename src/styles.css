@@ -3743,6 +3743,20 @@ align-items:stretch;
 }
 .danger-button:hover { background: var(--red); color: #fff; }
 
+.settings-code-input {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-align: center;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface2);
+  color: var(--text);
+  cursor: pointer;
+}
+
 /* ---------- VERIFICAÇÃO DE E-MAIL (gate de acesso) ---------- */
 .verify-gate-overlay {
   position: fixed;

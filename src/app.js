@@ -94,6 +94,12 @@ function bindThemeToggle() {
 
 const BASE_STORAGE_KEY = "pulsenote-state-v1";
 
+// Número (com DDI) do WhatsApp do PulseNote, mostrado em Configurações >
+// Integrações. TROQUE pelo número real assim que ele estiver ativo —
+// hoje aponta pro número de teste do Meta for Developers (Configuração
+// da API > "De"). Formato livre, é só texto exibido pra pessoa.
+const WHATSAPP_BOT_NUMBER = "+1 555 150 1087";
+
 // Retorna a chave de cache ISOLADA para o usuário atual.
 // Isso é essencial: sem isso, o navegador misturaria os dados em cache
 // de contas diferentes logadas no mesmo dispositivo.
@@ -838,6 +844,50 @@ function renderSettings() {
   preview.innerHTML = photoURL
     ? `<img src="${photoURL}" alt="Foto de perfil"/>`
     : initial;
+
+  renderWhatsAppSettings();
+}
+
+// Mostra o estado atual da integração com WhatsApp em Configurações:
+// vinculado (com o número) ou não (com o código pendente, se houver um
+// ainda válido). Chamada sempre que renderSettings() roda — inclusive
+// quando o onSnapshot do Firestore traz a confirmação do vínculo feita
+// pelo webhook, então a tela atualiza sozinha, sem precisar recarregar.
+function renderWhatsAppSettings() {
+  const linkedBlock   = document.getElementById("whatsappLinkedBlock");
+  const unlinkedBlock = document.getElementById("whatsappUnlinkedBlock");
+  const codeBlock     = document.getElementById("whatsappCodeBlock");
+  if (!linkedBlock || !unlinkedBlock || !state) return;
+
+  if (state.whatsappLinkedPhone) {
+    linkedBlock.hidden   = false;
+    unlinkedBlock.hidden = true;
+    const phoneLabel = document.getElementById("whatsappLinkedPhoneLabel");
+    if (phoneLabel) phoneLabel.textContent = `+${state.whatsappLinkedPhone}`;
+    return;
+  }
+
+  linkedBlock.hidden   = true;
+  unlinkedBlock.hidden = false;
+
+  const stillValid = state.whatsappLinkCode
+    && state.whatsappLinkCodeExpiresAt
+    && new Date(state.whatsappLinkCodeExpiresAt).getTime() > Date.now();
+
+  if (stillValid) {
+    codeBlock.hidden = false;
+    const codeText = document.getElementById("whatsappCodeText");
+    const numberEl  = document.getElementById("whatsappBotNumberLabel");
+    const expiryEl  = document.getElementById("whatsappCodeExpiry");
+    if (codeText) codeText.value = `vincular ${state.whatsappLinkCode}`;
+    if (numberEl) numberEl.textContent = WHATSAPP_BOT_NUMBER;
+    if (expiryEl) {
+      const mins = Math.max(1, Math.round((new Date(state.whatsappLinkCodeExpiresAt).getTime() - Date.now()) / 60000));
+      expiryEl.textContent = `Válido por mais ${mins} min.`;
+    }
+  } else {
+    codeBlock.hidden = true;
+  }
 }
 
 // Liga todos os eventos da página de Configurações. Chamada uma única vez,
@@ -960,6 +1010,42 @@ function bindSettingsView() {
     if (!confirm("Deseja sair da sua conta?")) return;
     await syncToServer();
     await logout();
+  });
+
+  // ── WhatsApp: gerar código de vinculação ──────────────────────────
+  document.getElementById("settingsWhatsappGenerateBtn")?.addEventListener("click", () => {
+    hideSettingsMsg();
+    const code = String(Math.floor(Math.random() * 1000000)).padStart(6, "0");
+    state.whatsappLinkCode = code;
+    state.whatsappLinkCodeExpiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 min
+    saveState();
+    renderWhatsAppSettings();
+    showToast("📲 Código gerado! Envie a mensagem pelo WhatsApp em até 10 minutos.");
+  });
+
+  // ── WhatsApp: desvincular ──────────────────────────────────────────
+  document.getElementById("settingsWhatsappUnlinkBtn")?.addEventListener("click", async () => {
+    hideSettingsMsg();
+    if (!confirm("Desvincular esse número do WhatsApp? Você pode gerar um novo código depois, a qualquer momento.")) return;
+    try {
+      const token = await currentUser?.getIdToken();
+      const response = await fetch("/api/whatsapp-unlink", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+      });
+      if (!response.ok) throw new Error("falha ao desvincular");
+      // O endpoint já limpou whatsappLinkedPhone no Firestore — o
+      // onSnapshot traz essa mudança de volta e re-renderiza sozinho,
+      // mas atualizamos local na hora pra não esperar o round-trip.
+      state.whatsappLinkedPhone = null;
+      saveState();
+      renderWhatsAppSettings();
+      showSettingsMsg("✅ WhatsApp desvinculado.", "success");
+      showToast("🔌 WhatsApp desvinculado!");
+    } catch (err) {
+      console.error("Erro ao desvincular WhatsApp:", err);
+      showSettingsMsg("Não foi possível desvincular agora. Tente de novo em instantes.", "error");
+    }
   });
 
   // ── Backup: exportar tudo como .json ─────────────────────────────
@@ -1092,6 +1178,12 @@ function normalizeState(parsed) {
   if (!parsed.finGoals) parsed.finGoals = [];
   if (!parsed.finRecurrents) parsed.finRecurrents = [];
   if (parsed.profilePhoto === undefined) parsed.profilePhoto = null;
+  // Vínculo com WhatsApp (ver bindSettingsView > "Integrações" e
+  // api/whatsapp-webhook.js): código de 6 dígitos gerado no app e
+  // confirmado quando a pessoa manda "vincular 123456" pelo WhatsApp.
+  if (parsed.whatsappLinkCode === undefined) parsed.whatsappLinkCode = null;
+  if (parsed.whatsappLinkCodeExpiresAt === undefined) parsed.whatsappLinkCodeExpiresAt = null;
+  if (parsed.whatsappLinkedPhone === undefined) parsed.whatsappLinkedPhone = null;
   // Retrocompatibilidade: lançamentos, tarefas e metas antigos não tinham
   // esses campos — garantimos que existam pra não quebrar o restante do app.
   parsed.tasks.forEach((t) => { if (!t.subtasks) t.subtasks = []; if (t.recurrence === undefined) t.recurrence = null; });
@@ -1112,6 +1204,9 @@ function loadDefaultState() {
     monthClosures: [],
     finGoals: [],
     finRecurrents: [],
+    whatsappLinkCode: null,
+    whatsappLinkCodeExpiresAt: null,
+    whatsappLinkedPhone: null,
   };
 }
 

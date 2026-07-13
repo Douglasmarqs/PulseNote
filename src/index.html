@@ -798,6 +798,41 @@
             <section class="panel">
               <div class="panel-header">
                 <div>
+                  <p class="eyebrow">Integrações</p>
+                  <h2>WhatsApp</h2>
+                </div>
+              </div>
+
+              <div id="whatsappLinkedBlock" hidden>
+                <p class="task-meta" style="margin-bottom:10px">
+                  ✅ Vinculado ao número <strong id="whatsappLinkedPhoneLabel"></strong>. Mande uma mensagem tipo
+                  <em>"gastei 45 no mercado"</em> pelo WhatsApp que eu lanço direto em Finanças.
+                </p>
+                <div class="form-actions">
+                  <button id="settingsWhatsappUnlinkBtn" class="ghost-button danger-button"><span>🔌</span><span>Desvincular</span></button>
+                </div>
+              </div>
+
+              <div id="whatsappUnlinkedBlock">
+                <p class="task-meta" style="margin-bottom:10px">Vincule seu WhatsApp para lançar gastos e receitas direto por mensagem, sem abrir o app.</p>
+
+                <div id="whatsappCodeBlock" hidden style="margin-bottom:14px">
+                  <label style="display:grid;gap:6px">
+                    Envie esta mensagem para <strong id="whatsappBotNumberLabel"></strong> no WhatsApp:
+                    <input id="whatsappCodeText" class="settings-code-input" readonly onclick="this.select()" />
+                  </label>
+                  <p class="task-meta" id="whatsappCodeExpiry"></p>
+                </div>
+
+                <div class="form-actions">
+                  <button id="settingsWhatsappGenerateBtn" class="ghost-button"><span>🔗</span><span>Gerar código de vinculação</span></button>
+                </div>
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <div>
                   <p class="eyebrow">Segurança</p>
                   <h2>Alterar senha</h2>
                 </div>
