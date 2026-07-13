@@ -1158,6 +1158,31 @@ function bindNavigation() {
   document.querySelectorAll("[data-view-shortcut]").forEach((button) => {
     button.addEventListener("click", () => setView(button.dataset.viewShortcut));
   });
+  initDashPanelCollapse();
+}
+
+// Painéis do início (Prioridades do dia, Próximos compromissos,
+// Desempenho semanal, Foco da semana) podem ser minimizados — o estado
+// fica salvo no localStorage por painel, então a tela continua do jeito
+// que a pessoa deixou da última vez que abriu o app.
+function initDashPanelCollapse() {
+  document.querySelectorAll(".dash-panel").forEach((panel) => {
+    const id = panel.dataset.panelId;
+    const btn = panel.querySelector("[data-collapse-toggle]");
+    if (!id || !btn) return;
+    const storageKey = `pn_dash_collapsed_${id}`;
+    const setCollapsed = (collapsed) => {
+      panel.classList.toggle("is-collapsed", collapsed);
+      btn.setAttribute("aria-expanded", String(!collapsed));
+      btn.title = collapsed ? "Expandir" : "Minimizar";
+    };
+    setCollapsed(localStorage.getItem(storageKey) === "1");
+    btn.addEventListener("click", () => {
+      const collapsed = !panel.classList.contains("is-collapsed");
+      setCollapsed(collapsed);
+      localStorage.setItem(storageKey, collapsed ? "1" : "0");
+    });
+  });
 }
 
 function bindForms() {
@@ -1674,8 +1699,8 @@ function renderDashboard() {
     doneTotal > 0 ? "Sua rotina esta ganhando ritmo" : "Complete uma tarefa para iniciar sua sequencia";
   document.querySelector("#streakCount").textContent = `${calculateStreak()} dias`;
 
-  renderList("#todayTasks", state.tasks.filter((task) => task.status !== "Concluida" && task.status !== "Cancelada").slice(0, 5), renderTaskRow, "Nenhuma tarefa pendente.");
-  renderList("#upcomingEvents", nextEvents.sort(sortEvent).slice(0, 5), renderEventRow, "Nenhum compromisso nos proximos dias.");
+  renderList("#todayTasks", state.tasks.filter((task) => task.status !== "Concluida" && task.status !== "Cancelada").slice(0, 5), renderTaskRow, "Nenhuma tarefa pendente.", "empty-state-compact");
+  renderList("#upcomingEvents", nextEvents.sort(sortEvent).slice(0, 5), renderEventRow, "Nenhum compromisso nos proximos dias.", "empty-state-compact");
   renderChart();
   renderGoalSummary();
   renderDashFinance();
@@ -1731,7 +1756,7 @@ function renderChart() {
   chart.innerHTML = days
     .map((date, index) => {
       const label = new Intl.DateTimeFormat("pt-BR", { weekday: "short" }).format(new Date(`${date}T12:00:00`));
-      const height = 18 + (counts[index] / max) * 150;
+      const height = 14 + (counts[index] / max) * 90;
       return `<div class="bar-item"><div class="bar" style="height:${height}px" title="${counts[index]} tarefas"></div><span>${label}</span></div>`;
     })
     .join("");
@@ -1745,7 +1770,8 @@ function renderGoalSummary() {
       const percent = Math.min(100, Math.round((goal.current / goal.target) * 100));
       return `<div class="goal-row"><div><strong>${escapeHtml(goal.title)}</strong><div class="task-meta">${goal.current}/${goal.target}</div></div><span class="pill">${percent}%</span></div>`;
     },
-    "Crie sua primeira meta."
+    "Crie sua primeira meta.",
+    "empty-state-compact"
   );
 }
 
@@ -2303,9 +2329,9 @@ function renderAchievements() {
     .join("");
 }
 
-function renderList(selector, items, renderer, emptyText) {
+function renderList(selector, items, renderer, emptyText, emptyClass = "empty-state") {
   const element = document.querySelector(selector);
-  element.innerHTML = items.length ? items.map(renderer).join("") : `<div class="empty-state">${emptyText}</div>`;
+  element.innerHTML = items.length ? items.map(renderer).join("") : `<div class="${emptyClass}">${emptyText}</div>`;
 }
 
 function formatDate(value) {

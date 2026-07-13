@@ -155,6 +155,22 @@
 }
 :root[data-theme="aurora"] ::selection { background: color-mix(in srgb, var(--accent) 45%, transparent); }
 
+/* No tema escuro, os cartões sólidos (--surface) cobrem quase toda a
+   tela no mobile, sobrando só uma fresta entre eles pra mostrar o
+   degradê de fundo — na intensidade original (12–16%) isso ficava
+   praticamente invisível, e o fundo parecia uma cor chapada sem vida.
+   Aqui a gente reforça só pro escuro (o claro já ficava bem do jeito
+   original) e acrescenta um brilho extra por trás do topo, que é a
+   área mais visível sem nenhum cartão por cima. */
+:root[data-theme="aurora"] body {
+  background:
+    radial-gradient(620px 380px at 12% 0%, color-mix(in srgb, var(--accent) 30%, transparent), transparent 65%),
+    radial-gradient(560px 360px at 100% 8%, color-mix(in srgb, var(--teal) 24%, transparent), transparent 62%),
+    radial-gradient(680px 480px at 50% 115%, color-mix(in srgb, var(--purple) 22%, transparent), transparent 62%),
+    var(--bg);
+  background-attachment: fixed;
+}
+
 /* Modo "Automático" (padrão — sem data-theme, ou data-theme="system"):
    segue a aparência do aparelho. Quando o aparelho está em modo escuro,
    usa a MESMA paleta do Aurora (em vez do antigo "Escuro" neutro), já
@@ -211,6 +227,14 @@
     background: radial-gradient(circle, rgba(79, 224, 255, 0.25), transparent 70%);
     width: 260px;
     height: 260px;
+  }
+  :root:not([data-theme="light"]):not([data-theme="aurora"]) body {
+    background:
+      radial-gradient(620px 380px at 12% 0%, color-mix(in srgb, var(--accent) 30%, transparent), transparent 65%),
+      radial-gradient(560px 360px at 100% 8%, color-mix(in srgb, var(--teal) 24%, transparent), transparent 62%),
+      radial-gradient(680px 480px at 50% 115%, color-mix(in srgb, var(--purple) 22%, transparent), transparent 62%),
+      var(--bg);
+    background-attachment: fixed;
   }
 }
 
@@ -275,6 +299,35 @@ body {
   overflow-x: hidden;
   width: 100%;
   max-width: 100%;
+  position: relative;
+}
+
+/* Textura de grão bem sutil por cima do fundo — no dia a dia, com os
+   cartões sólidos cobrindo boa parte da tela, o degradê acima quase não
+   aparece (só nos vãos entre os cartões), e o fundo escuro acaba parecendo
+   uma cor chapada sem vida. Esse "ruído" leve (gerado por SVG, sem
+   depender de nenhuma imagem externa) dá uma textura quase imperceptível
+   de perto, mas que tira a sensação de "vazio" — o mesmo truque usado em
+   apps premium pra dar um acabamento fosco ao fundo. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.5;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+}
+
+/* O conteúdo real do app precisa ficar acima da textura de grão (que usa
+   position:fixed + z-index:0) — sem isso o app inteiro ficaria "atrás"
+   dela visualmente em navegadores que respeitam a ordem de empilhamento
+   à risca. .app-shell é o único wrapper de topo (ver index.html), então
+   basta erguer ele — todo o resto dentro já acompanha. */
+.app-shell {
+  position: relative;
+  z-index: 1;
 }
 
 button, input, textarea, select {
@@ -745,7 +798,7 @@ p, h1, h2, h3 { margin: 0; }
   border-radius: 20px;
   border: 1.5px solid var(--line);
   box-shadow: var(--shadow-card);
-  padding: 16px;
+  padding: 14px 16px;
 }
 
 .wide { grid-column: span 2; }
@@ -756,7 +809,7 @@ p, h1, h2, h3 { margin: 0; }
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 12px;
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 
 /* Os dois "lados" de um cabeçalho (ex.: título + selos de Receita/Despesa)
@@ -768,15 +821,37 @@ p, h1, h2, h3 { margin: 0; }
 }
 
 .panel-header .eyebrow {
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--muted);
-  margin-bottom: 2px;
+  margin-bottom: 1px;
 }
 
-.panel-header h2 { font-size: 1rem; font-weight: 700; color: var(--text); }
+.panel-header h2 { font-size: 0.94rem; font-weight: 700; color: var(--text); }
+
+/* ---------- DASHBOARD PANELS — compactos e recolhíveis ---------- */
+/* Antes cada painel do início vinha sempre expandido, com cabeçalho maior
+   e listas vazias em caixas tracejadas de 24px de padding — em uma conta
+   nova (tudo vazio), a tela virava uma sequência de blocos grandes sem
+   informação nenhuma. Agora cada painel pode ser minimizado (o estado
+   fica salvo por painel, ver initDashPanelCollapse em app.js) e o
+   cabeçalho/conteúdo em si ocupam bem menos espaço. */
+.dash-panel-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+
+.dash-panel-collapse-btn { font-size: 0.8rem; transition: transform 200ms ease, background 160ms, color 160ms; }
+.dash-panel.is-collapsed .dash-panel-collapse-btn { transform: rotate(-90deg); }
+
+.dash-panel-body {
+  display: grid;
+  overflow: hidden;
+  transition: grid-template-rows 220ms ease;
+  grid-template-rows: 1fr;
+}
+.dash-panel-body > * { min-height: 0; overflow: hidden; }
+.dash-panel.is-collapsed .dash-panel-body { grid-template-rows: 0fr; }
+.dash-panel.is-collapsed .panel-header { margin-bottom: 0; }
 
 .icon-button {
   width: 34px;
@@ -954,7 +1029,7 @@ p, h1, h2, h3 { margin: 0; }
   grid-template-columns: repeat(7, 1fr);
   align-items: end;
   gap: 8px;
-  min-height: 180px;
+  min-height: 120px;
   padding: 4px 0;
 }
 
@@ -964,7 +1039,7 @@ p, h1, h2, h3 { margin: 0; }
   align-items: center;
   justify-content: flex-end;
   gap: 6px;
-  height: 170px;
+  height: 110px;
   font-size: 0.72rem;
   color: var(--muted);
   font-weight: 600;
@@ -1083,6 +1158,12 @@ input[type="time"] {
   appearance: none;
   min-height: 42px;
   line-height: 1.3;
+  /* iOS Safari centraliza o texto desses dois tipos de campo por padrão,
+     mesmo com appearance:none — sem isso aqui, "13 de jul. de 2026" e
+     "09:00" ficavam alinhados ao centro enquanto os campos de texto ao
+     redor (Título, Local) ficavam à esquerda, dando um ar desalinhado
+     ao formulário inteiro. */
+  text-align: left;
 }
 
 .form-grid {
@@ -1651,6 +1732,19 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   font-size: 0.9rem;
 }
 
+/* Variante enxuta usada só nos painéis do início (ver renderList em
+   app.js) — a caixa tracejada de 24px de padding é ótima quando é o
+   único conteúdo da tela (ex.: aba Tarefas vazia), mas empilhada 3-4
+   vezes seguidas no dashboard deixava a rolagem inicial enorme sem
+   nenhuma informação real. */
+.empty-state-compact {
+  padding: 10px 4px;
+  color: var(--muted);
+  text-align: left;
+  font-weight: 500;
+  font-size: 0.84rem;
+}
+
 /* ---------- TOAST ---------- */
 .toast {
   position: fixed;
@@ -1946,8 +2040,12 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   .overview-value, .overview-value-small { font-size: 1.1rem; }
 
   /* Mobile dashboard */
-  .dashboard-layout { grid-template-columns: 1fr; }
+  .dashboard-layout { grid-template-columns: 1fr; gap: 10px; }
   .wide { grid-column: auto; }
+  .panel, .list-panel, .calendar-panel { padding: 12px 14px; border-radius: 16px; }
+  .panel-header { margin-bottom: 8px; gap: 8px; }
+  .panel-header h2 { font-size: 0.9rem; }
+  .icon-button { width: 30px; height: 30px; border-radius: 9px; font-size: 0.82rem; }
 
   /* Mobile notes */
   #notesView .workbench { grid-template-columns: 1fr; }
@@ -2225,8 +2323,11 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   gap: 10px;
 }
 
-/* Linha valor + data no mesmo nível */
-#expenseDescription { text-align: center; }
+/* Linha valor + data no mesmo nível. Antes a descrição vinha centralizada
+   enquanto os campos vizinhos (valor, data, categoria) tinham alinhamentos
+   diferentes entre si — deixamos tudo à esquerda, igual a um formulário
+   comum, pra ficar consistente do início ao fim. */
+#expenseDescription { text-align: left; }
 
 .fin-form-row {
   display: grid;
@@ -2245,7 +2346,7 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   font-size: 0.85rem;
   width: 130px;
   flex-shrink: 0;
-  text-align: center;
+  text-align: left;
   -webkit-appearance: none;
   appearance: none;
 }
@@ -2260,7 +2361,7 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   flex: 1;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 8px;
   min-width: 0;
   height: 40px;
@@ -2272,15 +2373,15 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   font: inherit;
   font-size: 0.9rem;
   font-weight: 600;
-  text-align: center;
+  text-align: left;
   cursor: pointer;
   transition: border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
 }
 .fin-cat-trigger:hover { border-color: var(--accent); }
 .fin-cat-trigger:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .fin-cat-trigger-icon { font-size: 1.05rem; flex-shrink: 0; line-height: 1; }
-.fin-cat-trigger-label { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; }
-.fin-cat-trigger-chevron { flex-shrink: 0; color: var(--muted); transition: transform 150ms ease; }
+.fin-cat-trigger-label { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.fin-cat-trigger-chevron { flex-shrink: 0; color: var(--muted); transition: transform 150ms ease; margin-left: auto; }
 .fin-cat-trigger[aria-expanded="true"] .fin-cat-trigger-chevron { transform: rotate(180deg); }
 
 /* ---------- CATEGORY PICKER (sheet de seleção/criação de categoria) ---------- */
@@ -2510,7 +2611,7 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 .fin-amount-field {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 6px;
   background: var(--surface2);
   border: 2px solid var(--line);
@@ -2541,7 +2642,7 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   min-height: 52px;
   padding: 0;
   letter-spacing: -0.03em;
-  text-align: center;
+  text-align: left;
   box-shadow: none !important;
   flex: 0 1 auto;
   width: auto;

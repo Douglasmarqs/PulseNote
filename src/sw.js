@@ -2,7 +2,7 @@
 // Necessário para o app ser "instalável" (PWA) no Android/Chrome,
 // funcionar parcialmente offline, e exibir notificações do sistema.
 
-const CACHE_NAME = "pulsenote-v8";
+const CACHE_NAME = "pulsenote-v9";
 
 // Arquivos essenciais para o app abrir mesmo sem internet.
 // Usamos os caminhos REAIS (dentro de /src/), não os caminhos "bonitos"

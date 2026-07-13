@@ -244,50 +244,74 @@
             </article>
           </div>
 
-          <!-- Dashboard panels -->
+          <!-- Dashboard panels — cada um pode ser minimizado (estado fica
+               salvo, então continua do jeito que a pessoa deixou da
+               próxima vez que abrir o app). O botão "→" continua levando
+               pra tela cheia daquele assunto; o chevron só encolhe/expande
+               o cartão aqui no início. -->
           <div class="dashboard-layout">
-            <section class="panel">
+            <section class="panel dash-panel" data-panel-id="tasks">
               <div class="panel-header">
                 <div>
                   <p class="eyebrow">Resumo</p>
                   <h2>Prioridades do dia</h2>
                 </div>
-                <button class="icon-button" data-view-shortcut="tasks" title="Ver tarefas">→</button>
+                <div class="dash-panel-actions">
+                  <button class="icon-button" data-view-shortcut="tasks" title="Ver tarefas">→</button>
+                  <button class="icon-button dash-panel-collapse-btn" type="button" data-collapse-toggle aria-expanded="true" title="Minimizar">⌄</button>
+                </div>
               </div>
-              <div id="todayTasks" class="compact-list"></div>
+              <div class="dash-panel-body">
+                <div id="todayTasks" class="compact-list"></div>
+              </div>
             </section>
 
-            <section class="panel">
+            <section class="panel dash-panel" data-panel-id="events">
               <div class="panel-header">
                 <div>
                   <p class="eyebrow">Agenda</p>
                   <h2>Próximos compromissos</h2>
                 </div>
-                <button class="icon-button" data-view-shortcut="calendar" title="Ver agenda">→</button>
+                <div class="dash-panel-actions">
+                  <button class="icon-button" data-view-shortcut="calendar" title="Ver agenda">→</button>
+                  <button class="icon-button dash-panel-collapse-btn" type="button" data-collapse-toggle aria-expanded="true" title="Minimizar">⌄</button>
+                </div>
               </div>
-              <div id="upcomingEvents" class="event-list"></div>
+              <div class="dash-panel-body">
+                <div id="upcomingEvents" class="event-list"></div>
+              </div>
             </section>
 
-            <section class="panel wide">
+            <section class="panel wide dash-panel" data-panel-id="chart">
               <div class="panel-header">
                 <div>
                   <p class="eyebrow">Produtividade</p>
                   <h2>Desempenho semanal</h2>
                 </div>
-                <span class="pill" id="weeklySummary">0 concluídas</span>
+                <div class="dash-panel-actions">
+                  <span class="pill" id="weeklySummary">0 concluídas</span>
+                  <button class="icon-button dash-panel-collapse-btn" type="button" data-collapse-toggle aria-expanded="true" title="Minimizar">⌄</button>
+                </div>
               </div>
-              <div id="chartBars" class="bar-chart"></div>
+              <div class="dash-panel-body">
+                <div id="chartBars" class="bar-chart"></div>
+              </div>
             </section>
 
-            <section class="panel">
+            <section class="panel dash-panel" data-panel-id="goals">
               <div class="panel-header">
                 <div>
                   <p class="eyebrow">Metas</p>
                   <h2>Foco da semana</h2>
                 </div>
-                <button class="icon-button" data-view-shortcut="goals" title="Ver metas">→</button>
+                <div class="dash-panel-actions">
+                  <button class="icon-button" data-view-shortcut="goals" title="Ver metas">→</button>
+                  <button class="icon-button dash-panel-collapse-btn" type="button" data-collapse-toggle aria-expanded="true" title="Minimizar">⌄</button>
+                </div>
               </div>
-              <div id="goalSummary" class="goal-stack"></div>
+              <div class="dash-panel-body">
+                <div id="goalSummary" class="goal-stack"></div>
+              </div>
             </section>
           </div>
         </section>
