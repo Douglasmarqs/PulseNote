@@ -17,7 +17,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
   <meta name="apple-mobile-web-app-title" content="PulseNote"/>
 
-  <link rel="stylesheet" href="auth.css"/>
+  <link rel="stylesheet" href="/src/auth.css"/>
 </head>
 <body>
 
@@ -79,7 +79,7 @@
         <div class="field-group">
           <div class="field-label-row">
             <label class="field-label" for="loginPassword">Senha</label>
-            <a href="forgot-password.html" class="auth-link">Esqueci minha senha</a>
+            <a href="/forgot-password" class="auth-link">Esqueci minha senha</a>
           </div>
           <div class="field-wrap">
             <span class="field-icon">🔒</span>
@@ -185,7 +185,7 @@
     <div class="auth-security-note">
       🔒 Seus dados são protegidos pela infraestrutura de segurança do Google Firebase
       <br/>
-      <a href="privacy.html" style="font-size:0.76rem;color:#8a9bb0;text-decoration:underline">
+      <a href="/privacy" style="font-size:0.76rem;color:#8a9bb0;text-decoration:underline">
         Privacidade e Termos de Uso
       </a>
     </div>
@@ -196,7 +196,7 @@
 
   </main>
 
-  <script src="pwa-install.js"></script>
-  <script type="module" src="auth.js"></script>
+  <script src="/src/pwa-install.js"></script>
+  <script type="module" src="/src/auth.js"></script>
 </body>
 </html>
