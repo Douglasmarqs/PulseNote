@@ -113,8 +113,26 @@ function getFirebaseAdmin() {
   return admin;
 }
 
+// A Cloud API tem um bug conhecido com números BR: ela entrega o número
+// no webhook (`message.from`) SEM o 9º dígito do celular (ex.:
+// "553195361992", 12 dígitos), mas exige esse 9 presente pra aceitar o
+// ENVIO de resposta pro mesmo número — sem isso, dá erro #131030
+// "Recipient phone number not in allowed list" mesmo com o número
+// certinho cadastrado na lista de destinatários.
+// Só mexe quando reconhece claramente o padrão BR (55 + DDD + 8 dígitos
+// = 12 no total); qualquer outro formato passa direto, sem alteração.
+function fixBrazilianMobileNumber(phone) {
+  if (/^55\d{10}$/.test(phone)) {
+    const ddd = phone.slice(2, 4);
+    const subscriber = phone.slice(4);
+    return `55${ddd}9${subscriber}`;
+  }
+  return phone;
+}
+
 async function sendWhatsAppMessage(to, body) {
   const url = `https://graph.facebook.com/v20.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
+  const toFixed = fixBrazilianMobileNumber(to);
   try {
     const res = await fetch(url, {
       method: "POST",
@@ -122,7 +140,7 @@ async function sendWhatsAppMessage(to, body) {
         "Content-Type": "application/json",
         Authorization: `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
       },
-      body: JSON.stringify({ messaging_product: "whatsapp", to, text: { body } }),
+      body: JSON.stringify({ messaging_product: "whatsapp", to: toFixed, text: { body } }),
     });
     // fetch() só lança exceção em falha de REDE — se a Meta recusar o
     // envio (token sem permissão, número fora da lista de testadores,
@@ -447,11 +465,6 @@ module.exports = async (req, res) => {
     if (!message) return res.status(200).end(); // confirmação de entrega etc — ignora
 
     const fromPhone = message.from; // formato E.164 sem "+", ex: "5511999999999"
-    // LOG TEMPORÁRIO — pra descobrir se a Meta entrega o número com ou
-    // sem o "9" extra dos celulares brasileiros (suspeita do erro
-    // #131030 "Recipient phone number not in allowed list"). Remover
-    // depois de confirmar.
-    console.log("DEBUG fromPhone recebido:", fromPhone, "| tamanho:", fromPhone?.length);
     const fb = getFirebaseAdmin();
 
     // Reenvio da Meta (mesmo message.id de novo)? Ignora silenciosamente.
