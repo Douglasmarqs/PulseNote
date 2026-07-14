@@ -447,6 +447,11 @@ module.exports = async (req, res) => {
     if (!message) return res.status(200).end(); // confirmação de entrega etc — ignora
 
     const fromPhone = message.from; // formato E.164 sem "+", ex: "5511999999999"
+    // LOG TEMPORÁRIO — pra descobrir se a Meta entrega o número com ou
+    // sem o "9" extra dos celulares brasileiros (suspeita do erro
+    // #131030 "Recipient phone number not in allowed list"). Remover
+    // depois de confirmar.
+    console.log("DEBUG fromPhone recebido:", fromPhone, "| tamanho:", fromPhone?.length);
     const fb = getFirebaseAdmin();
 
     // Reenvio da Meta (mesmo message.id de novo)? Ignora silenciosamente.
