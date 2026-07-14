@@ -308,11 +308,19 @@ module.exports = async (req, res) => {
       }
 
       await appendFinanceEntry(fb, uid, result.entry);
-      const { type, amount, description, date } = result.entry;
-      await sendWhatsAppMessage(
-        fromPhone,
-        `✅ Lançado! ${type === "receita" ? "Receita" : "Despesa"} de R$ ${amount.toFixed(2)} — ${description} (${date}).`
-      );
+      const { type, amount, description, date, categoryId } = result.entry;
+
+      // Categorias já guardam o emoji como primeiro "token" do label (ex.:
+      // "🍔 Restaurante/Delivery") — mesma convenção usada em outros
+      // lugares do app (ver renderização de resumo por categoria em
+      // src/app.js). Aqui só reaproveitamos esse emoji na confirmação.
+      const categoryLabel = categories.find((c) => c.id === categoryId)?.label || "";
+      const categoryEmoji = categoryLabel.trim().split(/\s+/)[0] || (type === "receita" ? "💰" : "💸");
+
+      const confirmMsg = type === "receita"
+        ? `✅ ${categoryEmoji} Receita de ${description} adicionada! R$ ${amount.toFixed(2)} (${date}).`
+        : `✅ ${categoryEmoji} Gasto com ${description} adicionado! R$ ${amount.toFixed(2)} (${date}).`;
+      await sendWhatsAppMessage(fromPhone, confirmMsg);
       return res.status(200).end();
     }
 
