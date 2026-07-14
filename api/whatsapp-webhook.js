@@ -116,7 +116,7 @@ function getFirebaseAdmin() {
 async function sendWhatsAppMessage(to, body) {
   const url = `https://graph.facebook.com/v20.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
   try {
-    await fetch(url, {
+    const res = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -124,8 +124,17 @@ async function sendWhatsAppMessage(to, body) {
       },
       body: JSON.stringify({ messaging_product: "whatsapp", to, text: { body } }),
     });
+    // fetch() só lança exceção em falha de REDE — se a Meta recusar o
+    // envio (token sem permissão, número fora da lista de testadores,
+    // fora da janela de 24h etc.), ela responde com um corpo de erro
+    // normalmente, sem quebrar o fetch. Sem checar res.ok aqui, esse
+    // tipo de recusa passava batido, sem log nenhum.
+    if (!res.ok) {
+      const errBody = await res.text();
+      console.error("Meta recusou o envio da mensagem:", res.status, errBody);
+    }
   } catch (err) {
-    console.error("Falha ao responder no WhatsApp:", err);
+    console.error("Falha de rede ao responder no WhatsApp:", err);
   }
 }
 
