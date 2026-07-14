@@ -19,9 +19,10 @@
 //      "vincular 123456" pra este número, o handleLinkCommand() abaixo
 //      confirma e cria whatsappLinks/{numero} → { uid }.
 //
-//   3) Hoje só entende TEXTO. Foto de cupom e áudio têm TODO marcado
-//      abaixo — o mesmo Gemini aceita imagem/áudio, só muda o que é
-//      mandado no `contents` da chamada.
+//   3) Foto de cupom fiscal — implementada (downloadWhatsAppMedia() +
+//      parseTransactionImage()). Falta só ÁUDIO: mesma ideia de
+//      download usando message.audio.id — o Gemini aceita áudio direto
+//      e já entende o que foi dito.
 //
 //   4) Diferente do "✨ Lançar por texto" do app (que só PREENCHE o
 //      formulário e espera a pessoa confirmar), este webhook LANÇA
@@ -38,7 +39,7 @@
 // ============================================================
 
 const admin = require("firebase-admin");
-const { parseTransactionText } = require("./_lib/parseTransactionAI");
+const { parseTransactionText, parseTransactionImage } = require("./_lib/parseTransactionAI");
 
 // Espelha as categorias padrão de src/app.js (expenseCategories /
 // incomeCategories) — precisam bater com as do app para os ids que a IA
@@ -249,6 +250,70 @@ async function appendFinanceEntry(fb, uid, entry) {
   });
 }
 
+// Baixa uma mídia (foto, áudio) mandada pelo WhatsApp. Fluxo em 2 passos,
+// exigido pela própria API da Meta: 1) pega a URL temporária do arquivo
+// a partir do id da mensagem; 2) baixa o arquivo nessa URL — as duas
+// chamadas precisam do mesmo Bearer token, ou a Meta recusa.
+// Retorna { base64, mimeType } ou null se algo falhar.
+async function downloadWhatsAppMedia(mediaId) {
+  try {
+    const metaRes = await fetch(`https://graph.facebook.com/v20.0/${mediaId}`, {
+      headers: { Authorization: `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}` },
+    });
+    if (!metaRes.ok) {
+      console.error("Falha ao pegar URL da mídia:", metaRes.status, await metaRes.text());
+      return null;
+    }
+    const meta = await metaRes.json(); // { url, mime_type, sha256, file_size, id }
+
+    const fileRes = await fetch(meta.url, {
+      headers: { Authorization: `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}` },
+    });
+    if (!fileRes.ok) {
+      console.error("Falha ao baixar arquivo da mídia:", fileRes.status);
+      return null;
+    }
+    const buffer = Buffer.from(await fileRes.arrayBuffer());
+
+    // WhatsApp manda fotos grandes às vezes (até ~5MB) — o Gemini aceita,
+    // mas por segurança cortamos um teto folgado pra não estourar o
+    // limite de payload da function na Vercel.
+    if (buffer.byteLength > 8 * 1024 * 1024) {
+      console.error("Mídia grande demais:", buffer.byteLength);
+      return null;
+    }
+
+    return { base64: buffer.toString("base64"), mimeType: meta.mime_type || "image/jpeg" };
+  } catch (err) {
+    console.error("Erro inesperado baixando mídia do WhatsApp:", err);
+    return null;
+  }
+}
+
+// Compartilhado entre texto e foto: salva o lançamento e manda a
+// confirmação com o emoji da categoria, ou a mensagem de "não entendi"
+// se o Gemini não conseguiu extrair nada válido.
+async function finishParsedResult({ fb, uid, fromPhone, categories, result, failureMsg }) {
+  if (!result.ok) {
+    await sendWhatsAppMessage(fromPhone, failureMsg);
+    return;
+  }
+
+  await appendFinanceEntry(fb, uid, result.entry);
+  const { type, amount, description, date, categoryId } = result.entry;
+
+  // Categorias já guardam o emoji como primeiro "token" do label (ex.:
+  // "🍔 Restaurante/Delivery") — mesma convenção usada em outros lugares
+  // do app (ver renderização de resumo por categoria em src/app.js).
+  const categoryLabel = categories.find((c) => c.id === categoryId)?.label || "";
+  const categoryEmoji = categoryLabel.trim().split(/\s+/)[0] || (type === "receita" ? "💰" : "💸");
+
+  const confirmMsg = type === "receita"
+    ? `✅ ${categoryEmoji} Receita de ${description} adicionada! R$ ${amount.toFixed(2)} (${date}).`
+    : `✅ ${categoryEmoji} Gasto com ${description} adicionado! R$ ${amount.toFixed(2)} (${date}).`;
+  await sendWhatsAppMessage(fromPhone, confirmMsg);
+}
+
 module.exports = async (req, res) => {
   // ── Verificação do webhook — a Meta chama isso 1x só, ao salvar a
   //    configuração no painel do WhatsApp Business ──────────────────
@@ -292,50 +357,44 @@ module.exports = async (req, res) => {
       return res.status(200).end();
     }
 
+    const categories = await getUserCategories(fb, uid);
+    // TODO: usar o fuso horário salvo do usuário, como o app já faz
+    // via toLocalIso() — por ora usa a data UTC do servidor.
+    const today = new Date().toISOString().slice(0, 10);
+
     if (message.type === "text") {
-      const categories = await getUserCategories(fb, uid);
-      // TODO: usar o fuso horário salvo do usuário, como o app já faz
-      // via toLocalIso() — por ora usa a data UTC do servidor.
-      const today = new Date().toISOString().slice(0, 10);
       const result = await parseTransactionText({ text: message.text.body, categories, today });
-
-      if (!result.ok) {
-        await sendWhatsAppMessage(
-          fromPhone,
-          'Não consegui entender esse lançamento 🤔 Tenta descrever de outro jeito, tipo "gastei 45 no mercado".'
-        );
-        return res.status(200).end();
-      }
-
-      await appendFinanceEntry(fb, uid, result.entry);
-      const { type, amount, description, date, categoryId } = result.entry;
-
-      // Categorias já guardam o emoji como primeiro "token" do label (ex.:
-      // "🍔 Restaurante/Delivery") — mesma convenção usada em outros
-      // lugares do app (ver renderização de resumo por categoria em
-      // src/app.js). Aqui só reaproveitamos esse emoji na confirmação.
-      const categoryLabel = categories.find((c) => c.id === categoryId)?.label || "";
-      const categoryEmoji = categoryLabel.trim().split(/\s+/)[0] || (type === "receita" ? "💰" : "💸");
-
-      const confirmMsg = type === "receita"
-        ? `✅ ${categoryEmoji} Receita de ${description} adicionada! R$ ${amount.toFixed(2)} (${date}).`
-        : `✅ ${categoryEmoji} Gasto com ${description} adicionado! R$ ${amount.toFixed(2)} (${date}).`;
-      await sendWhatsAppMessage(fromPhone, confirmMsg);
+      await finishParsedResult({
+        fb, uid, fromPhone, categories, result,
+        failureMsg: 'Não consegui entender esse lançamento 🤔 Tenta descrever de outro jeito, tipo "gastei 45 no mercado".',
+      });
       return res.status(200).end();
     }
 
-    // TODO — foto do cupom: baixar a mídia com
-    //   GET https://graph.facebook.com/v20.0/{message.image.id}
-    // (retorna uma url temporária, baixar com o mesmo Authorization
-    // Bearer), converter para base64 e mandar pro Gemini como imagem
-    // (contents: [{ parts: [{ inlineData: { mimeType, data } }] }]),
-    // pedindo o mesmo JSON de saída — depois cai no mesmo
-    // appendFinanceEntry() acima.
-    //
+    if (message.type === "image") {
+      const media = await downloadWhatsAppMedia(message.image.id);
+      if (!media) {
+        await sendWhatsAppMessage(fromPhone, "Não consegui baixar essa foto 😕 Tenta mandar de novo.");
+        return res.status(200).end();
+      }
+
+      const result = await parseTransactionImage({
+        imageBase64: media.base64,
+        mimeType: media.mimeType,
+        categories,
+        today,
+      });
+      await finishParsedResult({
+        fb, uid, fromPhone, categories, result,
+        failureMsg: "Não consegui ler esse cupom 🤔 Tenta uma foto mais nítida, com o valor total visível, ou descreve o gasto em texto mesmo.",
+      });
+      return res.status(200).end();
+    }
+
     // TODO — áudio: mesma ideia de download usando message.audio.id; o
     // Gemini aceita áudio direto e já entende o que foi dito.
 
-    await sendWhatsAppMessage(fromPhone, "Por enquanto eu só entendo texto — foto do cupom e áudio chegam em breve 🙂");
+    await sendWhatsAppMessage(fromPhone, "Por enquanto eu só entendo texto e foto de cupom — áudio chega em breve 🙂");
     return res.status(200).end();
   } catch (err) {
     console.error("Erro no webhook do WhatsApp:", err);
