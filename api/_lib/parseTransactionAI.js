@@ -10,7 +10,12 @@
 // prompt, mesmos exemplos, mesma validação.
 // ============================================================
 
-const GEMINI_MODEL = "gemini-2.5-flash-lite"; // rápido, barato, elegível ao nível grátis
+// A família Gemini 2.5 está sendo desativada pela Google (desligamento
+// completo até out/2026, mas o Flash-Lite já vinha falhando com 404/503
+// bem antes disso — foi o que apareceu nos logs do webhook). Trocado
+// para o sucessor indicado pela própria Google, mesmo nível
+// rápido/barato/gratuito.
+const GEMINI_MODEL = "gemini-3.1-flash-lite";
 
 function buildSystemPrompt({ todayIso, categoryList }) {
   return `Você extrai dados de um lançamento financeiro a partir de uma frase em português.
