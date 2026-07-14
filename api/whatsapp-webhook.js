@@ -30,6 +30,20 @@
 //      antes de salvar, dá pra mandar uma mensagem com botões
 //      "Confirmar/Editar" em vez de salvar na hora.
 //
+//   5) Comandos além do lançamento normal (tudo case/acento-insensível):
+//      - "apagar último" / "desfazer" → apaga o último lançamento FEITO
+//        PELO WHATSAPP (nunca mexe em algo lançado pelo app)
+//      - "saldo" / "resumo" / "quanto gastei" → resumo rápido do mês
+//        atual (receitas, gastos, saldo), sem precisar abrir o app
+//
+//   6) Data de "hoje" calculada no fuso de Brasília (getTodayInBrazil),
+//      não em UTC — evita lançamento tardio (21h–23:59 em BR) cair com a
+//      data do dia seguinte.
+//
+//   7) Mensagens repetidas da Meta (reenvio por instabilidade de rede)
+//      são ignoradas via claimMessageOnce() — sem isso, um reenvio
+//      duplicaria o lançamento.
+//
 // Variáveis de ambiente novas (além de GEMINI_API_KEY e FIREBASE_* que
 // já existem em parse-transaction.js):
 //   WHATSAPP_VERIFY_TOKEN     — string secreta escolhida por você, só
@@ -314,6 +328,93 @@ async function finishParsedResult({ fb, uid, fromPhone, categories, result, fail
   await sendWhatsAppMessage(fromPhone, confirmMsg);
 }
 
+// Data de "hoje" no fuso de Brasília, não em UTC (o servidor da Vercel
+// roda em UTC — entre 21h e 23:59 no horário de Brasília, UTC já virou o
+// dia seguinte, o que fazia lançamentos tardios caírem com a data errada,
+// igual ao bug do toLocalIso() que já existe no app pro mesmo motivo).
+function getTodayInBrazil() {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
+}
+
+// Evita processar a MESMA mensagem duas vezes — a Meta reenvia o mesmo
+// evento quando não recebe 200 rápido o suficiente (ou em qualquer
+// instabilidade de rede), o que sem isso duplicaria lançamentos.
+// `.create()` do Admin SDK falha se o doc já existe — usamos isso como
+// trava atômica: só a primeira chamada "ganha" e processa de verdade.
+async function claimMessageOnce(fb, messageId) {
+  if (!messageId) return true; // sem id não dá pra checar, deixa passar
+  try {
+    await fb.firestore().collection("whatsappProcessedMessages").doc(messageId).create({
+      processedAt: new Date().toISOString(),
+    });
+    return true;
+  } catch (err) {
+    return false; // já existe -> é reenvio, ignora
+  }
+}
+
+// Tira acentos e caixa pra comparar comandos ("Último" == "ultimo").
+function normalizeCommand(text) {
+  return text.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+const DELETE_COMMANDS = new Set([
+  "apagar ultimo", "apagar o ultimo", "apagar ultimo lancamento",
+  "apagar o ultimo lancamento", "desfazer", "cancelar ultimo", "apagar",
+]);
+function isDeleteCommand(norm) {
+  return DELETE_COMMANDS.has(norm);
+}
+
+function isBalanceCommand(norm) {
+  return norm === "saldo" || norm === "meu saldo" || norm === "resumo"
+    || norm === "resumo do mes" || norm.startsWith("quanto gastei")
+    || norm.startsWith("quanto recebi");
+}
+
+// Apaga o lançamento mais recente ENTRE OS FEITOS PELO WHATSAPP (nunca
+// mexe em algo que a pessoa lançou pelo próprio app — "apagar último" só
+// deve desfazer o que ela acabou de mandar por aqui). Como o app sempre
+// usa unshift() (mais novo primeiro), procuramos do topo pra baixo o
+// primeiro com source "whatsapp".
+async function deleteLastWhatsAppEntry(fb, uid) {
+  const ref = fb.firestore().collection("userData").doc(uid);
+  let deletedEntry = null;
+  await fb.firestore().runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const current = snap.exists ? snap.data() : { data: {} };
+    const state = current.data || {};
+    const finances = Array.isArray(state.finances) ? state.finances : [];
+    const idx = finances.findIndex((f) => f.source === "whatsapp");
+    if (idx === -1) return;
+    deletedEntry = finances[idx];
+    const newFinances = [...finances.slice(0, idx), ...finances.slice(idx + 1)];
+    tx.set(ref, { data: { ...state, finances: newFinances }, updatedAt: new Date().toISOString() }, { merge: true });
+  });
+  return deletedEntry;
+}
+
+// Resumo do mês atual (baseado no fuso de Brasília) — pra responder
+// "saldo" sem precisar abrir o app.
+async function buildBalanceSummary(fb, uid, todayIso) {
+  const doc = await fb.firestore().collection("userData").doc(uid).get();
+  const state = doc.exists ? doc.data().data || {} : {};
+  const finances = Array.isArray(state.finances) ? state.finances : [];
+  const monthPrefix = todayIso.slice(0, 7); // "2026-07"
+
+  let income = 0;
+  let expense = 0;
+  for (const f of finances) {
+    if (typeof f.date !== "string" || !f.date.startsWith(monthPrefix)) continue;
+    const amount = Number(f.amount) || 0;
+    if (f.type === "receita") income += amount;
+    else expense += amount;
+  }
+
+  const monthName = new Date(`${monthPrefix}-01T12:00:00`).toLocaleDateString("pt-BR", { month: "long" });
+  return { income, expense, balance: income - expense, monthName };
+}
+
 module.exports = async (req, res) => {
   // ── Verificação do webhook — a Meta chama isso 1x só, ao salvar a
   //    configuração no painel do WhatsApp Business ──────────────────
@@ -339,6 +440,13 @@ module.exports = async (req, res) => {
     const fromPhone = message.from; // formato E.164 sem "+", ex: "5511999999999"
     const fb = getFirebaseAdmin();
 
+    // Reenvio da Meta (mesmo message.id de novo)? Ignora silenciosamente.
+    const isFirstTime = await claimMessageOnce(fb, message.id);
+    if (!isFirstTime) {
+      console.log("Mensagem repetida (reenvio da Meta), ignorando:", message.id);
+      return res.status(200).end();
+    }
+
     // "vincular 123456" precisa ser tratado ANTES de checar se o número já
     // é conhecido — é justamente para números novos, ainda sem vínculo,
     // que esse comando existe.
@@ -358,11 +466,35 @@ module.exports = async (req, res) => {
     }
 
     const categories = await getUserCategories(fb, uid);
-    // TODO: usar o fuso horário salvo do usuário, como o app já faz
-    // via toLocalIso() — por ora usa a data UTC do servidor.
-    const today = new Date().toISOString().slice(0, 10);
+    const today = getTodayInBrazil();
 
     if (message.type === "text") {
+      const norm = normalizeCommand(message.text.body);
+
+      if (isDeleteCommand(norm)) {
+        const deleted = await deleteLastWhatsAppEntry(fb, uid);
+        if (!deleted) {
+          await sendWhatsAppMessage(fromPhone, "Não achei nenhum lançamento feito por aqui pra apagar 🤷");
+        } else {
+          const verb = deleted.type === "receita" ? "Receita" : "Gasto";
+          await sendWhatsAppMessage(
+            fromPhone,
+            `🗑️ Apaguei: ${verb} de R$ ${Number(deleted.amount || 0).toFixed(2)} — ${deleted.description || "sem descrição"}.`
+          );
+        }
+        return res.status(200).end();
+      }
+
+      if (isBalanceCommand(norm)) {
+        const { income, expense, balance, monthName } = await buildBalanceSummary(fb, uid, today);
+        const balanceIcon = balance >= 0 ? "✅" : "⚠️";
+        await sendWhatsAppMessage(
+          fromPhone,
+          `📊 Resumo de ${monthName}:\n💰 Receitas: R$ ${income.toFixed(2)}\n💸 Gastos: R$ ${expense.toFixed(2)}\n${balanceIcon} Saldo: R$ ${balance.toFixed(2)}`
+        );
+        return res.status(200).end();
+      }
+
       const result = await parseTransactionText({ text: message.text.body, categories, today });
       await finishParsedResult({
         fb, uid, fromPhone, categories, result,
