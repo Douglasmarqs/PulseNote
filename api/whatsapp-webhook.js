@@ -469,7 +469,17 @@ module.exports = async (req, res) => {
   // 200 (o erro real vai só pro log).
   try {
     const message = req.body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
-    if (!message) return res.status(200).end(); // confirmação de entrega etc — ignora
+    if (!message) {
+      // Não é mensagem recebida — pode ser status de entrega (enviado/
+      // entregue/lido/FALHOU) da mensagem que O PRÓPRIO webhook mandou.
+      // LOG TEMPORÁRIO pra investigar por que respostas aceitas pela
+      // Meta não estão chegando no aparelho.
+      const statuses = req.body?.entry?.[0]?.changes?.[0]?.value?.statuses;
+      if (statuses) {
+        console.log("DEBUG status de entrega recebido:", JSON.stringify(statuses));
+      }
+      return res.status(200).end();
+    }
 
     const fromPhone = message.from; // formato E.164 sem "+", ex: "5511999999999"
     const fb = getFirebaseAdmin();
