@@ -150,6 +150,13 @@ async function sendWhatsAppMessage(to, body) {
     if (!res.ok) {
       const errBody = await res.text();
       console.error("Meta recusou o envio da mensagem:", res.status, errBody);
+    } else {
+      // Log de sucesso também — a Meta devolve o id da mensagem quando
+      // aceita de verdade. Útil pra confirmar entrega sem precisar do
+      // plano pago "Observability Plus" da Vercel pra ver o corpo da
+      // chamada externa.
+      const okBody = await res.text();
+      console.log("Meta aceitou o envio da mensagem:", okBody);
     }
   } catch (err) {
     console.error("Falha de rede ao responder no WhatsApp:", err);
