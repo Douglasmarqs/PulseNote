@@ -470,13 +470,14 @@ module.exports = async (req, res) => {
   try {
     const message = req.body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
     if (!message) {
-      // Não é mensagem recebida — pode ser status de entrega (enviado/
-      // entregue/lido/FALHOU) da mensagem que O PRÓPRIO webhook mandou.
-      // LOG TEMPORÁRIO pra investigar por que respostas aceitas pela
-      // Meta não estão chegando no aparelho.
+      // Não é mensagem recebida — é status de entrega (enviado/entregue/
+      // lido/FALHOU) de uma mensagem que O PRÓPRIO webhook mandou. Só
+      // logamos quando falha de verdade, pra não poluir os logs com
+      // "sent"/"delivered"/"read" de cada mensagem enviada.
       const statuses = req.body?.entry?.[0]?.changes?.[0]?.value?.statuses;
-      if (statuses) {
-        console.log("DEBUG status de entrega recebido:", JSON.stringify(statuses));
+      const failed = statuses?.find((s) => s.status === "failed");
+      if (failed) {
+        console.error("Entrega de mensagem falhou:", JSON.stringify(failed.errors));
       }
       return res.status(200).end();
     }
