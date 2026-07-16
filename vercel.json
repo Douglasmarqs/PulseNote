@@ -1,0 +1,86 @@
+{
+  "version": 2,
+  "outputDirectory": ".",
+
+  "headers": [
+    {
+      "source": "/sw.js",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
+      ]
+    },
+    {
+      "source": "/src/sw.js",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
+      ]
+    },
+    {
+      "source": "/src/app.js",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
+      ]
+    },
+    {
+      "source": "/src/styles.css",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
+      ]
+    },
+    {
+      "source": "/src/(.*).js",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
+      ]
+    },
+    {
+      "source": "/src/(.*).css",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
+      ]
+    }
+  ],
+
+  "rewrites": [
+    {
+      "source": "/login",
+      "destination": "/src/login.html"
+    },
+    {
+      "source": "/app",
+      "destination": "/src/index.html"
+    },
+    {
+      "source": "/forgot-password",
+      "destination": "/src/forgot-password.html"
+    },
+    {
+      "source": "/privacy",
+      "destination": "/src/privacy.html"
+    },
+    {
+      "source": "/manifest.json",
+      "destination": "/src/manifest.json"
+    },
+    {
+      "source": "/sw.js",
+      "destination": "/src/sw.js"
+    },
+    {
+      "source": "/notifications.js",
+      "destination": "/src/notifications.js"
+    },
+    {
+      "source": "/favicon.ico",
+      "destination": "/src/favicon.ico"
+    },
+    {
+      "source": "/icons/(.*)",
+      "destination": "/src/icons/$1"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}

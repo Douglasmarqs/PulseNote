@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
+  <title>PulseNote — Privacidade e Termos</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png"/>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f5f7fa;
+      color: #1a1f2e;
+      line-height: 1.6;
+    }
+    .wrap { max-width: 680px; margin: 0 auto; padding: 32px 20px 80px; }
+    .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 32px; }
+    .brand-mark {
+      width: 44px; height: 44px; border-radius: 14px;
+      background: linear-gradient(145deg, #4f8ef7, #af52de);
+      display: grid; place-items: center; flex-shrink: 0;
+    }
+    h1 { font-size: 1.5rem; font-weight: 800; margin: 0 0 4px; }
+    h2 { font-size: 1.05rem; font-weight: 800; margin: 32px 0 10px; }
+    p, li { font-size: 0.92rem; color: #4a5568; }
+    ul { padding-left: 20px; }
+    .updated { font-size: 0.8rem; color: #8a9bb0; margin-bottom: 24px; }
+    a { color: #4f8ef7; text-decoration: none; font-weight: 600; }
+    .back { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 24px; font-size: 0.88rem; }
+
+    /* Modo escuro automático, ligado ao sistema — antes esta página não
+       tinha nenhum suporte a tema e ficava sempre com fundo claro fixo. */
+    @media (prefers-color-scheme: dark) {
+      body { background: #0b0d12; color: #f4f6fb; }
+      p, li { color: #b6c0d6; }
+      .updated { color: #828ea3; }
+      a { color: #5b9ef8; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="brand">
+      <div class="brand-mark"><span style="color:#fff;font-size:1.2rem">⚡</span></div>
+      <div>
+        <strong style="font-size:1.1rem">PulseNote</strong>
+      </div>
+    </div>
+
+    <a href="/login" class="back">← Voltar para o login</a>
+
+    <h1>Privacidade e Termos de Uso</h1>
+    <p class="updated">Última atualização: junho de 2026</p>
+
+    <h2>O que é o PulseNote</h2>
+    <p>
+      O PulseNote é um aplicativo pessoal de produtividade que ajuda você a organizar
+      notas, tarefas, agenda, metas e finanças pessoais. É um projeto independente,
+      sem fins comerciais, focado em uso pessoal.
+    </p>
+
+    <h2>Quais dados coletamos</h2>
+    <ul>
+      <li><strong>Cadastro:</strong> nome e e-mail, usados apenas para autenticação da sua conta.</li>
+      <li><strong>Conteúdo que você cria:</strong> notas, tarefas, compromissos, metas e registros financeiros que você mesmo insere no app.</li>
+      <li><strong>Foto de perfil:</strong> opcional, enviada apenas se você escolher adicionar uma.</li>
+    </ul>
+
+    <h2>Onde seus dados ficam armazenados</h2>
+    <p>
+      Todos os dados são armazenados na infraestrutura do
+      <strong>Google Firebase</strong> (Authentication, Firestore e Storage),
+      com criptografia em trânsito (HTTPS) e em repouso, seguindo os padrões
+      de segurança do Google Cloud Platform.
+    </p>
+
+    <h2>Quem tem acesso aos seus dados</h2>
+    <p>
+      Apenas você. As regras de segurança do banco de dados garantem que cada
+      conta só pode ler e escrever os próprios dados — nenhum outro usuário,
+      e nenhum administrador do app, tem acesso ao conteúdo das suas notas,
+      tarefas ou registros financeiros.
+    </p>
+
+    <h2>Não compartilhamos seus dados</h2>
+    <p>
+      O PulseNote não vende, aluga, nem compartilha seus dados pessoais com
+      terceiros para fins de publicidade ou marketing. Não exibimos anúncios.
+    </p>
+
+    <h2>Notificações</h2>
+    <p>
+      Se você ativar as notificações, o app pode avisar sobre tarefas
+      vencendo, compromissos próximos, progresso de metas e situação do
+      orçamento mensal. Essas notificações são processadas localmente no seu
+      dispositivo — você pode desativá-las a qualquer momento nas
+      configurações do navegador.
+    </p>
+
+    <h2>Exclusão de conta e dados</h2>
+    <p>
+      Você pode solicitar a exclusão da sua conta e de todos os dados
+      associados a qualquer momento, entrando em contato através do e-mail
+      de suporte indicado no app.
+    </p>
+
+    <h2>Alterações nesta política</h2>
+    <p>
+      Esta política pode ser atualizada conforme o app evolui. Mudanças
+      relevantes serão comunicadas dentro do próprio aplicativo.
+    </p>
+  </div>
+</body>
+</html>

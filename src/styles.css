@@ -3,19 +3,26 @@
    Inspirado em Easy Notes & Apps iOS nativos
    ============================================================ */
 
+/* O atributo `hidden` do HTML usa o UA stylesheet (baixa prioridade),
+   então qualquer regra author com `display:X` o sobrescrevia — isso
+   fazia o JS não conseguir esconder elementos via el.hidden = true.
+   Exemplo: .modal-backdrop{display:grid} impedia fechar os modais.
+   Esta regra global com !important corrige de uma vez para todo o app. */
+[hidden] { display: none !important; }
+
 /* ---------- Design Tokens ---------- */
 :root {
-  --bg: #f5f7fa;
-  --bg2: #eef1f6;
+  --bg: #f6f5fb;
+  --bg2: #eeecf9;
   --surface: #ffffff;
-  --surface2: #f9fafc;
-  --text: #1a1f2e;
-  --text2: #4a5568;
-  --muted: #8a9bb0;
-  --line: #e8ecf2;
-  --accent: #4f8ef7;
-  --accent2: #3a7af0;
-  --accent-soft: #e8f0fe;
+  --surface2: #faf9fd;
+  --text: #1a1b2e;
+  --text2: #4a4a68;
+  --muted: #8b8aa8;
+  --line: #e7e5f4;
+  --accent: #6c5ce7;
+  --accent2: #5b4bd6;
+  --accent-soft: #ece9fc;
   --green: #34c759;
   --green-soft: #e5f9ec;
   --orange: #ff9500;
@@ -60,93 +67,267 @@
   --header-height: 70px;
 }
 
-[data-theme="night"] {
+/* ---------- Tema: Claro / Aurora / Automático ----------
+   Três opções, escolhidas em Configurações:
+   - "light"  → força claro, mesmo se o aparelho estiver em modo escuro
+   - "aurora" → força o escuro "Aurora" (azul-noite + violeta/ciano),
+     mesmo se o aparelho estiver em modo claro
+   - "system" (padrão, sem atributo) → acompanha Configurações > Aparência
+     do celular/computador via @media (prefers-color-scheme: dark); quando
+     o aparelho está em modo escuro, usa a mesma paleta do Aurora acima
+   O antigo tema "Escuro" (cinza-chumbo neutro) foi removido — o Aurora
+   ocupa esse lugar com uma paleta mais rica e funcionando corretamente.
+   O atributo data-theme é aplicado no <html> o mais cedo possível (script
+   inline no <head>, antes do CSS pintar a tela) para não haver nenhum
+   "flash" de tema errado ao carregar a página. */
+
+/* Modo "Aurora" — escuro azul-noite profundo + violeta/ciano, com um
+   brilho sutil (glow) nas sombras dos cartões e no hero, em vez do
+   cinza-chumbo neutro do antigo tema "Escuro" (removido por não estar
+   funcionando direito). */
+:root[data-theme="aurora"] {
   color-scheme: dark;
-  --bg: #0f1117;
-  --bg2: #161b24;
-  --surface: #1c2130;
-  --surface2: #232b3e;
-  --text: #f0f4ff;
-  --text2: #a8b4cc;
-  --muted: #6b7a96;
-  --line: #2a3348;
-  --accent: #5b9ef8;
-  --accent2: #4a8ef5;
-  --accent-soft: #1a2a4a;
-  --green: #30d158;
-  --green-soft: #0d2e1a;
-  --orange: #ff9f0a;
-  --orange-soft: #2a1d00;
-  --red: #ff453a;
-  --red-soft: #2a0e0d;
-  --purple: #bf5af2;
-  --purple-soft: #1f0d2e;
-  --pink: #ff375f;
-  --pink-soft: #2a0d15;
-  --note-yellow: #2a2410;
-  --note-blue: #0d1c2e;
-  --note-green: #0d2218;
-  --note-pink: #2a0d18;
-  --note-purple: #1a0d2a;
-  --note-orange: #2a1800;
-  --note-teal: #0d2228;
-  --note-red: #2a0d0d;
-  --note-yellow-border: #5a4e00;
-  --note-blue-border: #1a3a5c;
-  --note-green-border: #1a4024;
-  --note-pink-border: #5c1a30;
-  --note-purple-border: #4a1a5c;
-  --note-orange-border: #5c3300;
-  --note-teal-border: #1a4048;
-  --note-red-border: #5c1a1a;
-  --shadow-card: 0 2px 12px rgba(0,0,0,0.3);
-  --shadow-card-hover: 0 8px 28px rgba(0,0,0,0.4);
+  --bg: #060a18;
+  --bg2: #0a1024;
+  --surface: #10142c;
+  --surface2: #161b3a;
+  --text: #f1f3ff;
+  --text2: #b8c0e8;
+  --muted: #7c84b8;
+  --line: #262c52;
+  --accent: #7c6cff;
+  --accent2: #6456f0;
+  --accent-soft: #241f4e;
+  --green: #2fe0b0;
+  --green-soft: #0e2f38;
+  --orange: #ffb454;
+  --orange-soft: #3a2812;
+  --red: #ff6b8b;
+  --red-soft: #3a1830;
+  --purple: #c07dff;
+  --purple-soft: #2c1c4e;
+  --pink: #ff7fc4;
+  --pink-soft: #3a1a38;
+  --teal: #4fe0ff;
+  --teal-soft: #0e2c40;
+  --yellow: #ffe066;
+  --yellow-soft: #362c0c;
+  --note-yellow: #302a12;
+  --note-blue: #0f2038;
+  --note-green: #0d2c2a;
+  --note-pink: #301230;
+  --note-purple: #221238;
+  --note-orange: #2e1c0e;
+  --note-teal: #0c2838;
+  --note-red: #301220;
+  --note-yellow-border: #6b5a18;
+  --note-blue-border: #2c5c9a;
+  --note-green-border: #1f8f76;
+  --note-pink-border: #9a3286;
+  --note-purple-border: #6c3ca0;
+  --note-orange-border: #a05a20;
+  --note-teal-border: #1d8fa8;
+  --note-red-border: #a02a5a;
+  --shadow-card: 0 1px 0 rgba(255,255,255,0.06) inset, 0 8px 24px rgba(2,4,16,0.65);
+  --shadow-card-hover: 0 1px 0 rgba(255,255,255,0.09) inset, 0 14px 38px color-mix(in srgb, var(--accent) 22%, rgba(2,4,16,0.7));
+  --shadow-float: 0 26px 80px rgba(2,4,16,0.8);
 }
 
-[data-theme="ocean"] {
-  --bg: #edf6ff;
-  --bg2: #dff0fb;
-  --accent: #007aff;
-  --accent2: #0066d6;
-  --accent-soft: #ddeeff;
-  --green: #00c7be;
+/* Aurora: hero e "linha do topo" ganham o gradiente de três cores que dá
+   nome ao tema (índigo → violeta → ciano), em vez do gradiente simples de
+   duas cores usado nos outros temas. Vale tanto para o Aurora forçado
+   quanto para o modo Automático quando o aparelho está escuro (ambos
+   compartilham a mesma aparência). */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):not([data-theme="aurora"]) .daily-hero {
+    background: linear-gradient(120deg, #5546e0 0%, #8451e6 45%, #29b6d8 100%);
+    box-shadow: 0 16px 46px rgba(84, 70, 224, 0.35), 0 4px 16px rgba(41, 182, 216, 0.18);
+  }
+}
+:root[data-theme="aurora"] .daily-hero {
+  background: linear-gradient(120deg, #5546e0 0%, #8451e6 45%, #29b6d8 100%);
+  box-shadow: 0 16px 46px rgba(84, 70, 224, 0.35), 0 4px 16px rgba(41, 182, 216, 0.18);
+}
+:root[data-theme="aurora"] .daily-hero::before {
+  background: radial-gradient(circle, rgba(79, 224, 255, 0.25), transparent 70%);
+  width: 260px;
+  height: 260px;
+}
+:root[data-theme="aurora"] ::selection { background: color-mix(in srgb, var(--accent) 45%, transparent); }
+
+/* No tema escuro, os cartões sólidos (--surface) cobrem quase toda a
+   tela no mobile, sobrando só uma fresta entre eles pra mostrar o
+   degradê de fundo — na intensidade original (12–16%) isso ficava
+   praticamente invisível, e o fundo parecia uma cor chapada sem vida.
+   Aqui a gente reforça só pro escuro (o claro já ficava bem do jeito
+   original) e acrescenta um brilho extra por trás do topo, que é a
+   área mais visível sem nenhum cartão por cima. */
+:root[data-theme="aurora"] body {
+  background:
+    radial-gradient(620px 380px at 12% 0%, color-mix(in srgb, var(--accent) 30%, transparent), transparent 65%),
+    radial-gradient(560px 360px at 100% 8%, color-mix(in srgb, var(--teal) 24%, transparent), transparent 62%),
+    radial-gradient(680px 480px at 50% 115%, color-mix(in srgb, var(--purple) 22%, transparent), transparent 62%),
+    var(--bg);
+  background-attachment: fixed;
 }
 
-[data-theme="candy"] {
-  --bg: #fff0f8;
-  --bg2: #fce4f4;
-  --accent: #ff2d78;
-  --accent2: #e0005a;
-  --accent-soft: #ffd6e8;
+/* Modo "Automático" (padrão — sem data-theme, ou data-theme="system"):
+   segue a aparência do aparelho. Quando o aparelho está em modo escuro,
+   usa a MESMA paleta do Aurora (em vez do antigo "Escuro" neutro), já
+   que essa é a versão escura que realmente ficou boa. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):not([data-theme="aurora"]) {
+    color-scheme: dark;
+    --bg: #060a18;
+    --bg2: #0a1024;
+    --surface: #10142c;
+    --surface2: #161b3a;
+    --text: #f1f3ff;
+    --text2: #b8c0e8;
+    --muted: #7c84b8;
+    --line: #262c52;
+    --accent: #7c6cff;
+    --accent2: #6456f0;
+    --accent-soft: #241f4e;
+    --green: #2fe0b0;
+    --green-soft: #0e2f38;
+    --orange: #ffb454;
+    --orange-soft: #3a2812;
+    --red: #ff6b8b;
+    --red-soft: #3a1830;
+    --purple: #c07dff;
+    --purple-soft: #2c1c4e;
+    --pink: #ff7fc4;
+    --pink-soft: #3a1a38;
+    --teal: #4fe0ff;
+    --teal-soft: #0e2c40;
+    --yellow: #ffe066;
+    --yellow-soft: #362c0c;
+    --note-yellow: #302a12;
+    --note-blue: #0f2038;
+    --note-green: #0d2c2a;
+    --note-pink: #301230;
+    --note-purple: #221238;
+    --note-orange: #2e1c0e;
+    --note-teal: #0c2838;
+    --note-red: #301220;
+    --note-yellow-border: #6b5a18;
+    --note-blue-border: #2c5c9a;
+    --note-green-border: #1f8f76;
+    --note-pink-border: #9a3286;
+    --note-purple-border: #6c3ca0;
+    --note-orange-border: #a05a20;
+    --note-teal-border: #1d8fa8;
+    --note-red-border: #a02a5a;
+    --shadow-card: 0 1px 0 rgba(255,255,255,0.06) inset, 0 8px 24px rgba(2,4,16,0.65);
+    --shadow-card-hover: 0 1px 0 rgba(255,255,255,0.09) inset, 0 14px 38px color-mix(in srgb, var(--accent) 22%, rgba(2,4,16,0.7));
+    --shadow-float: 0 26px 80px rgba(2,4,16,0.8);
+  }
+  :root:not([data-theme="light"]):not([data-theme="aurora"]) .daily-hero::before {
+    background: radial-gradient(circle, rgba(79, 224, 255, 0.25), transparent 70%);
+    width: 260px;
+    height: 260px;
+  }
+  :root:not([data-theme="light"]):not([data-theme="aurora"]) body {
+    background:
+      radial-gradient(620px 380px at 12% 0%, color-mix(in srgb, var(--accent) 30%, transparent), transparent 65%),
+      radial-gradient(560px 360px at 100% 8%, color-mix(in srgb, var(--teal) 24%, transparent), transparent 62%),
+      radial-gradient(680px 480px at 50% 115%, color-mix(in srgb, var(--purple) 22%, transparent), transparent 62%),
+      var(--bg);
+    background-attachment: fixed;
+  }
 }
 
-[data-theme="forest"] {
-  --bg: #f0faf2;
-  --bg2: #e2f5e6;
-  --accent: #28a745;
-  --accent2: #1e7e34;
-  --accent-soft: #d4f0da;
-}
-
-[data-theme="sunny"] {
-  --accent: #ff9500;
-  --accent2: #e08000;
-  --accent-soft: #fff3e0;
+/* Modo "Claro" forçado — explícito para quando o aparelho está em modo
+   escuro mas a pessoa prefere claro mesmo assim (mesmos valores do :root
+   padrão, só que com prioridade garantida pelo atributo). */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f6f5fb;
+  --bg2: #eeecf9;
+  --surface: #ffffff;
+  --surface2: #faf9fd;
+  --text: #1a1b2e;
+  --text2: #4a4a68;
+  --muted: #8b8aa8;
+  --line: #e7e5f4;
+  --accent: #6c5ce7;
+  --accent2: #5b4bd6;
+  --accent-soft: #ece9fc;
+  --green: #34c759;
+  --green-soft: #e5f9ec;
+  --orange: #ff9500;
+  --orange-soft: #fff3e0;
+  --red: #ff3b30;
+  --red-soft: #ffeeed;
+  --shadow-card: 0 2px 12px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.04);
+  --shadow-card-hover: 0 8px 28px rgba(0,0,0,0.10), 0 3px 8px rgba(0,0,0,0.06);
+  --shadow-float: 0 20px 60px rgba(0,0,0,0.12);
 }
 
 /* ---------- Reset & Base ---------- */
 *, *::before, *::after { box-sizing: border-box; }
 
-html { -webkit-tap-highlight-color: transparent; }
+html {
+  -webkit-tap-highlight-color: transparent;
+  overflow-x: hidden;
+  width: 100%;
+  max-width: 100%;
+  /* Antes só o <body> tinha cor de fundo. Em PWA instalado no iOS
+     (viewport-fit=cover), a área de safe-area/notch fica fora da caixa
+     do <body> — sem isso aqui, aquela faixa podia "vazar" com a cor
+     padrão do navegador em vez de acompanhar o tema. */
+  background: var(--bg);
+}
 
 body {
   margin: 0;
-  background: var(--bg);
+  /* Fundo "premium": alguns brilhos suaves e desfocados atrás do app, em
+     vez de uma cor chapada — dá profundidade sem atrapalhar a leitura,
+     porque os cartões continuam sólidos (--surface) por cima. Usa as
+     cores do tema atual (funciona igual no claro e no Aurora). */
+  background:
+    radial-gradient(680px 460px at 8% -6%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 60%),
+    radial-gradient(620px 420px at 108% 6%, color-mix(in srgb, var(--teal) 14%, transparent), transparent 60%),
+    radial-gradient(760px 520px at 50% 118%, color-mix(in srgb, var(--purple) 12%, transparent), transparent 60%),
+    var(--bg);
+  background-attachment: fixed;
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Inter, sans-serif;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
+  width: 100%;
+  max-width: 100%;
+  position: relative;
+}
+
+/* Textura de grão bem sutil por cima do fundo — no dia a dia, com os
+   cartões sólidos cobrindo boa parte da tela, o degradê acima quase não
+   aparece (só nos vãos entre os cartões), e o fundo escuro acaba parecendo
+   uma cor chapada sem vida. Esse "ruído" leve (gerado por SVG, sem
+   depender de nenhuma imagem externa) dá uma textura quase imperceptível
+   de perto, mas que tira a sensação de "vazio" — o mesmo truque usado em
+   apps premium pra dar um acabamento fosco ao fundo. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.5;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+}
+
+/* O conteúdo real do app precisa ficar acima da textura de grão (que usa
+   position:fixed + z-index:0) — sem isso o app inteiro ficaria "atrás"
+   dela visualmente em navegadores que respeitam a ordem de empilhamento
+   à risca. .app-shell é o único wrapper de topo (ver index.html), então
+   basta erguer ele — todo o resto dentro já acompanha. */
+.app-shell {
+  position: relative;
+  z-index: 1;
 }
 
 button, input, textarea, select {
@@ -250,6 +431,12 @@ p, h1, h2, h3 { margin: 0; }
   flex-shrink: 0;
 }
 
+.nav-item .icon svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+
 .nav-item:hover {
   background: var(--surface2);
   color: var(--text);
@@ -273,27 +460,6 @@ p, h1, h2, h3 { margin: 0; }
   border-top: 1px solid var(--line);
   display: grid;
   gap: 8px;
-}
-
-.theme-picker {
-  display: grid;
-  gap: 6px;
-  padding: 12px;
-  background: var(--surface2);
-  border-radius: 14px;
-}
-
-.theme-picker span { font-size: 0.78rem; color: var(--muted); font-weight: 600; }
-
-.theme-picker select, .theme-chip select {
-  height: 36px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 0 10px;
-  background: var(--surface);
-  color: var(--text);
-  font-weight: 600;
-  width: 100%;
 }
 
 .ghost-button {
@@ -391,29 +557,12 @@ p, h1, h2, h3 { margin: 0; }
   width: 100%;
   color: var(--text);
   font-size: 0.9rem;
+  -webkit-appearance: none;
+  appearance: none;
+  outline: none;
+  border-radius: 0;
 }
 .search-box .icon { color: var(--muted); font-style: normal; font-size: 0.9rem; }
-
-.theme-chip {
-  display: flex;
-  align-items: center;
-  height: 44px;
-  padding: 0 12px;
-  background: var(--surface);
-  border: 1.5px solid var(--line);
-  border-radius: 14px;
-  gap: 6px;
-}
-.theme-chip .icon { color: var(--muted); font-style: normal; }
-.theme-chip select {
-  border: none;
-  background: transparent;
-  color: var(--text);
-  font-weight: 600;
-  font-size: 0.85rem;
-  padding: 0;
-  width: auto;
-}
 
 .primary-button {
   display: flex;
@@ -435,7 +584,7 @@ p, h1, h2, h3 { margin: 0; }
 .primary-button .icon { font-style: normal; font-size: 1.1rem; }
 
 /* ---------- VIEWS ---------- */
-.view { display: none; padding: 24px 28px; }
+.view { display: none; padding: 22px 26px; }
 .active-view { display: block; animation: fadeUp 240ms ease; }
 
 @keyframes fadeUp {
@@ -525,27 +674,51 @@ p, h1, h2, h3 { margin: 0; }
 
 .mascot-card { display: none; }
 
-/* ---------- METRIC GRID ---------- */
-.metric-grid {
+/* ---------- OVERVIEW GRID ----------
+   Substitui os antigos .today-summary-grid + .metric-grid, que ficavam
+   empilhados e repetiam a mesma informação de formas diferentes (era essa
+   duplicação o principal motivo do dashboard parecer bagunçado). Agora é
+   um grid só, com 6 cartões do mesmo tamanho/estilo, cada um com um dado
+   único: tarefas, saldo, progresso, agenda, meta e XP. */
+.overview-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 14px;
   margin-bottom: 20px;
 }
 
-.metric-panel {
+.overview-card {
   background: var(--surface);
-  border-radius: 20px;
-  padding: 18px;
+  border-radius: 18px;
+  padding: 14px;
   border: 1.5px solid var(--line);
   box-shadow: var(--shadow-card);
   display: grid;
-  gap: 6px;
+  gap: 4px;
+  align-content: start;
+  min-width: 0;
   transition: transform 180ms, box-shadow 180ms;
+  animation: metricIn 520ms cubic-bezier(.22,1,.36,1) both;
 }
-.metric-panel:hover { transform: translateY(-2px); box-shadow: var(--shadow-card-hover); }
+.overview-card:nth-child(1) { animation-delay: 20ms; }
+.overview-card:nth-child(2) { animation-delay: 60ms; }
+.overview-card:nth-child(3) { animation-delay: 100ms; }
+.overview-card:nth-child(4) { animation-delay: 140ms; }
+.overview-card:nth-child(5) { animation-delay: 180ms; }
+.overview-card:nth-child(6) { animation-delay: 220ms; }
 
-.metric-panel .metric-icon {
+@keyframes metricIn {
+  from { opacity: 0; transform: translateY(10px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .overview-card { animation: none; }
+}
+
+.overview-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-card-hover); }
+
+.overview-icon {
   width: 38px;
   height: 38px;
   border-radius: 12px;
@@ -553,23 +726,70 @@ p, h1, h2, h3 { margin: 0; }
   color: var(--accent);
   display: grid;
   place-items: center;
-  font-size: 1.1rem;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
+  transition: transform 260ms cubic-bezier(.34,1.56,.64,1);
+}
+.overview-icon svg { width: 19px; height: 19px; }
+.overview-card:hover .overview-icon { transform: scale(1.08) rotate(-4deg); }
+
+.overview-card:nth-child(1) .overview-icon {
+  background: linear-gradient(135deg, var(--accent-soft), color-mix(in srgb, var(--accent) 24%, var(--accent-soft)));
+  color: var(--accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 14%, transparent) inset;
+}
+.overview-card:nth-child(2) .overview-icon {
+  background: linear-gradient(135deg, var(--green-soft), color-mix(in srgb, var(--green) 24%, var(--green-soft)));
+  color: var(--green);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--green) 14%, transparent) inset;
+}
+.overview-card:nth-child(3) .overview-icon {
+  background: linear-gradient(135deg, var(--teal-soft), color-mix(in srgb, var(--teal) 24%, var(--teal-soft)));
+  color: var(--teal);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--teal) 14%, transparent) inset;
+}
+.overview-card:nth-child(4) .overview-icon {
+  background: linear-gradient(135deg, var(--orange-soft), color-mix(in srgb, var(--orange) 24%, var(--orange-soft)));
+  color: var(--orange);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--orange) 14%, transparent) inset;
+}
+.overview-card:nth-child(5) .overview-icon {
+  background: linear-gradient(135deg, var(--purple-soft), color-mix(in srgb, var(--purple) 24%, var(--purple-soft)));
+  color: var(--purple);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--purple) 14%, transparent) inset;
+}
+.overview-card:nth-child(6) .overview-icon {
+  background: linear-gradient(135deg, var(--yellow-soft), color-mix(in srgb, var(--yellow) 24%, var(--yellow-soft)));
+  color: var(--yellow);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--yellow) 14%, transparent) inset;
 }
 
-.metric-panel:nth-child(1) .metric-icon { background: var(--green-soft); color: var(--green); }
-.metric-panel:nth-child(2) .metric-icon { background: var(--accent-soft); color: var(--accent); }
-.metric-panel:nth-child(3) .metric-icon { background: var(--orange-soft); color: var(--orange); }
-.metric-panel:nth-child(4) .metric-icon { background: var(--purple-soft); color: var(--purple); }
-
-.metric-panel > span { font-size: 0.82rem; color: var(--muted); font-weight: 500; }
-.metric-panel strong { font-size: 2rem; font-weight: 800; letter-spacing: -0.04em; color: var(--text); }
-.metric-panel small { font-size: 0.78rem; color: var(--muted); }
+.overview-label { font-size: 0.78rem; color: var(--muted); font-weight: 600; }
+/* Todos os valores usam o mesmo tamanho de fonte, independente do
+   conteúdo (número, "R$ 0,00" ou um texto como "Nenhuma") — antes
+   .overview-value-small deixava alguns cartões com números bem menores
+   que os outros, o que dava uma sensação de grade desalinhada. */
+.overview-value, .overview-value-small {
+  font-size: 1.34rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.overview-card small { font-size: 0.74rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ---------- DASHBOARD LAYOUT ---------- */
 .dashboard-layout {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
+  /* "dense" faz o grid preencher automaticamente qualquer buraco deixado
+     por um cartão "wide" (2 colunas) — sem isso, o painel "Finanças do
+     mês" (1 coluna) ficava sozinho na última linha, com um vão vazio de
+     2 colunas do lado dele. Com dense, o próximo cartão de 1 coluna
+     "sobe" pra preencher esse espaço, sem precisar mudar a ordem no HTML. */
+  grid-auto-flow: dense;
   gap: 16px;
 }
 
@@ -578,7 +798,7 @@ p, h1, h2, h3 { margin: 0; }
   border-radius: 20px;
   border: 1.5px solid var(--line);
   box-shadow: var(--shadow-card);
-  padding: 18px;
+  padding: 14px 16px;
 }
 
 .wide { grid-column: span 2; }
@@ -587,20 +807,51 @@ p, h1, h2, h3 { margin: 0; }
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 12px;
-  margin-bottom: 14px;
+  margin-bottom: 10px;
+}
+
+/* Os dois "lados" de um cabeçalho (ex.: título + selos de Receita/Despesa)
+   nunca devem forçar a página a ficar mais larga que a tela — se não
+   couber ao lado do título, quebra pra linha de baixo. */
+.panel-header > div:first-child,
+.form-heading > div:first-child {
+  min-width: 0;
 }
 
 .panel-header .eyebrow {
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--muted);
-  margin-bottom: 2px;
+  margin-bottom: 1px;
 }
 
-.panel-header h2 { font-size: 1rem; font-weight: 700; color: var(--text); }
+.panel-header h2 { font-size: 0.94rem; font-weight: 700; color: var(--text); }
+
+/* ---------- DASHBOARD PANELS — compactos e recolhíveis ---------- */
+/* Antes cada painel do início vinha sempre expandido, com cabeçalho maior
+   e listas vazias em caixas tracejadas de 24px de padding — em uma conta
+   nova (tudo vazio), a tela virava uma sequência de blocos grandes sem
+   informação nenhuma. Agora cada painel pode ser minimizado (o estado
+   fica salvo por painel, ver initDashPanelCollapse em app.js) e o
+   cabeçalho/conteúdo em si ocupam bem menos espaço. */
+.dash-panel-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+
+.dash-panel-collapse-btn { font-size: 0.8rem; transition: transform 200ms ease, background 160ms, color 160ms; }
+.dash-panel.is-collapsed .dash-panel-collapse-btn { transform: rotate(-90deg); }
+
+.dash-panel-body {
+  display: grid;
+  overflow: hidden;
+  transition: grid-template-rows 220ms ease;
+  grid-template-rows: 1fr;
+}
+.dash-panel-body > * { min-height: 0; overflow: hidden; }
+.dash-panel.is-collapsed .dash-panel-body { grid-template-rows: 0fr; }
+.dash-panel.is-collapsed .panel-header { margin-bottom: 0; }
 
 .icon-button {
   width: 34px;
@@ -630,10 +881,60 @@ p, h1, h2, h3 { margin: 0; }
   transition: all 160ms;
 }
 
-.task-row { cursor: grab; }
+/* A tarefa tem mais metadados (data, prioridade, status) do que um evento
+   ou meta, então em vez de espremer tudo numa única linha (o que ficava
+   "embolado" — título, data e prioridade disputando o mesmo espaço), ela
+   usa duas linhas bem definidas: título+ações no topo, badges abaixo. */
+.task-row {
+  cursor: grab;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
 .task-row:hover, .event-row:hover { background: var(--line); }
 
-.task-main { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; }
+.task-row-top { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.task-row-top .task-title { flex: 1; min-width: 0; }
+
+.task-row-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+.task-row-bottom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding-left: 38px; /* alinha com o título, depois do círculo de concluir */
+}
+.task-row-bottom .task-meta { margin-top: 0; }
+
+/* ── Checklist (subtarefas) ─────────────────────────────────── */
+.task-subtasks {
+  display: none;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px 2px 38px;
+  border-top: 1px dashed var(--line);
+  margin-top: 2px;
+}
+.task-subtasks.open { display: flex; }
+.task-subtask-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+}
+.task-subtask-row span.done { text-decoration: line-through; opacity: 0.55; }
+.task-subtask-check {
+  width: 20px; height: 20px; min-width: 20px;
+  border-radius: 6px;
+  border: 1.5px solid var(--line);
+  background: transparent;
+  display: grid; place-items: center;
+  font-size: 0.7rem;
+  color: var(--green);
+  flex-shrink: 0;
+}
+.task-subtask-check.done { background: var(--green); border-color: var(--green); color: #fff; }
 
 .task-check {
   width: 28px;
@@ -648,8 +949,13 @@ p, h1, h2, h3 { margin: 0; }
   font-size: 0.85rem;
   transition: all 160ms;
   flex-shrink: 0;
+  position: relative;
 }
 .task-check:hover { border-color: var(--green); background: var(--green-soft); }
+
+@media (max-width: 720px) {
+  .task-check::after { content: ""; position: absolute; inset: -8px; }
+}
 
 .task-title { font-weight: 600; font-size: 0.9rem; overflow-wrap: anywhere; color: var(--text); }
 .task-meta, .note-meta, .event-meta { color: var(--muted); font-size: 0.8rem; margin-top: 1px; }
@@ -702,13 +1008,28 @@ p, h1, h2, h3 { margin: 0; }
 }
 .mini-button:hover, .card-actions button:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
 
+/* No mobile, botões de ação pequenos (editar, excluir, favoritar, mover)
+   ganham uma área de toque mínima de 44x44px mesmo mantendo o visual
+   compacto — usa um "padding invisível" via pseudo-elemento para não
+   precisar tocar 2-3 vezes até acertar o botão certo. */
+@media (max-width: 720px) {
+  .mini-button, .card-actions button {
+    position: relative;
+  }
+  .mini-button::after, .card-actions button::after {
+    content: "";
+    position: absolute;
+    inset: -7px;
+  }
+}
+
 /* ---------- BAR CHART ---------- */
 .bar-chart {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
   align-items: end;
   gap: 8px;
-  min-height: 180px;
+  min-height: 120px;
   padding: 4px 0;
 }
 
@@ -718,7 +1039,7 @@ p, h1, h2, h3 { margin: 0; }
   align-items: center;
   justify-content: flex-end;
   gap: 6px;
-  height: 170px;
+  height: 110px;
   font-size: 0.72rem;
   color: var(--muted);
   font-weight: 600;
@@ -784,13 +1105,39 @@ label {
 input, textarea, select {
   min-height: 42px;
   width: 100%;
+  min-width: 0; /* impede que selects com opções longas (ex.: emojis) estourem a largura do card */
   border: 1.5px solid var(--line);
   border-radius: 12px;
   padding: 8px 12px;
   color: var(--text);
   background: var(--surface2);
   font-size: 0.9rem;
-  transition: border-color 180ms, box-shadow 180ms;
+  font-family: inherit;
+  transition: border-color 180ms, box-shadow 180ms, background 180ms;
+}
+
+/* Todo <select> nativo do app usa a mesma setinha customizada em vez da
+   aparência padrão do sistema operacional (que muda de navegador pra
+   navegador e nunca combina com os outros campos ao lado). */
+select {
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b8aa8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M6 9l6 6 6-6'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 15px;
+  padding-right: 32px;
+  cursor: pointer;
+}
+
+/* No mobile, todo campo de formulário precisa ter pelo menos 16px de
+   font-size — abaixo disso, o iOS Safari faz zoom automático ao focar
+   o campo (e não desfaz o zoom sozinho), o que dá a sensação de
+   "tela bagunçada" que precisa de esforço para usar. */
+@media (max-width: 720px) {
+  input, textarea, select {
+    font-size: 16px;
+  }
 }
 
 input:focus, textarea:focus, select:focus {
@@ -802,6 +1149,23 @@ input:focus, textarea:focus, select:focus {
 
 textarea { resize: vertical; min-height: 80px; }
 
+/* Safari/iOS aplica estilo nativo "maior" em campos de data e hora,
+   ignorando a altura padrão dos demais campos — removendo a aparência
+   nativa eles passam a respeitar min-height/padding como qualquer input. */
+input[type="date"],
+input[type="time"] {
+  -webkit-appearance: none;
+  appearance: none;
+  min-height: 42px;
+  line-height: 1.3;
+  /* iOS Safari centraliza o texto desses dois tipos de campo por padrão,
+     mesmo com appearance:none — sem isso aqui, "13 de jul. de 2026" e
+     "09:00" ficavam alinhados ao centro enquanto os campos de texto ao
+     redor (Título, Local) ficavam à esquerda, dando um ar desalinhado
+     ao formulário inteiro. */
+  text-align: left;
+}
+
 .form-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -809,6 +1173,128 @@ textarea { resize: vertical; min-height: 80px; }
 }
 
 .form-actions { display: flex; gap: 8px; }
+
+/* ---------- Note editor (versão simplificada) ---------- */
+.note-editor { gap: 10px; }
+
+.note-title-field input {
+  font-size: 1.05rem;
+  font-weight: 700;
+  border: none;
+  background: transparent;
+  padding: 4px 2px;
+  min-height: 38px;
+}
+.note-title-field input:focus { box-shadow: none; }
+
+.note-body-field textarea {
+  border: none;
+  background: transparent;
+  resize: none;
+  overflow: hidden;
+  padding: 4px 2px;
+  min-height: 64px;
+  font-size: 0.94rem;
+  line-height: 1.5;
+}
+.note-body-field textarea:focus { box-shadow: none; }
+
+textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms ease; }
+
+.note-quick-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 8px;
+  border-top: 1.5px dashed var(--line);
+}
+
+.note-priority-picker { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.note-priority-dot {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: auto;
+  min-height: 0;
+  padding: 6px 12px 6px 10px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  border: 1.5px solid var(--line);
+  background: var(--surface2);
+  cursor: pointer;
+  transition: all 160ms ease;
+  white-space: nowrap;
+}
+.note-priority-dot .dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.note-priority-dot[data-priority="Baixa"]   { color: var(--green); }
+.note-priority-dot[data-priority="Media"]   { color: var(--accent); }
+.note-priority-dot[data-priority="Alta"]    { color: var(--orange); }
+.note-priority-dot[data-priority="Urgente"] { color: var(--red); }
+
+.note-priority-dot.active[data-priority="Baixa"]   { background: var(--green-soft);  border-color: var(--green); }
+.note-priority-dot.active[data-priority="Media"]   { background: var(--blue-soft, var(--accent-soft)); border-color: var(--accent); }
+.note-priority-dot.active[data-priority="Alta"]    { background: var(--orange-soft); border-color: var(--orange); }
+.note-priority-dot.active[data-priority="Urgente"] { background: var(--red-soft);    border-color: var(--red); }
+.note-priority-dot.active { transform: scale(1.04); font-weight: 800; }
+
+.note-checklist-toggle {
+  min-height: 0;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  background: var(--surface2);
+  color: var(--text2);
+  border: 1.5px solid var(--line);
+  cursor: pointer;
+  transition: all 160ms;
+  white-space: nowrap;
+}
+.note-checklist-toggle.active,
+.note-checklist-toggle:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+
+.note-checklist-field { margin-top: 0; }
+
+.note-more-details {
+  border-top: 1.5px dashed var(--line);
+  padding-top: 8px;
+}
+.note-more-details summary {
+  cursor: pointer;
+  list-style: none;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  user-select: none;
+}
+.note-more-details summary::-webkit-details-marker { display: none; }
+.note-more-details summary .chev { transition: transform 160ms ease; font-size: 0.75rem; }
+.note-more-details[open] summary .chev { transform: rotate(180deg); }
+.note-more-details > *:not(summary) { margin-top: 10px; }
+.note-more-details > div.form-grid:not(:first-of-type),
+.note-more-details > label { margin-top: 10px; }
+
+.note-save-btn { flex: 1; justify-content: center; height: 46px; font-size: 0.95rem; }
+
+/* Botão "Salvar compromisso" — mesmo tratamento do botão de notas: fica
+   no final do formulário (depois de todos os campos), ocupando a largura
+   toda, em vez de ficar isolado ao lado do título antes de qualquer campo
+   preenchido (posição antiga, confusa e inconsistente com Notas/Tarefas). */
+.event-save-btn { width: 100%; justify-content: center; height: 46px; font-size: 0.95rem; }
+.form-actions .ghost-button { flex: 0 0 auto; width: auto; padding: 10px 18px; }
 
 /* Note filters */
 .list-panel { position: relative; }
@@ -838,23 +1324,26 @@ textarea { resize: vertical; min-height: 80px; }
 /* Note select (legacy, hidden by JS if filter chips present) */
 #noteFilter { display: none; }
 
-/* NOTE GRID — Masonry Style */
+/* NOTE GRID — grid responsivo (substitui o antigo "columns" CSS, que
+   reordenava e cortava os cartões de forma imprevisível quando uma nota
+   tinha muito texto — a causa do layout "quebrando" ao escrever mais). */
 .note-grid {
-  columns: 2;
-  column-gap: 14px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 14px;
+  align-items: start;
 }
 
 .note-card {
-  break-inside: avoid;
-  margin-bottom: 14px;
   border-radius: var(--radius-card);
-  padding: 18px;
+  padding: 15px;
   border: 1.5px solid var(--note-yellow-border);
   background: var(--note-yellow);
   transition: transform 200ms ease, box-shadow 200ms ease;
   cursor: pointer;
   display: block;
   position: relative;
+  overflow-wrap: anywhere;
 }
 
 .note-card:hover {
@@ -906,7 +1395,32 @@ textarea { resize: vertical; min-height: 80px; }
 }
 
 .note-card .tag-list { flex-wrap: wrap; }
-.note-card .card-actions { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+/* 3 ações por nota: "Editar" e "Tarefa" dividem o espaço em partes
+   iguais, e "Excluir" vira um botão circular só com ícone à direita —
+   em vez dos 4 botões de texto que quebravam linha de formas diferentes
+   dependendo do tamanho da nota. */
+.note-card .card-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+}
+.note-card .card-actions button { flex: 1; text-align: center; }
+.note-card .card-actions .danger-action {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 0.9rem;
+}
+.note-card .card-actions .danger-action:hover {
+  background: var(--red-soft);
+  color: var(--red);
+  border-color: var(--red);
+}
 
 /* Fav button */
 .note-card .mini-button[title="Favoritar"] {
@@ -946,6 +1460,11 @@ textarea { resize: vertical; min-height: 80px; }
   font-size: 0.6rem;
   cursor: pointer;
   transition: all 150ms;
+  position: relative;
+}
+
+@media (max-width: 720px) {
+  .cl-check::after { content: ""; position: absolute; inset: -12px; }
 }
 
 .cl-check.done {
@@ -1026,6 +1545,61 @@ textarea { resize: vertical; min-height: 80px; }
 }
 
 .task-column.drag-over { border-color: var(--accent); background: var(--accent-soft); }
+
+/* Abas de status (só visíveis no mobile) */
+.task-status-tabs { display: none; }
+
+@media (max-width: 720px) {
+  /* Virou um "grid" 2x2 em vez de uma fileira com scroll horizontal —
+     assim as 4 abas ficam sempre 100% visíveis, sem cortar texto nem
+     depender do usuário descobrir que pode arrastar pro lado. */
+  .task-status-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+    padding: 6px;
+    margin-bottom: 14px;
+    background: var(--surface2);
+    border-radius: 16px;
+    border: 1.5px solid var(--line);
+  }
+
+  .status-tab {
+    padding: 10px 6px;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-align: center;
+    color: var(--text2);
+    background: var(--surface);
+    border: none;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: all 180ms ease;
+  }
+  .status-tab:active { transform: scale(0.97); }
+
+  .status-tab.active[data-status-tab="Pendente"] {
+    background: var(--text); color: var(--surface); box-shadow: var(--shadow-card);
+  }
+  .status-tab.active[data-status-tab="Em andamento"] {
+    background: var(--accent); color: #fff; box-shadow: 0 3px 10px color-mix(in srgb, var(--accent) 35%, transparent);
+  }
+  .status-tab.active[data-status-tab="Concluida"] {
+    background: var(--green); color: #fff; box-shadow: 0 3px 10px color-mix(in srgb, var(--green) 35%, transparent);
+  }
+  .status-tab.active[data-status-tab="Cancelada"] {
+    background: var(--red); color: #fff; box-shadow: 0 3px 10px color-mix(in srgb, var(--red) 35%, transparent);
+  }
+
+  /* Com as abas ativas, o board vira 1 coluna e mostra só a coluna
+     correspondente à aba selecionada — sem precisar rolar tudo */
+  .task-board { grid-template-columns: 1fr; }
+  .task-column { display: none; }
+  .task-column.tab-active { display: flex; }
+}
 
 .column-title {
   display: flex;
@@ -1158,6 +1732,19 @@ textarea { resize: vertical; min-height: 80px; }
   font-size: 0.9rem;
 }
 
+/* Variante enxuta usada só nos painéis do início (ver renderList em
+   app.js) — a caixa tracejada de 24px de padding é ótima quando é o
+   único conteúdo da tela (ex.: aba Tarefas vazia), mas empilhada 3-4
+   vezes seguidas no dashboard deixava a rolagem inicial enorme sem
+   nenhuma informação real. */
+.empty-state-compact {
+  padding: 10px 4px;
+  color: var(--muted);
+  text-align: left;
+  font-weight: 500;
+  font-size: 0.84rem;
+}
+
 /* ---------- TOAST ---------- */
 .toast {
   position: fixed;
@@ -1178,6 +1765,40 @@ textarea { resize: vertical; min-height: 80px; }
   max-width: 360px;
 }
 .toast.show { opacity: 1; transform: translateY(0); }
+
+/* ---------- SYNC STATUS PILL ---------- */
+/* Antes era criado só com estilo inline (JS), então não dava pra reposicionar
+   no mobile — ficava fixo a 24px do fundo e acabava sobrepondo a barra de
+   navegação inferior, cobrindo o rótulo da aba ativa (parecia que a barra
+   "quebrou"/mudou de nome). Agora é uma classe de verdade, então o media
+   query abaixo consegue subir o indicador para cima da barra. */
+.sync-status {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 7px 16px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  z-index: 998;
+  transition: opacity 300ms;
+  pointer-events: auto;
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+  color: var(--text2);
+  cursor: default;
+  max-width: 88vw;
+  text-align: center;
+  opacity: 0;
+}
+.sync-status.is-visible { opacity: 1; }
+.sync-status.is-actionable { cursor: pointer; }
+.sync-status[data-status="saving"]  { color: var(--accent); }
+.sync-status[data-status="saved"]   { color: var(--green); }
+.sync-status[data-status="offline"] { color: var(--orange); }
+.sync-status[data-status="error"]   { color: var(--red); }
 
 /* ---------- CELEBRATION ---------- */
 .celebration-burst { position: fixed; inset: 0; z-index: 100; pointer-events: none; }
@@ -1207,6 +1828,16 @@ textarea { resize: vertical; min-height: 80px; }
   100% { opacity: 0; transform: translate(calc(-50% + var(--x,0px)), calc(-50% + var(--y,0px))) rotate(240deg) scale(1.3); }
 }
 
+/* Destaque temporário ao abrir um item específico a partir de uma notificação */
+.notify-highlight {
+  animation: notifyPulse 1.3s ease 2;
+  border-radius: inherit;
+}
+@keyframes notifyPulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent); }
+  50%      { box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 35%, transparent); }
+}
+
 /* ---------- BOTTOM NAV (mobile) ---------- */
 .bottom-nav { display: none; }
 
@@ -1220,15 +1851,13 @@ textarea { resize: vertical; min-height: 80px; }
 
   .brand > div:not(.brand-mark),
   .nav-item span:last-child,
-  .ghost-button span,
-  .theme-picker,
   .streak-box { display: none; }
 
   .sidebar { align-items: center; padding: 20px 10px; gap: 4px; }
   .nav-item { justify-content: center; padding: 12px; width: 50px; border-radius: 14px; }
   .nav-item .icon { margin: 0; }
 
-  .metric-grid { grid-template-columns: repeat(2, 1fr); }
+  .overview-grid { grid-template-columns: repeat(3, 1fr); }
   .dashboard-layout { grid-template-columns: 1fr 1fr; }
   .task-board { grid-template-columns: repeat(2, 1fr); }
 
@@ -1287,6 +1916,12 @@ textarea { resize: vertical; min-height: 80px; }
     transition: all 200ms;
   }
 
+  .bottom-nav-item .bn-icon svg {
+    width: 19px;
+    height: 19px;
+    display: block;
+  }
+
   .bottom-nav-item.active {
     color: var(--accent);
   }
@@ -1300,13 +1935,98 @@ textarea { resize: vertical; min-height: 80px; }
   .main-area { padding-bottom: var(--nav-height); }
 
   .topbar {
-    padding: 14px 16px;
-    flex-wrap: wrap;
+    padding: 12px 16px;
     gap: 10px;
+    /* Em mobile não pode ser flex-wrap porque o topbar é sticky e ficaria
+       muito alto — os itens se ajustam com gap menor */
+    min-height: var(--header-height, 60px);
   }
 
-  .topbar-actions { width: 100%; }
-  .search-box { width: 100%; flex: 1; }
+  /* todayLabel costumava transbordar em mobile (ex.: "Quarta-Feira, 01 De Julho")
+     porque é um texto longo e o topbar não tem espaço para ele + ações.
+     Resolvido com white-space:nowrap + overflow:hidden + text-overflow:ellipsis
+     no container principal, e um max-width para não empurrar os botões de ação. */
+  .topbar > div:first-child {
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  #todayLabel {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 220px;
+  }
+
+  #viewTitle {
+    font-size: 1.3rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 220px;
+  }
+
+  .topbar-actions {
+    /* Antes existiam duas "barras" de busca lado a lado no celular (a de
+       filtro + o botão "Tudo ⌘K"), ambas espremidas — dava a impressão de
+       duas lupas quebradas. Agora só existe UMA busca no app inteiro, que
+       preenche o espaço que sobrar entre o avatar/instalar PWA e o botão
+       de adicionar tarefa. */
+    flex-shrink: 1;
+    min-width: 0;
+  }
+
+  /* Única busca do app: no celular ela vira flexível (em vez da largura
+     fixa de 240px do desktop) para caber ao lado dos outros botões sem
+     cortar texto nem empurrar nada pra fora da tela. */
+  .search-box {
+    flex: 1 1 auto;
+    min-width: 0;
+    width: auto;
+    padding: 0 10px;
+  }
+  .search-box input { min-width: 0; }
+
+  /* Botão de adicionar tarefa: só o ícone no mobile (mesma largura do
+     avatar, formato consistente), o rótulo "Tarefa" some visualmente —
+     a ação continua identificável via aria-label no HTML. O botão de
+     instalar PWA (quando aparece) recebe o mesmo tratamento. */
+  /* Alinha o avatar com a mesma altura da busca e do botão "+" (44px),
+     em vez do tamanho de 40px herdado do desktop — evita que o avatar
+     pareça "flutuar" um pouco acima/abaixo dos outros elementos da barra. */
+  .topbar-actions .user-avatar-btn {
+    width: 44px;
+    height: 44px;
+  }
+
+  #quickAddTask.primary-button,
+  .pwa-fixed-install-btn {
+    flex-shrink: 0;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    justify-content: center;
+  }
+  #quickAddTask.primary-button span:last-child,
+  .pwa-fixed-install-btn span:last-child {
+    display: none;
+  }
+
+  /* Em formulários verticais (Tarefas/Metas), o botão não deve crescer em
+     altura junto com os campos — só ocupar a largura total, mantendo a
+     mesma altura padrão dos demais botões do site. Importante: isso NÃO
+     pode incluir .editor-panel/.compact-editor aqui, pois o botão "Salvar"
+     dentro de .form-heading (Agenda/Anotações/Finanças) está numa linha,
+     não numa coluna — dar width:100% nele empurra o botão para fora da
+     tela (foi exatamente o bug visto nos prints). */
+  .inline-form .primary-button {
+    flex: 0 0 auto;
+    width: 100%;
+  }
+
+  .form-heading .primary-button {
+    flex: 0 0 auto;
+  }
 
   .view { padding: 16px; }
 
@@ -1314,22 +2034,73 @@ textarea { resize: vertical; min-height: 80px; }
   .daily-hero { padding: 20px; }
   .daily-hero h2 { font-size: 1.3rem; }
 
-  /* Mobile metric grid */
-  .metric-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
-  .metric-panel strong { font-size: 1.6rem; }
+  /* Mobile overview grid: 2 colunas, cartões compactos */
+  .overview-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .overview-card { padding: 12px; }
+  .overview-value, .overview-value-small { font-size: 1.1rem; }
 
   /* Mobile dashboard */
-  .dashboard-layout { grid-template-columns: 1fr; }
+  .dashboard-layout { grid-template-columns: 1fr; gap: 10px; }
   .wide { grid-column: auto; }
+  .panel, .list-panel, .calendar-panel { padding: 12px 14px; border-radius: 16px; }
+  .panel-header { margin-bottom: 8px; gap: 8px; }
+  .panel-header h2 { font-size: 0.9rem; }
+  .icon-button { width: 30px; height: 30px; border-radius: 9px; font-size: 0.82rem; }
 
   /* Mobile notes */
   #notesView .workbench { grid-template-columns: 1fr; }
-  .note-grid { columns: 1; }
+  .note-grid { grid-template-columns: 1fr; }
 
-  /* Mobile tasks */
-  .board-toolbar { flex-direction: column; }
-  .inline-form { flex-direction: column; }
+  /* Mobile tasks — cartão de "adicionar tarefa rápida". Todos os campos
+     (texto, prioridade, data) e a barra de progresso ficam com a MESMA
+     altura, mesmo raio de borda e texto centralizado, em vez de cada
+     um alinhar o conteúdo de um jeito (o texto encostado à esquerda,
+     o select mais pra dentro, a data centralizada pelo navegador). */
+  .board-toolbar { flex-direction: column; gap: 10px; }
+  .inline-form {
+    flex-direction: column;
+    background: var(--surface);
+    border: 1.5px solid var(--line);
+    border-radius: 20px;
+    padding: 16px;
+    box-shadow: var(--shadow-card);
+    gap: 10px;
+  }
+  .inline-form input,
+  .inline-form select {
+    width: 100%;
+    height: 46px;
+    text-align: center;
+    border-radius: 13px;
+  }
+  /* Select nativo some com a aparência do sistema (que varia de navegador
+     pra navegador) e ganha uma setinha customizada, igual ao resto do
+     app — assim o texto fica realmente centralizado em vez de sobrar
+     espaço reservado pra seta do lado direito. */
+  .inline-form select {
+    -webkit-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b8aa8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M6 9l6 6 6-6'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    background-size: 16px;
+    padding-right: 34px;
+    text-align-last: center;
+  }
+  .inline-form .primary-button {
+    width: 100%;
+    justify-content: center;
+    height: 46px;
+  }
   .task-board { grid-template-columns: 1fr; }
+
+  /* Barra de progresso das tarefas: centralizada, mesma largura do
+     cartão de cima em vez de encostar nas bordas de um jeito diferente. */
+  .progress-strip {
+    width: 100%;
+    justify-content: center;
+    text-align: center;
+  }
 
   /* Mobile calendar */
   .calendar-layout { grid-template-columns: 1fr; }
@@ -1340,13 +2111,1748 @@ textarea { resize: vertical; min-height: 80px; }
   /* Toast above nav */
   .toast { bottom: calc(var(--nav-height) + 12px); right: 16px; left: 16px; text-align: center; }
 
+  /* Indicador de sincronização também acima da barra — e mais alto ainda
+     que o toast, para nunca sobrepor um ao outro quando os dois aparecem
+     ao mesmo tempo (ex.: "Tarefa adicionada" + "Salvando..."). */
+  .sync-status { bottom: calc(var(--nav-height) + 62px); z-index: 90; }
+
   /* Form grid 1 col on mobile */
   .form-grid { grid-template-columns: 1fr; }
+
+  /* Nota — linha de prioridade/checklist: em telas estreitas, 3 pílulas
+     cabiam numa linha e a 4ª ("Urgente") sobrava sozinha embaixo, e o botão
+     "Checklist" ficava boiando numa 3ª linha isolada. Em vez de depender de
+     quebra automática (flex-wrap), a prioridade vira uma grade de 4 colunas
+     iguais — sempre cabe tudo numa linha só — e o checklist fica em sua
+     própria linha, ocupando a largura toda, como uma ação separada e clara. */
+  .note-quick-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .note-priority-picker {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    width: 100%;
+  }
+  .note-priority-dot {
+    justify-content: center;
+    padding: 8px 4px;
+    font-size: 0.72rem;
+    gap: 4px;
+  }
+  .note-checklist-toggle {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+  }
+
+  /* Cartão de anotação no mobile: mesma lógica do desktop (Editar/Tarefa
+     dividem o espaço, Excluir vira um círculo só com ícone), garantindo
+     que a linha de ações nunca quebre de forma imprevisível. */
+  .note-card .card-actions button {
+    padding: 0 6px;
+  }
 }
 
-/* Note grid 3 col on large screens */
+/* Note grid já se adapta sozinha em telas grandes via auto-fill */
 @media (min-width: 1400px) {
-  .note-grid { columns: 3; }
   .dashboard-layout { grid-template-columns: repeat(3, 1fr); }
-  .metric-grid { grid-template-columns: repeat(4, 1fr); }
+  .overview-grid { grid-template-columns: repeat(6, 1fr); }
 }
+
+/* ============================================================
+   FINANCES MODULE
+   ============================================================ */
+
+/* Cabeçalho fixo (mês + resumo), visível em todas as abas de Finanças */
+.fin-header { display: grid; gap: 14px; margin-bottom: 18px; }
+
+.fin-budget-bar { padding: 16px 18px; display: grid; gap: 10px; }
+.fin-budget-bar-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.fin-budget-bar-title { font-weight: 700; font-size: 0.88rem; color: var(--text); }
+.fin-budget-bar-label { font-size: 0.8rem; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
+.fin-budget-track {
+  height: 12px;
+  background: var(--surface2);
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.08);
+}
+.fin-budget-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--green);
+  transition: width 500ms cubic-bezier(0.22, 1, 0.36, 1), background 300ms ease;
+}
+
+/* Abas de Finanças: Lançamentos / Análise / Controle / Automação —
+   separam o fluxo de "registrar" (usado toda hora) dos painéis de
+   análise/controle/automação (consultados com menos frequência), para a
+   tela não ficar com tudo empilhado de uma vez. */
+.fin-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 5px;
+  margin-bottom: 18px;
+  background: var(--surface2);
+  border: 1.5px solid var(--line);
+  border-radius: 16px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  scroll-snap-type: x proximity;
+  position: relative;
+}
+.fin-tabs::-webkit-scrollbar { display: none; }
+
+.fin-tab-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  flex: 1 1 auto;
+  white-space: nowrap;
+  padding: 11px 14px;
+  border-radius: 12px;
+  border: none;
+  background: none;
+  color: var(--text2);
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 180ms ease;
+  scroll-snap-align: center;
+}
+
+.fin-tab-icon {
+  display: inline-flex;
+  width: 17px;
+  height: 17px;
+}
+
+.fin-tab-icon svg { width: 100%; height: 100%; display: block; }
+
+.fin-tab-btn:hover { color: var(--text); }
+.fin-tab-btn:active { transform: scale(0.97); }
+
+.fin-tab-btn.active {
+  background: var(--surface);
+  color: var(--accent);
+  box-shadow: var(--shadow-card);
+  position: relative;
+}
+.fin-tab-btn.active::after {
+  content: "";
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 4px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--accent);
+  animation: finTabUnderline 220ms ease;
+}
+@keyframes finTabUnderline {
+  from { transform: scaleX(0); opacity: 0; }
+  to { transform: scaleX(1); opacity: 1; }
+}
+
+.fin-tab-panel { animation: fadeUp 220ms ease; }
+
+/* Aba Análise: por categoria + gráfico dos últimos 6 meses lado a lado
+   em telas largas, empilhados em telas estreitas. */
+.fin-analise-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  align-items: stretch;
+  min-width: 0;
+}
+
+/* Os dois gráficos ficam lado a lado, com a mesma altura (align-items:
+   stretch acima), e o conteúdo do gráfico ocupa o espaço disponível em
+   vez de deixar sobra em branco — era isso que fazia a aba parecer
+   "esquisita"/desalinhada no desktop. */
+.fin-chart-panel {
+  display: flex;
+  flex-direction: column;
+}
+.fin-chart-panel .fin-chart6m {
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+.fin-chart-panel .fin-chart6m .empty-state {
+  width: 100%;
+}
+.fin-chart-panel .fin-chart6m svg {
+  width: 100%;
+}
+
+@media (max-width: 900px) {
+  .fin-analise-grid { grid-template-columns: 1fr; }
+}
+
+/* Layout: 2 colunas em desktop, 1 coluna em mobile/tablet */
+.fin-layout {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  gap: 20px;
+  align-items: start;
+  min-width: 0;
+}
+
+.fin-left, .fin-right { display: grid; gap: 14px; min-width: 0; }
+
+/* Proteção global contra overflow em Finanças */
+.fin-layout, .fin-layout * { min-width: 0; }
+
+/* Form card */
+.fin-form-card { gap: 12px; min-width: 0; transition: border-color 200ms ease, box-shadow 200ms ease; }
+.fin-form-card.is-receita { border-color: var(--green); box-shadow: 0 0 0 3px var(--green-soft); }
+.fin-form-card.month-closed { opacity: 0.6; pointer-events: none; position: relative; }
+.fin-form-card.month-closed::after {
+  content: "🔒 Mês fechado — reabra para editar";
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.88rem; font-weight: 700; color: var(--text2);
+  background: color-mix(in srgb, var(--surface) 80%, transparent);
+  border-radius: inherit; backdrop-filter: blur(4px);
+  pointer-events: all; cursor: not-allowed;
+}
+
+#expenseForm {
+  display: grid;
+  gap: 10px;
+}
+
+/* Linha valor + data no mesmo nível. Antes a descrição vinha centralizada
+   enquanto os campos vizinhos (valor, data, categoria) tinham alinhamentos
+   diferentes entre si — deixamos tudo à esquerda, igual a um formulário
+   comum, pra ficar consistente do início ao fim. */
+#expenseDescription { text-align: left; }
+
+.fin-form-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: stretch;
+}
+.fin-date-input {
+  height: 44px;
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface2);
+  color: var(--text);
+  padding: 0 10px;
+  font: inherit;
+  font-size: 0.85rem;
+  width: 130px;
+  flex-shrink: 0;
+  text-align: left;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* Categoria: botão seletor customizado (abre o picker) + botão "+" */
+.fin-cat-select-row { display: flex; gap: 6px; }
+.fin-cat-select-row select { flex: 1; height: 40px; border: 1.5px solid var(--line); border-radius: 12px; padding: 0 10px; background: var(--surface2); color: var(--text); font: inherit; }
+.fin-cat-add-btn { width: 40px; height: 40px; border-radius: 12px; border: 1.5px dashed var(--line); background: transparent; color: var(--muted); font-size: 1.2rem; cursor: pointer; flex-shrink: 0; transition: all 150ms; }
+.fin-cat-add-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+
+.fin-cat-trigger {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  min-width: 0;
+  height: 40px;
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  padding: 0 12px;
+  background: var(--surface2);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
+}
+.fin-cat-trigger:hover { border-color: var(--accent); }
+.fin-cat-trigger:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.fin-cat-trigger-icon { font-size: 1.05rem; flex-shrink: 0; line-height: 1; }
+.fin-cat-trigger-label { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.fin-cat-trigger-chevron { flex-shrink: 0; color: var(--muted); transition: transform 150ms ease; margin-left: auto; }
+.fin-cat-trigger[aria-expanded="true"] .fin-cat-trigger-chevron { transform: rotate(180deg); }
+
+/* ---------- CATEGORY PICKER (sheet de seleção/criação de categoria) ---------- */
+
+/* Seções (grupos temáticos + "Mais usadas") dentro do picker */
+.cat-picker-section + .cat-picker-section { margin-top: 14px; }
+.cat-picker-section-title {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 6px 4px;
+}
+.cat-picker-section:first-child .cat-picker-section-title { margin-top: 0; }
+
+/* Cada linha de categoria: ícone num badge colorido (mesma linguagem visual
+   dos widgets do dashboard) + nome + check quando selecionada. */
+.cat-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 10px;
+  border-radius: 14px;
+  cursor: pointer;
+  border: 1.5px solid transparent;
+  background: var(--surface2);
+  margin-bottom: 4px;
+  transition: border-color 150ms ease, background 150ms ease, transform 150ms ease;
+}
+.cat-picker-row:hover { border-color: color-mix(in srgb, var(--cat-color, var(--accent)) 45%, transparent); transform: translateX(2px); }
+.cat-picker-row.is-selected {
+  border-color: var(--cat-color, var(--accent));
+  background: color-mix(in srgb, var(--cat-color, var(--accent)) 12%, var(--surface2));
+}
+
+.cat-picker-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  font-size: 1.05rem;
+  line-height: 1;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--cat-color, var(--accent)) 18%, transparent);
+}
+
+.cat-picker-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+.cat-picker-row.is-selected .cat-picker-label { color: var(--text); font-weight: 700; }
+
+.cat-picker-check {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--cat-color, var(--accent));
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.cat-picker-delete {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 150ms ease;
+}
+.cat-picker-delete:hover { background: var(--red-soft); color: var(--red); }
+
+#categoryPickerCreate { transition: filter 150ms ease, transform 150ms ease; }
+#categoryPickerCreate:hover { filter: brightness(1.08); transform: translateY(-1px); }
+#categoryPickerSearch:focus { border-color: var(--accent) !important; box-shadow: 0 0 0 3px var(--accent-soft); }
+#categoryPickerList::-webkit-scrollbar { width: 6px; }
+#categoryPickerList::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+
+/* ---------- AI QUICK ENTRY (Finanças) ---------- */
+.ai-quick-entry {
+  border: 1.5px solid transparent;
+  border-radius: 16px;
+  padding: 14px;
+  margin-bottom: 16px;
+  background:
+    linear-gradient(var(--surface2), var(--surface2)) padding-box,
+    linear-gradient(120deg, #6c5ce7, #af52de) border-box;
+}
+
+.ai-quick-entry-label {
+  display: block;
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.ai-quick-entry-row { display: flex; gap: 8px; }
+
+.ai-quick-entry-row input {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  padding: 8px 12px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.92rem;
+}
+
+.ai-quick-entry-row .primary-button {
+  flex-shrink: 0;
+  height: 44px;
+  background: linear-gradient(120deg, #6c5ce7, #af52de);
+}
+
+.ai-quick-entry-hint {
+  font-size: 0.76rem;
+  color: var(--muted);
+  margin: 8px 0 0;
+  line-height: 1.4;
+}
+
+@media (max-width: 720px) {
+  .ai-quick-entry-row { flex-direction: column; }
+  .ai-quick-entry-row .primary-button { width: 100%; justify-content: center; }
+}
+
+/* Seletor de tema (Claro / Aurora / Automático) — Configurações > Aparência */
+.theme-toggle {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.theme-toggle-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 16px 8px;
+  border-radius: var(--radius-btn);
+  border: 1.5px solid var(--line);
+  background: var(--surface2);
+  color: var(--text2);
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 180ms ease;
+}
+
+.theme-toggle-btn:hover { border-color: var(--accent); color: var(--text); }
+
+.theme-toggle-btn.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+.theme-toggle-icon { font-size: 1.3rem; }
+
+/* Type toggle */
+.fin-type-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 4px;
+  background: var(--surface2);
+  border-radius: 14px;
+  border: 1.5px solid var(--line);
+}
+
+.fin-type-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 6px;
+  border-radius: 11px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text2);
+  transition: all 200ms ease;
+  border: none;
+  background: none;
+}
+
+.fin-type-icon {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+.fin-type-icon svg { width: 100%; height: 100%; display: block; }
+
+.fin-type-btn.active[data-fin-type="despesa"] {
+  background: var(--red-soft);
+  color: var(--red);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+.fin-type-btn.active[data-fin-type="receita"] {
+  background: var(--green-soft);
+  color: var(--green);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+/* Amount field — "R$" e o valor formam um único bloco centralizado no
+   campo, em vez do valor ficar solto encostado à esquerda. */
+.fin-amount-field {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  background: var(--surface2);
+  border: 2px solid var(--line);
+  border-radius: 16px;
+  padding: 4px 16px;
+  transition: border-color 200ms, box-shadow 200ms;
+}
+
+.fin-amount-field:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  background: var(--surface);
+}
+
+.fin-currency-sign {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.fin-amount-field input {
+  border: none;
+  background: transparent;
+  font-size: 1.8rem;
+  font-weight: 800;
+  color: var(--text);
+  min-height: 52px;
+  padding: 0;
+  letter-spacing: -0.03em;
+  text-align: left;
+  box-shadow: none !important;
+  flex: 0 1 auto;
+  width: auto;
+  max-width: 100%;
+}
+
+.fin-amount-field input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+/* ─── Navegador de mês em Finanças ─────────────────────────── */
+.fin-month-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--surface);
+  border-radius: 18px;
+  border: 1.5px solid var(--line);
+  padding: 8px;
+  gap: 6px;
+  margin-top: 4px;
+  box-shadow: var(--shadow-card);
+}
+
+/* Área clicável maior (44px, alvo de toque confortável em mobile),
+   texto e chevron centralizados, transição suave nos estados —
+   inspirado no seletor de mês do calendário nativo do iOS. */
+.fin-month-arrow {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: var(--surface2);
+  border: 1.5px solid var(--line);
+  color: var(--text2);
+  font-size: 1.3rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: background 160ms ease, color 160ms ease, border-color 160ms ease, transform 160ms ease;
+  flex-shrink: 0;
+}
+.fin-month-arrow:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.fin-month-arrow:active { transform: scale(0.92); }
+
+.fin-month-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex: 1;
+  min-height: 44px;
+}
+
+.fin-month-label {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--text);
+  text-transform: capitalize;
+  letter-spacing: -0.02em;
+  text-align: center;
+  transition: opacity 160ms ease;
+}
+
+.fin-closed-badge {
+  display: inline-block;
+  background: var(--green-soft);
+  color: var(--green);
+  border: 1px solid var(--green);
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+/* Botões de ação (Fechar / Reabrir / Exportar) */
+.fin-month-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.fin-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 42px;
+  flex: 1;
+  min-width: 0;
+  padding: 0 16px;
+  border-radius: 13px;
+  font-size: 0.84rem;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1.5px solid transparent;
+  transition: background 160ms ease, color 160ms ease, box-shadow 160ms ease, transform 120ms ease;
+  white-space: nowrap;
+}
+.fin-action-btn:active { transform: translateY(1px) scale(0.99); }
+
+.fin-action-icon {
+  display: inline-flex;
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  transition: transform 160ms ease;
+}
+.fin-action-icon svg { width: 100%; height: 100%; display: block; }
+.fin-action-btn:hover .fin-action-icon { transform: scale(1.1); }
+
+.fin-action-btn.close {
+  background: var(--orange-soft);
+  color: var(--orange);
+  border-color: var(--orange);
+}
+.fin-action-btn.close:hover { background: var(--orange); color: #fff; box-shadow: 0 6px 16px color-mix(in srgb, var(--orange) 35%, transparent); }
+
+.fin-action-btn.reopen {
+  background: var(--green-soft);
+  color: var(--green);
+  border-color: var(--green);
+}
+.fin-action-btn.reopen:hover { background: var(--green); color: #fff; box-shadow: 0 6px 16px color-mix(in srgb, var(--green) 35%, transparent); }
+
+.fin-action-btn.export {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.fin-action-btn.export:hover { background: var(--accent); color: #fff; box-shadow: 0 6px 16px color-mix(in srgb, var(--accent) 35%, transparent); }
+
+/* Summary cards */
+.fin-summary-grid{
+display:grid;
+grid-template-columns:repeat(3,minmax(0,1fr));
+gap:14px;
+align-items:stretch;
+}
+
+.fin-summary-card{
+  background: var(--surface);
+  border-radius: 18px;
+  border: 1.5px solid var(--line);
+  box-shadow: var(--shadow-card);
+  transition: transform 180ms ease, box-shadow 180ms ease;
+  position: relative;
+  /* Container query: o tamanho do valor abaixo escala com a largura do
+     próprio card (não do viewport), então funciona igual em 2 ou 3
+     colunas, mobile ou desktop, sem precisar de breakpoints manuais. */
+  container-type: inline-size;
+
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px;
+  min-height: 92px;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.fin-summary-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0.05;
+  pointer-events: none;
+}
+.fin-summary-card.receita::before { background: radial-gradient(120px 60px at 100% 0%, var(--green), transparent); }
+.fin-summary-card.despesa::before { background: radial-gradient(120px 60px at 100% 0%, var(--red), transparent); }
+.fin-summary-card.saldo::before   { background: radial-gradient(120px 60px at 100% 0%, var(--saldo-color, var(--green)), transparent); }
+
+.fin-summary-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-card-hover); }
+
+/* Bolinha discreta indicando que o saldo mostrado inclui valor transferido
+   do mês anterior — some ao passar o mouse/tocar (title nativo explica). */
+.fin-summary-card.has-carryover::after {
+  content: "";
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--surface);
+}
+
+.fin-sum-icon {
+  display: inline-flex;
+  width: 15px;
+  height: 15px;
+  margin-right: 5px;
+  vertical-align: -2px;
+}
+
+.fin-sum-icon svg { width: 100%; height: 100%; display: block; }
+
+.fin-sum-label {
+  display: flex;
+  align-items: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.fin-summary-card.receita .fin-sum-icon { color: var(--green); }
+.fin-summary-card.despesa .fin-sum-icon { color: var(--red); }
+.fin-summary-card.saldo .fin-sum-icon   { color: var(--saldo-color, var(--green)); }
+
+.fin-summary-card strong{
+display:flex;
+align-items:center;
+width:100%;
+min-width:0;
+overflow:hidden;
+white-space:nowrap;
+font-weight:800;
+font-size:clamp(1.05rem,2.8vw,1.45rem);
+line-height:1.05;
+letter-spacing:-0.02em;
+font-variant-numeric:tabular-nums;
+}
+
+.fin-summary-card.receita strong { color: var(--green); }
+.fin-summary-card.despesa strong { color: var(--red); }
+.fin-summary-card.saldo strong   { color: var(--saldo-color, var(--green)); }
+
+/* Category breakdown */
+.fin-cat-list { display: grid; gap: 10px; }
+
+.fin-cat-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.fin-cat-info {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 120px;
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--text2);
+}
+
+.fin-cat-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.fin-cat-label { white-space: nowrap; }
+
+.fin-cat-bar-wrap {
+  flex: 1;
+  height: 8px;
+  background: var(--surface2);
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+}
+
+.fin-cat-bar {
+  height: 100%;
+  border-radius: inherit;
+  min-width: 4px;
+  transition: width 400ms ease;
+}
+
+.fin-cat-value {
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--text);
+  min-width: 80px;
+  text-align: right;
+}
+
+/* Financial calendar */
+.fin-calendar-card { padding: 18px; }
+
+.fin-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 5px;
+}
+
+.fin-cal-day {
+  aspect-ratio: 1;
+  border-radius: 10px;
+  background: var(--surface2);
+  border: 1.5px solid transparent;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text2);
+  cursor: pointer;
+  transition: all 150ms;
+  gap: 2px;
+  padding: 0;
+}
+
+.fin-cal-day strong {
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.fin-cal-day:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.fin-cal-day.today {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.fin-cal-day.has-data {
+  border-color: var(--line);
+}
+
+/* Day dots */
+.fin-day-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.fin-day-dot.receita { background: var(--green); }
+.fin-day-dot.despesa { background: var(--red); }
+.fin-day-dot.both    { background: linear-gradient(90deg, var(--green) 50%, var(--red) 50%); }
+
+.fin-cal-day.today .fin-day-dot { background: rgba(255,255,255,0.7); }
+
+/* Transaction list */
+.fin-tx-list { display: grid; gap: 8px; }
+
+.fin-transaction {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: var(--surface2);
+  border-radius: 14px;
+  border: 1.5px solid var(--line);
+  transition: all 160ms;
+}
+
+.fin-transaction:hover { background: var(--line); }
+
+.fin-tx-icon {
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+
+/* Coluna principal: 2 linhas (título+valor / categoria+ações), em vez de
+   tudo numa linha só competindo por espaço com ícone + 2 botões — era isso
+   que deixava o título espremido e cortado (ex.: "Alimen..."). */
+.fin-tx-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fin-tx-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.fin-tx-title {
+  min-width: 0;
+  flex: 1;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fin-tx-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.fin-tx-meta {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fin-tx-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.fin-tx-amount {
+  font-size: 0.96rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.fin-tx-amount.receita { color: var(--green); }
+.fin-tx-amount.despesa { color: var(--red); }
+
+/* ---- Finance responsive ---- */
+@media (max-width: 1100px) {
+  .fin-layout { grid-template-columns: 1fr; }
+  .fin-summary-grid{
+display:grid;
+grid-template-columns:repeat(3,minmax(0,1fr));
+gap:14px;
+align-items:stretch;
+}
+}
+
+@media (max-width: 720px) {
+  .fin-tabs {
+    gap: 3px;
+    padding: 4px;
+    margin-bottom: 14px;
+    -webkit-mask-image: linear-gradient(to right, transparent 0, black 14px, black calc(100% - 14px), transparent 100%);
+    mask-image: linear-gradient(to right, transparent 0, black 14px, black calc(100% - 14px), transparent 100%);
+  }
+  .fin-tab-btn { padding: 8px 6px; font-size: 0.72rem; gap: 3px; }
+  .fin-tab-icon { width: 14px; height: 14px; }
+  .fin-layout { grid-template-columns: 1fr; gap: 10px; }
+  .fin-left, .fin-right { gap: 10px; }
+  .fin-form-card { padding: 14px; gap: 10px; }
+  .fin-amount-field input { font-size: 1.5rem; min-height: 46px; }
+  .fin-form-row { grid-template-columns: 1fr; }
+  .fin-date-input { width: 100%; }
+  .fin-left .panel, .fin-right .panel, .fin-calendar-card { padding: 14px; }
+  .fin-summary-card{
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 10px 8px;
+    gap: 4px;
+    min-height: 76px;
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .fin-sum-icon { display: none; }
+  .fin-summary-grid{
+display:grid;
+grid-template-columns:repeat(3,minmax(0,1fr));
+gap:14px;
+align-items:stretch;
+}
+  .fin-cal-grid { grid-template-columns: repeat(7, 1fr); gap: 3px; }
+  .fin-cal-day { font-size: 0.7rem; border-radius: 8px; }
+  .fin-cat-row { gap: 6px; }
+  .fin-cat-info { min-width: 76px; font-size: 0.74rem; flex-shrink: 0; }
+  .fin-cat-bar-wrap { min-width: 0; }
+  .fin-cat-value { min-width: 56px; font-size: 0.74rem; flex-shrink: 0; }
+  .fin-month-actions { flex-wrap: wrap; }
+  .fin-action-btn { font-size: 0.78rem; padding: 0 10px; }
+  .fin-tx-actions .mini-button { width: 26px; height: 26px; }
+}
+
+@media (max-width: 380px) {
+  .fin-cat-info { min-width: 64px; font-size: 0.7rem; }
+  .fin-cat-value { min-width: 48px; font-size: 0.7rem; }
+}
+
+/* ---- Modal "Nova categoria": ícones agrupados por tema + paleta ampla ----
+   Trocado de estilos inline soltos por classes, com grid responsivo (em vez
+   de flex-wrap com tamanho fixo) — assim o picker cresce em ícones sem
+   nunca ultrapassar a largura do modal, nem em telas pequenas. */
+.new-category-card {
+  width: 100%;
+  max-width: 400px;
+  max-height: 88dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.new-category-header {
+  justify-content: flex-end;
+  border-bottom: none;
+  padding-bottom: 0;
+}
+.new-category-body {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 0;
+}
+.new-category-intro {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+.new-category-icon-badge {
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  background: var(--accent-soft);
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+.new-category-icon-badge svg { width: 26px; height: 26px; }
+.new-category-intro h2 { font-size: 1.15rem; font-weight: 800; color: var(--text); margin: 0; }
+.new-category-hint {
+  font-size: 0.82rem;
+  color: var(--muted);
+  margin: 0;
+  line-height: 1.4;
+  max-width: 320px;
+}
+.new-category-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  padding: 5px 12px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+.new-category-field {
+  display: grid;
+  gap: 6px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 16px;
+}
+.new-category-field-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.new-category-count {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.new-category-name-input {
+  height: 46px;
+  border-radius: 12px;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+.new-category-name-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.new-category-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--muted);
+  margin: 0 0 8px;
+}
+.new-category-icon-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 42px;
+  padding: 0 12px;
+  margin-bottom: 10px;
+  border-radius: 12px;
+  border: 1.5px solid var(--line);
+  background: var(--surface2);
+  color: var(--muted);
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+.new-category-icon-search svg { width: 16px; height: 16px; flex-shrink: 0; }
+.new-category-icon-search:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  color: var(--accent);
+}
+.new-category-icon-search input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: none;
+  background: none;
+  outline: none;
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--text);
+}
+.new-category-icon-search input::placeholder { color: var(--muted); font-weight: 500; }
+
+.new-category-icon-list {
+  margin-bottom: 4px;
+}
+.new-category-empty {
+  text-align: center;
+  font-size: 0.82rem;
+  color: var(--muted);
+  padding: 24px 12px;
+  margin: 0 0 18px;
+}
+.new-category-icon-section + .new-category-icon-section { margin-top: 14px; }
+.new-category-icon-section-title {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 8px 2px;
+}
+.new-category-emoji-grid {
+  display: grid;
+  /* Antes eram 6 colunas com botão de 38px (abaixo do alvo de toque
+     recomendado de 44px), navegadas por abas horizontais que em alguns
+     celulares renderizavam em branco (bug de scroll aninhado no Safari
+     do iOS). Agora todos os grupos aparecem em sequência, cada um com
+     seu próprio título, dentro do único scroll do modal — sem abas
+     escondidas que possam falhar em aparecer. */
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  margin-bottom: 18px;
+  padding-right: 2px;
+}
+.cat-emoji-btn {
+  aspect-ratio: 1;
+  width: 100%;
+  min-height: 44px;
+  border-radius: 10px;
+  font-size: 1.3rem;
+  border: 2px solid var(--line);
+  background: var(--surface2);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  transition: all 140ms ease;
+}
+.cat-emoji-btn.active { border-color: var(--accent); background: var(--accent-soft); transform: scale(1.06); }
+.new-category-color-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+.cat-color-btn {
+  width: 32px;
+  height: 32px;
+  min-height: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  padding: 0;
+  border: 3px solid transparent;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  transition: all 140ms ease;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+}
+.cat-color-check {
+  width: 15px;
+  height: 15px;
+  color: #fff;
+  opacity: 0;
+  transform: scale(0.5);
+  transition: all 140ms ease;
+  filter: drop-shadow(0 1px 1px rgba(0,0,0,0.35));
+}
+.cat-color-btn.active {
+  border-color: var(--surface);
+  box-shadow: 0 0 0 2px currentColor, 0 2px 8px rgba(0,0,0,0.2);
+}
+.cat-color-btn.active .cat-color-check { opacity: 1; transform: scale(1); }
+.new-category-preview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--surface2);
+  border: 1.5px solid var(--line);
+  margin-bottom: 18px;
+}
+.new-category-preview-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  font-size: 1.1rem;
+  flex-shrink: 0;
+  transition: all 160ms ease;
+}
+.new-category-preview-info {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+.new-category-preview-info strong {
+  font-size: 0.9rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.new-category-preview-amount {
+  font-weight: 800;
+  font-size: 0.88rem;
+  flex-shrink: 0;
+}
+.new-category-preview-amount.receita { color: var(--green); }
+.new-category-preview-amount.despesa { color: var(--red); }
+.new-category-error {
+  color: var(--red, #ff3b30);
+  font-size: 0.84rem;
+  font-weight: 600;
+  display: none;
+  background: var(--red-soft, #ffeeed);
+  padding: 10px 12px;
+  border-radius: 10px;
+  margin-bottom: 12px;
+}
+.new-category-save {
+  height: 48px;
+  width: 100%;
+  justify-content: center;
+  gap: 8px;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  transition: transform 140ms ease, box-shadow 140ms ease, opacity 140ms ease;
+}
+.new-category-save:active { transform: translateY(1px) scale(0.99); }
+.new-category-save-icon { font-size: 1.05rem; line-height: 1; }
+.new-category-save.is-loading { opacity: 0.75; cursor: default; }
+.new-category-save.is-loading .new-category-save-icon {
+  display: inline-block;
+  animation: newCategorySpin 700ms linear infinite;
+}
+.new-category-save.is-loading .new-category-save-label::after { content: "..."; }
+@keyframes newCategorySpin { to { transform: rotate(360deg); } }
+@media (max-width: 380px) {
+  .new-category-emoji-grid { grid-template-columns: repeat(5, 1fr); }
+}
+
+/* ---- Botão de nova categoria e cancelar edição ---- */
+#newCategoryBtn:hover {
+  background: var(--accent-soft) !important;
+  border-color: var(--accent) !important;
+}
+
+#cancelEditExpense:hover {
+  background: var(--line) !important;
+}
+
+/* ---- Emoji/cor pickers do modal de nova categoria ---- */
+.cat-emoji-btn:hover, .cat-color-btn:hover {
+  transform: scale(1.08);
+  transition: transform 140ms ease;
+}
+
+/* ---- Botão de editar transação ---- */
+.fin-tx-actions .mini-button {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  transition: all 140ms ease;
+}
+.fin-tx-actions .mini-button:hover {
+  transform: scale(1.1);
+}
+
+/* ─── Gráfico 6 meses ───────────────────────────────────────── */
+.fin-chart6m {
+  width: 100%;
+  overflow-x: auto;
+}
+.fin-chart6m svg { display: block; }
+
+/* ─── Metas por categoria ────────────────────────────────────── */
+.fin-goals-list { display: grid; gap: 10px; }
+.fin-goal-row {
+  background: var(--surface2);
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: grid;
+  gap: 4px;
+}
+.fin-goal-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.fin-goal-label { font-size: 0.88rem; font-weight: 700; color: var(--text); flex: 1; }
+.fin-goal-val   { font-size: 0.82rem; font-weight: 700; white-space: nowrap; }
+
+/* ─── Meses fechados ───────────────────────────────────────────── */
+.fin-closures-list { display: grid; gap: 10px; margin-top: 4px; }
+.fin-closure-row {
+  background: var(--surface2);
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: grid;
+  gap: 8px;
+}
+.fin-closure-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.fin-closure-label { font-size: 0.88rem; font-weight: 700; color: var(--text); text-transform: capitalize; }
+.fin-closure-val   { font-size: 0.88rem; font-weight: 700; white-space: nowrap; }
+.fin-closure-actions { display: flex; gap: 8px; }
+.fin-closure-actions .mini-button { flex: 1; text-align: center; }
+
+/* ─── Recorrentes ─────────────────────────────────────────────── */
+.fin-recur-list { display: grid; gap: 8px; min-width: 0; overflow: hidden; }
+.fin-recur-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  background: var(--surface2);
+  border: 1.5px solid var(--line);
+  border-radius: 14px;
+  transition: border-color 160ms ease, transform 160ms ease;
+  min-width: 0;
+  max-width: 100%;
+}
+.fin-recur-row:hover { border-color: var(--line); transform: translateY(-1px); }
+.fin-recur-row.is-skipped { opacity: 0.55; }
+.fin-recur-icon {
+  width: 40px; height: 40px;
+  border-radius: 12px;
+  display: grid; place-items: center;
+  font-size: 1.1rem; flex-shrink: 0;
+}
+.fin-recur-info { flex: 1; min-width: 0; }
+.fin-recur-info strong {
+  display: block; font-size: 0.9rem; font-weight: 700;
+  color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.fin-recur-amount { font-size: 0.88rem; font-weight: 800; white-space: nowrap; flex-shrink: 0; }
+.fin-recur-amount.receita { color: var(--green); }
+.fin-recur-amount.despesa { color: var(--red); }
+
+/* Indicador discreto de status (ativo/pulado neste mês) — some no lugar
+   dos textos extras, um ponto colorido já comunica o estado de relance. */
+.fin-recur-status { flex-shrink: 0; display: flex; align-items: center; }
+.fin-recur-status-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--green);
+}
+.fin-recur-status-dot.skipped { background: var(--muted); }
+
+/* Os antigos 3 botões de ação (▶ ⏭ ✕) lado a lado ocupavam espaço demais,
+   poluíam o card e quebravam alinhamento em telas estreitas. Agora existe
+   apenas UM botão "•••" por card, que abre um menu contextual flutuante
+   com as mesmas ações — lista muito mais limpa e sem risco de overflow. */
+.fin-recur-menu-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: all 140ms ease;
+}
+.fin-recur-menu-btn svg { width: 18px; height: 18px; }
+.fin-recur-menu-btn:hover { background: var(--line); color: var(--text); }
+
+.fin-recur-menu {
+  position: absolute;
+  z-index: 2000;
+  min-width: 190px;
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  border-radius: 14px;
+  box-shadow: var(--shadow-float);
+  animation: finRecurMenuIn 140ms ease;
+}
+@keyframes finRecurMenuIn {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.fin-recur-menu button {
+  all: unset;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 9px 10px;
+  border-radius: 9px;
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+.fin-recur-menu button:hover { background: var(--accent-soft); color: var(--accent); }
+.fin-recur-menu button.danger:hover { background: var(--red-soft); color: var(--red); }
+
+@media (max-width: 380px) {
+  .fin-recur-row { gap: 6px; padding: 10px; }
+  .fin-recur-icon { width: 34px; height: 34px; font-size: 0.95rem; }
+  .fin-recur-amount { font-size: 0.8rem; }
+  .fin-recur-menu-btn { width: 26px; height: 26px; }
+  .fin-recur-status { display: none; }
+}
+
+/* ─── Modais genéricos ────────────────────────────────────────── */
+.modal-backdrop {
+  position: fixed; inset: 0; z-index: 400;
+  background: rgba(0,0,0,0.55);
+  backdrop-filter: blur(4px);
+  display: grid; place-items: center; padding: 20px;
+}
+.modal-card {
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  border-radius: 20px;
+  width: 100%; max-width: 400px;
+  box-shadow: var(--shadow-float);
+  overflow: hidden;
+}
+.modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.modal-header h2 { font-size: 1rem; font-weight: 800; color: var(--text); }
+.modal-body { padding: 16px 20px 20px; }
+
+/* ---- Banner de instalação PWA ---- */
+#pwaInstallBanner strong, #pwaInstallBanner span {
+  font-family: inherit;
+}
+
+/* ---- Botão fixo de instalação do PWA ---- */
+.pwa-fixed-install-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 14px;
+  border-radius: 12px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1.5px solid var(--accent);
+  font-size: 0.84rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 160ms ease;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.pwa-fixed-install-btn:hover {
+  background: var(--accent);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+@media (max-width: 720px) {
+  .pwa-fixed-install-btn {
+    height: 36px;
+    padding: 0 12px;
+    font-size: 0.8rem;
+  }
+}
+
+/* ---------- SETTINGS VIEW ---------- */
+.settings-layout {
+  display: grid;
+  gap: 16px;
+  max-width: 640px;
+}
+
+.avatar-upload {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.avatar-upload-photo {
+  position: relative;
+  width: 88px;
+  height: 88px;
+  flex-shrink: 0;
+}
+
+.avatar-circle {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #6c5ce7, #af52de);
+  color: #fff;
+  font-size: 2rem;
+  font-weight: 800;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(79, 142, 247, 0.3);
+}
+.avatar-circle img { width: 100%; height: 100%; object-fit: cover; }
+
+.avatar-upload-camera {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-size: 0.85rem;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  border: 2px solid var(--surface);
+}
+
+.avatar-upload-info { display: grid; gap: 4px; min-width: 0; }
+.avatar-upload-info strong { font-size: 1rem; color: var(--text); }
+.avatar-upload-info .muted { font-size: 0.84rem; color: var(--muted); }
+
+.upload-progress { width: 100%; max-width: 220px; margin-top: 6px; }
+.upload-progress p { font-size: 0.75rem; color: var(--muted); margin-top: 4px; }
+
+.settings-form {
+  display: grid;
+  gap: 12px;
+}
+
+.settings-message {
+  padding: 12px 14px;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.settings-message.success { background: var(--green-soft); color: var(--green); }
+.settings-message.error   { background: var(--red-soft);   color: var(--red); }
+
+.danger-button {
+  background: var(--red-soft);
+  color: var(--red);
+}
+.danger-button:hover { background: var(--red); color: #fff; }
+
+.settings-code-input {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-align: center;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface2);
+  color: var(--text);
+  cursor: pointer;
+}
+
+/* ---------- VERIFICAÇÃO DE E-MAIL (gate de acesso) ---------- */
+.verify-gate-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9990;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(6px);
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+
+.verify-gate-card {
+  background: var(--surface);
+  border-radius: 24px;
+  padding: 32px 28px;
+  max-width: 380px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+  display: grid;
+  gap: 14px;
+  animation: fadeUp 200ms ease;
+}
+
+.verify-gate-icon { font-size: 2.4rem; }
+.verify-gate-card h2 { font-size: 1.2rem; font-weight: 800; color: var(--text); }
+.verify-gate-card p { font-size: 0.88rem; color: var(--text2); line-height: 1.5; }
+.verify-gate-card p strong { color: var(--text); }
+
+@media (max-width: 720px) {
+  .settings-layout { max-width: none; }
+
+  /* Perfil/Configurações no celular: os botões de ação (Salvar nome,
+     Alterar senha, Exportar/Importar backup) ocupam a largura toda em
+     vez de ficarem lado a lado se espremendo — evita texto cortado ou
+     botões "quebrados" visualmente em telas estreitas. */
+  #settingsView .form-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  #settingsView .form-actions .primary-button,
+  #settingsView .form-actions .ghost-button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* Foto de perfil + nome/e-mail: centraliza quando quebra linha, em vez
+     de ficar desalinhado à esquerda com espaço vazio do lado. */
+  .avatar-upload { justify-content: center; text-align: center; }
+  .avatar-upload-info { justify-items: center; }
+}
+
+@media (max-width: 380px) {
+  /* Seletor de tema: reduz padding e fonte para o rótulo "Automático" nunca
+     quebrar linha dentro do botão nesses aparelhos bem estreitos (era
+     isso que parecia "bugado" nas telas menores). */
+  .theme-toggle-btn { padding: 12px 4px; font-size: 0.74rem; gap: 4px; }
+  .theme-toggle-icon { font-size: 1.1rem; }
+}
+
+/* ── Busca global (Ctrl/Cmd+K) ──────────────────────────────── */
+/* A busca de tudo agora vive dentro da própria .search-box (Enter nela
+   abre os resultados) e no atalho de teclado Ctrl/Cmd+K — não existe
+   mais um botão/lupa separado pra isso, então não há mais estilo de
+   botão aqui, só o modal de resultados abaixo. */
+.palette-result {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface2);
+  border: 1.5px solid transparent;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+}
+.palette-result:hover { border-color: var(--accent); }
+.palette-result-icon { flex-shrink: 0; font-size: 1rem; }
+.palette-result-text { flex: 1; min-width: 0; }
+.palette-result-title {
+  font-size: 0.86rem; font-weight: 700; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.palette-result-sub { font-size: 0.72rem; color: var(--muted); }
+mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border-radius: 3px; padding: 0 1px; }
+
+
+/* ── Marcos de meta ──────────────────────────────────────────── */
+.goal-milestones { display: grid; gap: 6px; margin-top: 8px; }
+.goal-milestone-row { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; }
+.goal-milestone-check {
+  width: 18px; height: 18px; min-width: 18px; border-radius: 5px;
+  border: 1.5px solid var(--line); background: transparent;
+  display: grid; place-items: center; font-size: 0.65rem; color: var(--green);
+}
+.goal-milestone-check.done { background: var(--green); border-color: var(--green); color: #fff; }
+.goal-milestone-row span.done { text-decoration: line-through; opacity: 0.55; }

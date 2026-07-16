@@ -2,9 +2,66 @@
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>PulseNote - Produtividade pessoal</title>
-    <link rel="stylesheet" href="styles.css" />
+
+    <!-- Aplica o tema (claro/escuro/sistema) ANTES da primeira pintura da
+         página, lendo a preferência salva localmente. Sem isso, a tela
+         "piscaria" clara por uma fração de segundo antes do JS principal
+         (app.js, que é um módulo e carrega depois) aplicar o tema certo. -->
+    <!-- Uma única tag, sem media-query, controlada por JS — antes eram
+         duas tags fixas (uma por prefers-color-scheme) que só seguiam o
+         SISTEMA. Isso fazia a status bar nativa ficar preta mesmo quando
+         a pessoa escolhia "Claro" manualmente com o aparelho em modo
+         escuro (o app.js roda depois e não tem como corrigir uma tag já
+         "vencida" pela media query certa). Agora o valor é calculado
+         aqui, de forma síncrona, junto com o data-theme, para não
+         piscar; e o app.js mantém sincronizado quando o tema muda. -->
+    <meta name="theme-color" id="themeColorMeta" content="#f5f7fa" />
+    <!-- Diz ao navegador/OS qual esquema de cor a página está usando de fato,
+         independente do tema do aparelho. Sem isso, controles nativos (menu
+         do <select>, calendário do <input type="date">, barra de rolagem,
+         autofill) seguem o tema do SISTEMA — então se a pessoa escolher
+         "Escuro" no PulseNote mas o celular estiver no modo claro, esses
+         elementos nativos "vazam" com fundo branco por cima do app escuro. -->
+    <meta name="color-scheme" id="colorSchemeMeta" content="dark light" />
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("pulsenote-theme");
+          var isDark = t === "aurora" || ((t !== "light") && window.matchMedia("(prefers-color-scheme: dark)").matches);
+          if (t === "light" || t === "aurora") document.documentElement.setAttribute("data-theme", t);
+          var meta = document.getElementById("themeColorMeta");
+          if (meta) meta.setAttribute("content", isDark ? "#060a18" : "#f5f7fa");
+          var csMeta = document.getElementById("colorSchemeMeta");
+          if (csMeta) csMeta.setAttribute("content", isDark ? "dark" : "light");
+        } catch (e) {}
+      })();
+    </script>
+
+    <!-- PWA: instalação e ícone na tela inicial -->
+    <link rel="manifest" href="manifest.json" />
+    <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png" />
+    <link rel="shortcut icon" href="favicon.ico" />
+
+    <!-- Abre a conexão (DNS + TLS) com o Firebase/Google cedo, em paralelo
+         com o resto do HTML — sem isso, essa conexão só começava quando
+         o app.js (carregado por último) chegava aos imports do Firebase,
+         o que deixava a entrada do app mais lenta do que precisava ser. -->
+    <link rel="preconnect" href="https://www.gstatic.com" crossorigin />
+    <link rel="preconnect" href="https://identitytoolkit.googleapis.com" />
+    <link rel="preconnect" href="https://firestore.googleapis.com" />
+    <link rel="dns-prefetch" href="https://www.gstatic.com" />
+
+    <!-- iOS: ícone e comportamento de app instalado -->
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="PulseNote" />
+
+    <link rel="stylesheet" href="/src/styles.css" />
+    <link rel="stylesheet" href="/src/auth.css" />
   </head>
   <body>
     <div class="app-shell">
@@ -21,42 +78,36 @@
 
         <nav class="nav-list" aria-label="Navegação principal">
           <button class="nav-item active" data-view="dashboard">
-            <span class="icon">🏠</span>
+            <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11.5L12 4l8 7.5"/><path d="M6.5 10v8.5a1 1 0 001 1H10v-6h4v6h2.5a1 1 0 001-1V10"/></svg></span>
             <span>Início</span>
           </button>
           <button class="nav-item" data-view="notes">
-            <span class="icon">📝</span>
+            <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h8"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></span>
             <span>Notas</span>
           </button>
           <button class="nav-item" data-view="tasks">
-            <span class="icon">✅</span>
+            <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 12.3l2.3 2.3L16 9.6"/></svg></span>
             <span>Tarefas</span>
           </button>
           <button class="nav-item" data-view="calendar">
-            <span class="icon">📅</span>
+            <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17"/><path d="M8 3v4"/><path d="M16 3v4"/></svg></span>
             <span>Agenda</span>
           </button>
           <button class="nav-item" data-view="goals">
-            <span class="icon">🎯</span>
+            <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.8"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/></svg></span>
             <span>Metas</span>
+          </button>
+          <button class="nav-item" data-view="finances">
+            <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8a2 2 0 012-2h11a2 2 0 012 2"/><rect x="3" y="8" width="18" height="11" rx="2"/><path d="M16.3 13.2h1.7"/></svg></span>
+            <span>Finanças</span>
+          </button>
+          <button class="nav-item" data-view="settings">
+            <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.9l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.9-.3 1.7 1.7 0 00-1 1.6V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1-1.6 1.7 1.7 0 00-1.9.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.9V15a1.7 1.7 0 00-1.6-1H3a2 2 0 110-4h.1A1.7 1.7 0 004.7 9a1.7 1.7 0 00-.3-1.9l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.9.3H9a1.7 1.7 0 001-1.6V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.6 1.7 1.7 0 001.9-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.9V9a1.7 1.7 0 001.6 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.6 1z"/></svg></span>
+            <span>Configurações</span>
           </button>
         </nav>
 
         <div class="sidebar-footer">
-          <label class="theme-picker">
-            <span>Tema</span>
-            <select id="themeSelect" title="Escolher tema">
-              <option value="sunny">☀️ Sol</option>
-              <option value="ocean">🌊 Oceano</option>
-              <option value="candy">🍬 Doce</option>
-              <option value="forest">🌿 Floresta</option>
-              <option value="night">🌙 Noite</option>
-            </select>
-          </label>
-          <button id="themeToggle" class="ghost-button">
-            <span>🎨</span>
-            <span>Trocar tema</span>
-          </button>
           <div class="streak-box">
             <span class="muted">🔥 Sequência</span>
             <strong id="streakCount">0 dias</strong>
@@ -74,26 +125,35 @@
             <h1 id="viewTitle">Seu dia em foco</h1>
           </div>
           <div class="topbar-actions">
-            <label class="search-box">
+            <!-- O botão "Instalar app" é inserido aqui pelo pwa-install.js,
+                 apenas se o navegador permitir instalação como PWA -->
+            <div data-pwa-install-slot></div>
+            <label class="search-box" title="Filtra esta tela — aperte Enter para buscar em tudo (ou Ctrl/Cmd+K)">
               <span class="icon">🔍</span>
-              <input id="globalSearch" type="search" placeholder="Pesquisar..." />
+              <input id="globalSearch" type="text" inputmode="search" autocomplete="off" autocorrect="off" placeholder="Pesquisar... (Enter busca tudo)" />
             </label>
-            <label class="theme-chip" title="Tema">
-              <span class="icon">🎨</span>
-              <select id="themeSelectMobile">
-                <option value="sunny">Sol</option>
-                <option value="ocean">Oceano</option>
-                <option value="candy">Doce</option>
-                <option value="forest">Floresta</option>
-                <option value="night">Noite</option>
-              </select>
-            </label>
-            <button id="quickAddTask" class="primary-button">
+            <button id="quickAddTask" class="primary-button" aria-label="Adicionar tarefa" title="Adicionar tarefa">
               <span class="icon">＋</span>
               <span>Tarefa</span>
             </button>
           </div>
         </header>
+
+        <!-- Busca global (Ctrl/Cmd+K) — procura em notas, tarefas, agenda e
+             finanças ao mesmo tempo, diferente da busca do topo que só
+             filtra a lista da tela atual. -->
+        <div id="globalPaletteModal" class="modal-backdrop" hidden>
+          <div class="modal-card" style="max-width:520px">
+            <div class="modal-header">
+              <h2>Busca global</h2>
+              <button class="icon-button" id="closeGlobalPalette">✕</button>
+            </div>
+            <div class="modal-body" style="display:grid;gap:12px">
+              <input id="globalPaletteInput" type="text" placeholder="Buscar em notas, tarefas, agenda e finanças..." autocomplete="off" class="field-input" />
+              <div id="globalPaletteResults" style="display:grid;gap:6px;max-height:50vh;overflow:auto"></div>
+            </div>
+          </div>
+        </div>
 
         <!-- ===== DASHBOARD VIEW ===== -->
         <section id="dashboardView" class="view active-view">
@@ -122,92 +182,135 @@
             </div>
           </section>
 
-          <!-- Metrics -->
-          <div class="metric-grid">
-            <article class="metric-panel">
-              <span class="metric-icon">✅</span>
-              <span>Tarefas concluídas</span>
-              <strong id="doneMetric">0</strong>
-              <small id="doneMetricDetail">Hoje</small>
+          <!-- Visão geral do dia: um único grid coeso. Antes eram dois grids
+               empilhados com cartões parecidos e informação repetida
+               ("Compromissos" e "Próximo evento" diziam quase a mesma
+               coisa, e "Pontos XP" já aparece no card do topo) — daí a
+               sensação de bagunça. Agora cada card mostra um dado real e
+               distinto, com o mesmo estilo visual (ícone + valor + nota). -->
+          <div class="overview-grid">
+            <article class="overview-card">
+              <span class="overview-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+              </span>
+              <span class="overview-label">Tarefas pendentes</span>
+              <strong class="overview-value" id="summaryTasksPending">0</strong>
+              <small id="doneMetricDetail">0 concluídas hoje</small>
             </article>
-            <article class="metric-panel">
-              <span class="metric-icon">📊</span>
-              <span>Progresso geral</span>
-              <strong id="progressMetric">0%</strong>
+
+            <article class="overview-card">
+              <span class="overview-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8a2 2 0 012-2h11a2 2 0 012 2"/><rect x="3" y="8" width="18" height="11" rx="2"/><path d="M16.3 13.2h1.7"/></svg>
+              </span>
+              <span class="overview-label">Saldo do mês</span>
+              <strong class="overview-value" id="summaryFinSaldo">R$ 0,00</strong>
+              <small>Receitas − despesas</small>
+            </article>
+
+            <article class="overview-card">
+              <span class="overview-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="12.5" width="3.4" height="7.5" rx="1"/><rect x="10.3" y="7.5" width="3.4" height="12.5" rx="1"/><rect x="16.6" y="3.5" width="3.4" height="16.5" rx="1"/></svg>
+              </span>
+              <span class="overview-label">Progresso geral</span>
+              <strong class="overview-value" id="progressMetric">0%</strong>
               <small>Notas, tarefas e metas</small>
             </article>
-            <article class="metric-panel">
-              <span class="metric-icon">📅</span>
-              <span>Compromissos</span>
-              <strong id="eventMetric">0</strong>
-              <small>Próximos 7 dias</small>
+
+            <article class="overview-card">
+              <span class="overview-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17"/><path d="M8 3v4"/><path d="M16 3v4"/></svg>
+              </span>
+              <span class="overview-label">Próximo compromisso</span>
+              <strong class="overview-value overview-value-small" id="summaryNextEvent">Nenhum</strong>
+              <small id="eventMetric">0 nos próximos 7 dias</small>
             </article>
-            <article class="metric-panel">
-              <span class="metric-icon">⭐</span>
-              <span>Pontos XP</span>
-              <strong id="scoreMetric">0</strong>
+
+            <article class="overview-card">
+              <span class="overview-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.8"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/></svg>
+              </span>
+              <span class="overview-label">Meta em destaque</span>
+              <strong class="overview-value overview-value-small" id="summaryTopGoal">Nenhuma</strong>
+              <small>Foco da semana</small>
+            </article>
+
+            <article class="overview-card">
+              <span class="overview-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linejoin="round"><path d="M12 2.7l2.7 5.6 6.1.6-4.5 4.3 1.2 6.1-5.5-3-5.5 3 1.2-6.1-4.5-4.3 6.1-.6L12 2.7z"/></svg>
+              </span>
+              <span class="overview-label">Pontos XP</span>
+              <strong class="overview-value" id="scoreMetric">0</strong>
               <small id="levelMetric">Nível 1</small>
             </article>
           </div>
 
-          <!-- Dashboard panels -->
+          <!-- Dashboard panels — cada um pode ser minimizado (estado fica
+               salvo, então continua do jeito que a pessoa deixou da
+               próxima vez que abrir o app). O botão "→" continua levando
+               pra tela cheia daquele assunto; o chevron só encolhe/expande
+               o cartão aqui no início. -->
           <div class="dashboard-layout">
-            <section class="panel">
+            <section class="panel dash-panel" data-panel-id="tasks">
               <div class="panel-header">
                 <div>
                   <p class="eyebrow">Resumo</p>
                   <h2>Prioridades do dia</h2>
                 </div>
-                <button class="icon-button" data-view-shortcut="tasks" title="Ver tarefas">→</button>
+                <div class="dash-panel-actions">
+                  <button class="icon-button" data-view-shortcut="tasks" title="Ver tarefas">→</button>
+                  <button class="icon-button dash-panel-collapse-btn" type="button" data-collapse-toggle aria-expanded="true" title="Minimizar">⌄</button>
+                </div>
               </div>
-              <div id="todayTasks" class="compact-list"></div>
+              <div class="dash-panel-body">
+                <div id="todayTasks" class="compact-list"></div>
+              </div>
             </section>
 
-            <section class="panel">
+            <section class="panel dash-panel" data-panel-id="events">
               <div class="panel-header">
                 <div>
                   <p class="eyebrow">Agenda</p>
                   <h2>Próximos compromissos</h2>
                 </div>
-                <button class="icon-button" data-view-shortcut="calendar" title="Ver agenda">→</button>
+                <div class="dash-panel-actions">
+                  <button class="icon-button" data-view-shortcut="calendar" title="Ver agenda">→</button>
+                  <button class="icon-button dash-panel-collapse-btn" type="button" data-collapse-toggle aria-expanded="true" title="Minimizar">⌄</button>
+                </div>
               </div>
-              <div id="upcomingEvents" class="event-list"></div>
+              <div class="dash-panel-body">
+                <div id="upcomingEvents" class="event-list"></div>
+              </div>
             </section>
 
-            <section class="panel wide">
+            <section class="panel wide dash-panel" data-panel-id="chart">
               <div class="panel-header">
                 <div>
                   <p class="eyebrow">Produtividade</p>
                   <h2>Desempenho semanal</h2>
                 </div>
-                <span class="pill" id="weeklySummary">0 concluídas</span>
+                <div class="dash-panel-actions">
+                  <span class="pill" id="weeklySummary">0 concluídas</span>
+                  <button class="icon-button dash-panel-collapse-btn" type="button" data-collapse-toggle aria-expanded="true" title="Minimizar">⌄</button>
+                </div>
               </div>
-              <div id="chartBars" class="bar-chart"></div>
+              <div class="dash-panel-body">
+                <div id="chartBars" class="bar-chart"></div>
+              </div>
             </section>
 
-            <section class="panel">
+            <section class="panel dash-panel" data-panel-id="goals">
               <div class="panel-header">
                 <div>
                   <p class="eyebrow">Metas</p>
                   <h2>Foco da semana</h2>
                 </div>
-                <button class="icon-button" data-view-shortcut="goals" title="Ver metas">→</button>
-              </div>
-              <div id="goalSummary" class="goal-stack"></div>
-            </section>
-
-            <section class="panel">
-              <div class="panel-header">
-                <div>
-                  <p class="eyebrow">Conectores</p>
-                  <h2>Sincronização</h2>
+                <div class="dash-panel-actions">
+                  <button class="icon-button" data-view-shortcut="goals" title="Ver metas">→</button>
+                  <button class="icon-button dash-panel-collapse-btn" type="button" data-collapse-toggle aria-expanded="true" title="Minimizar">⌄</button>
                 </div>
-                <span class="pill">Local</span>
               </div>
-              <div class="connector-grid">
-                <div class="connector-row"><span>Google Calendar</span><button class="mini-button">Conectar</button></div>
-                <div class="connector-row"><span>Outlook</span><button class="mini-button">Conectar</button></div>
-                <div class="connector-row"><span>Backup automático</span><button class="mini-button">Ativar</button></div>
+              <div class="dash-panel-body">
+                <div id="goalSummary" class="goal-stack"></div>
               </div>
             </section>
           </div>
@@ -218,68 +321,82 @@
           <div class="workbench">
 
             <!-- Editor -->
-            <form id="noteForm" class="editor-panel">
+            <form id="noteForm" class="editor-panel note-editor">
               <div class="form-heading">
                 <div>
                   <p class="eyebrow">Nova anotação</p>
-                  <h2>Capturar ideia</h2>
+                  <h2>O que você quer guardar hoje?</h2>
                 </div>
-                <button type="submit" class="primary-button">
-                  <span class="icon">＋</span>
-                  <span>Salvar</span>
-                </button>
               </div>
               <input id="noteId" type="hidden" />
-              <label>
-                Título
-                <input id="noteTitle" required maxlength="80" placeholder="Ex.: Planejar projeto" />
+
+              <label class="note-title-field">
+                <input id="noteTitle" required maxlength="80" placeholder="Dê um título curto..." autocomplete="off" />
               </label>
-              <label>
-                Descrição
-                <textarea id="noteDescription" rows="4" placeholder="Detalhes, tópicos, links..."></textarea>
+              <label class="note-body-field">
+                <textarea id="noteDescription" class="autogrow" rows="3" placeholder="Escreva livremente aqui — ideias, lembretes, recados para você mesmo..."></textarea>
               </label>
-              <div class="form-grid">
-                <label>
-                  Categoria
-                  <input id="noteCategory" list="categoryOptions" placeholder="Trabalho" />
-                </label>
-                <label>
-                  Pasta
-                  <input id="noteFolder" placeholder="Projetos" />
-                </label>
-                <label>
-                  Tags
-                  <input id="noteTags" placeholder="planejamento, foco" />
-                </label>
-                <label>
-                  Prioridade
-                  <select id="notePriority">
-                    <option>Baixa</option>
-                    <option selected>Media</option>
-                    <option>Alta</option>
-                    <option>Urgente</option>
-                  </select>
-                </label>
+
+              <!-- Atalhos rápidos: cor, prioridade e checklist ficam à mão sem poluir a tela -->
+              <div class="note-quick-row">
+                <div class="note-priority-picker" id="notePriorityPicker">
+                  <button type="button" class="note-priority-dot" data-priority="Baixa"><span class="dot"></span>Baixa</button>
+                  <button type="button" class="note-priority-dot active" data-priority="Media"><span class="dot"></span>Média</button>
+                  <button type="button" class="note-priority-dot" data-priority="Alta"><span class="dot"></span>Alta</button>
+                  <button type="button" class="note-priority-dot" data-priority="Urgente"><span class="dot"></span>Urgente</button>
+                </div>
+                <select id="notePriority" hidden>
+                  <option>Baixa</option>
+                  <option selected>Media</option>
+                  <option>Alta</option>
+                  <option>Urgente</option>
+                </select>
+                <button type="button" class="note-checklist-toggle" id="noteChecklistToggle">☑️ Checklist</button>
               </div>
-              <label>
-                Checklist
+
+              <!-- Checklist: escondida até o usuário pedir, pra não intimidar quem só quer anotar algo rápido -->
+              <label id="noteChecklistField" class="note-checklist-field" hidden>
+                Itens da checklist
                 <textarea id="noteChecklist" rows="3" placeholder="Uma tarefa por linha"></textarea>
               </label>
-              <label>
-                Anexos e links
-                <input id="noteAttachments" placeholder="https://..." />
-              </label>
-              <label>
-                Meta relacionada
-                <input id="noteGoal" placeholder="Ex.: Entregar MVP esta semana" />
-              </label>
-              <label>
-                Observações adicionais
-                <textarea id="noteObservations" rows="2"></textarea>
-              </label>
+
+              <!-- Mais detalhes: tudo que é opcional fica recolhido, mas continua a 1 toque de distância -->
+              <details class="note-more-details">
+                <summary>Mais detalhes <span class="chev">▾</span></summary>
+                <div class="form-grid">
+                  <label>
+                    Categoria
+                    <input id="noteCategory" list="categoryOptions" placeholder="Trabalho" />
+                  </label>
+                  <label>
+                    Pasta
+                    <input id="noteFolder" placeholder="Projetos" />
+                  </label>
+                  <label>
+                    Tags
+                    <input id="noteTags" placeholder="planejamento, foco" />
+                  </label>
+                  <label>
+                    Meta relacionada
+                    <input id="noteGoal" placeholder="Ex.: Entregar MVP esta semana" />
+                  </label>
+                </div>
+                <label>
+                  Anexos e links
+                  <input id="noteAttachments" placeholder="https://..." />
+                </label>
+                <label>
+                  Observações adicionais
+                  <textarea id="noteObservations" class="autogrow" rows="2"></textarea>
+                </label>
+              </details>
+
               <div class="form-actions">
                 <button id="resetNoteForm" type="button" class="ghost-button">Limpar</button>
-                <button id="suggestNote" type="button" class="ghost-button">✨ Sugerir com IA</button>
+                <button type="submit" class="primary-button note-save-btn">
+                  <span class="icon">＋</span>
+                  <span>Salvar anotação</span>
+                </button>
               </div>
             </form>
 
@@ -335,6 +452,14 @@
               <strong id="taskProgressLabel">0%</strong>
             </div>
           </div>
+          <!-- Abas de status — só aparecem no mobile (CSS), facilitam ver
+               cada coluna sem precisar rolar uma lista vertical enorme -->
+          <div class="task-status-tabs" id="taskStatusTabs">
+            <button class="status-tab active" data-status-tab="Pendente">⚪ Pendente</button>
+            <button class="status-tab" data-status-tab="Em andamento">🔵 Em andamento</button>
+            <button class="status-tab" data-status-tab="Concluida">✅ Concluída</button>
+            <button class="status-tab" data-status-tab="Cancelada">⛔ Cancelada</button>
+          </div>
           <div id="taskBoard" class="task-board"></div>
         </section>
 
@@ -347,9 +472,6 @@
                   <p class="eyebrow">Agenda</p>
                   <h2>Novo compromisso</h2>
                 </div>
-                <button class="primary-button" type="submit">
-                  <span>Salvar</span>
-                </button>
               </div>
               <input id="eventTitle" required placeholder="Título do compromisso" />
               <div class="form-grid">
@@ -362,8 +484,15 @@
                 <option value="15" selected>15 min antes</option>
                 <option value="30">30 min antes</option>
                 <option value="60">1 hora antes</option>
+                <option value="1440">1 dia antes</option>
               </select>
               <textarea id="eventNotes" rows="3" placeholder="Notas do compromisso"></textarea>
+              <div class="form-actions">
+                <button class="primary-button event-save-btn" type="submit">
+                  <span class="icon">＋</span>
+                  <span>Salvar compromisso</span>
+                </button>
+              </div>
             </form>
 
             <section class="calendar-panel">
@@ -408,30 +537,394 @@
           </div>
         </section>
 
+        <!-- ===== FINANCES VIEW ===== -->
+        <!-- ===== FINANCES VIEW ===== -->
+        <section id="financesView" class="view">
+
+          <!-- Cabeçalho fixo: mês ativo + resumo do período (contexto visível em todas as abas) -->
+          <div class="fin-header">
+            <div class="fin-month-nav">
+              <button class="fin-month-arrow" id="finMonthPrev">‹</button>
+              <div class="fin-month-center">
+                <span id="finMonthLabel" class="fin-month-label">Julho 2026</span>
+                <span id="finClosedBadge" class="fin-closed-badge" hidden>✓ Fechado</span>
+              </div>
+              <button class="fin-month-arrow" id="finMonthNext">›</button>
+            </div>
+
+            <div class="fin-month-actions">
+              <button id="finCloseMonth" class="fin-action-btn close"><span class="fin-action-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg></span>Fechar mês</button>
+              <button id="finReopenMonth" class="fin-action-btn reopen" hidden><span class="fin-action-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 017.5-1.7"/></svg></span>Reabrir</button>
+              <button id="finExportReport" class="fin-action-btn export"><span class="fin-action-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v11"/><path d="M7.5 10.5L12 15l4.5-4.5"/><path d="M5 21h14"/></svg></span>Exportar</button>
+            </div>
+
+            <div class="fin-summary-grid">
+              <div class="fin-summary-card receita">
+                <span class="fin-sum-label"><span class="fin-sum-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16l6-6 4 4 6-7"/><path d="M15.5 6.5H21V12"/></svg></span>Receitas</span>
+                <strong id="finReceitas">R$ 0,00</strong>
+              </div>
+              <div class="fin-summary-card despesa">
+                <span class="fin-sum-label"><span class="fin-sum-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8l6 6 4-4 6 7"/><path d="M15.5 17.5H21V12"/></svg></span>Despesas</span>
+                <strong id="finDespesas">R$ 0,00</strong>
+              </div>
+              <div class="fin-summary-card saldo" id="finSaldoCard">
+                <span class="fin-sum-label"><span class="fin-sum-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="12.5" width="3.4" height="7.5" rx="1"/><rect x="10.3" y="7.5" width="3.4" height="12.5" rx="1"/><rect x="16.6" y="3.5" width="3.4" height="16.5" rx="1"/></svg></span>Saldo</span>
+                <strong id="finSaldo">R$ 0,00</strong>
+              </div>
+            </div>
+
+            <div class="panel fin-budget-bar">
+              <div class="fin-budget-bar-top">
+                <span class="fin-budget-bar-title">Uso do orçamento</span>
+                <span id="finUsedLabel" class="fin-budget-bar-label">0% das receitas usadas</span>
+              </div>
+              <div class="progress-track fin-budget-track">
+                <div id="finProgressBar" class="fin-budget-fill" style="width:0%"></div>
+              </div>
+            </div>
+          </div><!-- /fin-header -->
+
+          <!-- Abas: separam o lançamento do dia a dia da análise/controle/automação -->
+          <div class="fin-tabs" role="tablist" aria-label="Seções de Finanças">
+            <button class="fin-tab-btn active" data-fin-tab="lancamentos" role="tab" aria-selected="true">
+              <span class="fin-tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg></span>Lançamentos
+            </button>
+            <button class="fin-tab-btn" data-fin-tab="analise" role="tab" aria-selected="false">
+              <span class="fin-tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="12.5" width="3.4" height="7.5" rx="1"/><rect x="10.3" y="7.5" width="3.4" height="12.5" rx="1"/><rect x="16.6" y="3.5" width="3.4" height="16.5" rx="1"/></svg></span>Análise
+            </button>
+            <button class="fin-tab-btn" data-fin-tab="controle" role="tab" aria-selected="false">
+              <span class="fin-tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.8"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/></svg></span>Controle
+            </button>
+            <button class="fin-tab-btn" data-fin-tab="automacao" role="tab" aria-selected="false">
+              <span class="fin-tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0115-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 01-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg></span>Automação
+            </button>
+          </div>
+
+          <!-- ABA: LANÇAMENTOS — registrar + calendário + histórico do mês -->
+          <div class="fin-tab-panel" data-fin-panel="lancamentos" role="tabpanel">
+            <div class="fin-layout">
+              <div class="fin-left">
+                <div class="editor-panel fin-form-card">
+                  <div class="ai-quick-entry">
+                    <label for="aiQuickText" class="ai-quick-entry-label">✨ Lançar por texto</label>
+                    <div class="ai-quick-entry-row">
+                      <input id="aiQuickText" type="text" placeholder="Ex.: almoço 32 reais ontem" maxlength="120" />
+                      <button type="button" id="aiQuickSubmit" class="primary-button">
+                        <span id="aiQuickSubmitLabel">Preencher</span>
+                      </button>
+                    </div>
+                  </div>
+                  <div class="fin-type-toggle">
+                    <button class="fin-type-btn active" data-fin-type="despesa"><span class="fin-type-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8l6 6 4-4 6 7"/><path d="M15.5 17.5H21V12"/></svg></span>Despesa</button>
+                    <button class="fin-type-btn" data-fin-type="receita"><span class="fin-type-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16l6-6 4 4 6-7"/><path d="M15.5 6.5H21V12"/></svg></span>Receita</button>
+                  </div>
+                  <form id="expenseForm">
+                    <input id="expenseId" type="hidden" value="" />
+                    <input id="expenseType" type="hidden" value="despesa" />
+                    <div class="fin-form-row">
+                      <div class="fin-amount-field">
+                        <span class="fin-currency-sign">R$</span>
+                        <input id="expenseAmount" type="text" inputmode="decimal" placeholder="0,00" required />
+                      </div>
+                      <input id="expenseDate" type="date" class="fin-date-input" />
+                    </div>
+                    <input id="expenseDescription" placeholder="Descrição (ex.: Almoço, Uber...)" />
+                    <div class="fin-cat-select-row">
+                      <button type="button" id="expenseCategoryTrigger" class="fin-cat-trigger" aria-haspopup="true">
+                        <span id="expenseCategoryTriggerIcon" class="fin-cat-trigger-icon">🍔</span>
+                        <span id="expenseCategoryTriggerLabel" class="fin-cat-trigger-label">Alimentação</span>
+                        <svg class="fin-cat-trigger-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+                      </button>
+                      <select id="expenseCategory" hidden aria-hidden="true" tabindex="-1"><option value="alimentacao">🍔 Alimentação</option></select>
+                      <button type="button" id="newCategoryBtn" class="fin-cat-add-btn" title="Nova categoria">＋</button>
+                    </div>
+                    <button type="submit" class="primary-button" style="width:100%;justify-content:center;height:44px">➕ Registrar</button>
+                    <button type="button" id="cancelEditExpense" hidden style="width:100%;height:36px;border-radius:10px;border:1.5px solid var(--line);background:var(--surface2);color:var(--text2);cursor:pointer;font-weight:600;font-family:inherit;margin-top:6px">Cancelar edição</button>
+                  </form>
+                </div>
+              </div><!-- /fin-left -->
+
+              <div class="fin-right">
+                <div class="panel fin-calendar-card">
+                  <div class="panel-header">
+                    <div><p class="eyebrow">Calendário</p><h2 id="finCalMonthLabel">Financeiro</h2></div>
+                    <div style="display:flex;gap:6px;flex-wrap:wrap">
+                      <span class="pill" style="background:var(--green-soft);color:var(--green);border-color:var(--green)">● Receita</span>
+                      <span class="pill" style="background:var(--red-soft);color:var(--red);border-color:var(--red)">● Despesa</span>
+                    </div>
+                  </div>
+                  <div id="finCalGrid" class="fin-cal-grid"></div>
+                </div>
+
+                <div class="panel">
+                  <div class="panel-header">
+                    <div><p class="eyebrow">Histórico</p><h2>Transações</h2></div>
+                  </div>
+                  <div id="finTransactions" class="fin-tx-list"></div>
+                </div>
+              </div><!-- /fin-right -->
+            </div><!-- /fin-layout -->
+          </div><!-- /aba lançamentos -->
+
+          <!-- ABA: ANÁLISE — para onde o dinheiro está indo -->
+          <div class="fin-tab-panel" data-fin-panel="analise" role="tabpanel" hidden>
+            <div class="fin-analise-grid">
+              <div class="panel wide">
+                <div class="panel-header">
+                  <div><p class="eyebrow">Análise</p><h2>Por categoria</h2></div>
+                </div>
+                <div id="finCategories" class="fin-cat-list"></div>
+              </div>
+
+              <div class="panel fin-chart-panel">
+                <div class="panel-header">
+                  <div><p class="eyebrow">Histórico</p><h2>Últimos 6 meses</h2></div>
+                </div>
+                <div id="finChart6m" class="fin-chart6m"></div>
+              </div>
+
+              <div class="panel fin-chart-panel">
+                <div class="panel-header">
+                  <div><p class="eyebrow">Evolução</p><h2>Saldo acumulado</h2></div>
+                </div>
+                <div id="finSaldoEvolution" class="fin-chart6m"></div>
+              </div>
+            </div>
+          </div><!-- /aba análise -->
+
+          <!-- ABA: CONTROLE — metas de gasto por categoria -->
+          <div class="fin-tab-panel" data-fin-panel="controle" role="tabpanel" hidden>
+            <div class="panel">
+              <div class="panel-header">
+                <div><p class="eyebrow">Controle</p><h2>Metas de gasto</h2></div>
+                <button class="mini-button" id="finOpenGoalsModal">+ Meta</button>
+              </div>
+              <div id="finGoalsList" class="fin-goals-list">
+                <div class="empty-state">Nenhuma meta definida.<br>Adicione limites por categoria.</div>
+              </div>
+            </div>
+
+            <div class="panel" style="margin-top:14px">
+              <div class="panel-header">
+                <div><p class="eyebrow">Histórico</p><h2>Meses fechados</h2></div>
+              </div>
+              <div id="finClosuresList" class="fin-closures-list">
+                <div class="empty-state">Nenhum mês fechado ainda.</div>
+              </div>
+            </div>
+          </div><!-- /aba controle -->
+
+          <!-- ABA: AUTOMAÇÃO — lançamentos recorrentes -->
+          <div class="fin-tab-panel" data-fin-panel="automacao" role="tabpanel" hidden>
+            <div class="panel">
+              <div class="panel-header">
+                <div><p class="eyebrow">Automação</p><h2>Recorrentes</h2></div>
+                <button class="mini-button" id="finOpenRecurModal">+ Novo</button>
+              </div>
+              <div id="finRecurList" class="fin-recur-list">
+                <div class="empty-state">Nenhum lançamento recorrente.<br>Adicione assinaturas, salário, aluguel…</div>
+              </div>
+            </div>
+          </div><!-- /aba automação -->
+
+        </section><!-- /financesView -->
+
+        <!-- ===== SETTINGS VIEW ===== -->
+        <section id="settingsView" class="view">
+          <div class="settings-layout">
+
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Conta</p>
+                  <h2>Foto de perfil</h2>
+                </div>
+              </div>
+              <div class="avatar-upload">
+                <div class="avatar-upload-photo">
+                  <div id="settingsAvatarPreview" class="avatar-circle">U</div>
+                  <label for="settingsPhotoInput" class="avatar-upload-camera" title="Alterar foto">📷</label>
+                  <input id="settingsPhotoInput" type="file" accept="image/*" hidden />
+                </div>
+                <div class="avatar-upload-info">
+                  <strong id="settingsUserName">Usuário</strong>
+                  <span id="settingsUserEmail" class="muted"></span>
+                  <div class="upload-progress" id="settingsUploadProgress" hidden>
+                    <div class="progress-track"><div id="settingsUploadProgressBar" style="width:0%"></div></div>
+                    <p>Processando imagem...</p>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Preferências</p>
+                  <h2>Aparência</h2>
+                </div>
+              </div>
+              <div class="theme-toggle" id="themeToggle" role="radiogroup" aria-label="Tema do aplicativo">
+                <button type="button" class="theme-toggle-btn" data-theme-choice="light" role="radio">
+                  <span class="theme-toggle-icon">☀️</span><span>Claro</span>
+                </button>
+                <button type="button" class="theme-toggle-btn" data-theme-choice="aurora" role="radio">
+                  <span class="theme-toggle-icon">🌌</span><span>Aurora</span>
+                </button>
+                <button type="button" class="theme-toggle-btn" data-theme-choice="system" role="radio">
+                  <span class="theme-toggle-icon">💻</span><span>Automático</span>
+                </button>
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Conta</p>
+                  <h2>Dados pessoais</h2>
+                </div>
+              </div>
+              <form id="settingsNameForm" class="settings-form">
+                <label>
+                  Nome
+                  <input id="settingsNameInput" maxlength="60" required />
+                </label>
+                <div class="form-actions">
+                  <button type="submit" class="primary-button"><span>Salvar nome</span></button>
+                </div>
+              </form>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Integrações</p>
+                  <h2>WhatsApp</h2>
+                </div>
+              </div>
+
+              <div id="whatsappLinkedBlock" hidden>
+                <p class="task-meta" style="margin-bottom:10px">
+                  ✅ Vinculado ao número <strong id="whatsappLinkedPhoneLabel"></strong>. Mande uma mensagem tipo
+                  <em>"gastei 45 no mercado"</em> pelo WhatsApp que eu lanço direto em Finanças.
+                </p>
+                <div class="form-actions">
+                  <button id="settingsWhatsappUnlinkBtn" class="ghost-button danger-button"><span>🔌</span><span>Desvincular</span></button>
+                </div>
+              </div>
+
+              <div id="whatsappUnlinkedBlock">
+                <p class="task-meta" style="margin-bottom:10px">Vincule seu WhatsApp para lançar gastos e receitas direto por mensagem, sem abrir o app.</p>
+
+                <div id="whatsappCodeBlock" hidden style="margin-bottom:14px">
+                  <label style="display:grid;gap:6px">
+                    Envie esta mensagem para <strong id="whatsappBotNumberLabel"></strong> no WhatsApp:
+                    <input id="whatsappCodeText" class="settings-code-input" readonly onclick="this.select()" />
+                  </label>
+                  <p class="task-meta" id="whatsappCodeExpiry"></p>
+                </div>
+
+                <div class="form-actions">
+                  <button id="settingsWhatsappGenerateBtn" class="ghost-button"><span>🔗</span><span>Gerar código de vinculação</span></button>
+                </div>
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Segurança</p>
+                  <h2>Alterar senha</h2>
+                </div>
+              </div>
+              <form id="settingsPasswordForm" class="settings-form">
+                <label>
+                  Senha atual
+                  <input id="settingsCurrentPw" type="password" autocomplete="current-password" />
+                </label>
+                <label>
+                  Nova senha
+                  <input id="settingsNewPw" type="password" autocomplete="new-password" placeholder="mín. 6 caracteres" />
+                </label>
+                <div class="form-actions">
+                  <button type="submit" class="primary-button"><span>Alterar senha</span></button>
+                </div>
+              </form>
+            </section>
+
+            <div id="settingsMessage" class="settings-message" hidden></div>
+
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Seus dados</p>
+                  <h2>Backup</h2>
+                </div>
+              </div>
+              <p class="task-meta" style="margin-bottom:10px">Baixe uma cópia completa de tudo (notas, tarefas, agenda, metas e finanças) em um arquivo .json, ou restaure a partir de um backup anterior.</p>
+              <div class="form-actions" style="gap:8px">
+                <button id="settingsExportBackup" class="ghost-button"><span>⬇️</span><span>Exportar backup (.json)</span></button>
+                <button id="settingsImportBackup" class="ghost-button"><span>⬆️</span><span>Importar backup</span></button>
+                <input id="settingsImportFile" type="file" accept="application/json" hidden />
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Sessão</p>
+                  <h2>Sair da conta</h2>
+                </div>
+              </div>
+              <button id="settingsLogoutBtn" class="ghost-button danger-button">
+                <span>🚪</span><span>Sair da conta</span>
+              </button>
+            </section>
+
+            <section class="panel" style="border-color:var(--red)">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow" style="color:var(--red)">Zona de perigo</p>
+                  <h2>Excluir conta</h2>
+                </div>
+              </div>
+              <p class="task-meta" style="margin-bottom:10px">Isso apaga permanentemente sua conta e todos os seus dados do PulseNote. Não tem como desfazer — considere exportar um backup antes.</p>
+              <button id="settingsDeleteAccountBtn" class="ghost-button danger-button">
+                <span>⚠️</span><span>Excluir minha conta</span>
+              </button>
+            </section>
+
+          </div>
+        </section><!-- /settingsView -->
+
       </main><!-- /main-area -->
     </div><!-- /app-shell -->
 
     <!-- ========== BOTTOM NAV (mobile) ========== -->
     <nav class="bottom-nav" aria-label="Navegação mobile">
       <button class="bottom-nav-item active" data-view="dashboard">
-        <span class="bn-icon">🏠</span>
+        <span class="bn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11.5L12 4l8 7.5"/><path d="M6.5 10v8.5a1 1 0 001 1H10v-6h4v6h2.5a1 1 0 001-1V10"/></svg></span>
         <span>Início</span>
       </button>
       <button class="bottom-nav-item" data-view="notes">
-        <span class="bn-icon">📝</span>
+        <span class="bn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h8"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></span>
         <span>Notas</span>
       </button>
       <button class="bottom-nav-item" data-view="tasks">
-        <span class="bn-icon">✅</span>
+        <span class="bn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 12.3l2.3 2.3L16 9.6"/></svg></span>
         <span>Tarefas</span>
       </button>
       <button class="bottom-nav-item" data-view="calendar">
-        <span class="bn-icon">📅</span>
+        <span class="bn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17"/><path d="M8 3v4"/><path d="M16 3v4"/></svg></span>
         <span>Agenda</span>
       </button>
       <button class="bottom-nav-item" data-view="goals">
-        <span class="bn-icon">🎯</span>
+        <span class="bn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.8"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/></svg></span>
         <span>Metas</span>
+      </button>
+      <button class="bottom-nav-item" data-view="finances">
+        <span class="bn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8a2 2 0 012-2h11a2 2 0 012 2"/><rect x="3" y="8" width="18" height="11" rx="2"/><path d="M16.3 13.2h1.7"/></svg></span>
+        <span>Finanças</span>
       </button>
     </nav>
 
@@ -447,6 +940,65 @@
       <option value="Finanças"></option>
     </datalist>
 
-    <script src="app.js"></script>
+    <!-- Modal: Meta de gasto por categoria -->
+    <div id="finGoalsModal" class="modal-backdrop" hidden>
+      <div class="modal-card">
+        <div class="modal-header">
+          <h2>Nova meta de gasto</h2>
+          <button class="icon-button" id="finCloseGoalsModal">✕</button>
+        </div>
+        <div class="modal-body" style="display:grid;gap:12px">
+          <label class="field">
+            <span class="field-label">Categoria</span>
+            <select id="goalCategory" class="field-input"></select>
+          </label>
+          <label class="field">
+            <span class="field-label">Limite mensal (R$)</span>
+            <input id="goalLimit" type="number" min="1" step="0.01" class="field-input" placeholder="ex.: 500">
+          </label>
+          <button id="finSaveGoal" class="primary-button" style="width:100%;justify-content:center">💾 Salvar meta</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Lançamento Recorrente -->
+    <div id="finRecurModal" class="modal-backdrop" hidden>
+      <div class="modal-card">
+        <div class="modal-header">
+          <h2>Novo lançamento recorrente</h2>
+          <button class="icon-button" id="finCloseRecurModal">✕</button>
+        </div>
+        <div class="modal-body" style="display:grid;gap:12px">
+          <label class="field">
+            <span class="field-label">Descrição</span>
+            <input id="recurDesc" type="text" class="field-input" placeholder="ex.: Netflix, Aluguel, Salário…">
+          </label>
+          <label class="field">
+            <span class="field-label">Valor (R$)</span>
+            <input id="recurAmount" type="number" min="0.01" step="0.01" class="field-input" placeholder="ex.: 49,90">
+          </label>
+          <label class="field">
+            <span class="field-label">Tipo</span>
+            <select id="recurType" class="field-input">
+              <option value="despesa">💸 Despesa</option>
+              <option value="receita">💰 Receita</option>
+            </select>
+          </label>
+          <label class="field">
+            <span class="field-label">Categoria</span>
+            <select id="recurCategory" class="field-input"></select>
+          </label>
+          <label class="field">
+            <span class="field-label">Dia do mês</span>
+            <input id="recurDay" type="number" min="1" max="31" class="field-input" placeholder="ex.: 5 (dia 5 de cada mês)">
+          </label>
+          <button id="finSaveRecur" class="primary-button" style="width:100%;justify-content:center">💾 Salvar recorrente</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="/src/pwa-install.js" defer></script>
+    <script src="/src/notifications.js" defer></script>
+    <script type="module" src="/src/app.js"></script>
   </body>
 </html>
