@@ -336,9 +336,9 @@
             </div>
             <div class="modal-body" style="display:grid;gap:14px">
               <div class="segmented" id="plannerQuickAddType">
-                <button class="active" data-quick-type="task">✅ Tarefa</button>
-                <button data-quick-type="event">📅 Compromisso</button>
-                <button data-quick-type="goal">🎯 Meta</button>
+                <button class="active" data-quick-type="task"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8.5 12.3 2.3 2.3L16 9.6"/></svg><span>Tarefa</span></button>
+                <button data-quick-type="event"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17"/><path d="M8 3v4"/><path d="M16 3v4"/></svg><span>Compromisso</span></button>
+                <button data-quick-type="goal"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.8"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/></svg><span>Meta</span></button>
               </div>
 
               <form id="plannerQuickAddForm" data-type="task" style="display:grid;gap:12px">
@@ -359,7 +359,7 @@
                     <input id="pqaEventDate" type="date" />
                     <input id="pqaEventTime" type="time" />
                   </div>
-                  <input id="pqaEventLocation" placeholder="📍 Local ou link" style="margin-top:10px" />
+                  <input id="pqaEventLocation" placeholder="Local ou link" style="margin-top:10px" />
                 </div>
 
                 <div id="pqaGoalFields" style="display:none">
@@ -368,7 +368,7 @@
 
                 <div class="form-actions">
                   <button type="submit" class="primary-button">
-                    <span class="icon">＋</span>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
                     <span>Salvar</span>
                   </button>
                 </div>
@@ -395,14 +395,14 @@
               </div>
               <div class="planner-header-actions">
                 <div class="segmented planner-tabs" role="tablist" aria-label="Visão do planner">
-                  <button class="active" data-planner-tab="list">📋 Lista</button>
-                  <button data-planner-tab="day">☀️ Dia</button>
-                  <button data-planner-tab="week">🗓️ Semana</button>
-                  <button data-planner-tab="month">📆 Mês</button>
-                  <button data-planner-tab="notes">📝 Notas</button>
+                  <button class="active" data-planner-tab="list"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg><span>Lista</span></button>
+                  <button data-planner-tab="day"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg><span>Dia</span></button>
+                  <button data-planner-tab="week"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="3"/><path d="M16 2.5v4"/><path d="M8 2.5v4"/><path d="M3 10h18"/><path d="M8 14.5h.01"/><path d="M12 14.5h.01"/><path d="M16 14.5h.01"/></svg><span>Semana</span></button>
+                  <button data-planner-tab="month"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="3"/><path d="M16 2.5v4"/><path d="M8 2.5v4"/><path d="M3 10h18"/><path d="M7.5 14.5h2"/><path d="M14.5 14.5h2"/><path d="M7.5 18h2"/><path d="M14.5 18h2"/></svg><span>Mês</span></button>
+                  <button data-planner-tab="notes"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="15" height="18" rx="2.5"/><path d="M9 3v18"/><path d="M2.5 8h2.5"/><path d="M2.5 13h2.5"/><path d="M2.5 18h2.5"/></svg><span>Notas</span></button>
                 </div>
                 <button class="primary-button planner-add-btn" type="button" title="Adicionar tarefa, compromisso ou meta">
-                  <span class="icon">＋</span>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
                   <span>Adicionar</span>
                 </button>
               </div>
@@ -417,7 +417,10 @@
                   <p class="eyebrow">Foco da semana</p>
                   <h2>Metas</h2>
                 </div>
-                <button class="mini-button" type="button" onclick="openPlannerQuickAdd('goal')">🎯 Nova meta</button>
+                <button class="mini-button" type="button" onclick="openPlannerQuickAdd('goal')">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.8"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/></svg>
+                  <span>Nova meta</span>
+                </button>
               </div>
               <div id="plannerGoalsStrip" class="planner-goals-strip"></div>
             </section>
@@ -430,12 +433,12 @@
             <!-- ===== DIA ===== -->
             <div class="planner-subview" data-planner-subview="day">
               <div class="planner-day-nav">
-                <button class="icon-button" id="plannerDayPrev" title="Dia anterior">‹</button>
+                <button class="icon-button" id="plannerDayPrev" title="Dia anterior"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></button>
                 <div class="planner-day-nav-label">
                   <strong id="plannerDayLabel">Hoje</strong>
                   <button class="mini-button" id="plannerDayToday">Ir para hoje</button>
                 </div>
-                <button class="icon-button" id="plannerDayNext" title="Próximo dia">›</button>
+                <button class="icon-button" id="plannerDayNext" title="Próximo dia"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></button>
               </div>
               <div class="panel planner-day-allday-panel">
                 <p class="eyebrow">Tarefas do dia</p>
@@ -447,30 +450,51 @@
               </div>
             </div>
 
-            <!-- ===== SEMANA (chega na próxima etapa) ===== -->
+            <!-- ===== SEMANA ===== -->
             <div class="planner-subview" data-planner-subview="week">
-              <div class="planner-placeholder">
-                <span class="planner-placeholder-icon">🗓️</span>
-                <h3>Visão Semana chega na próxima etapa</h3>
-                <p>Por enquanto, use <strong>Lista</strong> ou <strong>Dia</strong> para ver tarefas e compromissos da semana.</p>
+              <div class="planner-day-nav">
+                <button class="icon-button" id="plannerWeekPrev" title="Semana anterior"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></button>
+                <div class="planner-day-nav-label">
+                  <strong id="plannerWeekLabel">Esta semana</strong>
+                  <button class="mini-button" id="plannerWeekToday">Semana atual</button>
+                </div>
+                <button class="icon-button" id="plannerWeekNext" title="Próxima semana"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></button>
               </div>
+              <div id="plannerWeekBody" class="planner-week-body"></div>
             </div>
 
-            <!-- ===== MÊS (chega na próxima etapa) ===== -->
+            <!-- ===== MÊS ===== -->
             <div class="planner-subview" data-planner-subview="month">
-              <div class="planner-placeholder">
-                <span class="planner-placeholder-icon">📆</span>
-                <h3>Visão Mês chega na próxima etapa</h3>
-                <p>Por enquanto, a aba <strong>Agenda</strong> (antigo) ainda tem a grade mensal completa.</p>
+              <div class="planner-day-nav">
+                <button class="icon-button" id="plannerMonthPrev" title="Mês anterior"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></button>
+                <div class="planner-day-nav-label">
+                  <strong id="plannerMonthLabel">Mês</strong>
+                  <button class="mini-button" id="plannerMonthToday">Mês atual</button>
+                </div>
+                <button class="icon-button" id="plannerMonthNext" title="Próximo mês"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></button>
+              </div>
+              <div class="panel">
+                <div class="planner-month-weekdays">
+                  <span>Dom</span><span>Seg</span><span>Ter</span><span>Qua</span><span>Qui</span><span>Sex</span><span>Sáb</span>
+                </div>
+                <div id="plannerMonthGrid" class="planner-month-grid"></div>
               </div>
             </div>
 
-            <!-- ===== NOTAS (reskin chega na próxima etapa) ===== -->
+            <!-- ===== NOTAS (reskin completo chega na próxima etapa) ===== -->
             <div class="planner-subview" data-planner-subview="notes">
-              <div class="planner-placeholder">
-                <span class="planner-placeholder-icon">📝</span>
-                <h3>Notas com a nova cara chega na próxima etapa</h3>
+              <div class="empty-state-pro">
+                <div class="empty-state-pro-badge tone-accent">
+                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="15" height="18" rx="2.5"/><path d="M9 3v18"/><path d="M2.5 8h2.5"/><path d="M2.5 13h2.5"/><path d="M2.5 18h2.5"/></svg>
+                </div>
+                <h3>Notas com a nova cara está a caminho</h3>
                 <p>Por enquanto, use a aba <strong>Notas</strong> no menu — sua biblioteca completa continua lá, intacta.</p>
+                <div class="empty-state-pro-actions">
+                  <button class="primary-button" type="button" onclick="setView('notes')">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13.5"/><path d="m13 6 6.5 6-6.5 6"/></svg>
+                    <span>Abrir Notas</span>
+                  </button>
+                </div>
               </div>
             </div>
 

@@ -4030,3 +4030,171 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
   .planner-timeline-hour { grid-template-columns: 42px 1fr; height: 50px; }
   .planner-timeline-events { left: 50px; }
 }
+
+/* ============================================================
+   PLANNER — Design System v2 (ícones, empty states premium,
+   metas expansíveis, Semana, Mês, micro-interações)
+   ============================================================ */
+
+/* ---------- Ícones (sistema único, sem emoji) ---------- */
+.pn-icon { flex-shrink: 0; display: inline-block; vertical-align: -3px; }
+.segmented button .pn-icon,
+.mini-button .pn-icon,
+.ghost-button .pn-icon,
+.primary-button .pn-icon { vertical-align: -2px; margin-right: 2px; }
+.task-meta .pn-icon { margin-right: 3px; opacity: 0.8; }
+.icon-button svg { display: block; }
+
+/* ---------- Estado vazio premium (substitui caixa tracejada) ---------- */
+.empty-state-pro {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+  gap: 10px;
+  padding: 48px 22px;
+  animation: fadeUp 260ms ease both;
+}
+.empty-state-pro-badge {
+  width: 64px; height: 64px;
+  border-radius: 20px;
+  display: grid; place-items: center;
+  background: var(--accent-soft);
+  color: var(--accent);
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--accent) 25%, transparent);
+  animation: emptyBadgeIn 420ms cubic-bezier(.2,.9,.3,1.3) both;
+}
+@keyframes emptyBadgeIn {
+  from { transform: scale(0.6); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+.empty-state-pro-badge.tone-red { background: var(--red-soft); color: var(--red); box-shadow: 0 10px 24px color-mix(in srgb, var(--red) 25%, transparent); }
+.empty-state-pro-badge.tone-green { background: var(--green-soft); color: var(--green); box-shadow: 0 10px 24px color-mix(in srgb, var(--green) 25%, transparent); }
+.empty-state-pro h3 { font-size: 1rem; font-weight: 800; color: var(--text); max-width: 320px; }
+.empty-state-pro p { font-size: 0.85rem; color: var(--muted); max-width: 300px; line-height: 1.55; }
+.empty-state-pro-actions { display: flex; gap: 10px; margin-top: 6px; flex-wrap: wrap; justify-content: center; }
+
+.empty-state-compact-pro {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 13px 14px;
+  border-radius: 14px;
+  background: var(--surface2);
+  color: var(--muted);
+  font-size: 0.82rem;
+  animation: fadeUp 200ms ease both;
+}
+.empty-state-compact-pro .tone-accent { color: var(--accent); display: flex; }
+
+/* ---------- Metas: card expansível com marcos ---------- */
+.planner-goals-strip { align-items: flex-start; }
+.planner-goal-chip-top { cursor: pointer; }
+.planner-goal-ms-toggle {
+  display: flex; align-items: center; gap: 6px;
+  background: none; border: none; padding: 2px 0;
+  font-size: 0.74rem; font-weight: 700; color: var(--text2);
+  cursor: pointer;
+}
+.planner-goal-ms-toggle .planner-goal-chevron { margin-left: auto; transition: transform 180ms ease; }
+.planner-goal-chip.is-expanded .planner-goal-chevron { transform: rotate(90deg); }
+.planner-goal-chip.is-expanded { width: 260px; }
+
+.planner-goal-milestones {
+  display: grid; gap: 6px;
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line);
+  animation: fadeUp 180ms ease both;
+}
+.planner-goal-milestones-empty { font-size: 0.76rem; color: var(--muted); padding: 2px 0; }
+.planner-goal-milestones .goal-milestone-row { display: flex; align-items: center; gap: 8px; }
+.planner-ms-remove { width: 22px; height: 22px; padding: 0; margin-left: auto; display: grid; place-items: center; flex-shrink: 0; }
+.planner-add-milestone { width: 100%; justify-content: center; margin-top: 2px; padding: 7px 10px; font-size: 0.76rem; }
+
+/* ---------- Linhas: micro polimento + feedback de toque ---------- */
+.planner-row { animation: fadeUp 200ms ease both; }
+.task-check.is-done { background: var(--green); border-color: var(--green); color: #fff; }
+.is-done-text { text-decoration: line-through; opacity: 0.5; }
+.planner-row-delete:active,
+.mini-button:active,
+.planner-add-btn:active,
+.icon-button:active { transform: scale(0.93); }
+.planner-row-delete,
+.mini-button,
+.icon-button { transition: transform 140ms ease, background 160ms ease; }
+
+/* ---------- Semana ---------- */
+.planner-week-body { display: grid; gap: 12px; }
+.planner-week-day {
+  background: var(--surface2);
+  border-radius: 18px;
+  padding: 12px;
+  border: 1.5px solid transparent;
+  transition: border-color 160ms;
+}
+.planner-week-day.is-today { border-color: var(--accent); }
+.planner-week-day-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: none;
+  border: none;
+  padding: 2px 4px 10px;
+  cursor: pointer;
+  color: var(--text);
+}
+.planner-week-day-name { font-size: 0.78rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
+.planner-week-day-num { font-size: 1rem; font-weight: 800; }
+.planner-week-day.is-today .planner-week-day-num {
+  background: var(--accent); color: #fff;
+  width: 26px; height: 26px; border-radius: 50%;
+  display: grid; place-items: center; font-size: 0.86rem;
+}
+.planner-week-day-chevron { margin-left: auto; color: var(--muted); transition: transform 160ms; }
+.planner-week-day-header:hover .planner-week-day-chevron { transform: translateX(3px); }
+.planner-week-day-body { display: grid; gap: 8px; }
+
+/* ---------- Mês ---------- */
+.planner-month-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  text-align: center;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--muted);
+  padding-bottom: 8px;
+  text-transform: uppercase;
+}
+.planner-month-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+}
+.planner-month-cell {
+  aspect-ratio: 1;
+  border-radius: 14px;
+  background: var(--surface2);
+  border: 1.5px solid transparent;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 4px;
+  cursor: pointer;
+  color: var(--text);
+  transition: transform 140ms ease, border-color 140ms ease, background 140ms ease;
+}
+.planner-month-cell:hover { background: var(--line); }
+.planner-month-cell:active { transform: scale(0.92); }
+.planner-month-cell.is-blank { background: none; cursor: default; pointer-events: none; }
+.planner-month-cell.is-today { border-color: var(--accent); background: var(--accent-soft); }
+.planner-month-cell.is-today .planner-month-daynum { color: var(--accent); }
+.planner-month-cell.has-items { font-weight: 800; }
+.planner-month-daynum { font-size: 0.86rem; }
+.planner-month-dots { display: flex; gap: 3px; }
+.planner-month-dots span { width: 5px; height: 5px; border-radius: 50%; }
+
+@media (max-width: 720px) {
+  .planner-month-cell { border-radius: 10px; }
+  .planner-goal-chip.is-expanded { width: 230px; }
+}

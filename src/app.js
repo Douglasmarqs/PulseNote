@@ -517,6 +517,9 @@ let draggedTaskId = null;
 // ── Planner (NOVO, hub unificado) ──────────────────────────────
 let plannerActiveTab = "list"; // "list" | "day" | "week" | "month" | "notes"
 let plannerDayDate = todayIso;
+let plannerWeekAnchor = todayIso; // qualquer data dentro da semana ativa
+let plannerMonthAnchor = todayIso; // qualquer data dentro do mês ativo
+let plannerExpandedGoals = new Set();
 // Mês ativo na view de Finanças. Formato "YYYY-MM". Começa no mês atual.
 let finActiveMonth = todayIso.slice(0, 7);
 
@@ -1639,6 +1642,7 @@ function addGoalMilestone(id, event) {
   goal.milestones.push({ id: crypto.randomUUID(), title: title.trim(), done: false });
   saveState();
   renderGoals();
+  renderPlannerGoalsStrip();
 }
 
 function toggleGoalMilestone(goalId, msId, event) {
@@ -1648,6 +1652,7 @@ function toggleGoalMilestone(goalId, msId, event) {
   goal.milestones = (goal.milestones || []).map((m) => (m.id === msId ? { ...m, done: !m.done } : m));
   saveState();
   renderGoals();
+  renderPlannerGoalsStrip();
 }
 
 function deleteGoalMilestone(goalId, msId, event) {
@@ -1657,6 +1662,7 @@ function deleteGoalMilestone(goalId, msId, event) {
   goal.milestones = (goal.milestones || []).filter((m) => m.id !== msId);
   saveState();
   renderGoals();
+  renderPlannerGoalsStrip();
 }
 
 function valueOf(selector) {
@@ -1887,15 +1893,75 @@ function renderGoalSummary() {
 // só a apresentação.
 // ============================================================
 
+// ── Sistema de ícones (estilo Lucide, um traço só, sem emoji) ──
+// Substitui os emojis usados na primeira versão: o briefing de
+// design pede um único conjunto de ícones consistente em peso e
+// estilo, nunca emoji solto.
+const ICONS = {
+  list: '<path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>',
+  calendarWeek: '<rect x="3" y="4.5" width="18" height="16" rx="3"/><path d="M16 2.5v4"/><path d="M8 2.5v4"/><path d="M3 10h18"/><path d="M8 14.5h.01"/><path d="M12 14.5h.01"/><path d="M16 14.5h.01"/>',
+  calendarMonth: '<rect x="3" y="4.5" width="18" height="16" rx="3"/><path d="M16 2.5v4"/><path d="M8 2.5v4"/><path d="M3 10h18"/><path d="M7.5 14.5h2"/><path d="M14.5 14.5h2"/><path d="M7.5 18h2"/><path d="M14.5 18h2"/>',
+  notebook: '<rect x="5" y="3" width="15" height="18" rx="2.5"/><path d="M9 3v18"/><path d="M2.5 8h2.5"/><path d="M2.5 13h2.5"/><path d="M2.5 18h2.5"/>',
+  target: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.8"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/>',
+  checkCircle: '<circle cx="12" cy="12" r="9"/><path d="m8.5 12.3 2.3 2.3L16 9.6"/>',
+  calendar: '<rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17"/><path d="M8 3v4"/><path d="M16 3v4"/>',
+  flag: '<path d="M5 21V4"/><path d="M5 4h12.5l-2 4.5L19.5 13H5"/>',
+  plus: '<path d="M12 5v14"/><path d="M5 12h14"/>',
+  alertTriangle: '<path d="M12 3 2.5 20h19L12 3z"/><path d="M12 9.5v4.3"/><path d="M12 17h.01"/>',
+  calendarCheck: '<rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17"/><path d="M8 3v4"/><path d="M16 3v4"/><path d="M8.5 14l2 2 4-4"/>',
+  arrowRight: '<path d="M5 12h13.5"/><path d="m13 6 6.5 6-6.5 6"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.2 3.2"/>',
+  mapPin: '<path d="M12 21.5s-7.2-6.6-7.2-11.4a7.2 7.2 0 0 1 14.4 0c0 4.8-7.2 11.4-7.2 11.4z"/><circle cx="12" cy="10.1" r="2.4"/>',
+  trash: '<path d="M4 7h16"/><path d="M6 7V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2"/><path d="M8 7v13a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2V7"/><path d="M10 11v6"/><path d="M14 11v6"/>',
+  chevronLeft: '<path d="m15 18-6-6 6-6"/>',
+  chevronRight: '<path d="m9 18 6-6-6-6"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  x: '<path d="M18 6 6 18"/><path d="M6 6 18 18"/>',
+  inbox: '<path d="M21.5 12h-5.6l-1.8 3h-4.2l-1.8-3H2.5"/><path d="M5.6 5.3 2.5 12v6a2 2 0 0 0 2 2h15a2 2 0 0 0 2-2v-6l-3.1-6.7A2 2 0 0 0 16.6 4H7.4a2 2 0 0 0-1.8 1.3z"/>',
+  sparkle: '<path d="M11 2.5 12.6 7l4.4 1.6-4.4 1.6L11 14.7l-1.6-4.5L5 8.6l4.4-1.6z"/><path d="M18.5 14l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/>',
+  compass: '<circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5z"/>',
+};
+
+function icon(name, size = 18, extraClass = "") {
+  const body = ICONS[name] || ICONS.sparkle;
+  return `<svg class="pn-icon ${extraClass}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
+}
+
+// ── Estado vazio premium (nunca caixa tracejada / texto seco) ──
+function emptyStateHtml({ iconName = "sparkle", tone = "accent", title, desc, ctaLabel, ctaOnClick, secondaryLabel, secondaryOnClick }) {
+  return `
+    <div class="empty-state-pro">
+      <div class="empty-state-pro-badge tone-${tone}">${icon(iconName, 26)}</div>
+      <h3>${title}</h3>
+      <p>${desc}</p>
+      ${ctaLabel ? `
+        <div class="empty-state-pro-actions">
+          <button class="primary-button" type="button" onclick="${ctaOnClick}">${icon("plus", 15)}<span>${ctaLabel}</span></button>
+          ${secondaryLabel ? `<button class="ghost-button" type="button" onclick="${secondaryOnClick}">${secondaryLabel}</button>` : ""}
+        </div>` : ""}
+    </div>
+  `;
+}
+
+// ── Variante compacta do estado vazio, para áreas pequenas dentro
+// de uma tela já preenchida (ex.: um dia sem compromisso dentro da
+// timeline) — continua com ícone, nunca texto seco isolado.
+function emptyStateCompactHtml({ iconName = "sparkle", text, tone = "accent" }) {
+  return `<div class="empty-state-compact-pro"><span class="tone-${tone}">${icon(iconName, 15)}</span><span>${text}</span></div>`;
+}
+
 function renderPlanner() {
   const label = document.querySelector("#plannerHeaderLabel");
   if (label) {
     const pendingCount = state.tasks.filter((t) => t.status !== "Concluida" && t.status !== "Cancelada").length;
-    label.textContent = pendingCount ? `${pendingCount} pendência${pendingCount === 1 ? "" : "s"} para organizar` : "Tudo em dia por aqui ✨";
+    label.textContent = pendingCount ? `${pendingCount} pendência${pendingCount === 1 ? "" : "s"} para organizar` : "Tudo em dia por aqui";
   }
   renderPlannerGoalsStrip();
   if (plannerActiveTab === "list") renderPlannerList();
   else if (plannerActiveTab === "day") renderPlannerDay();
+  else if (plannerActiveTab === "week") renderPlannerWeek();
+  else if (plannerActiveTab === "month") renderPlannerMonth();
 }
 
 function setPlannerTab(tab) {
@@ -1908,6 +1974,8 @@ function setPlannerTab(tab) {
   });
   if (tab === "list") renderPlannerList();
   else if (tab === "day") renderPlannerDay();
+  else if (tab === "week") renderPlannerWeek();
+  else if (tab === "month") renderPlannerMonth();
 }
 
 function bindPlannerNav() {
@@ -1917,6 +1985,12 @@ function bindPlannerNav() {
   document.querySelector("#plannerDayPrev")?.addEventListener("click", () => changePlannerDay(-1));
   document.querySelector("#plannerDayNext")?.addEventListener("click", () => changePlannerDay(1));
   document.querySelector("#plannerDayToday")?.addEventListener("click", goToPlannerToday);
+  document.querySelector("#plannerWeekPrev")?.addEventListener("click", () => changePlannerWeek(-1));
+  document.querySelector("#plannerWeekNext")?.addEventListener("click", () => changePlannerWeek(1));
+  document.querySelector("#plannerWeekToday")?.addEventListener("click", goToPlannerThisWeek);
+  document.querySelector("#plannerMonthPrev")?.addEventListener("click", () => changePlannerMonth(-1));
+  document.querySelector("#plannerMonthNext")?.addEventListener("click", () => changePlannerMonth(1));
+  document.querySelector("#plannerMonthToday")?.addEventListener("click", goToPlannerThisMonth);
 }
 
 // ── Cor determinística por item (mesma paleta pastel das notas) —
@@ -1938,34 +2012,80 @@ function plannerColorTone(id) {
   return tones[Math.abs(hash) % tones.length];
 }
 
-// ── Metas: fita horizontal compacta, sempre visível no topo do Planner ──
+// ── Metas: fita horizontal compacta, sempre visível no topo do
+// Planner, com marcos expansíveis (toque no card pra abrir/fechar) ──
+function togglePlannerGoalExpand(id, event) {
+  event?.stopPropagation();
+  if (plannerExpandedGoals.has(id)) plannerExpandedGoals.delete(id);
+  else plannerExpandedGoals.add(id);
+  renderPlannerGoalsStrip();
+}
+
 function renderPlannerGoalsStrip() {
   const root = document.querySelector("#plannerGoalsStrip");
   if (!root) return;
   const goals = state.goals;
   if (!goals.length) {
-    root.innerHTML = `<div class="empty-state-compact">Nenhuma meta ainda — toque em "🎯 Nova meta" para criar a primeira.</div>`;
+    root.innerHTML = emptyStateHtml({
+      iconName: "target",
+      title: "Defina sua primeira meta",
+      desc: "Metas ficam fixadas aqui em cima, com marcos que você vai riscando conforme avança.",
+      ctaLabel: "Nova meta",
+      ctaOnClick: "openPlannerQuickAdd('goal')",
+    });
     return;
   }
-  root.innerHTML = goals.map((goal) => {
-    const percent = Math.min(100, Math.round((goal.current / goal.target) * 100));
-    const isComplete = goal.current >= goal.target;
-    return `
-      <article class="planner-goal-chip ${isComplete ? "is-complete" : ""}" data-goal-id="${goal.id}">
-        <div class="planner-goal-chip-top">
+  root.innerHTML = goals
+    .map((goal) => {
+      const percent = Math.min(100, Math.round((goal.current / goal.target) * 100));
+      const isComplete = goal.current >= goal.target;
+      const milestones = goal.milestones || [];
+      const msDone = milestones.filter((m) => m.done).length;
+      const expanded = plannerExpandedGoals.has(goal.id);
+      const milestonesHtml = expanded
+        ? `
+        <div class="planner-goal-milestones">
+          ${
+            milestones.length
+              ? milestones
+                  .map(
+                    (m) => `
+            <div class="goal-milestone-row">
+              <button class="goal-milestone-check ${m.done ? "done" : ""}" onclick="toggleGoalMilestone('${goal.id}','${m.id}', event)">${m.done ? icon("check", 12) : ""}</button>
+              <span class="${m.done ? "done" : ""}">${escapeHtml(m.title)}</span>
+              <button class="mini-button planner-ms-remove" onclick="deleteGoalMilestone('${goal.id}','${m.id}', event)">${icon("x", 12)}</button>
+            </div>`
+                  )
+                  .join("")
+              : `<p class="planner-goal-milestones-empty">Sem marcos ainda.</p>`
+          }
+          <button class="ghost-button planner-add-milestone" type="button" onclick="addGoalMilestone('${goal.id}', event)">${icon("plus", 13)}<span>Marco</span></button>
+        </div>`
+        : "";
+      return `
+      <article class="planner-goal-chip ${isComplete ? "is-complete" : ""} ${expanded ? "is-expanded" : ""}" data-goal-id="${goal.id}">
+        <div class="planner-goal-chip-top" onclick="togglePlannerGoalExpand('${goal.id}', event)">
           <strong>${escapeHtml(goal.title)}</strong>
           <span class="pill" style="${isComplete ? "background:var(--green);color:#fff;border-color:var(--green);" : ""}">${percent}%</span>
         </div>
         <div class="progress-track"><div style="width:${percent}%;background:${isComplete ? "var(--green)" : "linear-gradient(90deg,var(--accent),var(--purple))"}"></div></div>
+        ${
+          milestones.length
+            ? `<button class="planner-goal-ms-toggle" type="button" onclick="togglePlannerGoalExpand('${goal.id}', event)">${icon("flag", 13)}<span>${msDone}/${milestones.length} marcos</span>${icon("chevronRight", 13, "planner-goal-chevron")}</button>`
+            : ""
+        }
         <div class="planner-goal-chip-controls">
           <button class="mini-button" onclick="changeGoal('${goal.id}', -1)">−</button>
           <span class="task-meta">${goal.current}/${goal.target}</span>
           <button class="mini-button" onclick="changeGoal('${goal.id}', 1)">+</button>
-          <button class="mini-button" onclick="deleteGoal('${goal.id}')" style="margin-left:auto">🗑️</button>
+          <button class="mini-button" onclick="addGoalMilestone('${goal.id}', event)" title="Adicionar marco">${icon("flag", 13)}</button>
+          <button class="mini-button planner-row-delete" onclick="deleteGoal('${goal.id}')" title="Excluir" style="margin-left:auto">${icon("trash", 13)}</button>
         </div>
+        ${milestonesHtml}
       </article>
     `;
-  }).join("");
+    })
+    .join("");
 }
 
 // ── Lista: agrupa tarefas + compromissos por proximidade da data,
@@ -2011,20 +2131,23 @@ function renderPlannerList() {
   const query = elements.globalSearch.value.trim().toLowerCase();
   const buckets = getPlannerDateBuckets();
   const sections = [
-    { key: "overdue", label: "⚠️ Atrasado" },
-    { key: "today", label: "📅 Hoje" },
-    { key: "tomorrow", label: "🔜 Amanhã" },
-    { key: "week", label: "🗓️ Esta semana" },
-    { key: "later", label: "📌 Sem data / mais tarde" },
+    { key: "overdue", label: "Atrasado", iconName: "alertTriangle", warn: true },
+    { key: "today", label: "Hoje", iconName: "calendarCheck" },
+    { key: "tomorrow", label: "Amanhã", iconName: "arrowRight" },
+    { key: "week", label: "Esta semana", iconName: "calendarWeek" },
+    { key: "later", label: "Sem data / mais tarde", iconName: "clock" },
   ];
 
   const html = sections
-    .map(({ key, label }) => {
+    .map(({ key, label, iconName, warn }) => {
       const items = buckets[key].filter((item) => !query || (item.data.title || "").toLowerCase().includes(query));
       if (!items.length) return "";
       return `
         <div class="planner-section">
-          <div class="planner-section-title"><span>${label}</span><span class="pill">${items.length}</span></div>
+          <div class="planner-section-title">
+            <span class="planner-section-title-label ${warn ? "is-warn" : ""}">${icon(iconName, 15)}<span>${label}</span></span>
+            <span class="pill">${items.length}</span>
+          </div>
           <div class="planner-section-body">
             ${items.map((item) => (item.kind === "task" ? renderPlannerTaskRow(item.data) : renderPlannerEventRow(item.data))).join("")}
           </div>
@@ -2033,22 +2156,30 @@ function renderPlannerList() {
     })
     .join("");
 
-  root.innerHTML = html || `<div class="empty-state">Nada por aqui. Toque em "＋ Adicionar" para criar sua primeira tarefa ou compromisso.</div>`;
+  root.innerHTML =
+    html ||
+    emptyStateHtml({
+      iconName: "inbox",
+      title: "Sua lista está limpa",
+      desc: "Tarefas e compromissos aparecem aqui, agrupados por Atrasado, Hoje, Amanhã e Esta semana.",
+      ctaLabel: "Adicionar item",
+      ctaOnClick: "openPlannerQuickAdd('task')",
+    });
 }
 
 function renderPlannerTaskRow(task) {
   const isDone = task.status === "Concluida";
   return `
     <article class="planner-row planner-row--task" data-task-id="${task.id}">
-      <button class="task-check" onclick="toggleTask('${task.id}')" title="Concluir" style="${isDone ? "background:var(--green);border-color:var(--green);color:#fff;" : ""}">${isDone ? "✓" : ""}</button>
+      <button class="task-check ${isDone ? "is-done" : ""}" onclick="toggleTask('${task.id}')" title="Concluir">${isDone ? icon("check", 13) : ""}</button>
       <div class="planner-row-main">
-        <strong style="${isDone ? "text-decoration:line-through;opacity:0.5;" : ""}">${escapeHtml(task.title)}</strong>
+        <strong class="${isDone ? "is-done-text" : ""}">${escapeHtml(task.title)}</strong>
         <div class="planner-row-meta">
           <span class="priority-pill priority-${task.priority}">${escapeHtml(task.priority)}</span>
-          ${task.dueDate ? `<span class="task-meta">📅 ${formatDate(task.dueDate)}</span>` : ""}
+          ${task.dueDate ? `<span class="task-meta">${icon("calendarWeek", 12)}${formatDate(task.dueDate)}</span>` : ""}
         </div>
       </div>
-      <button class="mini-button" onclick="deleteTask('${task.id}')" title="Excluir">🗑️</button>
+      <button class="mini-button planner-row-delete" onclick="deleteTask('${task.id}')" title="Excluir">${icon("trash", 14)}</button>
     </article>
   `;
 }
@@ -2061,10 +2192,11 @@ function renderPlannerEventRow(ev) {
       <div class="planner-row-main">
         <strong>${escapeHtml(ev.title)}</strong>
         <div class="planner-row-meta">
-          <span class="task-meta">📅 ${formatDate(ev.date)}${ev.location && ev.location !== "Sem local" ? ` · 📍 ${escapeHtml(ev.location)}` : ""}</span>
+          <span class="task-meta">${icon("calendarWeek", 12)}${formatDate(ev.date)}</span>
+          ${ev.location && ev.location !== "Sem local" ? `<span class="task-meta">${icon("mapPin", 12)}${escapeHtml(ev.location)}</span>` : ""}
         </div>
       </div>
-      <button class="mini-button" onclick="deleteEvent('${ev.id}')" title="Excluir">🗑️</button>
+      <button class="mini-button planner-row-delete" onclick="deleteEvent('${ev.id}')" title="Excluir">${icon("trash", 14)}</button>
     </article>
   `;
 }
@@ -2082,6 +2214,11 @@ function goToPlannerToday() {
   renderPlannerDay();
 }
 
+function jumpPlannerToDay(date) {
+  plannerDayDate = date;
+  setPlannerTab("day");
+}
+
 function renderPlannerDay() {
   const label = document.querySelector("#plannerDayLabel");
   if (label) {
@@ -2096,7 +2233,7 @@ function renderPlannerDay() {
   if (alldayRoot) {
     alldayRoot.innerHTML = dayTasks.length
       ? dayTasks.map(renderPlannerTaskRow).join("")
-      : `<div class="empty-state-compact">Nenhuma tarefa para este dia.</div>`;
+      : emptyStateCompactHtml({ iconName: "calendarCheck", text: "Nenhuma tarefa para este dia." });
   }
 
   const dayEvents = state.events.filter((e) => e.date === plannerDayDate).sort(sortEvent);
@@ -2119,25 +2256,134 @@ function renderPlannerDay() {
         return `
           <article class="planner-event-block" data-event-id="${ev.id}" style="top:${top}%;background:${tone.bg};border-color:${tone.border}">
             <strong>${ev.time} · ${escapeHtml(ev.title)}</strong>
-            ${ev.location && ev.location !== "Sem local" ? `<span>📍 ${escapeHtml(ev.location)}</span>` : ""}
-            <button class="mini-button" onclick="deleteEvent('${ev.id}')" title="Excluir">🗑️</button>
+            ${ev.location && ev.location !== "Sem local" ? `<span>${icon("mapPin", 11)}${escapeHtml(ev.location)}</span>` : ""}
+            <button class="mini-button" onclick="deleteEvent('${ev.id}')" title="Excluir">${icon("trash", 12)}</button>
           </article>
         `;
       })
       .join("");
     const noTimeEvents = dayEvents.filter((ev) => !ev.time);
-    const noTimeHtml = noTimeEvents.length
-      ? `<div class="planner-day-notime">${noTimeEvents.map(renderPlannerEventRow).join("")}</div>`
-      : "";
+    const noTimeHtml = noTimeEvents.length ? `<div class="planner-day-notime">${noTimeEvents.map(renderPlannerEventRow).join("")}</div>` : "";
     timeline.innerHTML = `
       ${noTimeHtml}
       <div class="planner-timeline-wrap">
         <div class="planner-timeline-hours">${hourRows}</div>
-        <div class="planner-timeline-events">${blocksHtml || (dayEvents.length ? "" : "")}</div>
+        <div class="planner-timeline-events">${blocksHtml}</div>
       </div>
-      ${!dayEvents.length ? `<div class="empty-state-compact">Nenhum compromisso neste dia.</div>` : ""}
+      ${!dayEvents.length ? emptyStateCompactHtml({ iconName: "compass", text: "Nenhum compromisso neste dia." }) : ""}
     `;
   }
+}
+
+// ── Semana: 7 dias em agenda vertical, cada um levando pro Dia ──
+function changePlannerWeek(delta) {
+  const d = new Date(`${plannerWeekAnchor}T12:00:00`);
+  d.setDate(d.getDate() + delta * 7);
+  plannerWeekAnchor = toLocalIso(d);
+  renderPlannerWeek();
+}
+
+function goToPlannerThisWeek() {
+  plannerWeekAnchor = todayIso;
+  renderPlannerWeek();
+}
+
+function renderPlannerWeek() {
+  const anchorDate = new Date(`${plannerWeekAnchor}T12:00:00`);
+  const days = getWeekDays(anchorDate);
+
+  const label = document.querySelector("#plannerWeekLabel");
+  if (label) {
+    const first = new Date(`${days[0]}T12:00:00`);
+    const last = new Date(`${days[6]}T12:00:00`);
+    const sameMonth = first.getMonth() === last.getMonth();
+    const fmtDay = (d) => new Intl.DateTimeFormat("pt-BR", { day: "2-digit" }).format(d);
+    const fmtMonthFull = new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" }).format(last);
+    label.textContent = sameMonth ? `${fmtDay(first)} – ${fmtDay(last)} de ${fmtMonthFull}` : `${fmtDay(first)} – ${fmtDay(last)} de ${fmtMonthFull}`;
+  }
+
+  const root = document.querySelector("#plannerWeekBody");
+  if (!root) return;
+  root.innerHTML = days
+    .map((date) => {
+      const dayTasks = state.tasks.filter((t) => t.dueDate === date && t.status !== "Cancelada" && t.status !== "Concluida");
+      const dayEvents = state.events.filter((e) => e.date === date).sort(sortEvent);
+      const isToday = date === todayIso;
+      const d = new Date(`${date}T12:00:00`);
+      let weekdayLabel = new Intl.DateTimeFormat("pt-BR", { weekday: "short" }).format(d).replace(".", "");
+      weekdayLabel = weekdayLabel.charAt(0).toUpperCase() + weekdayLabel.slice(1);
+      const items = [...dayTasks.map((t) => ({ kind: "task", data: t })), ...dayEvents.map((e) => ({ kind: "event", data: e }))];
+      return `
+        <div class="planner-week-day ${isToday ? "is-today" : ""}">
+          <button class="planner-week-day-header" type="button" onclick="jumpPlannerToDay('${date}')">
+            <span class="planner-week-day-name">${weekdayLabel}</span>
+            <span class="planner-week-day-num">${d.getDate()}</span>
+            ${items.length ? `<span class="pill">${items.length}</span>` : ""}
+            ${icon("chevronRight", 15, "planner-week-day-chevron")}
+          </button>
+          <div class="planner-week-day-body">
+            ${
+              items.length
+                ? items.map((item) => (item.kind === "task" ? renderPlannerTaskRow(item.data) : renderPlannerEventRow(item.data))).join("")
+                : emptyStateCompactHtml({ iconName: "sparkle", text: "Nada por aqui." })
+            }
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+}
+
+// ── Mês: grade clássica com pontinhos indicando dias com itens ──
+function changePlannerMonth(delta) {
+  const d = new Date(`${plannerMonthAnchor}T12:00:00`);
+  d.setDate(1);
+  d.setMonth(d.getMonth() + delta);
+  plannerMonthAnchor = toLocalIso(d);
+  renderPlannerMonth();
+}
+
+function goToPlannerThisMonth() {
+  plannerMonthAnchor = todayIso;
+  renderPlannerMonth();
+}
+
+function renderPlannerMonth() {
+  const anchor = new Date(`${plannerMonthAnchor}T12:00:00`);
+  const label = document.querySelector("#plannerMonthLabel");
+  if (label) {
+    let text = new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" }).format(anchor);
+    label.textContent = text.charAt(0).toUpperCase() + text.slice(1);
+  }
+
+  const year = anchor.getFullYear();
+  const month = anchor.getMonth();
+  const leadingBlanks = new Date(year, month, 1).getDay();
+  const days = getMonthDays(anchor);
+
+  const root = document.querySelector("#plannerMonthGrid");
+  if (!root) return;
+
+  const cells = [];
+  for (let i = 0; i < leadingBlanks; i++) cells.push(`<div class="planner-month-cell is-blank"></div>`);
+  days.forEach((date) => {
+    const dayTasks = state.tasks.filter((t) => t.dueDate === date && t.status !== "Cancelada" && t.status !== "Concluida");
+    const dayEvents = state.events.filter((e) => e.date === date);
+    const total = dayTasks.length + dayEvents.length;
+    const isToday = date === todayIso;
+    const dotCount = Math.min(4, total);
+    const dots = dotCount
+      ? `<span class="planner-month-dots">${[...Array(dotCount)].map((_, i) => `<span style="background:${plannerColorTone(date + i).border}"></span>`).join("")}</span>`
+      : "";
+    cells.push(`
+      <button class="planner-month-cell ${isToday ? "is-today" : ""} ${total ? "has-items" : ""}" type="button" onclick="jumpPlannerToDay('${date}')">
+        <span class="planner-month-daynum">${new Date(`${date}T12:00:00`).getDate()}</span>
+        ${dots}
+      </button>
+    `);
+  });
+
+  root.innerHTML = cells.join("");
 }
 
 // ── Adicionar rápido (Tarefa / Compromisso / Meta) num único modal ──
