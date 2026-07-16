@@ -3856,3 +3856,177 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
 }
 .goal-milestone-check.done { background: var(--green); border-color: var(--green); color: #fff; }
 .goal-milestone-row span.done { text-decoration: line-through; opacity: 0.55; }
+
+/* ============================================================
+   PLANNER (NOVO) — hub unificado inspirado no app Calendars.
+   Junta Tarefas + Agenda + Metas numa visão só, com várias
+   "lentes" sobre os mesmos dados (Lista / Dia / Semana / Mês).
+   ============================================================ */
+
+.planner-shell { display: grid; gap: 16px; }
+
+.planner-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+.planner-header-title h2 { font-size: 1.15rem; font-weight: 800; color: var(--text); margin-top: 2px; }
+.planner-header-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+.planner-tabs {
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.planner-tabs::-webkit-scrollbar { display: none; }
+.planner-tabs button { white-space: nowrap; }
+
+/* ---------- Metas (fita horizontal, sempre visível) ---------- */
+.planner-goals-strip {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: thin;
+}
+.planner-goal-chip {
+  flex: 0 0 auto;
+  width: 220px;
+  background: var(--surface2);
+  border: 1.5px solid var(--line);
+  border-radius: 16px;
+  padding: 12px 14px;
+  display: grid;
+  gap: 8px;
+  transition: transform 160ms, box-shadow 160ms;
+}
+.planner-goal-chip:hover { transform: translateY(-2px); box-shadow: var(--shadow-card-hover); }
+.planner-goal-chip.is-complete { border-color: var(--green); background: var(--green-soft); }
+.planner-goal-chip-top {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+}
+.planner-goal-chip-top strong {
+  font-size: 0.86rem; font-weight: 700; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.planner-goal-chip-controls { display: flex; align-items: center; gap: 6px; }
+
+/* ---------- Sub-visões (Lista / Dia / Semana / Mês / Notas) ---------- */
+.planner-subview { display: none; }
+.planner-subview.active { display: grid; gap: 14px; animation: fadeUp 200ms ease; }
+
+.planner-list-body { display: grid; gap: 18px; }
+
+.planner-section { display: grid; gap: 8px; }
+.planner-section-title {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 0.82rem; font-weight: 800; color: var(--text2);
+  padding: 0 2px;
+}
+.planner-section-body { display: grid; gap: 8px; }
+
+.planner-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--surface2);
+  border-radius: 14px;
+  transition: background 160ms;
+}
+.planner-row:hover { background: var(--line); }
+.planner-row-main { flex: 1; min-width: 0; display: grid; gap: 3px; }
+.planner-row-main strong { font-size: 0.9rem; color: var(--text); overflow-wrap: anywhere; }
+.planner-row-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+
+.planner-row-time {
+  flex-shrink: 0;
+  min-width: 52px;
+  text-align: center;
+  padding: 5px 8px;
+  border-radius: 10px;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+/* ---------- Dia: navegador + checklist + timeline ---------- */
+.planner-day-nav {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+}
+.planner-day-nav-label { display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; }
+.planner-day-nav-label strong { font-size: 1rem; color: var(--text); }
+
+.planner-day-allday-panel, .planner-day-timeline-panel { display: grid; gap: 10px; }
+
+.planner-day-notime { display: grid; gap: 8px; margin-bottom: 10px; }
+
+.planner-day-timeline-panel .planner-timeline { max-height: 62vh; overflow-y: auto; padding-right: 2px; }
+
+.planner-timeline-wrap { position: relative; }
+.planner-timeline-hours { display: grid; }
+.planner-timeline-hour {
+  display: grid;
+  grid-template-columns: 52px 1fr;
+  align-items: start;
+  height: 56px;
+  gap: 8px;
+}
+.planner-timeline-hour span { font-size: 0.72rem; color: var(--muted); font-weight: 700; }
+.planner-timeline-line { border-top: 1px dashed var(--line); margin-top: 6px; }
+
+.planner-timeline-events { position: absolute; inset: 0; left: 60px; pointer-events: none; }
+.planner-event-block {
+  position: absolute;
+  left: 0; right: 8px;
+  border-left: 4px solid;
+  border-radius: 10px;
+  padding: 6px 10px;
+  font-size: 0.78rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  pointer-events: auto;
+  box-shadow: var(--shadow-card);
+}
+.planner-event-block strong { font-size: 0.82rem; color: var(--text); }
+.planner-event-block span { font-size: 0.72rem; color: var(--text2); }
+.planner-event-block .mini-button { align-self: flex-end; margin-top: 2px; }
+
+/* ---------- Placeholder das visões que chegam nas próximas etapas ---------- */
+.planner-placeholder {
+  padding: 40px 24px;
+  border-radius: 20px;
+  border: 2px dashed var(--line);
+  text-align: center;
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+}
+.planner-placeholder-icon { font-size: 2rem; }
+.planner-placeholder h3 { font-size: 1rem; font-weight: 800; color: var(--text); }
+.planner-placeholder p { font-size: 0.85rem; color: var(--muted); max-width: 360px; }
+
+/* ---------- Itens de nav "antigo" (fase de transição) ---------- */
+.legacy-nav-item { opacity: 0.55; }
+.legacy-nav-item:hover { opacity: 0.9; }
+.legacy-nav-item em {
+  font-style: normal;
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  display: block;
+}
+
+@media (max-width: 720px) {
+  .planner-header { flex-direction: column; align-items: stretch; }
+  .planner-header-actions { justify-content: space-between; }
+  .planner-add-btn span:last-child { display: none; }
+  .planner-add-btn { width: 44px; padding: 0; justify-content: center; }
+  .planner-goal-chip { width: 190px; }
+  .planner-timeline-hour { grid-template-columns: 42px 1fr; height: 50px; }
+  .planner-timeline-events { left: 50px; }
+}

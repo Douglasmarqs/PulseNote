@@ -361,10 +361,11 @@ const appReady = new Promise((resolve) => {
 const statusList = ["Pendente", "Em andamento", "Concluida", "Cancelada"];
 const viewTitles = {
   dashboard: "Seu dia em foco ✨",
+  planner: "Planner",
   notes: "Anotações",
-  tasks: "Tarefas",
-  calendar: "Agenda",
-  goals: "Metas e conquistas",
+  tasks: "Tarefas (antigo)",
+  calendar: "Agenda (antigo)",
+  goals: "Metas (antigo)",
   finances: "Finanças",
   settings: "Configurações",
 };
@@ -513,6 +514,9 @@ Object.defineProperty(window, "PulseNoteState", {
 let activeView = "dashboard";
 let calendarMode = "month";
 let draggedTaskId = null;
+// ── Planner (NOVO, hub unificado) ──────────────────────────────
+let plannerActiveTab = "list"; // "list" | "day" | "week" | "month" | "notes"
+let plannerDayDate = todayIso;
 // Mês ativo na view de Finanças. Formato "YYYY-MM". Começa no mês atual.
 let finActiveMonth = todayIso.slice(0, 7);
 
@@ -593,6 +597,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   setInterval(updateEventCountdowns, 30000);
 
   bindNavigation();
+  bindPlannerNav();
+  bindPlannerQuickAdd();
   bindForms();
   bindActions();
   bindSettingsView();
@@ -1725,6 +1731,7 @@ function enableAutogrowTextareas() {
 function renderAll() {
   setDefaultDates();
   renderDashboard();
+  renderPlanner();
   renderNotes();
   renderTasks();
   renderCalendar();
@@ -1868,6 +1875,342 @@ function renderGoalSummary() {
     "Crie sua primeira meta.",
     "empty-state-compact"
   );
+}
+
+// ============================================================
+// PLANNER (NOVO) — hub unificado inspirado no app Calendars.
+// Não cria nenhum dado novo: só lê/escreve nos mesmos arrays de
+// sempre (state.tasks, state.events, state.goals) através das
+// MESMAS funções já usadas pelas telas antigas (toggleTask,
+// deleteTask, deleteEvent, changeGoal, createTask...), então o
+// comportamento e os dados salvos continuam idênticos — muda
+// só a apresentação.
+// ============================================================
+
+function renderPlanner() {
+  const label = document.querySelector("#plannerHeaderLabel");
+  if (label) {
+    const pendingCount = state.tasks.filter((t) => t.status !== "Concluida" && t.status !== "Cancelada").length;
+    label.textContent = pendingCount ? `${pendingCount} pendência${pendingCount === 1 ? "" : "s"} para organizar` : "Tudo em dia por aqui ✨";
+  }
+  renderPlannerGoalsStrip();
+  if (plannerActiveTab === "list") renderPlannerList();
+  else if (plannerActiveTab === "day") renderPlannerDay();
+}
+
+function setPlannerTab(tab) {
+  plannerActiveTab = tab;
+  document.querySelectorAll("#plannerView .planner-tabs button").forEach((b) => {
+    b.classList.toggle("active", b.dataset.plannerTab === tab);
+  });
+  document.querySelectorAll("#plannerView .planner-subview").forEach((el) => {
+    el.classList.toggle("active", el.dataset.plannerSubview === tab);
+  });
+  if (tab === "list") renderPlannerList();
+  else if (tab === "day") renderPlannerDay();
+}
+
+function bindPlannerNav() {
+  document.querySelectorAll("#plannerView .planner-tabs button[data-planner-tab]").forEach((btn) => {
+    btn.addEventListener("click", () => setPlannerTab(btn.dataset.plannerTab));
+  });
+  document.querySelector("#plannerDayPrev")?.addEventListener("click", () => changePlannerDay(-1));
+  document.querySelector("#plannerDayNext")?.addEventListener("click", () => changePlannerDay(1));
+  document.querySelector("#plannerDayToday")?.addEventListener("click", goToPlannerToday);
+}
+
+// ── Cor determinística por item (mesma paleta pastel das notas) —
+// dá o efeito "colorido" do Calendars sem precisar de um campo novo
+// de cor no compromisso.
+function plannerColorTone(id) {
+  const tones = [
+    { bg: "var(--note-blue)", border: "var(--note-blue-border)" },
+    { bg: "var(--note-green)", border: "var(--note-green-border)" },
+    { bg: "var(--note-pink)", border: "var(--note-pink-border)" },
+    { bg: "var(--note-purple)", border: "var(--note-purple-border)" },
+    { bg: "var(--note-orange)", border: "var(--note-orange-border)" },
+    { bg: "var(--note-teal)", border: "var(--note-teal-border)" },
+    { bg: "var(--note-yellow)", border: "var(--note-yellow-border)" },
+    { bg: "var(--note-red)", border: "var(--note-red-border)" },
+  ];
+  let hash = 0;
+  for (const ch of String(id)) hash = (hash * 31 + ch.charCodeAt(0)) % 997;
+  return tones[Math.abs(hash) % tones.length];
+}
+
+// ── Metas: fita horizontal compacta, sempre visível no topo do Planner ──
+function renderPlannerGoalsStrip() {
+  const root = document.querySelector("#plannerGoalsStrip");
+  if (!root) return;
+  const goals = state.goals;
+  if (!goals.length) {
+    root.innerHTML = `<div class="empty-state-compact">Nenhuma meta ainda — toque em "🎯 Nova meta" para criar a primeira.</div>`;
+    return;
+  }
+  root.innerHTML = goals.map((goal) => {
+    const percent = Math.min(100, Math.round((goal.current / goal.target) * 100));
+    const isComplete = goal.current >= goal.target;
+    return `
+      <article class="planner-goal-chip ${isComplete ? "is-complete" : ""}" data-goal-id="${goal.id}">
+        <div class="planner-goal-chip-top">
+          <strong>${escapeHtml(goal.title)}</strong>
+          <span class="pill" style="${isComplete ? "background:var(--green);color:#fff;border-color:var(--green);" : ""}">${percent}%</span>
+        </div>
+        <div class="progress-track"><div style="width:${percent}%;background:${isComplete ? "var(--green)" : "linear-gradient(90deg,var(--accent),var(--purple))"}"></div></div>
+        <div class="planner-goal-chip-controls">
+          <button class="mini-button" onclick="changeGoal('${goal.id}', -1)">−</button>
+          <span class="task-meta">${goal.current}/${goal.target}</span>
+          <button class="mini-button" onclick="changeGoal('${goal.id}', 1)">+</button>
+          <button class="mini-button" onclick="deleteGoal('${goal.id}')" style="margin-left:auto">🗑️</button>
+        </div>
+      </article>
+    `;
+  }).join("");
+}
+
+// ── Lista: agrupa tarefas + compromissos por proximidade da data,
+// igual à tela "Today"/lista do Calendars (Atrasado / Hoje / Amanhã...) ──
+function getPlannerDateBuckets() {
+  const buckets = { overdue: [], today: [], tomorrow: [], week: [], later: [] };
+  const tmr = offsetDate(1);
+  const in7 = offsetDate(7);
+
+  state.tasks.forEach((task) => {
+    if (task.status === "Concluida" || task.status === "Cancelada") return;
+    const item = { kind: "task", data: task, time: null };
+    if (!task.dueDate) buckets.later.push(item);
+    else if (task.dueDate < todayIso) buckets.overdue.push(item);
+    else if (task.dueDate === todayIso) buckets.today.push(item);
+    else if (task.dueDate === tmr) buckets.tomorrow.push(item);
+    else if (task.dueDate <= in7) buckets.week.push(item);
+    else buckets.later.push(item);
+  });
+
+  state.events.forEach((ev) => {
+    if (!ev.date || ev.date < todayIso) return; // compromissos passados não poluem a lista
+    const item = { kind: "event", data: ev, time: ev.time };
+    if (ev.date === todayIso) buckets.today.push(item);
+    else if (ev.date === tmr) buckets.tomorrow.push(item);
+    else if (ev.date <= in7) buckets.week.push(item);
+    else buckets.later.push(item);
+  });
+
+  const sorter = (a, b) => {
+    const at = a.time || "99:99";
+    const bt = b.time || "99:99";
+    if (at !== bt) return at.localeCompare(bt);
+    return (a.data.title || "").localeCompare(b.data.title || "");
+  };
+  Object.values(buckets).forEach((arr) => arr.sort(sorter));
+  return buckets;
+}
+
+function renderPlannerList() {
+  const root = document.querySelector("#plannerListBody");
+  if (!root) return;
+  const query = elements.globalSearch.value.trim().toLowerCase();
+  const buckets = getPlannerDateBuckets();
+  const sections = [
+    { key: "overdue", label: "⚠️ Atrasado" },
+    { key: "today", label: "📅 Hoje" },
+    { key: "tomorrow", label: "🔜 Amanhã" },
+    { key: "week", label: "🗓️ Esta semana" },
+    { key: "later", label: "📌 Sem data / mais tarde" },
+  ];
+
+  const html = sections
+    .map(({ key, label }) => {
+      const items = buckets[key].filter((item) => !query || (item.data.title || "").toLowerCase().includes(query));
+      if (!items.length) return "";
+      return `
+        <div class="planner-section">
+          <div class="planner-section-title"><span>${label}</span><span class="pill">${items.length}</span></div>
+          <div class="planner-section-body">
+            ${items.map((item) => (item.kind === "task" ? renderPlannerTaskRow(item.data) : renderPlannerEventRow(item.data))).join("")}
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+
+  root.innerHTML = html || `<div class="empty-state">Nada por aqui. Toque em "＋ Adicionar" para criar sua primeira tarefa ou compromisso.</div>`;
+}
+
+function renderPlannerTaskRow(task) {
+  const isDone = task.status === "Concluida";
+  return `
+    <article class="planner-row planner-row--task" data-task-id="${task.id}">
+      <button class="task-check" onclick="toggleTask('${task.id}')" title="Concluir" style="${isDone ? "background:var(--green);border-color:var(--green);color:#fff;" : ""}">${isDone ? "✓" : ""}</button>
+      <div class="planner-row-main">
+        <strong style="${isDone ? "text-decoration:line-through;opacity:0.5;" : ""}">${escapeHtml(task.title)}</strong>
+        <div class="planner-row-meta">
+          <span class="priority-pill priority-${task.priority}">${escapeHtml(task.priority)}</span>
+          ${task.dueDate ? `<span class="task-meta">📅 ${formatDate(task.dueDate)}</span>` : ""}
+        </div>
+      </div>
+      <button class="mini-button" onclick="deleteTask('${task.id}')" title="Excluir">🗑️</button>
+    </article>
+  `;
+}
+
+function renderPlannerEventRow(ev) {
+  const tone = plannerColorTone(ev.id);
+  return `
+    <article class="planner-row planner-row--event" data-event-id="${ev.id}" style="border-left:4px solid ${tone.border}">
+      <div class="planner-row-time" style="background:${tone.bg};color:${tone.border}">${ev.time || "—"}</div>
+      <div class="planner-row-main">
+        <strong>${escapeHtml(ev.title)}</strong>
+        <div class="planner-row-meta">
+          <span class="task-meta">📅 ${formatDate(ev.date)}${ev.location && ev.location !== "Sem local" ? ` · 📍 ${escapeHtml(ev.location)}` : ""}</span>
+        </div>
+      </div>
+      <button class="mini-button" onclick="deleteEvent('${ev.id}')" title="Excluir">🗑️</button>
+    </article>
+  `;
+}
+
+// ── Dia: navegador de data + checklist do dia + timeline por hora ──
+function changePlannerDay(delta) {
+  const date = new Date(`${plannerDayDate}T12:00:00`);
+  date.setDate(date.getDate() + delta);
+  plannerDayDate = toLocalIso(date);
+  renderPlannerDay();
+}
+
+function goToPlannerToday() {
+  plannerDayDate = todayIso;
+  renderPlannerDay();
+}
+
+function renderPlannerDay() {
+  const label = document.querySelector("#plannerDayLabel");
+  if (label) {
+    const date = new Date(`${plannerDayDate}T12:00:00`);
+    let text = new Intl.DateTimeFormat("pt-BR", { weekday: "long", day: "2-digit", month: "long" }).format(date);
+    text = text.charAt(0).toUpperCase() + text.slice(1);
+    label.textContent = plannerDayDate === todayIso ? `Hoje · ${text}` : text;
+  }
+
+  const dayTasks = state.tasks.filter((t) => t.dueDate === plannerDayDate && t.status !== "Cancelada");
+  const alldayRoot = document.querySelector("#plannerDayAllday");
+  if (alldayRoot) {
+    alldayRoot.innerHTML = dayTasks.length
+      ? dayTasks.map(renderPlannerTaskRow).join("")
+      : `<div class="empty-state-compact">Nenhuma tarefa para este dia.</div>`;
+  }
+
+  const dayEvents = state.events.filter((e) => e.date === plannerDayDate).sort(sortEvent);
+  const timeline = document.querySelector("#plannerDayTimeline");
+  if (timeline) {
+    const startHour = 6;
+    const endHour = 23;
+    const hourRows = [...Array(endHour - startHour + 1)]
+      .map((_, i) => `<div class="planner-timeline-hour"><span>${String(startHour + i).padStart(2, "0")}:00</span><div class="planner-timeline-line"></div></div>`)
+      .join("");
+    const totalMinutes = (endHour - startHour + 1) * 60;
+    const blocksHtml = dayEvents
+      .map((ev) => {
+        if (!ev.time) return "";
+        const [h, m] = ev.time.split(":").map(Number);
+        const minutesFromStart = (h - startHour) * 60 + m;
+        if (minutesFromStart < 0 || minutesFromStart > totalMinutes) return "";
+        const top = (minutesFromStart / totalMinutes) * 100;
+        const tone = plannerColorTone(ev.id);
+        return `
+          <article class="planner-event-block" data-event-id="${ev.id}" style="top:${top}%;background:${tone.bg};border-color:${tone.border}">
+            <strong>${ev.time} · ${escapeHtml(ev.title)}</strong>
+            ${ev.location && ev.location !== "Sem local" ? `<span>📍 ${escapeHtml(ev.location)}</span>` : ""}
+            <button class="mini-button" onclick="deleteEvent('${ev.id}')" title="Excluir">🗑️</button>
+          </article>
+        `;
+      })
+      .join("");
+    const noTimeEvents = dayEvents.filter((ev) => !ev.time);
+    const noTimeHtml = noTimeEvents.length
+      ? `<div class="planner-day-notime">${noTimeEvents.map(renderPlannerEventRow).join("")}</div>`
+      : "";
+    timeline.innerHTML = `
+      ${noTimeHtml}
+      <div class="planner-timeline-wrap">
+        <div class="planner-timeline-hours">${hourRows}</div>
+        <div class="planner-timeline-events">${blocksHtml || (dayEvents.length ? "" : "")}</div>
+      </div>
+      ${!dayEvents.length ? `<div class="empty-state-compact">Nenhum compromisso neste dia.</div>` : ""}
+    `;
+  }
+}
+
+// ── Adicionar rápido (Tarefa / Compromisso / Meta) num único modal ──
+function openPlannerQuickAdd(type) {
+  const modal = document.querySelector("#plannerQuickAddModal");
+  if (!modal) return;
+  modal.hidden = false;
+  setPlannerQuickAddType(type || (plannerActiveTab === "day" ? "event" : "task"));
+  setTimeout(() => document.querySelector("#pqaTitle")?.focus(), 50);
+}
+
+function closePlannerQuickAdd() {
+  const modal = document.querySelector("#plannerQuickAddModal");
+  if (!modal) return;
+  modal.hidden = true;
+  document.querySelector("#plannerQuickAddForm")?.reset();
+}
+
+function setPlannerQuickAddType(type) {
+  document.querySelectorAll("#plannerQuickAddType button").forEach((b) => b.classList.toggle("active", b.dataset.quickType === type));
+  document.querySelector("#pqaTaskFields").style.display = type === "task" ? "grid" : "none";
+  document.querySelector("#pqaEventFields").style.display = type === "event" ? "block" : "none";
+  document.querySelector("#pqaGoalFields").style.display = type === "goal" ? "block" : "none";
+  const form = document.querySelector("#plannerQuickAddForm");
+  form.dataset.type = type;
+  const referenceDate = plannerActiveTab === "day" ? plannerDayDate : todayIso;
+  if (type === "task") document.querySelector("#pqaTaskDue").value ||= referenceDate;
+  if (type === "event") {
+    document.querySelector("#pqaEventDate").value ||= referenceDate;
+    document.querySelector("#pqaEventTime").value ||= "09:00";
+  }
+}
+
+function bindPlannerQuickAdd() {
+  document.querySelectorAll(".planner-add-btn").forEach((btn) => {
+    btn.addEventListener("click", () => openPlannerQuickAdd());
+  });
+  document.querySelector("#closePlannerQuickAdd")?.addEventListener("click", closePlannerQuickAdd);
+  document.querySelector("#plannerQuickAddModal")?.addEventListener("click", (e) => {
+    if (e.target.id === "plannerQuickAddModal") closePlannerQuickAdd();
+  });
+  document.querySelectorAll("#plannerQuickAddType button").forEach((btn) => {
+    btn.addEventListener("click", () => setPlannerQuickAddType(btn.dataset.quickType));
+  });
+  document.querySelector("#plannerQuickAddForm")?.addEventListener("submit", submitPlannerQuickAdd);
+}
+
+function submitPlannerQuickAdd(event) {
+  event.preventDefault();
+  const type = event.target.dataset.type || "task";
+  const title = valueOf("#pqaTitle");
+  if (!title) return;
+
+  if (type === "task") {
+    const priority = document.querySelector("#pqaTaskPriority").value;
+    const due = document.querySelector("#pqaTaskDue").value || todayIso;
+    state.tasks.unshift(createTask(title, "Pendente", priority, due));
+    showToast("Tarefa adicionada.");
+  } else if (type === "event") {
+    const date = document.querySelector("#pqaEventDate").value || todayIso;
+    const time = document.querySelector("#pqaEventTime").value || "09:00";
+    const location = valueOf("#pqaEventLocation") || "Sem local";
+    state.events.push({ id: crypto.randomUUID(), title, date, time, location, reminder: 15, notes: "" });
+    showToast("Compromisso salvo.");
+  } else if (type === "goal") {
+    const target = Number(document.querySelector("#pqaGoalTarget").value || 1);
+    state.goals.unshift({ id: crypto.randomUUID(), title, target, current: 0, milestones: [] });
+    showToast("Meta criada.");
+  }
+
+  saveState();
+  closePlannerQuickAdd();
+  renderAll();
 }
 
 function renderNotes() {
