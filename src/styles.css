@@ -1259,6 +1259,9 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   cursor: pointer;
   transition: all 160ms;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 .note-checklist-toggle.active,
 .note-checklist-toggle:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
@@ -1316,6 +1319,9 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   border: 1.5px solid var(--line);
   cursor: pointer;
   transition: all 160ms;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .filter-chip:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
@@ -1334,32 +1340,55 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   align-items: start;
 }
 
+/* Pastas: chips derivados dos valores de "folder" das notas — quebra
+   em várias linhas em telas estreitas (nunca scroll horizontal, nunca
+   corta texto). */
+.note-folders {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.folder-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  background: var(--surface2);
+  color: var(--text2);
+  border: 1.5px solid var(--line);
+  transition: all 160ms;
+}
+.folder-chip:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.folder-chip.active { background: var(--accent); color: #fff; border-color: var(--accent); box-shadow: 0 3px 10px color-mix(in srgb, var(--accent) 30%, transparent); }
+.folder-chip .pill { background: rgba(255,255,255,0.25); color: inherit; border: none; }
+.folder-chip:not(.active) .pill { background: var(--surface); color: var(--muted); }
+
+/* Card: modelo novo — superfície neutra + listra colorida à esquerda
+   (a mesma paleta de sempre, agora como identidade da nota e não como
+   fundo inteiro, pra ficar mais parecido com apps como Bear/Notas do
+   que com post-its). */
 .note-card {
   border-radius: var(--radius-card);
-  padding: 15px;
-  border: 1.5px solid var(--note-yellow-border);
-  background: var(--note-yellow);
+  padding: 15px 15px 15px 16px;
+  border: 1.5px solid var(--line);
+  border-left-width: 4px;
+  background: var(--surface2);
   transition: transform 200ms ease, box-shadow 200ms ease;
   cursor: pointer;
   display: block;
   position: relative;
   overflow-wrap: anywhere;
+  animation: fadeUp 200ms ease both;
 }
 
 .note-card:hover {
   transform: translateY(-3px) scale(1.01);
   box-shadow: var(--shadow-card-hover);
 }
-
-/* Color variants by nth-child */
-.note-card:nth-child(8n+1) { background: var(--note-yellow); border-color: var(--note-yellow-border); }
-.note-card:nth-child(8n+2) { background: var(--note-blue);   border-color: var(--note-blue-border); }
-.note-card:nth-child(8n+3) { background: var(--note-green);  border-color: var(--note-green-border); }
-.note-card:nth-child(8n+4) { background: var(--note-pink);   border-color: var(--note-pink-border); }
-.note-card:nth-child(8n+5) { background: var(--note-purple); border-color: var(--note-purple-border); }
-.note-card:nth-child(8n+6) { background: var(--note-orange); border-color: var(--note-orange-border); }
-.note-card:nth-child(8n+7) { background: var(--note-teal);   border-color: var(--note-teal-border); }
-.note-card:nth-child(8n+8) { background: var(--note-red);    border-color: var(--note-red-border); }
 
 /* Note card content */
 .note-card header {
@@ -1381,6 +1410,22 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   font-size: 0.78rem;
   color: var(--text2);
   margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.note-folder-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
 }
 
 .note-card p {
@@ -1394,7 +1439,11 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   overflow: hidden;
 }
 
+.note-wordcount { display: block; margin-top: 2px; margin-bottom: 8px; }
+
 .note-card .tag-list { flex-wrap: wrap; }
+.note-priority-row { margin-top: 4px; }
+
 /* 3 ações por nota: "Editar" e "Tarefa" dividem o espaço em partes
    iguais, e "Excluir" vira um botão circular só com ícone à direita —
    em vez dos 4 botões de texto que quebravam linha de formas diferentes
@@ -1406,6 +1455,12 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   margin-top: 10px;
 }
 .note-card .card-actions button { flex: 1; text-align: center; }
+.note-card-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
 .note-card .card-actions .danger-action {
   flex: 0 0 auto;
   width: 30px;
@@ -1422,16 +1477,25 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   border-color: var(--red);
 }
 
-/* Fav button */
-.note-card .mini-button[title="Favoritar"] {
-  width: 30px;
-  height: 30px;
+/* Botão de favoritar — estrela com preenchimento suave quando ativa */
+.note-fav-btn {
+  width: 32px;
+  height: 32px;
   padding: 0;
   border-radius: 50%;
-  font-size: 1rem;
-  line-height: 1;
-  background: rgba(255,255,255,0.5);
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  color: var(--muted);
+  display: grid;
+  place-items: center;
   flex-shrink: 0;
+  transition: all 160ms;
+}
+.note-fav-btn:hover { border-color: var(--accent); color: var(--accent); }
+.note-fav-btn.is-active {
+  background: color-mix(in srgb, #f5b400 18%, var(--surface));
+  border-color: #f5b400;
+  color: #f5b400;
 }
 
 /* Checklist preview */
@@ -1462,6 +1526,7 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   transition: all 150ms;
   position: relative;
 }
+.cl-check .pn-icon { width: 9px; height: 9px; margin: 0; }
 
 @media (max-width: 720px) {
   .cl-check::after { content: ""; position: absolute; inset: -12px; }
@@ -1723,9 +1788,10 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 
 /* ---------- EMPTY STATE ---------- */
 .empty-state {
-  padding: 24px;
+  padding: 28px 20px;
   border-radius: 16px;
-  border: 2px dashed var(--line);
+  background: var(--surface2);
+  border: 1.5px solid var(--line);
   color: var(--muted);
   text-align: center;
   font-weight: 600;
@@ -2487,7 +2553,9 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 }
 
 .ai-quick-entry-label {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 0.84rem;
   font-weight: 700;
   color: var(--text);
@@ -2710,7 +2778,9 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 }
 
 .fin-closed-badge {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   background: var(--green-soft);
   color: var(--green);
   border: 1px solid var(--green);
@@ -3094,15 +3164,32 @@ align-items:stretch;
 }
 
 @media (max-width: 720px) {
+  /* Antes rolava na horizontal (com máscara de esmaecimento nas bordas);
+     trocado por quebra em 2 colunas — mesmo ajuste feito no Planner,
+     pelo mesmo motivo: o briefing pede zero scrollbar horizontal. */
   .fin-tabs {
-    gap: 3px;
-    padding: 4px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 0;
     margin-bottom: 14px;
-    -webkit-mask-image: linear-gradient(to right, transparent 0, black 14px, black calc(100% - 14px), transparent 100%);
-    mask-image: linear-gradient(to right, transparent 0, black 14px, black calc(100% - 14px), transparent 100%);
+    overflow: visible;
+    background: none;
+    border: none;
+    mask-image: none;
+    -webkit-mask-image: none;
   }
-  .fin-tab-btn { padding: 8px 6px; font-size: 0.72rem; gap: 3px; }
-  .fin-tab-icon { width: 14px; height: 14px; }
+  .fin-tab-btn {
+    flex: 1 1 calc(50% - 4px);
+    padding: 11px 8px;
+    font-size: 0.8rem;
+    gap: 6px;
+    background: var(--surface2);
+    border: 1.5px solid var(--line);
+    border-radius: 14px;
+  }
+  .fin-tab-btn.active { box-shadow: none; border-color: var(--accent); }
+  .fin-tab-icon { width: 15px; height: 15px; }
   .fin-layout { grid-template-columns: 1fr; gap: 10px; }
   .fin-left, .fin-right { gap: 10px; }
   .fin-form-card { padding: 14px; gap: 10px; }

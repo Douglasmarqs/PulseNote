@@ -520,6 +520,7 @@ let plannerDayDate = todayIso;
 let plannerWeekAnchor = todayIso; // qualquer data dentro da semana ativa
 let plannerMonthAnchor = todayIso; // qualquer data dentro do mês ativo
 let plannerExpandedGoals = new Set();
+let notesFolderFilter = "all"; // filtro de pasta ativo na biblioteca de Notas
 // Mês ativo na view de Finanças. Formato "YYYY-MM". Começa no mês atual.
 let finActiveMonth = todayIso.slice(0, 7);
 
@@ -1910,6 +1911,10 @@ const ICONS = {
   target: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.8"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/>',
   checkCircle: '<circle cx="12" cy="12" r="9"/><path d="m8.5 12.3 2.3 2.3L16 9.6"/>',
   calendar: '<rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17"/><path d="M8 3v4"/><path d="M16 3v4"/>',
+  star: '<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/>',
+  folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2.3h8A2 2 0 0 1 21 9.3V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  pencil: '<path d="M12 20h8"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
+  zap: '<path d="M12.5 2 4 13.5h6.5L11 22l8.5-11.5H13z"/>',
   flag: '<path d="M5 21V4"/><path d="M5 4h12.5l-2 4.5L19.5 13H5"/>',
   plus: '<path d="M12 5v14"/><path d="M5 12h14"/>',
   alertTriangle: '<path d="M12 3 2.5 20h19L12 3z"/><path d="M12 9.5v4.3"/><path d="M12 17h.01"/>',
@@ -1920,6 +1925,7 @@ const ICONS = {
   trash: '<path d="M4 7h16"/><path d="M6 7V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2"/><path d="M8 7v13a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2V7"/><path d="M10 11v6"/><path d="M14 11v6"/>',
   chevronLeft: '<path d="m15 18-6-6 6-6"/>',
   chevronRight: '<path d="m9 18 6-6-6-6"/>',
+  chevronDown: '<path d="m6 9 6 6 6-6"/>',
   check: '<path d="M20 6 9 17l-5-5"/>',
   x: '<path d="M18 6 6 18"/><path d="M6 6 18 18"/>',
   inbox: '<path d="M21.5 12h-5.6l-1.8 3h-4.2l-1.8-3H2.5"/><path d="M5.6 5.3 2.5 12v6a2 2 0 0 0 2 2h15a2 2 0 0 0 2-2v-6l-3.1-6.7A2 2 0 0 0 16.6 4H7.4a2 2 0 0 0-1.8 1.3z"/>',
@@ -2466,58 +2472,112 @@ function renderNotes() {
   let notes = queryFilter(state.notes, ["title", "description", "category", "folder", "goal"]);
   if (filter === "favorite") notes = notes.filter((note) => note.favorite);
   if (["Alta", "Urgente"].includes(filter)) notes = notes.filter((note) => note.priority === filter);
+  if (notesFolderFilter !== "all") notes = notes.filter((note) => ((note.folder || "").trim() || "Sem pasta") === notesFolderFilter);
 
+  renderNoteFolders();
+
+  const isFiltering = Boolean(searchQuery) || filter !== "all" || notesFolderFilter !== "all";
   renderList(
     "#notesList",
     notes,
-    (note) => {
-      // Build checklist preview (max 3 items)
-      const checklistHtml = note.checklist && note.checklist.length
-        ? `<div class="checklist-preview">${note.checklist.slice(0, 3).map((item) =>
-            `<div class="cl-item">
-              <span class="cl-check">✓</span>
-              <span class="cl-text">${escapeHtml(item)}</span>
-            </div>`
-          ).join("")}${note.checklist.length > 3 ? `<div class="cl-item"><span class="task-meta">+${note.checklist.length - 3} mais itens</span></div>` : ""}</div>`
-        : "";
-
-      const tagsHtml = note.tags && note.tags.length
-        ? `<div class="tag-list">${note.tags.slice(0,3).map((t) => `<span class="pill">#${escapeHtml(t)}</span>`).join("")}</div>`
-        : "";
-
-      const words = (note.description || "").trim().split(/\s+/).filter(Boolean).length;
-      const readingMin = Math.max(1, Math.round(words / 200));
-      const wordCountHtml = words > 0 ? `<small class="task-meta" style="display:block;margin-top:2px">${words} palavras · ${readingMin} min de leitura</small>` : "";
-
-      const titleHtml = highlightMatch(escapeHtml(note.title), searchQuery);
-      const descHtml = note.description ? `<p>${highlightMatch(escapeHtml(note.description), searchQuery)}</p>` : "";
-
-      return `
-        <article class="note-card">
-          <header>
-            <div>
-              <h3>${titleHtml}</h3>
-              <div class="note-meta">${escapeHtml(note.category)} · ${formatDate(note.createdAt)}</div>
-            </div>
-            <button class="mini-button" onclick="toggleFavorite('${note.id}')" title="Favoritar" style="font-size:1.1rem;background:none;border:none;padding:0;width:30px;height:30px;display:grid;place-items:center;flex-shrink:0;border-radius:50%;">${note.favorite ? "⭐" : "☆"}</button>
-          </header>
-          ${descHtml}
-          ${wordCountHtml}
-          ${checklistHtml}
-          ${tagsHtml}
-          <div class="tag-list" style="margin-top:4px">
-            <span class="priority-pill priority-${note.priority}">${note.priority}</span>
-          </div>
-          <div class="card-actions">
-            <button onclick="editNote('${note.id}')">✏️ Editar</button>
-            <button onclick="convertNoteToTask('${note.id}')">➡️ Tarefa</button>
-            <button class="danger-action" onclick="deleteNote('${note.id}')" title="Excluir" aria-label="Excluir">🗑️</button>
-          </div>
-        </article>
-      `;
-    },
-    "Nenhuma anotação encontrada. Crie a primeira! ✨"
+    (note) => renderNoteCard(note, searchQuery),
+    emptyStateHtml(
+      isFiltering
+        ? {
+            iconName: "inbox",
+            title: "Nada por aqui com esse filtro",
+            desc: "Tente limpar a busca, trocar a pasta ou o filtro de prioridade.",
+          }
+        : {
+            iconName: "notebook",
+            title: "Sua primeira nota está a um toque",
+            desc: "Ideias, lembretes e recados soltos — tudo cabe aqui, sem formulário complicado.",
+            ctaLabel: "Nova nota",
+            ctaOnClick: "document.querySelector('#noteTitle').focus()",
+          }
+    ),
+    ""
   );
+}
+
+// ── Pastas: derivadas dos próprios valores de "folder" das notas —
+// sem precisar de uma estrutura de dados nova. Toque numa pasta pra
+// filtrar a biblioteca por ela. ──
+function renderNoteFolders() {
+  const root = document.querySelector("#noteFolders");
+  if (!root) return;
+  const counts = {};
+  state.notes.forEach((n) => {
+    const key = (n.folder || "").trim() || "Sem pasta";
+    counts[key] = (counts[key] || 0) + 1;
+  });
+  const folders = Object.keys(counts).sort((a, b) => a.localeCompare(b, "pt-BR"));
+  if (!folders.length) {
+    root.hidden = true;
+    root.innerHTML = "";
+    return;
+  }
+  root.hidden = false;
+  const allChip = `<button class="folder-chip ${notesFolderFilter === "all" ? "active" : ""}" type="button" onclick="setNotesFolderFilter('all')">${icon("notebook", 13)}<span>Todas</span><span class="pill">${state.notes.length}</span></button>`;
+  const chips = folders.map((f) => {
+    const safe = f.replace(/'/g, "\\'");
+    return `<button class="folder-chip ${notesFolderFilter === f ? "active" : ""}" type="button" onclick="setNotesFolderFilter('${safe}')">${icon("folder", 13)}<span>${escapeHtml(f)}</span><span class="pill">${counts[f]}</span></button>`;
+  });
+  root.innerHTML = [allChip, ...chips].join("");
+}
+
+function setNotesFolderFilter(folder) {
+  notesFolderFilter = folder;
+  renderNotes();
+}
+
+function renderNoteCard(note, searchQuery) {
+  const tone = plannerColorTone(note.id); // mesma paleta pastel do Planner, agora como identidade da nota (listra lateral), não fundo inteiro
+  const checklistHtml =
+    note.checklist && note.checklist.length
+      ? `<div class="checklist-preview">${note.checklist
+          .slice(0, 3)
+          .map((item) => `<div class="cl-item"><span class="cl-check">${icon("check", 11)}</span><span class="cl-text">${escapeHtml(item)}</span></div>`)
+          .join("")}${note.checklist.length > 3 ? `<div class="cl-item"><span class="task-meta">+${note.checklist.length - 3} mais itens</span></div>` : ""}</div>`
+      : "";
+
+  const tagsHtml =
+    note.tags && note.tags.length ? `<div class="tag-list">${note.tags.slice(0, 3).map((t) => `<span class="pill">#${escapeHtml(t)}</span>`).join("")}</div>` : "";
+
+  const words = (note.description || "").trim().split(/\s+/).filter(Boolean).length;
+  const readingMin = Math.max(1, Math.round(words / 200));
+  const wordCountHtml = words > 0 ? `<small class="task-meta note-wordcount">${words} palavras · ${readingMin} min de leitura</small>` : "";
+
+  const titleHtml = highlightMatch(escapeHtml(note.title), searchQuery);
+  const descHtml = note.description ? `<p>${highlightMatch(escapeHtml(note.description), searchQuery)}</p>` : "";
+  const folderName = (note.folder || "").trim();
+  const folderHtml = folderName ? `<span class="note-folder-badge">${icon("folder", 11)}${escapeHtml(folderName)}</span>` : "";
+
+  return `
+    <article class="note-card" style="border-left-color:${tone.border}">
+      <header>
+        <div>
+          <h3>${titleHtml}</h3>
+          <div class="note-meta">${escapeHtml(note.category || "Geral")} · ${formatDate(note.createdAt)}${folderHtml}</div>
+        </div>
+        <button class="note-fav-btn ${note.favorite ? "is-active" : ""}" onclick="toggleFavorite('${note.id}')" title="Favoritar">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="${note.favorite ? "currentColor" : "none"}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></svg>
+        </button>
+      </header>
+      ${descHtml}
+      ${wordCountHtml}
+      ${checklistHtml}
+      ${tagsHtml}
+      <div class="tag-list note-priority-row">
+        <span class="priority-pill priority-${note.priority}">${escapeHtml(note.priority)}</span>
+      </div>
+      <div class="card-actions note-card-actions">
+        <button onclick="editNote('${note.id}')" title="Editar">${icon("pencil", 14)}<span>Editar</span></button>
+        <button onclick="convertNoteToTask('${note.id}')" title="Virar tarefa">${icon("arrowRight", 14)}<span>Tarefa</span></button>
+        <button class="danger-action" onclick="deleteNote('${note.id}')" title="Excluir" aria-label="Excluir">${icon("trash", 14)}</button>
+      </div>
+    </article>
+  `;
 }
 
 // Envolve trechos que batem com a busca em <mark>, pra destacar visualmente
@@ -4742,7 +4802,7 @@ function openCategoryPicker() {
       const sectionsHtml = [];
       if (mostUsed.length) {
         sectionsHtml.push(`<div class="cat-picker-section">
-          <p class="cat-picker-section-title">⭐ Mais usadas</p>
+          <p class="cat-picker-section-title" style="display:flex;align-items:center;gap:5px">${icon("star", 12)}Mais usadas</p>
           ${mostUsed.map(rowHtml).join("")}
         </div>`);
       }
@@ -4755,10 +4815,7 @@ function openCategoryPicker() {
       bodyHtml = sectionsHtml.join("");
     }
 
-    const emptyHtml = filtered.length ? "" : `
-      <div style="text-align:center;padding:20px 10px;color:var(--muted);font-size:0.85rem">
-        Nenhuma categoria encontrada.
-      </div>`;
+    const emptyHtml = filtered.length ? "" : `<div style="padding:6px 2px">${emptyStateCompactHtml({ iconName: "inbox", text: "Nenhuma categoria encontrada." })}</div>`;
 
     const createHtml = (query || "").trim() && !hasExactMatch ? `
       <button type="button" id="categoryPickerCreate" data-name="${escapeHtml(query.trim())}"
@@ -5350,7 +5407,11 @@ function renderFinGoals() {
   if (!el) return;
   const goals = state.finGoals || [];
   if (!goals.length) {
-    el.innerHTML = `<div class="empty-state">Nenhuma meta definida.<br>Adicione limites por categoria.</div>`;
+    el.innerHTML = emptyStateHtml({
+      iconName: "target",
+      title: "Defina limites por categoria",
+      desc: "Escolha uma categoria e um teto de gasto mensal — a barra muda de cor conforme você se aproxima do limite.",
+    });
     return;
   }
   const monthKey = getActiveFinMonth();
@@ -5369,12 +5430,12 @@ function renderFinGoals() {
         <div class="fin-goal-top">
           <span class="fin-goal-label">${cat.label}</span>
           <span class="fin-goal-val" style="color:${color}">${formatCurrency(spent)} / ${formatCurrency(g.limit)}</span>
-          <button class="icon-button" style="padding:2px 6px;font-size:0.7rem" onclick="deleteFinGoal('${g.id}')">✕</button>
+          <button class="icon-button" style="padding:2px 6px;font-size:0.7rem" onclick="deleteFinGoal('${g.id}')">${icon("x", 12)}</button>
         </div>
         <div class="progress-track" style="height:6px;margin-top:4px">
           <div style="width:${pct}%;height:100%;border-radius:999px;background:${color};transition:width 400ms"></div>
         </div>
-        <span style="font-size:0.72rem;color:var(--muted)">${over ? "⚠️ Limite ultrapassado!" : `${pct}% usado`}</span>
+        <span style="font-size:0.72rem;color:var(--muted)">${over ? `<span style="display:inline-flex;align-items:center;gap:3px;color:var(--red)">${icon("alertTriangle", 11)}Limite ultrapassado!</span>` : `${pct}% usado`}</span>
       </div>`;
   }).join("");
 }
@@ -5386,7 +5447,11 @@ function renderFinClosures() {
   if (!el) return;
   const closures = [...(state.monthClosures || [])].sort((a, b) => b.monthKey.localeCompare(a.monthKey));
   if (!closures.length) {
-    el.innerHTML = `<div class="empty-state">Nenhum mês fechado ainda.</div>`;
+    el.innerHTML = emptyStateHtml({
+      iconName: "calendarCheck",
+      title: "Nenhum mês fechado ainda",
+      desc: "Quando você fechar um mês, ele aparece aqui com o saldo final, pra revisar ou reabrir quando quiser.",
+    });
     return;
   }
   el.innerHTML = closures.map((c) => `
@@ -5450,7 +5515,11 @@ function renderFinRecurrents() {
   if (!el) return;
   const recurrents = state.finRecurrents || [];
   if (!recurrents.length) {
-    el.innerHTML = `<div class="empty-state">Nenhum lançamento recorrente.<br>Adicione assinaturas, salário, aluguel…</div>`;
+    el.innerHTML = emptyStateHtml({
+      iconName: "compass",
+      title: "Automatize o que se repete",
+      desc: "Assinaturas, salário, aluguel — cadastre uma vez e o lançamento entra sozinho todo mês.",
+    });
     return;
   }
   el.innerHTML = recurrents.map((r) => {
