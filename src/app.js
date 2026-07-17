@@ -1299,8 +1299,12 @@ function bindForms() {
   document.querySelector("#eventForm").addEventListener("submit", saveEvent);
   document.querySelector("#goalForm").addEventListener("submit", saveGoal);
   document.querySelector("#quickAddTask").addEventListener("click", () => {
-    setView("tasks");
-    document.querySelector("#taskTitle").focus();
+    if (activeView === "planner") {
+      openPlannerQuickAdd();
+    } else {
+      setView("tasks");
+      document.querySelector("#taskTitle").focus();
+    }
   });
   elements.globalSearch.addEventListener("input", renderAll);
 
@@ -2418,9 +2422,6 @@ function setPlannerQuickAddType(type) {
 }
 
 function bindPlannerQuickAdd() {
-  document.querySelectorAll(".planner-add-btn").forEach((btn) => {
-    btn.addEventListener("click", () => openPlannerQuickAdd());
-  });
   document.querySelector("#closePlannerQuickAdd")?.addEventListener("click", closePlannerQuickAdd);
   document.querySelector("#plannerQuickAddModal")?.addEventListener("click", (e) => {
     if (e.target.id === "plannerQuickAddModal") closePlannerQuickAdd();

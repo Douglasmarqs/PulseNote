@@ -4023,12 +4023,49 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
 
 @media (max-width: 720px) {
   .planner-header { flex-direction: column; align-items: stretch; }
-  .planner-header-actions { justify-content: space-between; }
-  .planner-add-btn span:last-child { display: none; }
-  .planner-add-btn { width: 44px; padding: 0; justify-content: center; }
+  .planner-header-actions { justify-content: stretch; }
+
+  /* As 5 abas (Lista/Dia/Semana/Mês/Notas) não cabem numa linha só em
+     390px sem cortar texto ou rolar horizontalmente — então em vez de
+     esconder rótulo ou encolher fonte, a barra quebra em 2 linhas de
+     botões do mesmo tamanho. Nada de conteúdo escondido, nada de
+     scrollbar horizontal. */
+  #plannerView .planner-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    width: 100%;
+    gap: 8px;
+    background: none;
+    border: none;
+    padding: 0;
+  }
+  #plannerView .planner-tabs button {
+    flex: 1 1 calc(33.333% - 6px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    background: var(--surface2);
+    border: 1.5px solid var(--line);
+    border-radius: 14px;
+    padding: 11px 6px;
+    min-height: 44px;
+    box-shadow: none;
+  }
+  #plannerView .planner-tabs button.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+    box-shadow: 0 6px 16px color-mix(in srgb, var(--accent) 35%, transparent);
+  }
+
   .planner-goal-chip { width: 190px; }
   .planner-timeline-hour { grid-template-columns: 42px 1fr; height: 50px; }
   .planner-timeline-events { left: 50px; }
+}
+
+@media (max-width: 360px) {
+  #plannerView .planner-tabs button { padding: 10px 4px; gap: 4px; }
 }
 
 /* ============================================================
@@ -4117,7 +4154,6 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
 .is-done-text { text-decoration: line-through; opacity: 0.5; }
 .planner-row-delete:active,
 .mini-button:active,
-.planner-add-btn:active,
 .icon-button:active { transform: scale(0.93); }
 .planner-row-delete,
 .mini-button,
