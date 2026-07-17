@@ -367,6 +367,7 @@ const viewTitles = {
   calendar: "Agenda (antigo)",
   goals: "Metas (antigo)",
   finances: "Finanças",
+  profile: "Perfil",
   settings: "Configurações",
 };
 
@@ -732,11 +733,12 @@ function renderProfileButton(user) {
         <span style="font-size:0.78rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block">${user?.email || ""}</span>
       </div>
     </div>
-    <button class="dropdown-item" id="dropdownProfile">⚙️ Configurações</button>
+    <button class="dropdown-item" id="dropdownViewProfile"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;vertical-align:-2px"><circle cx="12" cy="8.5" r="3.5"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></svg>Ver perfil</button>
+    <button class="dropdown-item" id="dropdownProfile"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;vertical-align:-2px"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.9l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.9-.3 1.7 1.7 0 00-1 1.6V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1-1.6 1.7 1.7 0 00-1.9.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.9V15a1.7 1.7 0 00-1.6-1H3a2 2 0 110-4h.1A1.7 1.7 0 004.7 9a1.7 1.7 0 00-.3-1.9l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.9.3H9a1.7 1.7 0 001-1.6V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.6 1.7 1.7 0 001.9-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.9V9a1.7 1.7 0 001.6 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.6 1z"/></svg>Configurações</button>
     <button class="dropdown-item" id="dropdownNotifications">
-      ${window.notificationsAreEnabled?.() ? "🔔 Notificações ativadas" : "🔕 Ativar notificações"}
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;vertical-align:-2px"><path d="M6 8.5a6 6 0 0 1 12 0c0 4.2 1.3 5.8 2 6.5H4c.7-.7 2-2.3 2-6.5z"/><path d="M9.5 17.5a2.5 2.5 0 0 0 5 0"/></svg>${window.notificationsAreEnabled?.() ? "Notificações ativadas" : "Ativar notificações"}
     </button>
-    <button class="dropdown-item danger" id="dropdownLogout">🚪 Sair da conta</button>
+    <button class="dropdown-item danger" id="dropdownLogout"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;vertical-align:-2px"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>Sair da conta</button>
   `;
   document.body.appendChild(dropdown);
 
@@ -768,6 +770,11 @@ function renderProfileButton(user) {
     clearTimeout(syncTimer);
     showSyncStatus("saving");
     try { await syncToServer(); } finally { await logout(); }
+  });
+
+  document.getElementById("dropdownViewProfile").addEventListener("click", () => {
+    closeDropdown();
+    setView("profile");
   });
 
   document.getElementById("dropdownProfile").addEventListener("click", () => {
@@ -837,6 +844,52 @@ function fileToCompressedDataUrl(file) {
 // Preenche os campos da página de Configurações com os dados atuais
 // (nome, e-mail, foto). Chamada sempre que renderAll() roda, para que a
 // tela já apareça correta ao navegar até ela.
+// ============================================================
+// PERFIL (NOVO) — avatar, nível/XP, sequência, estatísticas e
+// conquistas. Reaproveita os mesmos cálculos usados no Início
+// (calculateXpStats, calculateStreak) e na tela antiga de Metas
+// (getAchievementsList) — nenhum número novo, só uma vitrine.
+// ============================================================
+function renderProfile() {
+  const nameEl = document.querySelector("#profileNameLabel");
+  if (!nameEl) return;
+
+  const user = getUser();
+  nameEl.textContent = user?.name || "Usuário";
+  const emailEl = document.querySelector("#profileEmailLabel");
+  if (emailEl) emailEl.textContent = user?.email || "";
+
+  const photoURL = state?.profilePhoto || currentUser?.photoURL || "";
+  const initial = (user?.name || "U").charAt(0).toUpperCase();
+  const avatarEl = document.querySelector("#profileAvatarPreview");
+  if (avatarEl) avatarEl.innerHTML = photoURL ? `<img src="${photoURL}" alt="Foto de perfil"/>` : initial;
+
+  const { level, levelProgress, xpIntoLevel, xpPerLevel, score } = calculateXpStats();
+  document.querySelector("#profileLevelLabel").textContent = `Nível ${level}`;
+  document.querySelector("#profileLevelBadge").textContent = level;
+  document.querySelector("#profileLevelBar").style.width = `${levelProgress}%`;
+  document.querySelector("#profileLevelXpLabel").textContent = `${xpIntoLevel}/${xpPerLevel} XP para o próximo nível · ${score} XP no total`;
+
+  document.querySelector("#profileStatStreak").textContent = calculateStreak();
+  document.querySelector("#profileStatTasks").textContent = state.tasks.filter((t) => t.status === "Concluida").length;
+  document.querySelector("#profileStatGoals").textContent = state.goals.filter((g) => g.current >= g.target).length;
+  document.querySelector("#profileStatNotes").textContent = state.notes.filter((n) => n.favorite).length;
+
+  const achievements = getAchievementsList();
+  document.querySelector("#profileAchievementCount").textContent = `${achievements.filter((a) => a.unlocked).length}/${achievements.length}`;
+  document.querySelector("#profileAchievements").innerHTML = achievements
+    .map(
+      (a) => `
+      <article class="profile-badge ${a.unlocked ? "is-unlocked" : "is-locked"}">
+        <div class="profile-badge-icon">${icon(a.unlocked ? a.iconName : "lock", 19)}</div>
+        <strong>${escapeHtml(a.title)}</strong>
+        <span>${escapeHtml(a.detail)}</span>
+      </article>
+    `
+    )
+    .join("");
+}
+
 function renderSettings() {
   const nameEl  = document.getElementById("settingsNameInput");
   const emailEl = document.getElementById("settingsUserEmail");
@@ -1162,6 +1215,10 @@ function updateAllAvatars(photoURL) {
       ? `<img src="${photoURL}" alt="Foto de perfil"/>`
       : initial;
   }
+
+  // Avatar grande na tela de Perfil (mesmo conteúdo do de Configurações)
+  const profilePreviewEl = document.getElementById("profileAvatarPreview");
+  if (profilePreviewEl) profilePreviewEl.innerHTML = previewEl ? previewEl.innerHTML : (photoURL ? `<img src="${photoURL}" alt="Foto de perfil"/>` : initial);
 }
 
 // Lê a foto atual do state (já sincronizado com o Firestore) e atualiza
@@ -1748,6 +1805,7 @@ function renderAll() {
   renderCalendar();
   renderGoals();
   renderFinances();
+  renderProfile();
   renderSettings();
   refreshProfileAvatar();
 }
@@ -1766,13 +1824,49 @@ function queryFilter(items, fields) {
   return items.filter((item) => fields.some((field) => String(item[field] || "").toLowerCase().includes(query)));
 }
 
+// ── XP/Nível: cálculo único, reaproveitado pelo Início e pelo Perfil.
+// Antes esse cálculo só existia dentro do renderDashboard — extraído
+// aqui pra não duplicar a fórmula em dois lugares. ──
+function calculateXpStats() {
+  const doneTotal = state.tasks.filter((task) => task.status === "Concluida").length;
+  const score = doneTotal * 25 + state.goals.reduce((sum, goal) => sum + goal.current * 10, 0);
+  const xpPerLevel = 150;
+  const level = Math.max(1, Math.floor(score / xpPerLevel) + 1);
+  const xpIntoLevel = score % xpPerLevel;
+  const levelProgress = Math.min(100, Math.round((xpIntoLevel / xpPerLevel) * 100));
+  return { score, level, levelProgress, xpIntoLevel, xpPerLevel };
+}
+
+// ── Conquistas: lista única de regras, reaproveitada pela tela antiga
+// de Metas e pelo novo Perfil. ──
+function getAchievementsList() {
+  const done = state.tasks.filter((task) => task.status === "Concluida").length;
+  const favorites = state.notes.filter((note) => note.favorite).length;
+  const completedGoals = state.goals.filter((goal) => goal.current >= goal.target).length;
+  const streak = calculateStreak();
+  const { level } = calculateXpStats();
+  return [
+    { title: "Primeiro check-in", detail: "Concluir uma tarefa", iconName: "checkCircle", unlocked: done >= 1 },
+    { title: "Dia produtivo", detail: "Concluir três tarefas", iconName: "zap", unlocked: done >= 3 },
+    { title: "Maratonista", detail: "Concluir dez tarefas", iconName: "flame", unlocked: done >= 10 },
+    { title: "Centena", detail: "Concluir cem tarefas", iconName: "trophy", unlocked: done >= 100 },
+    { title: "Biblioteca viva", detail: "Favoritar uma anotação", iconName: "star", unlocked: favorites >= 1 },
+    { title: "Colecionador de ideias", detail: "Ter dez anotações", iconName: "notebook", unlocked: state.notes.length >= 10 },
+    { title: "Meta batida", detail: "Completar uma meta", iconName: "target", unlocked: completedGoals >= 1 },
+    { title: "Trilha de metas", detail: "Completar três metas", iconName: "flag", unlocked: completedGoals >= 3 },
+    { title: "Constância", detail: "Sequência de 3 dias", iconName: "calendarCheck", unlocked: streak >= 3 },
+    { title: "Semana cheia", detail: "Sequência de 7 dias", iconName: "flame", unlocked: streak >= 7 },
+    { title: "Organizador", detail: "Ter cinco compromissos", iconName: "calendarWeek", unlocked: state.events.length >= 5 },
+    { title: "Em ascensão", detail: "Alcançar o nível 5", iconName: "sparkle", unlocked: level >= 5 },
+  ];
+}
+
 function renderDashboard() {
   const doneToday = state.tasks.filter((task) => task.completedAt === todayIso).length;
   const doneTotal = state.tasks.filter((task) => task.status === "Concluida").length;
   const activeTasks = state.tasks.filter((task) => task.status !== "Cancelada");
   const progress = activeTasks.length ? Math.round((doneTotal / activeTasks.length) * 100) : 0;
   const nextEvents = state.events.filter((event) => event.date >= todayIso && event.date <= offsetDate(7));
-  const score = doneTotal * 25 + state.goals.reduce((sum, goal) => sum + goal.current * 10, 0);
 
   // ── Resumo real do dia (sem gamificação) ──
   const pendingTasks = state.tasks.filter((t) => t.status === "Pendente" || t.status === "Em andamento").length;
@@ -1801,9 +1895,8 @@ function renderDashboard() {
   document.querySelector("#doneMetricDetail").textContent = `${doneToday} concluída${doneToday === 1 ? "" : "s"} hoje · ${doneTotal} no histórico`;
   document.querySelector("#progressMetric").textContent = `${progress}%`;
   document.querySelector("#eventMetric").textContent = `${nextEvents.length} nos próximos 7 dias`;
-  document.querySelector("#scoreMetric").textContent = score;
-  const level = Math.max(1, Math.floor(score / 150) + 1);
-  const levelProgress = Math.min(100, Math.round(((score % 150) / 150) * 100));
+  document.querySelector("#scoreMetric").textContent = calculateXpStats().score;
+  const { level, levelProgress } = calculateXpStats();
   document.querySelector("#levelMetric").textContent = `Nivel ${level}`;
   document.querySelector("#heroLevelLabel").textContent = `Nivel ${level}`;
   document.querySelector("#heroProgressBar").style.width = `${levelProgress}%`;
@@ -1915,6 +2008,10 @@ const ICONS = {
   folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2.3h8A2 2 0 0 1 21 9.3V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
   pencil: '<path d="M12 20h8"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
   zap: '<path d="M12.5 2 4 13.5h6.5L11 22l8.5-11.5H13z"/>',
+  flame: '<path d="M12 2.5c1 3 .3 4.6-1 6.2-1.3 1.6-2.5 2.9-2.5 5a3.5 3.5 0 0 0 7 0c0-1-.3-1.8-.8-2.5.8.6 1.8 1.8 1.8 3.8a5.5 5.5 0 0 1-11 0c0-4.5 3-6.2 4.5-9 .6-1 1.3-2.2 2-3.5z"/>',
+  trophy: '<path d="M8 4h8v4a4 4 0 0 1-8 0z"/><path d="M8 5H4.5a2.5 2.5 0 0 0 0 5H8"/><path d="M16 5h3.5a2.5 2.5 0 0 1 0 5H16"/><path d="M10 13v3"/><path d="M14 13v3"/><path d="M7 21h10"/><path d="M8.5 21c0-2 1-3 3.5-3s3.5 1 3.5 3"/>',
+  lock: '<rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/>',
+  camera: '<path d="M4 8h3l1.5-2h7L17 8h3a1.5 1.5 0 0 1 1.5 1.5v9A1.5 1.5 0 0 1 20 20H4a1.5 1.5 0 0 1-1.5-1.5v-9A1.5 1.5 0 0 1 4 8z"/><circle cx="12" cy="14" r="3.6"/>',
   flag: '<path d="M5 21V4"/><path d="M5 4h12.5l-2 4.5L19.5 13H5"/>',
   plus: '<path d="M12 5v14"/><path d="M5 12h14"/>',
   alertTriangle: '<path d="M12 3 2.5 20h19L12 3z"/><path d="M12 9.5v4.3"/><path d="M12 17h.01"/>',
@@ -3052,21 +3149,13 @@ function deleteGoal(id) {
 }
 
 function renderAchievements() {
-  const done = state.tasks.filter((task) => task.status === "Concluida").length;
-  const favorites = state.notes.filter((note) => note.favorite).length;
-  const completedGoals = state.goals.filter((goal) => goal.current >= goal.target).length;
-  const achievements = [
-    { title: "Primeiro check-in", detail: "Concluir uma tarefa", icon: "🏅", unlocked: done >= 1 },
-    { title: "Dia produtivo", detail: "Concluir três tarefas", icon: "🔥", unlocked: done >= 3 },
-    { title: "Biblioteca viva", detail: "Favoritar uma anotação", icon: "⭐", unlocked: favorites >= 1 },
-    { title: "Meta batida", detail: "Completar uma meta", icon: "🎯", unlocked: completedGoals >= 1 },
-  ];
+  const achievements = getAchievementsList();
   document.querySelector("#achievementCount").textContent = `${achievements.filter((item) => item.unlocked).length}/${achievements.length}`;
   document.querySelector("#achievements").innerHTML = achievements
     .map(
       (item) => `
         <article class="achievement ${item.unlocked ? "unlocked" : ""}">
-          <strong>${item.icon} ${item.title}${item.unlocked ? " ✓" : ""}</strong>
+          <strong style="display:flex;align-items:center;gap:6px">${icon(item.iconName, 14)}${item.title}${item.unlocked ? icon("check", 12) : ""}</strong>
           <span class="task-meta">${item.detail}</span>
         </article>
       `

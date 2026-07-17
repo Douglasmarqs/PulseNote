@@ -110,6 +110,10 @@
             <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8a2 2 0 012-2h11a2 2 0 012 2"/><rect x="3" y="8" width="18" height="11" rx="2"/><path d="M16.3 13.2h1.7"/></svg></span>
             <span>Finanças</span>
           </button>
+          <button class="nav-item" data-view="profile">
+            <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8.5" r="3.5"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></svg></span>
+            <span>Perfil</span>
+          </button>
           <button class="nav-item" data-view="settings">
             <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.9l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.9-.3 1.7 1.7 0 00-1 1.6V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1-1.6 1.7 1.7 0 00-1.9.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.9V15a1.7 1.7 0 00-1.6-1H3a2 2 0 110-4h.1A1.7 1.7 0 004.7 9a1.7 1.7 0 00-.3-1.9l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.9.3H9a1.7 1.7 0 001-1.6V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.6 1.7 1.7 0 001.9-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.9V9a1.7 1.7 0 001.6 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.6 1z"/></svg></span>
             <span>Configurações</span>
@@ -912,6 +916,76 @@
           </div><!-- /aba automação -->
 
         </section><!-- /financesView -->
+
+        <!-- ===== PROFILE VIEW (NOVO) =====
+             Avatar grande, nível/XP, sequência, estatísticas reais e
+             conquistas — hoje esses dados existiam espalhados (um
+             pedaço no Início, outro na tela antiga de Metas). Aqui
+             tudo usa os MESMOS cálculos de sempre (calculateXpStats,
+             calculateStreak, getAchievementsList), só reunidos numa
+             tela própria. Edição de foto/nome continua em
+             Configurações — o botão de câmera aqui só aciona o mesmo
+             input de arquivo que já existe lá. -->
+        <section id="profileView" class="view">
+          <div class="profile-shell">
+            <section class="panel profile-hero">
+              <div class="profile-avatar-wrap">
+                <div class="profile-avatar-lg" id="profileAvatarPreview">U</div>
+                <button class="profile-avatar-edit" type="button" onclick="document.getElementById('settingsPhotoInput').click()" title="Trocar foto">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l1.5-2h7L17 8h3a1.5 1.5 0 0 1 1.5 1.5v9A1.5 1.5 0 0 1 20 20H4a1.5 1.5 0 0 1-1.5-1.5v-9A1.5 1.5 0 0 1 4 8z"/><circle cx="12" cy="14" r="3.6"/></svg>
+                </button>
+              </div>
+              <h2 id="profileNameLabel">Usuário</h2>
+              <p class="task-meta" id="profileEmailLabel"></p>
+              <button class="ghost-button" type="button" onclick="setView('settings')">Editar perfil</button>
+            </section>
+
+            <section class="panel profile-level-card">
+              <div class="profile-level-top">
+                <div>
+                  <p class="eyebrow">Progresso</p>
+                  <h2 id="profileLevelLabel">Nível 1</h2>
+                </div>
+                <span class="profile-level-badge" id="profileLevelBadge">1</span>
+              </div>
+              <div class="progress-track"><div id="profileLevelBar" style="width:0%"></div></div>
+              <p class="task-meta" id="profileLevelXpLabel">0/150 XP para o próximo nível</p>
+            </section>
+
+            <div class="profile-stats-grid">
+              <div class="profile-stat-tile">
+                <span class="profile-stat-icon tone-orange"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5c1 3 .3 4.6-1 6.2-1.3 1.6-2.5 2.9-2.5 5a3.5 3.5 0 0 0 7 0c0-1-.3-1.8-.8-2.5.8.6 1.8 1.8 1.8 3.8a5.5 5.5 0 0 1-11 0c0-4.5 3-6.2 4.5-9 .6-1 1.3-2.2 2-3.5z"/></svg></span>
+                <strong id="profileStatStreak">0</strong>
+                <span>Sequência (dias)</span>
+              </div>
+              <div class="profile-stat-tile">
+                <span class="profile-stat-icon tone-accent"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8.5 12.3 2.3 2.3L16 9.6"/></svg></span>
+                <strong id="profileStatTasks">0</strong>
+                <span>Tarefas concluídas</span>
+              </div>
+              <div class="profile-stat-tile">
+                <span class="profile-stat-icon tone-green"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.8"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/></svg></span>
+                <strong id="profileStatGoals">0</strong>
+                <span>Metas batidas</span>
+              </div>
+              <div class="profile-stat-tile">
+                <span class="profile-stat-icon tone-yellow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></svg></span>
+                <strong id="profileStatNotes">0</strong>
+                <span>Notas favoritas</span>
+              </div>
+            </div>
+
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Conquistas</p>
+                  <h2 id="profileAchievementCount">0/12</h2>
+                </div>
+              </div>
+              <div id="profileAchievements" class="profile-achievements-grid"></div>
+            </section>
+          </div>
+        </section>
 
         <!-- ===== SETTINGS VIEW ===== -->
         <section id="settingsView" class="view">
