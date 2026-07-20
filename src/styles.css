@@ -1343,6 +1343,55 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 /* Pastas: chips derivados dos valores de "folder" das notas — quebra
    em várias linhas em telas estreitas (nunca scroll horizontal, nunca
    corta texto). */
+.note-editing-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: var(--accent-soft);
+  border: 1.5px solid var(--accent);
+  margin-bottom: 14px;
+  animation: fadeUp 200ms ease both;
+}
+.note-editing-banner span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+.note-editing-banner strong {
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 220px;
+}
+.note-editing-banner button {
+  background: none;
+  border: none;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 4px;
+  flex-shrink: 0;
+}
+
+.note-filter-group-label {
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+  margin: 2px 0 6px;
+}
+
 .note-folders {
   display: flex;
   flex-wrap: wrap;
@@ -3757,6 +3806,16 @@ align-items:stretch;
   max-width: 640px;
 }
 
+.settings-section-label {
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin: 6px 4px -6px;
+}
+.settings-section-label:first-child { margin-top: 0; }
+
 .avatar-upload {
   display: flex;
   align-items: center;
@@ -4127,7 +4186,7 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
     padding: 0;
   }
   #plannerView .planner-tabs button {
-    flex: 1 1 calc(33.333% - 6px);
+    flex: 1 1 calc(50% - 4px);
     display: flex;
     align-items: center;
     justify-content: center;

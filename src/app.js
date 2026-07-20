@@ -363,9 +363,6 @@ const viewTitles = {
   dashboard: "Seu dia em foco ✨",
   planner: "Planner",
   notes: "Anotações",
-  tasks: "Tarefas (antigo)",
-  calendar: "Agenda (antigo)",
-  goals: "Metas (antigo)",
   finances: "Finanças",
   profile: "Perfil",
   settings: "Configurações",
@@ -516,7 +513,7 @@ let activeView = "dashboard";
 let calendarMode = "month";
 let draggedTaskId = null;
 // ── Planner (NOVO, hub unificado) ──────────────────────────────
-let plannerActiveTab = "list"; // "list" | "day" | "week" | "month" | "notes"
+let plannerActiveTab = "list"; // "list" | "day" | "week" | "month"
 let plannerDayDate = todayIso;
 let plannerWeekAnchor = todayIso; // qualquer data dentro da semana ativa
 let plannerMonthAnchor = todayIso; // qualquer data dentro do mês ativo
@@ -1004,8 +1001,8 @@ function bindSettingsView() {
 
       updateAllAvatars(dataUrl);
       progressWrap.hidden = true;
-      showSettingsMsg("✅ Foto atualizada!", "success");
-      showToast("✅ Foto de perfil atualizada!");
+      showSettingsMsg("Foto atualizada!", "success");
+      showToast("Foto de perfil atualizada!");
     } catch (err) {
       console.error("Erro ao processar foto:", err);
       progressWrap.hidden = true;
@@ -1030,8 +1027,8 @@ function bindSettingsView() {
       const nameEl = document.querySelector(".user-dropdown-header strong");
       if (nameEl) nameEl.textContent = newName;
       renderSettings();
-      showSettingsMsg("✅ Nome atualizado!", "success");
-      showToast("✅ Perfil atualizado!");
+      showSettingsMsg("Nome atualizado!", "success");
+      showToast("Perfil atualizado!");
     } catch (err) {
       console.error("Erro ao salvar nome:", err);
       showSettingsMsg(`Erro ao salvar nome: ${err.message}`, "error");
@@ -1055,8 +1052,8 @@ function bindSettingsView() {
 
       document.getElementById("settingsCurrentPw").value = "";
       document.getElementById("settingsNewPw").value     = "";
-      showSettingsMsg("✅ Senha alterada com sucesso!", "success");
-      showToast("✅ Senha alterada!");
+      showSettingsMsg("Senha alterada com sucesso!", "success");
+      showToast("Senha alterada!");
     } catch (err) {
       const messages = {
         "auth/wrong-password":        "Senha atual incorreta.",
@@ -1083,7 +1080,7 @@ function bindSettingsView() {
     state.whatsappLinkCodeExpiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 min
     saveState();
     renderWhatsAppSettings();
-    showToast("📲 Código gerado! Envie a mensagem pelo WhatsApp em até 10 minutos.");
+    showToast("Código gerado! Envie a mensagem pelo WhatsApp em até 10 minutos.");
   });
 
   // ── WhatsApp: desvincular ──────────────────────────────────────────
@@ -1103,7 +1100,7 @@ function bindSettingsView() {
       state.whatsappLinkedPhone = null;
       saveState();
       renderWhatsAppSettings();
-      showSettingsMsg("✅ WhatsApp desvinculado.", "success");
+      showSettingsMsg("WhatsApp desvinculado.", "success");
       showToast("🔌 WhatsApp desvinculado!");
     } catch (err) {
       console.error("Erro ao desvincular WhatsApp:", err);
@@ -1146,8 +1143,8 @@ function bindSettingsView() {
         state = normalizeState(incoming);
         saveState();
         renderAll();
-        showSettingsMsg("✅ Backup importado com sucesso!", "success");
-        showToast("✅ Dados restaurados do backup!");
+        showSettingsMsg("Backup importado com sucesso!", "success");
+        showToast("Dados restaurados do backup!");
       } catch (err) {
         console.error("Erro ao importar backup:", err);
         showSettingsMsg("Não foi possível ler esse arquivo. Confira se é um backup válido do PulseNote.", "error");
@@ -1349,19 +1346,24 @@ function initDashPanelCollapse() {
 
 function bindForms() {
   document.querySelector("#noteForm").addEventListener("submit", saveNote);
-  document.querySelector("#resetNoteForm").addEventListener("click", resetNoteForm);
   document.querySelector("#noteFilter").addEventListener("change", renderNotes);
   bindNoteQuickControls();
   enableAutogrowTextareas();
-  document.querySelector("#taskForm").addEventListener("submit", saveTask);
-  document.querySelector("#eventForm").addEventListener("submit", saveEvent);
-  document.querySelector("#goalForm").addEventListener("submit", saveGoal);
+  // As telas antigas de Tarefas/Agenda/Metas foram removidas (o Planner já
+  // cobre tudo o que elas faziam) — mas os formulários ficam com "?." por
+  // segurança, caso algum dia voltem a existir num contexto diferente.
+  document.querySelector("#taskForm")?.addEventListener("submit", saveTask);
+  document.querySelector("#eventForm")?.addEventListener("submit", saveEvent);
+  document.querySelector("#goalForm")?.addEventListener("submit", saveGoal);
   document.querySelector("#quickAddTask").addEventListener("click", () => {
     if (activeView === "planner") {
       openPlannerQuickAdd();
+    } else if (activeView === "notes") {
+      document.querySelector("#noteTitle").focus();
+    } else if (activeView === "finances") {
+      document.querySelector("#expenseDescription")?.focus() || document.querySelector("#aiQuickText")?.focus();
     } else {
-      setView("tasks");
-      document.querySelector("#taskTitle").focus();
+      openPlannerQuickAdd();
     }
   });
   elements.globalSearch.addEventListener("input", renderAll);
@@ -1746,16 +1748,19 @@ function splitLines(value) {
 }
 
 function resetNoteForm() {
-  document.querySelector("#noteForm").reset();
+  const form = document.querySelector("#noteForm");
+  if (!form) return;
+  form.reset();
   document.querySelector("#noteId").value = "";
   document.querySelector("#notePriority").value = "Media";
-  document.querySelectorAll("#notePriorityPicker .note-priority-dot").forEach((d) =>
-    d.classList.toggle("active", d.dataset.priority === "Media")
-  );
+  document.querySelectorAll("#notePriorityPicker .note-priority-dot").forEach((d) => d.classList.toggle("active", d.dataset.priority === "Media"));
   document.querySelector("#noteChecklistField").hidden = true;
   document.querySelector("#noteChecklistToggle").classList.remove("active");
-  document.querySelector(".note-more-details").open = false;
-  document.querySelectorAll("#noteForm textarea.autogrow").forEach((t) => (t.style.height = "auto"));
+  const moreDetails = document.querySelector(".note-more-details");
+  if (moreDetails) moreDetails.open = false;
+  document.querySelector("#noteEditingBanner").hidden = true;
+  document.querySelector("#noteSaveBtnLabel").textContent = "Salvar anotação";
+  enableAutogrowTextareas();
 }
 
 function bindNoteQuickControls() {
@@ -1778,6 +1783,19 @@ function bindNoteQuickControls() {
       if (!field.hidden) document.querySelector("#noteChecklist").focus();
     });
   }
+
+  // Botão "Limpar" — antes não fazia nada
+  document.querySelector("#resetNoteForm")?.addEventListener("click", () => {
+    resetNoteForm();
+    document.querySelector("#noteTitle").focus();
+  });
+
+  // "Cancelar edição" dentro do aviso — mesmo efeito de Limpar, só que
+  // some sozinho quando não há edição em andamento (fica dentro do banner)
+  document.querySelector("#cancelEditNote")?.addEventListener("click", () => {
+    resetNoteForm();
+    document.querySelector("#noteTitle").focus();
+  });
 }
 
 // Faz os textareas marcados crescerem junto com o texto, em vez de
@@ -1811,9 +1829,12 @@ function renderAll() {
 }
 
 function setDefaultDates() {
-  document.querySelector("#taskDue").value ||= todayIso;
-  document.querySelector("#eventDate").value ||= todayIso;
-  document.querySelector("#eventTime").value ||= "09:00";
+  const taskDue = document.querySelector("#taskDue");
+  if (taskDue) taskDue.value ||= todayIso;
+  const eventDate = document.querySelector("#eventDate");
+  if (eventDate) eventDate.value ||= todayIso;
+  const eventTime = document.querySelector("#eventTime");
+  if (eventTime) eventTime.value ||= "09:00";
   const expDate = document.querySelector("#expenseDate");
   if (expDate) expDate.value ||= todayIso;
 }
@@ -1931,11 +1952,18 @@ function renderDashFinance() {
       <div class="progress-track" style="flex:1;height:8px"><div style="width:${usedPct}%;height:100%;border-radius:999px;background:${usedPct > 80 ? "var(--red)" : usedPct > 60 ? "var(--orange)" : "var(--green)"};transition:width 400ms"></div></div>
       <span style="font-size:0.8rem;font-weight:700;color:var(--muted)">${usedPct}%</span>
     </div>
-    ${entries.slice(0, 3).map((f) => {
-      const cat = findCategory(f.category);
-      const isReceita = f.type === "receita";
-      return `<div class="connector-row"><span style="font-size:0.88rem;font-weight:600">${isReceita ? "💰" : cat.label.split(" ")[0]} ${escapeHtml(f.description)}</span><span style="font-weight:800;color:${isReceita ? "var(--green)" : "var(--red)"}">${isReceita ? "+" : "-"}${formatCurrency(f.amount)}</span></div>`;
-    }).join("")}
+    ${
+      entries.length
+        ? entries
+            .slice(0, 3)
+            .map((f) => {
+              const cat = findCategory(f.category);
+              const isReceita = f.type === "receita";
+              return `<div class="connector-row"><span style="font-size:0.88rem;font-weight:600;display:inline-flex;align-items:center;gap:5px">${isReceita ? icon("trendingUp", 13) : cat.label.split(" ")[0]} ${escapeHtml(f.description)}</span><span style="font-weight:800;color:${isReceita ? "var(--green)" : "var(--red)"}">${isReceita ? "+" : "-"}${formatCurrency(f.amount)}</span></div>`;
+            })
+            .join("")
+        : emptyStateCompactHtml({ iconName: "calendar", text: "Nada lançado este mês ainda." })
+    }
   `;
   fitCurrencyValues("dashFinReceitas", "dashFinDespesas", "dashFinSaldo");
 }
@@ -2012,6 +2040,9 @@ const ICONS = {
   trophy: '<path d="M8 4h8v4a4 4 0 0 1-8 0z"/><path d="M8 5H4.5a2.5 2.5 0 0 0 0 5H8"/><path d="M16 5h3.5a2.5 2.5 0 0 1 0 5H16"/><path d="M10 13v3"/><path d="M14 13v3"/><path d="M7 21h10"/><path d="M8.5 21c0-2 1-3 3.5-3s3.5 1 3.5 3"/>',
   lock: '<rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/>',
   camera: '<path d="M4 8h3l1.5-2h7L17 8h3a1.5 1.5 0 0 1 1.5 1.5v9A1.5 1.5 0 0 1 20 20H4a1.5 1.5 0 0 1-1.5-1.5v-9A1.5 1.5 0 0 1 4 8z"/><circle cx="12" cy="14" r="3.6"/>',
+  trendingUp: '<path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/>',
+  repeat: '<path d="M17 2l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>',
+  arrowLeftRight: '<path d="m8 3-4 4 4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/>',
   flag: '<path d="M5 21V4"/><path d="M5 4h12.5l-2 4.5L19.5 13H5"/>',
   plus: '<path d="M12 5v14"/><path d="M5 12h14"/>',
   alertTriangle: '<path d="M12 3 2.5 20h19L12 3z"/><path d="M12 9.5v4.3"/><path d="M12 17h.01"/>',
@@ -2276,17 +2307,41 @@ function renderPlannerList() {
 
 function renderPlannerTaskRow(task) {
   const isDone = task.status === "Concluida";
+  const subtasks = task.subtasks || [];
+  const doneCount = subtasks.filter((s) => s.done).length;
+  const recTitle = task.recurrence
+    ? `Repete: ${{ diaria: "diariamente", semanal: "semanalmente", mensal: "mensalmente" }[task.recurrence]} (toque pra mudar)`
+    : "Sem repetição (toque pra ativar)";
   return `
     <article class="planner-row planner-row--task" data-task-id="${task.id}">
       <button class="task-check ${isDone ? "is-done" : ""}" onclick="toggleTask('${task.id}')" title="Concluir">${isDone ? icon("check", 13) : ""}</button>
-      <div class="planner-row-main">
+      <div class="planner-row-main" onclick="toggleTaskDetails('${task.id}', event)" style="cursor:pointer">
         <strong class="${isDone ? "is-done-text" : ""}">${escapeHtml(task.title)}</strong>
         <div class="planner-row-meta">
           <span class="priority-pill priority-${task.priority}">${escapeHtml(task.priority)}</span>
+          ${task.status === "Em andamento" || task.status === "Cancelada" ? `<span class="status-pill status-${task.status.replace(" ", "-")}">${task.status}</span>` : ""}
           ${task.dueDate ? `<span class="task-meta">${icon("calendarWeek", 12)}${formatDate(task.dueDate)}</span>` : ""}
+          ${subtasks.length ? `<span class="task-meta">${icon("checkCircle", 12)}${doneCount}/${subtasks.length}</span>` : ""}
         </div>
       </div>
+      <button class="mini-button" onclick="cycleTaskRecurrence('${task.id}', event)" title="${recTitle}" style="${task.recurrence ? "color:var(--accent);" : ""}">${icon("repeat", 14)}</button>
+      <button class="mini-button" onclick="openTaskMoveMenu('${task.id}', event)" title="Mudar status (${task.status})">${icon("arrowLeftRight", 14)}</button>
       <button class="mini-button planner-row-delete" onclick="deleteTask('${task.id}')" title="Excluir">${icon("trash", 14)}</button>
+      <div class="task-subtasks">
+        ${
+          subtasks
+            .map(
+              (s) => `
+          <div class="task-subtask-row">
+            <button class="task-subtask-check ${s.done ? "done" : ""}" onclick="toggleSubtask('${task.id}','${s.id}', event)">${s.done ? icon("check", 11) : ""}</button>
+            <span class="${s.done ? "done" : ""}">${escapeHtml(s.title)}</span>
+            <button class="mini-button" onclick="deleteSubtask('${task.id}','${s.id}', event)" style="padding:0;width:22px;height:22px;margin-left:auto">${icon("x", 11)}</button>
+          </div>`
+            )
+            .join("") || `<p class="planner-goal-milestones-empty">Sem itens na checklist ainda.</p>`
+        }
+        <button class="ghost-button planner-add-milestone" type="button" onclick="addSubtask('${task.id}', event)">${icon("plus", 13)}<span>Item da checklist</span></button>
+      </div>
     </article>
   `;
 }
@@ -2550,7 +2605,9 @@ function submitPlannerQuickAdd(event) {
     const date = document.querySelector("#pqaEventDate").value || todayIso;
     const time = document.querySelector("#pqaEventTime").value || "09:00";
     const location = valueOf("#pqaEventLocation") || "Sem local";
-    state.events.push({ id: crypto.randomUUID(), title, date, time, location, reminder: 15, notes: "" });
+    const reminder = Number(document.querySelector("#pqaEventReminder").value || 15);
+    const notes = valueOf("#pqaEventNotes") || "";
+    state.events.push({ id: crypto.randomUUID(), title, date, time, location, reminder, notes });
     showToast("Compromisso salvo.");
   } else if (type === "goal") {
     const target = Number(document.querySelector("#pqaGoalTarget").value || 1);
@@ -2601,8 +2658,9 @@ function renderNotes() {
 // sem precisar de uma estrutura de dados nova. Toque numa pasta pra
 // filtrar a biblioteca por ela. ──
 function renderNoteFolders() {
+  const wrap = document.querySelector("#noteFoldersWrap");
   const root = document.querySelector("#noteFolders");
-  if (!root) return;
+  if (!root || !wrap) return;
   const counts = {};
   state.notes.forEach((n) => {
     const key = (n.folder || "").trim() || "Sem pasta";
@@ -2610,12 +2668,12 @@ function renderNoteFolders() {
   });
   const folders = Object.keys(counts).sort((a, b) => a.localeCompare(b, "pt-BR"));
   if (!folders.length) {
-    root.hidden = true;
+    wrap.hidden = true;
     root.innerHTML = "";
     return;
   }
-  root.hidden = false;
-  const allChip = `<button class="folder-chip ${notesFolderFilter === "all" ? "active" : ""}" type="button" onclick="setNotesFolderFilter('all')">${icon("notebook", 13)}<span>Todas</span><span class="pill">${state.notes.length}</span></button>`;
+  wrap.hidden = false;
+  const allChip = `<button class="folder-chip ${notesFolderFilter === "all" ? "active" : ""}" type="button" onclick="setNotesFolderFilter('all')">${icon("notebook", 13)}<span>Todas as pastas</span><span class="pill">${state.notes.length}</span></button>`;
   const chips = folders.map((f) => {
     const safe = f.replace(/'/g, "\\'");
     return `<button class="folder-chip ${notesFolderFilter === f ? "active" : ""}" type="button" onclick="setNotesFolderFilter('${safe}')">${icon("folder", 13)}<span>${escapeHtml(f)}</span><span class="pill">${counts[f]}</span></button>`;
@@ -2732,6 +2790,12 @@ function editNote(id) {
   const hasExtra = note.category || note.folder || (note.tags && note.tags.length) || note.goal || (note.attachments && note.attachments.length) || note.observations;
   document.querySelector(".note-more-details").open = Boolean(hasExtra);
 
+  // Deixa claro que agora é edição, não criação — antes o formulário ficava
+  // idêntico nos dois casos, sem nenhum aviso.
+  document.querySelector("#noteEditingBanner").hidden = false;
+  document.querySelector("#noteEditingTitle").textContent = note.title;
+  document.querySelector("#noteSaveBtnLabel").textContent = "Salvar alterações";
+
   enableAutogrowTextareas();
   setView("notes");
   document.querySelector("#noteTitle").focus();
@@ -2760,8 +2824,9 @@ function deleteNote(id) {
 }
 
 function renderTasks() {
-  const tasks = queryFilter(state.tasks, ["title", "status", "priority", "dueDate"]);
   const board = document.querySelector("#taskBoard");
+  if (!board) return; // tela antiga de Tarefas removida — o Planner cobre tudo isso agora
+  const tasks = queryFilter(state.tasks, ["title", "status", "priority", "dueDate"]);
   const activeTasks = state.tasks.filter((task) => task.status !== "Cancelada");
   const completed = activeTasks.filter((task) => task.status === "Concluida").length;
   const progress = activeTasks.length ? Math.round((completed / activeTasks.length) * 100) : 0;
@@ -2864,7 +2929,7 @@ function openTaskMoveMenu(taskId, event) {
             color:${status === task.status ? "var(--accent)" : "var(--text)"};
             font-weight:700;font-size:0.9rem;cursor:pointer;width:100%">
             <span>${status}</span>
-            ${status === task.status ? "<span>✓</span>" : ""}
+            ${status === task.status ? icon("check", 14) : ""}
           </button>
         `).join("")}
       </div>
@@ -2945,14 +3010,18 @@ function cycleTaskRecurrence(id, event) {
   task.recurrence = order[(idx + 1) % order.length];
   saveState();
   renderTasks();
+  renderPlanner();
   const labels = { diaria: "Repete diariamente", semanal: "Repete semanalmente", mensal: "Repete mensalmente" };
-  showToast(task.recurrence ? `🔁 ${labels[task.recurrence]}` : "Repetição desativada.");
+  showToast(task.recurrence ? labels[task.recurrence] : "Repetição desativada.");
 }
 
 // ── Subtarefas (checklist dentro da tarefa) ────────────────────
+// O seletor não fica mais preso a ".task-row" — assim funciona tanto na
+// tela antiga de Tarefas quanto nas linhas de tarefa do Planner, que
+// usam o mesmo data-task-id.
 function toggleTaskDetails(id, event) {
   event?.stopPropagation();
-  document.querySelector(`.task-row[data-task-id="${id}"] .task-subtasks`)?.classList.toggle("open");
+  document.querySelector(`[data-task-id="${id}"] .task-subtasks`)?.classList.toggle("open");
 }
 
 function addSubtask(id, event) {
@@ -2965,6 +3034,7 @@ function addSubtask(id, event) {
   task.subtasks.push({ id: crypto.randomUUID(), title: title.trim(), done: false });
   saveState();
   renderTasks();
+  renderPlanner();
 }
 
 function toggleSubtask(taskId, subId, event) {
@@ -2974,6 +3044,7 @@ function toggleSubtask(taskId, subId, event) {
   task.subtasks = (task.subtasks || []).map((s) => (s.id === subId ? { ...s, done: !s.done } : s));
   saveState();
   renderTasks();
+  renderPlanner();
 }
 
 function deleteSubtask(taskId, subId, event) {
@@ -2983,6 +3054,7 @@ function deleteSubtask(taskId, subId, event) {
   task.subtasks = (task.subtasks || []).filter((s) => s.id !== subId);
   saveState();
   renderTasks();
+  renderPlanner();
 }
 
 function deleteTask(id) {
@@ -2992,13 +3064,14 @@ function deleteTask(id) {
 }
 
 function renderCalendar() {
+  const grid = document.querySelector("#calendarGrid");
+  if (!grid) return; // tela antiga de Agenda removida — o Planner (Semana/Mês) cobre isso agora
   const current = new Date();
   document.querySelector("#monthLabel").textContent = new Intl.DateTimeFormat("pt-BR", {
     month: "long",
     year: "numeric",
   }).format(current);
 
-  const grid = document.querySelector("#calendarGrid");
   const days = calendarMode === "month" ? getMonthDays(current) : calendarMode === "week" ? getWeekDays(current) : [todayIso];
   grid.innerHTML = days
     .map((date) => {
@@ -3087,6 +3160,7 @@ function deleteEvent(id) {
 }
 
 function renderGoals() {
+  if (!document.querySelector("#goalsList")) return; // tela antiga de Metas removida — Planner + Perfil cobrem isso agora
   const goals = queryFilter(state.goals, ["title"]);
   renderList(
     "#goalsList",
@@ -4413,7 +4487,7 @@ function saveExpense(event) {
       date: valueOf("#expenseDate") || todayIso,
     };
     state.finances.unshift(entry);
-    showToast(type === "receita" ? "💰 Receita adicionada!" : "💸 Despesa registrada!");
+    showToast(type === "receita" ? "Receita adicionada!" : "Despesa registrada!");
   }
 
   saveState();
@@ -5299,15 +5373,18 @@ function handlePwaShortcutAction() {
   const itemFromUrl = params.get("item");
   if (action) {
     if (action === "new-task") {
-      setView("tasks");
-      setTimeout(() => document.querySelector("#taskTitle")?.focus(), 200);
+      setView("planner");
+      setTimeout(() => openPlannerQuickAdd("task"), 200);
     } else if (action === "new-expense") {
       setView("finances");
       setTimeout(() => document.querySelector("#expenseAmount")?.focus(), 200);
     } else if (action.startsWith("open-")) {
       // Vem de um clique em notificação do sistema (ver sw.js)
-      const view = action.replace("open-", "");
-      if (["dashboard", "notes", "tasks", "calendar", "goals", "finances"].includes(view)) {
+      let view = action.replace("open-", "");
+      // Tarefas/Agenda/Metas viraram Planner — mantém compatibilidade com
+      // notificações antigas que ainda apontem pros nomes de tela antigos.
+      if (["tasks", "calendar", "goals"].includes(view)) view = "planner";
+      if (["dashboard", "notes", "planner", "finances", "profile", "settings"].includes(view)) {
         setView(view);
         if (itemFromUrl) highlightItem(itemFromUrl);
       }
@@ -5323,7 +5400,9 @@ function handlePwaShortcutAction() {
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.addEventListener("message", (event) => {
       if (event.data?.type === "open-view" && event.data.view) {
-        setView(event.data.view);
+        let view = event.data.view;
+        if (["tasks", "calendar", "goals"].includes(view)) view = "planner";
+        setView(view);
         if (event.data.itemId) highlightItem(event.data.itemId);
       }
     });

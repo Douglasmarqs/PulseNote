@@ -2,7 +2,17 @@
 // Necessário para o app ser "instalável" (PWA) no Android/Chrome,
 // funcionar parcialmente offline, e exibir notificações do sistema.
 
-const CACHE_NAME = "pulsenote-v9";
+// v10: corrige um bug real de cache que causava loop de redirecionamento
+// (a tela ficava alternando e não abria). A causa: o handler de fetch
+// cacheava QUALQUER requisição — inclusive a página /app em si — com a
+// mesma estratégia "responde do cache na hora" usada pra CSS/imagens. Se
+// alguma vez a resposta de /app viesse errada (ex.: durante uma janela de
+// deploy), aquele HTML errado ficava preso no cache pra sempre, e a cada
+// visita a /app o navegador servia essa versão errada de novo — que por
+// sua vez tentava redirecionar de novo, num loop. Documentos de navegação
+// (a própria página HTML) agora sempre buscam da rede primeiro; só
+// arquivos estáticos (CSS/JS/imagens) continuam usando cache instantâneo.
+const CACHE_NAME = "pulsenote-v10";
 
 // Arquivos essenciais para o app abrir mesmo sem internet.
 // Usamos os caminhos REAIS (dentro de /src/), não os caminhos "bonitos"
@@ -45,14 +55,6 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
-// Estratégia: "stale-while-revalidate" — responde IMEDIATAMENTE com a
-// versão em cache (se existir), o que faz o app abrir na hora em vez de
-// esperar a rede toda vez, e por trás dos panos busca uma versão nova na
-// rede para deixar pronta na próxima abertura. Se não houver cache ainda
-// (primeira visita), espera a rede normalmente. Isso resolve a demora na
-// abertura sem sacrificar atualizações — o app só fica "um passo atrás"
-// entre uma versão nova ser publicada e o cache ser atualizado, o que
-// acontece sozinho logo na primeira abertura seguinte.
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   const url = new URL(request.url);
@@ -67,6 +69,32 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  // Documentos de navegação (a página em si: /app, /login, / etc.) — SEMPRE
+  // busca da rede primeiro. É a categoria de arquivo onde "servir uma versão
+  // presa no cache" causa os problemas mais graves (loop de redirecionamento,
+  // tela branca, versão antiga do app inteiro), então aqui staleness nunca
+  // vale a pena — só cai pro cache se a rede falhar de verdade (offline).
+  const isNavigation = request.mode === "navigate" || request.destination === "document";
+  if (isNavigation) {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response && response.status === 200) {
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, response.clone()));
+          }
+          return response;
+        })
+        .catch(() => caches.open(CACHE_NAME).then((cache) => cache.match(request)))
+    );
+    return;
+  }
+
+  // Estratégia para o resto (CSS/JS/imagens): "stale-while-revalidate" —
+  // responde IMEDIATAMENTE com a versão em cache (se existir), o que faz o
+  // app abrir na hora em vez de esperar a rede toda vez, e por trás dos
+  // panos busca uma versão nova na rede para deixar pronta na próxima
+  // abertura. Se não houver cache ainda (primeira visita), espera a rede
+  // normalmente.
   event.respondWith(
     caches.open(CACHE_NAME).then(async (cache) => {
       const cached = await cache.match(request);
