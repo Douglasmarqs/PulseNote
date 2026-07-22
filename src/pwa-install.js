@@ -32,6 +32,14 @@
         // conta própria (pode levar até 24h), então um redeploy recente
         // podia demorar bastante pra ser notado.
         reg.update().catch(() => {});
+
+        // Mesma checagem, mas também toda vez que a pessoa volta pra essa
+        // aba depois de ter usado outro app/aba — cobre o caso de alguém
+        // que deixa o PulseNote aberto em segundo plano por muito tempo
+        // (comum em celular) sem nunca dar um "reload" de verdade.
+        document.addEventListener("visibilitychange", () => {
+          if (document.visibilityState === "visible") reg.update().catch(() => {});
+        });
       }).catch((err) => {
         console.warn("Service Worker não registrado:", err);
       });

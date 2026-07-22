@@ -74,7 +74,7 @@ async function signInWithGoogle() {
     }
     await signInWithPopup(auth, googleProvider);
     markDeviceAsKnown();
-    window.location.replace("index.html");
+    window.location.replace("/app");
   } catch (err) {
     console.error("Google sign-in error:", err.code, err.message);
     // Pop-up bloqueado/indisponível (comum em PWA instalado e navegadores
@@ -99,7 +99,7 @@ document.querySelectorAll("[data-google-signin]").forEach((btn) => {
 getRedirectResult(auth).then((result) => {
   if (result?.user) {
     markDeviceAsKnown();
-    window.location.replace("index.html");
+    window.location.replace("/app");
   }
 }).catch((err) => {
   if (err?.code) console.error("Erro ao concluir login com Google:", err.code, err.message);
@@ -109,12 +109,12 @@ getRedirectResult(auth).then((result) => {
 const unsubscribeAuthCheck = onAuthStateChanged(auth, (user) => {
   unsubscribeAuthCheck();
   const path = window.location.pathname;
-  const isAuthPage = path.endsWith("login.html")
+  const isAuthPage = path === "/login" || path.endsWith("/login")
     || path === "/"
     || path.endsWith("/");
   if (user && isAuthPage) {
     markDeviceAsKnown();
-    window.location.replace("index.html");
+    window.location.replace("/app");
   }
 });
 
@@ -211,7 +211,7 @@ if (loginForm) {
     try {
       await signInWithEmailAndPassword(auth, email, password);
       markDeviceAsKnown();
-      window.location.replace("index.html");
+      window.location.replace("/app");
     } catch (err) {
       console.error("Login error:", err.code, err.message);
       showError("loginError", translateAuthError(err.code));
@@ -261,7 +261,7 @@ if (registerForm) {
       catch (verifyErr) { console.error("Erro ao enviar verificação:", verifyErr); }
       // Cadastro OK → vai para o app (que vai exigir a confirmação do e-mail)
       markDeviceAsKnown();
-      window.location.replace("index.html");
+      window.location.replace("/app");
     } catch (err) {
       console.error("Register error:", err.code, err.message);
       showError("registerError", translateAuthError(err.code));
@@ -280,7 +280,7 @@ if (forgotForm) {
     const email = document.getElementById("forgotEmail").value.trim();
     try {
       await sendPasswordResetEmail(auth, email, {
-        url: window.location.origin + "/login.html",
+        url: window.location.origin + "/login",
       });
       markDeviceAsKnown();
       document.getElementById("stepEmail").hidden   = true;

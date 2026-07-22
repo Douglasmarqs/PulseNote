@@ -268,7 +268,7 @@ async function logout() {
     // — não há risco de outra conta logada no mesmo aparelho "herdar" estes
     // dados. Isso só acelera a próxima vez que esta mesma pessoa logar.
     currentUser = null;
-    window.location.replace("login.html");
+    window.location.replace("/login");
   }
 }
 
@@ -280,7 +280,7 @@ const appReady = new Promise((resolve) => {
 
   onAuthStateChanged(auth, async (user) => {
     if (!user) {
-      window.location.replace("login.html");
+      window.location.replace("/login");
       return;
     }
 
@@ -1039,19 +1039,33 @@ function bindSettingsView() {
   document.getElementById("settingsPasswordForm").addEventListener("submit", async (e) => {
     e.preventDefault();
     hideSettingsMsg();
-    const currentPw = document.getElementById("settingsCurrentPw").value;
-    const newPw     = document.getElementById("settingsNewPw").value;
+    const currentPwField = document.getElementById("settingsCurrentPw");
+    const newPwField = document.getElementById("settingsNewPw");
+    currentPwField.classList.remove("has-error");
+    newPwField.classList.remove("has-error");
+    const currentPw = currentPwField.value;
+    const newPw = newPwField.value;
 
-    if (!currentPw) { showSettingsMsg("Informe a senha atual.", "error"); return; }
-    if (!newPw || newPw.length < 6) { showSettingsMsg("A nova senha deve ter pelo menos 6 caracteres.", "error"); return; }
+    if (!currentPw) {
+      currentPwField.classList.add("has-error");
+      currentPwField.focus();
+      showSettingsMsg("Informe a senha atual.", "error");
+      return;
+    }
+    if (!newPw || newPw.length < 6) {
+      newPwField.classList.add("has-error");
+      newPwField.focus();
+      showSettingsMsg("A nova senha deve ter pelo menos 6 caracteres.", "error");
+      return;
+    }
 
     try {
       const credential = EmailAuthProvider.credential(currentUser.email, currentPw);
       await reauthenticateWithCredential(currentUser, credential);
       await updatePassword(currentUser, newPw);
 
-      document.getElementById("settingsCurrentPw").value = "";
-      document.getElementById("settingsNewPw").value     = "";
+      currentPwField.value = "";
+      newPwField.value = "";
       showSettingsMsg("Senha alterada com sucesso!", "success");
       showToast("Senha alterada!");
     } catch (err) {
@@ -1061,6 +1075,7 @@ function bindSettingsView() {
         "auth/requires-recent-login": "Por segurança, faça login novamente antes de trocar a senha.",
         "auth/weak-password":         "A nova senha é muito fraca.",
       };
+      currentPwField.classList.add("has-error");
       showSettingsMsg(messages[err.code] || `Erro: ${err.message}`, "error");
     }
   });
@@ -1122,7 +1137,7 @@ function bindSettingsView() {
     a.download = `pulsenote-backup-${todayIso}.json`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 5000);
-    showToast("⬇️ Backup exportado!");
+    showToast("Backup exportado!");
   });
 
   // ── Backup: importar de um .json exportado anteriormente ─────────
@@ -1153,6 +1168,32 @@ function bindSettingsView() {
     reader.readAsText(file);
   });
 
+  // ── Forçar atualização: desregistra o Service Worker, limpa os caches
+  // locais e recarrega direto do servidor. Não mexe em nenhum dado (que
+  // vive no Firestore, não no cache do navegador) — só garante que a
+  // pessoa está vendo a versão mais nova do app, sem depender do ciclo
+  // de atualização automático (que pode levar mais de uma visita pra
+  // "pegar" dependendo do navegador). ──
+  document.getElementById("settingsForceUpdate")?.addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
+    const originalHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = "<span>Atualizando…</span>";
+    try {
+      if ("caches" in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map((key) => caches.delete(key)));
+      }
+      if ("serviceWorker" in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(registrations.map((reg) => reg.unregister()));
+      }
+    } catch (err) {
+      console.warn("Erro ao limpar cache:", err);
+    }
+    window.location.reload(true);
+  });
+
   // ── Excluir conta permanentemente ─────────────────────────────────
   document.getElementById("settingsDeleteAccountBtn")?.addEventListener("click", async () => {
     hideSettingsMsg();
@@ -1173,7 +1214,7 @@ function bindSettingsView() {
       if (key) localStorage.removeItem(key);
 
       await deleteUser(currentUser);
-      window.location.replace("login.html");
+      window.location.replace("/login");
     } catch (err) {
       const messages = {
         "auth/wrong-password":        "Senha incorreta.",
@@ -2164,12 +2205,14 @@ function renderPlannerGoalsStrip() {
   if (!root) return;
   const goals = state.goals;
   if (!goals.length) {
+    // Sem botão aqui de propósito: o cabeçalho deste painel já tem um
+    // "Nova meta" fixo logo acima — repetir o mesmo botão dentro do
+    // estado vazio era redundante (dois botões idênticos, um em cima
+    // do outro, fazendo exatamente a mesma coisa).
     root.innerHTML = emptyStateHtml({
       iconName: "target",
       title: "Defina sua primeira meta",
-      desc: "Metas ficam fixadas aqui em cima, com marcos que você vai riscando conforme avança.",
-      ctaLabel: "Nova meta",
-      ctaOnClick: "openPlannerQuickAdd('goal')",
+      desc: "Metas ficam fixadas aqui em cima, com marcos que você vai riscando conforme avança. Toque em \"Nova meta\" ali em cima pra criar a primeira.",
     });
     return;
   }

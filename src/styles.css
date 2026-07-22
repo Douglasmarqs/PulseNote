@@ -65,6 +65,34 @@
   --shadow-float: 0 20px 60px rgba(0,0,0,0.12);
   --nav-height: 80px;
   --header-height: 70px;
+
+  /* Escala de espaçamento em grid de 8pt — usada em todo trabalho novo
+     daqui pra frente. Não fomos reescrever cada valor de padding/margin
+     já existente no arquivo pra bater 100% com essa escala (são
+     centenas de regras já testadas e funcionando; o risco de quebrar
+     algo visualmente por um ganho só estético não compensa). Novos
+     componentes devem usar estas variáveis em vez de valores soltos. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* Escala tipográfica — mesma lógica: referência para trabalho novo,
+     sem reescrever o que já existe e já funciona. */
+  --text-xs: 0.72rem;
+  --text-sm: 0.82rem;
+  --text-base: 0.9rem;
+  --text-md: 0.96rem;
+  --text-lg: 1.1rem;
+  --text-xl: 1.3rem;
+  --text-2xl: 1.6rem;
+  --text-3xl: 2rem;
 }
 
 /* ---------- Tema: Claro / Aurora / Automático ----------
@@ -1146,6 +1174,64 @@ input:focus, textarea:focus, select:focus {
   background: var(--surface);
   outline: none;
 }
+
+/* Estados que faltavam: hover (feedback antes mesmo de tocar/clicar),
+   erro (campo com problema, ex.: validação de formulário) e desabilitado
+   (campo temporariamente bloqueado, ex.: enquanto salva). Nenhum dos
+   três existia antes — só existia o estado de foco. */
+input:not(:disabled):not(:focus):hover,
+textarea:not(:disabled):not(:focus):hover,
+select:not(:disabled):not(:focus):hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+}
+
+input.has-error, textarea.has-error, select.has-error,
+input[aria-invalid="true"], textarea[aria-invalid="true"], select[aria-invalid="true"] {
+  border-color: var(--red);
+  background: var(--red-soft);
+}
+input.has-error:focus, textarea.has-error:focus, select.has-error:focus {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--red) 20%, transparent);
+}
+.field-error-msg {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--red);
+  margin-top: -2px;
+}
+
+input:disabled, textarea:disabled, select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  background: var(--line);
+}
+
+/* Loading: aplicado via JS (classList.add("is-loading")) em campos que
+   dependem de uma resposta assíncrona pra saber o valor certo — evita
+   que a pessoa digite em cima de um campo que está prestes a ser
+   preenchido/substituído sozinho. */
+.field-loading-wrap { position: relative; }
+input.is-loading, textarea.is-loading, select.is-loading {
+  color: transparent;
+  pointer-events: none;
+}
+.field-loading-wrap.is-loading::after {
+  content: "";
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  width: 16px;
+  height: 16px;
+  margin-top: -8px;
+  border: 2px solid var(--line);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: fieldSpin 700ms linear infinite;
+}
+@keyframes fieldSpin { to { transform: rotate(360deg); } }
 
 textarea { resize: vertical; min-height: 80px; }
 

@@ -12,7 +12,11 @@
 // sua vez tentava redirecionar de novo, num loop. Documentos de navegação
 // (a própria página HTML) agora sempre buscam da rede primeiro; só
 // arquivos estáticos (CSS/JS/imagens) continuam usando cache instantâneo.
-const CACHE_NAME = "pulsenote-v10";
+// v11: mesma correção da v10, republicada para forçar mais um ciclo de
+// atualização em quem ainda estava preso numa versão antiga do cache —
+// junto com uma checagem de atualização mais agressiva em pwa-install.js
+// (agora também verifica ao voltar pra aba, não só ao abrir o app).
+const CACHE_NAME = "pulsenote-v11";
 
 // Arquivos essenciais para o app abrir mesmo sem internet.
 // Usamos os caminhos REAIS (dentro de /src/), não os caminhos "bonitos"
