@@ -19,6 +19,51 @@ import {
   onSnapshot,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
+// ============================================================
+// Rede de segurança: mostra erros na TELA em vez de falhar calado
+// ============================================================
+// Até agora, se algo desse errado (um elemento que não existe mais, uma
+// função que falhou), o único sinal era "o botão não faz nada" — sem
+// nenhuma pista do que realmente aconteceu, nem pra quem está usando
+// nem pra mim tentando corrigir a distância. Isso captura qualquer erro
+// não tratado (de clique, de carregamento, de promessa) e mostra um
+// aviso simples na tela, com a mensagem exata do erro — assim dá pra
+// tirar print e mandar, em vez de "não funciona".
+let lastShownRuntimeError = "";
+function showRuntimeErrorBanner(message) {
+  if (!message || message === lastShownRuntimeError) return; // evita repetir o mesmo aviso em loop
+  lastShownRuntimeError = message;
+  let banner = document.getElementById("runtimeErrorBanner");
+  if (!banner) {
+    banner = document.createElement("div");
+    banner.id = "runtimeErrorBanner";
+    banner.style.cssText =
+      "position:fixed;left:12px;right:12px;bottom:12px;z-index:99999;background:#3a0d0d;color:#ffd9d9;" +
+      "border:1.5px solid #e5484d;border-radius:14px;padding:12px 14px;font:600 13px/1.4 -apple-system,system-ui,sans-serif;" +
+      "box-shadow:0 12px 32px rgba(0,0,0,0.4);";
+    document.body.appendChild(banner);
+  }
+  banner.innerHTML = "";
+  const strong = document.createElement("strong");
+  strong.textContent = "Algo quebrou nesta tela:";
+  strong.style.cssText = "display:block;margin-bottom:4px;";
+  const p = document.createElement("p");
+  p.textContent = message;
+  p.style.cssText = "margin:0 0 8px;word-break:break-word;";
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.textContent = "Fechar";
+  btn.style.cssText = "background:#e5484d;color:#fff;border:none;border-radius:8px;padding:6px 12px;font-weight:700;";
+  btn.onclick = () => banner.remove();
+  banner.append(strong, p, btn);
+}
+window.addEventListener("error", (event) => {
+  showRuntimeErrorBanner(event.message || String(event.error));
+});
+window.addEventListener("unhandledrejection", (event) => {
+  showRuntimeErrorBanner(event.reason?.message || String(event.reason));
+});
+
 // ── Tema: Claro / Aurora / Automático ─────────────────────────────
 // A escolha fica em localStorage (não depende de login/Firestore, então
 // funciona até na tela de login). Um script inline no <head> do HTML já
