@@ -532,7 +532,11 @@ p, h1, h2, h3 { margin: 0; }
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 14px 28px;
+  /* env(safe-area-inset-top) reserva o espaço da barra de status do
+     aparelho (relógio, sinal, bateria) — sem isso, o cabeçalho
+     renderiza por baixo dela em qualquer tela com notch/status bar
+     (afeta todas as views, já que o topbar é compartilhado). */
+  padding: calc(14px + env(safe-area-inset-top)) 28px 14px;
   background: color-mix(in srgb, var(--bg) 85%, transparent);
   backdrop-filter: blur(20px);
   border-bottom: 1px solid var(--line);
@@ -2181,7 +2185,7 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   .main-area { padding-bottom: var(--nav-height); }
 
   .topbar {
-    padding: 12px 16px;
+    padding: calc(10px + env(safe-area-inset-top)) 16px 10px;
     gap: 10px;
     /* Em mobile não pode ser flex-wrap porque o topbar é sticky e ficaria
        muito alto — os itens se ajustam com gap menor */

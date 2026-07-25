@@ -44,7 +44,7 @@ body.auth-page {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px 16px max(24px, env(safe-area-inset-bottom));
+  padding: max(24px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
   position: relative;
 }
 
