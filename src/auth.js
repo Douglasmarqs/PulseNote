@@ -166,8 +166,11 @@ document.querySelectorAll(".toggle-pw").forEach((btn) => {
   btn.addEventListener("click", () => {
     const input = document.getElementById(btn.dataset.target);
     if (!input) return;
-    input.type = input.type === "password" ? "text" : "password";
-    btn.textContent = input.type === "password" ? "👁️" : "🙈";
+    const showing = input.type === "password";
+    input.type = showing ? "text" : "password";
+    btn.querySelector(".icon-eye").hidden = !showing;
+    btn.querySelector(".icon-eye-off").hidden = showing;
+    btn.setAttribute("aria-label", showing ? "Ocultar senha" : "Mostrar senha");
   });
 });
 
@@ -186,11 +189,11 @@ function updateStrength(pw) {
   if (/[0-9]/.test(pw))         score++;
   if (/[^A-Za-z0-9]/.test(pw)) score++;
   const levels = [
-    { w: "0%",   color: "#e8ecf2", text: "" },
-    { w: "25%",  color: "#ff3b30", text: "Fraca" },
-    { w: "50%",  color: "#ff9500", text: "Regular" },
-    { w: "75%",  color: "#ffcc00", text: "Boa" },
-    { w: "100%", color: "#34c759", text: "Forte 💪" },
+    { w: "0%",   color: "#262c52", text: "" },
+    { w: "25%",  color: "#ff5a52", text: "Fraca" },
+    { w: "50%",  color: "#ff9f45", text: "Regular" },
+    { w: "75%",  color: "#ffd166", text: "Boa" },
+    { w: "100%", color: "#2fe0b0", text: "Forte" },
   ];
   const lvl = levels[Math.min(score, 4)];
   fill.style.width      = pw.length === 0 ? "0%" : lvl.w;

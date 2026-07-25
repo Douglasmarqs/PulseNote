@@ -1,67 +1,64 @@
 /* ============================================================
-   PulseNote — Auth Pages (login, register, reset)
+   PulseNote — Auth Pages (login, cadastro, recuperar senha)
+   ============================================================
+   Reformulação: a versão anterior usava emoji como ícone (✉️ 🔒 👤
+   👋 ⏳...) e um fundo de 3 blobs coloridos flutuando — um padrão
+   muito reconhecível de tela gerada por IA, e destoante do resto do
+   app, que usa um sistema de ícones SVG só de traço (ver ICONS em
+   app.js) e o tema escuro "Aurora" como cara principal. Esta versão:
+   - troca todo emoji por SVG no mesmo estilo do resto do app;
+   - fixa um único tema escuro (em vez de claro-com-override-de-
+     sistema — ver o bug de fundo abaixo);
+   - dá uma presença discreta ao mascote (Pulsinho) dentro do
+     cartão, sem virar o logotipo principal.
+
+   IMPORTANTE: este arquivo é carregado tanto pelas páginas de auth
+   quanto por index.html (o app principal), porque o dropdown de
+   perfil do topbar (.user-avatar-btn / .user-dropdown) e o botão de
+   instalar PWA (.pwa-fixed-install-btn) moram aqui. Essas três
+   seções não devem ser tocadas por reformulações futuras desta
+   página — qualquer alteração nelas também muda o app principal.
+
+   BUG CORRIGIDO: antes, "body { background; color; display:flex;
+   align-items:center; justify-content:center }" era global (sem
+   escopo) — como este arquivo carrega DEPOIS de styles.css em
+   index.html, ele sobrescrevia o fundo "premium" (gradientes suaves
+   com as cores do tema) que styles.css desenha no <body> do app
+   principal, trocando por um azul clarinho fixo (ou preto fixo, no
+   bloco de dark mode antigo). Provavelmente invisível na prática
+   (.app-shell cobre a tela toda), mas ainda assim uma sobreposição
+   involuntária entre dois arquivos. Agora todo estilo de página
+   (fundo, centralização) fica em ".auth-page"/".auth-bg", que só
+   existem nas páginas de auth — head-to-head zero risco de vazar
+   para o app principal.
    ============================================================ */
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { -webkit-tap-highlight-color: transparent; }
 
-body {
+body.auth-page {
   min-height: 100dvh;
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Inter, sans-serif;
   -webkit-font-smoothing: antialiased;
-  background: #f0f4ff;
-  color: #1a1f2e;
+  color: #f1f3ff;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 24px 16px max(24px, env(safe-area-inset-bottom));
+  position: relative;
 }
 
-/* ── Animated background blobs ── */
+/* ── Fundo: um único glow contido, não três blobs animados ── */
 .auth-bg {
   position: fixed;
   inset: 0;
   z-index: 0;
-  overflow: hidden;
   pointer-events: none;
-}
-
-.auth-blobs { position: relative; width: 100%; height: 100%; }
-
-.blob {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(70px);
-  opacity: 0.45;
-  animation: blobFloat 8s ease-in-out infinite;
-}
-
-.blob-1 {
-  width: 400px; height: 400px;
-  background: radial-gradient(circle, #6c5ce7 0%, #c8a8ff 100%);
-  top: -100px; left: -80px;
-  animation-delay: 0s;
-}
-
-.blob-2 {
-  width: 320px; height: 320px;
-  background: radial-gradient(circle, #af52de 0%, #ff6b9d 100%);
-  bottom: -80px; right: -60px;
-  animation-delay: 3s;
-}
-
-.blob-3 {
-  width: 260px; height: 260px;
-  background: radial-gradient(circle, #34c759 0%, #5ac8fa 100%);
-  top: 50%; left: 50%;
-  transform: translate(-50%, -50%);
-  animation-delay: 6s;
-}
-
-@keyframes blobFloat {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  33%       { transform: translate(20px, -20px) scale(1.05); }
-  66%       { transform: translate(-15px, 15px) scale(0.97); }
+  background:
+    radial-gradient(640px 480px at 15% -10%, rgba(124, 108, 255, 0.22), transparent 60%),
+    radial-gradient(560px 420px at 105% 10%, rgba(192, 125, 255, 0.16), transparent 60%),
+    radial-gradient(720px 520px at 50% 115%, rgba(47, 224, 176, 0.10), transparent 60%),
+    #060a18;
 }
 
 /* ── Shell ── */
@@ -76,51 +73,52 @@ body {
   gap: 24px;
 }
 
-/* ── Brand ── */
-.auth-brand {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
+/* ── Brand: traço de pulso abstrato — a marca "oficial", sóbria.
+   O Pulsinho completo vive dentro do cartão (.auth-mascot), como
+   presença secundária, não como logotipo. ── */
+.auth-brand { display: flex; align-items: center; gap: 14px; }
 
 .brand-mark {
   width: 52px;
   height: 52px;
   border-radius: 16px;
-  background: linear-gradient(145deg, #6c5ce7, #af52de);
+  background: linear-gradient(145deg, #7c6cff, #c07dff);
+  color: #fff;
   display: grid;
   place-items: center;
-  box-shadow: 0 6px 20px rgba(79, 142, 247, 0.35);
+  box-shadow: 0 8px 24px rgba(124, 108, 255, 0.35);
 }
-
-.brand-icon { font-size: 1.5rem; }
 
 .auth-brand strong {
   display: block;
   font-size: 1.3rem;
   font-weight: 800;
   letter-spacing: -0.02em;
-  color: #1a1f2e;
+  color: #f1f3ff;
 }
 
 .auth-brand span {
   display: block;
   font-size: 0.82rem;
-  color: #8a9bb0;
+  color: #7c84b8;
   font-weight: 500;
 }
+
+/* ── Mascote dentro do cartão: pequeno, parado, discreto ── */
+.auth-mascot { display: flex; justify-content: center; margin-bottom: 4px; }
+.auth-mascot .pulsinho { width: 52px; height: 52px; }
+.auth-mascot-standalone { width: 56px; height: 56px; margin: 0 auto 12px; }
 
 /* ── Card ── */
 .auth-card {
   width: 100%;
-  background: rgba(255, 255, 255, 0.92);
+  background: rgba(16, 20, 44, 0.85);
   backdrop-filter: blur(24px);
   border-radius: 28px;
-  border: 1.5px solid rgba(255, 255, 255, 0.8);
+  border: 1.5px solid rgba(255, 255, 255, 0.08);
   box-shadow:
-    0 4px 24px rgba(0, 0, 0, 0.06),
-    0 1px 3px rgba(0, 0, 0, 0.04),
-    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    0 4px 32px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
   padding: 32px 28px;
   overflow: hidden;
 }
@@ -130,9 +128,9 @@ body {
   display: flex;
   gap: 4px;
   padding: 4px;
-  background: #f0f4ff;
+  background: #060a18;
   border-radius: 14px;
-  margin-bottom: 28px;
+  margin-bottom: 24px;
 }
 
 .auth-tab {
@@ -141,42 +139,45 @@ body {
   border-radius: 11px;
   font-size: 0.92rem;
   font-weight: 700;
-  color: #8a9bb0;
+  color: #7c84b8;
   background: none;
   border: none;
   cursor: pointer;
   transition: all 200ms ease;
+  font-family: inherit;
 }
 
 .auth-tab.active {
-  background: #fff;
-  color: #6c5ce7;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  background: #1a1f3d;
+  color: #a496ff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
 /* ── Forms ── */
 .auth-form { display: none; flex-direction: column; gap: 16px; }
-.auth-form.active-form { display: flex; animation: fadeUp 220ms ease; }
+.auth-form.active-form { display: flex; animation: authFadeUp 220ms ease; }
 
-@keyframes fadeUp {
+@keyframes authFadeUp {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
 .auth-title {
-  font-size: 1.45rem;
+  font-size: 1.4rem;
   font-weight: 800;
-  letter-spacing: -0.025em;
-  color: #1a1f2e;
+  letter-spacing: -0.02em;
+  color: #f1f3ff;
   line-height: 1.2;
 }
+.auth-title--center { text-align: center; }
 
 .auth-subtitle {
   font-size: 0.9rem;
-  color: #8a9bb0;
+  color: #7c84b8;
   line-height: 1.5;
   margin-top: -8px;
 }
+.auth-subtitle--center { text-align: center; margin-top: 4px; margin-bottom: 20px; }
 
 /* ── Fields ── */
 .field-group { display: flex; flex-direction: column; gap: 6px; }
@@ -184,39 +185,32 @@ body {
 .field-label {
   font-size: 0.82rem;
   font-weight: 700;
-  color: #4a5568;
+  color: #b8c0e8;
   letter-spacing: 0.01em;
 }
 
-.field-label-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
+.field-label-row { display: flex; align-items: center; justify-content: space-between; }
 
-.field-wrap {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
+.field-wrap { position: relative; display: flex; align-items: center; }
 
 .field-icon {
   position: absolute;
   left: 14px;
-  font-size: 1rem;
+  color: #7c84b8;
   pointer-events: none;
   z-index: 1;
+  display: flex;
 }
 
 .field-input {
   width: 100%;
   height: 50px;
-  background: #f5f7fa;
-  border: 1.5px solid #e8ecf2;
+  background: #0c0f22;
+  border: 1.5px solid #262c52;
   border-radius: 14px;
   padding: 0 42px 0 44px;
   font-size: 16px; /* nunca menor que 16px: evita zoom automático no iOS Safari */
-  color: #1a1f2e;
+  color: #f1f3ff;
   font-family: inherit;
   transition: border-color 180ms, box-shadow 180ms, background 180ms;
   -webkit-appearance: none;
@@ -224,32 +218,32 @@ body {
 
 .field-input:focus {
   outline: none;
-  border-color: #6c5ce7;
-  box-shadow: 0 0 0 3px rgba(79, 142, 247, 0.15);
-  background: #fff;
+  border-color: #7c6cff;
+  box-shadow: 0 0 0 3px rgba(124, 108, 255, 0.22);
+  background: #10142c;
 }
 
-.field-input::placeholder { color: #b0bec5; }
+.field-input::placeholder { color: #4c5478; }
 
 .toggle-pw {
   position: absolute;
-  right: 12px;
+  right: 10px;
+  display: flex;
   background: none;
   border: none;
   cursor: pointer;
-  font-size: 1rem;
-  color: #8a9bb0;
-  padding: 4px;
+  color: #7c84b8;
+  padding: 6px;
   line-height: 1;
-  opacity: 0.7;
-  transition: opacity 160ms;
+  opacity: 0.85;
+  transition: opacity 160ms, color 160ms;
 }
-.toggle-pw:hover { opacity: 1; }
+.toggle-pw:hover { opacity: 1; color: #b8c0e8; }
 
 /* ── Password strength ── */
 .pw-strength-bar {
   height: 5px;
-  background: #e8ecf2;
+  background: #262c52;
   border-radius: 999px;
   overflow: hidden;
   margin-top: 6px;
@@ -266,22 +260,22 @@ body {
   font-size: 0.76rem;
   font-weight: 600;
   margin-top: 3px;
-  color: #8a9bb0;
+  color: #7c84b8;
 }
 
 /* ── Error ── */
 .auth-error {
-  background: #ffeeed;
-  border: 1.5px solid #ffcdd2;
+  background: rgba(255, 90, 82, 0.12);
+  border: 1.5px solid rgba(255, 90, 82, 0.35);
   border-radius: 12px;
   padding: 10px 14px;
   font-size: 0.86rem;
   font-weight: 600;
-  color: #c62828;
-  animation: shake 300ms ease;
+  color: #ff8a85;
+  animation: authShake 300ms ease;
 }
 
-@keyframes shake {
+@keyframes authShake {
   0%,100% { transform: translateX(0); }
   20%      { transform: translateX(-6px); }
   40%      { transform: translateX(6px); }
@@ -298,13 +292,13 @@ body {
   width: 100%;
   height: 52px;
   border-radius: 16px;
-  background: linear-gradient(135deg, #6c5ce7, #af52de);
+  background: linear-gradient(135deg, #7c6cff, #c07dff);
   color: #fff;
   font-size: 1rem;
   font-weight: 700;
   border: none;
   cursor: pointer;
-  box-shadow: 0 6px 20px rgba(79, 142, 247, 0.35);
+  box-shadow: 0 8px 24px rgba(124, 108, 255, 0.35);
   transition: transform 180ms, box-shadow 180ms;
   font-family: inherit;
   margin-top: 4px;
@@ -312,15 +306,26 @@ body {
 
 .auth-btn:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 10px 28px rgba(79, 142, 247, 0.40);
+  box-shadow: 0 12px 30px rgba(124, 108, 255, 0.42);
 }
 
 .auth-btn:active:not(:disabled) {
   transform: translateY(1px);
-  box-shadow: 0 3px 10px rgba(79, 142, 247, 0.25);
+  box-shadow: 0 4px 14px rgba(124, 108, 255, 0.28);
 }
 
 .auth-btn:disabled { opacity: 0.7; cursor: not-allowed; }
+
+/* Spinner desenhado em CSS — substitui o "⏳" de emoji */
+.btn-spinner {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2.5px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  animation: authSpin 700ms linear infinite;
+}
+@keyframes authSpin { to { transform: rotate(360deg); } }
 
 /* ── Login com Google ── */
 .google-btn {
@@ -331,16 +336,16 @@ body {
   width: 100%;
   height: 50px;
   border-radius: 16px;
-  background: #fff;
-  color: #3c4257;
+  background: #10142c;
+  color: #f1f3ff;
   font-size: 0.94rem;
   font-weight: 700;
-  border: 1.5px solid #e3e8f0;
+  border: 1.5px solid #262c52;
   cursor: pointer;
   font-family: inherit;
   transition: transform 160ms, box-shadow 160ms, border-color 160ms;
 }
-.google-btn:hover { border-color: #c4cedb; box-shadow: 0 3px 12px rgba(0,0,0,0.07); }
+.google-btn:hover { border-color: #3a4270; box-shadow: 0 4px 16px rgba(0,0,0,0.3); }
 .google-btn:active { transform: translateY(1px); }
 
 .auth-divider {
@@ -348,7 +353,7 @@ body {
   align-items: center;
   text-align: center;
   margin: 18px 0;
-  color: #aab6c4;
+  color: #4c5478;
   font-size: 0.78rem;
   font-weight: 600;
 }
@@ -356,7 +361,7 @@ body {
   content: "";
   flex: 1;
   height: 1px;
-  background: #e3e8f0;
+  background: #262c52;
 }
 .auth-divider span { padding: 0 10px; }
 
@@ -364,7 +369,7 @@ body {
 .auth-link {
   background: none;
   border: none;
-  color: #6c5ce7;
+  color: #a496ff;
   font-size: 0.86rem;
   font-weight: 700;
   cursor: pointer;
@@ -373,35 +378,27 @@ body {
   font-family: inherit;
   transition: color 150ms;
 }
-.auth-link:hover { color: #5b4bd6; text-decoration: underline; }
+.auth-link:hover { color: #c4b8ff; text-decoration: underline; }
+.auth-link--muted { color: #7c84b8; font-size: 0.76rem; font-weight: 600; }
+.auth-link--muted:hover { color: #a496ff; }
 
 .auth-switch {
   text-align: center;
   font-size: 0.88rem;
-  color: #8a9bb0;
+  color: #7c84b8;
   margin-top: 4px;
 }
 
-.auth-back-link {
-  text-align: center;
-  margin-top: 20px;
-}
-
-/* ── Icon header ── */
-.auth-icon-header {
-  font-size: 3rem;
-  text-align: center;
-  margin-bottom: 12px;
-}
+.auth-back-link { text-align: center; margin-top: 20px; }
 
 /* ── Info box ── */
 .auth-info-box {
-  background: #fffbdd;
-  border: 1.5px solid #ffe082;
+  background: rgba(255, 184, 0, 0.1);
+  border: 1.5px solid rgba(255, 184, 0, 0.3);
   border-radius: 12px;
   padding: 12px 14px;
   font-size: 0.84rem;
-  color: #5a4000;
+  color: #ffd873;
   line-height: 1.5;
   margin-top: 8px;
 }
@@ -412,32 +409,44 @@ body {
   gap: 8px;
   flex-wrap: wrap;
   justify-content: center;
-}
-
-.auth-security-note {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.78rem;
-  color: #8a9bb0;
-  font-weight: 600;
-  text-align: center;
-  max-width: 320px;
-  line-height: 1.4;
+  position: relative;
+  z-index: 1;
 }
 
 .feature-pill {
-  background: rgba(255, 255, 255, 0.75);
-  border: 1.5px solid rgba(255, 255, 255, 0.9);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(16, 20, 44, 0.6);
+  border: 1.5px solid rgba(255, 255, 255, 0.08);
   backdrop-filter: blur(10px);
   border-radius: 999px;
-  padding: 6px 14px;
-  font-size: 0.82rem;
+  padding: 7px 14px;
+  font-size: 0.8rem;
   font-weight: 600;
-  color: #4a5568;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  color: #b8c0e8;
 }
+.feature-pill svg { flex-shrink: 0; color: #a496ff; }
 
+.auth-security-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 0.78rem;
+  color: #7c84b8;
+  font-weight: 600;
+  text-align: left;
+  max-width: 320px;
+  line-height: 1.5;
+  position: relative;
+  z-index: 1;
+}
+.auth-security-note svg { flex-shrink: 0; margin-top: 2px; color: #4c5478; }
+
+/* ── Profile dropdown in app ──
+   ATENÇÃO: esta seção (até o fim de .dropdown-item) é usada pelo app
+   principal (topbar), não só pelas páginas de auth — não alterar sem
+   testar o dropdown de perfil dentro do app. ── */
 /* ── Profile dropdown in app ── */
 .user-avatar-btn {
   width: 40px;
@@ -526,10 +535,10 @@ body {
 
 /* ── Responsive ── */
 @media (max-width: 480px) {
-  .auth-card { padding: 24px 18px; border-radius: 22px; }
-  .auth-title { font-size: 1.25rem; }
+  .auth-card { padding: 26px 20px; border-radius: 22px; }
+  .auth-title { font-size: 1.22rem; }
   .auth-features { gap: 6px; }
-  .feature-pill { font-size: 0.76rem; padding: 5px 10px; }
+  .feature-pill { font-size: 0.74rem; padding: 6px 11px; }
 }
 
 /* ---- Botão fixo de instalação do PWA (tela de login) ---- */
@@ -556,97 +565,15 @@ body {
 }
 
 /* ============================================================
-   Modo escuro — automático, ligado ao sistema operacional.
-   Antes as páginas de login/cadastro/recuperação de senha (este
-   arquivo) tinham todas as cores fixas em tons claros, então
-   ficavam com um "fundo branco estranho" mesmo com o celular em
-   modo escuro — só o app principal (styles.css) reagia ao tema do
-   sistema. Este bloco resolve isso sem precisar de nenhum seletor
-   manual: o navegador aplica sozinho quando o sistema está em dark.
+   Modo escuro do APP PRINCIPAL (não das páginas de auth — estas
+   já são escuras por padrão, ver .auth-bg acima). Mantido só para
+   o botão de instalar PWA, que também aparece dentro do app: sem
+   tema manual escolhido e com o sistema em modo escuro, ele precisa
+   de cores claras em vez do roxo-sobre-branco que é o padrão do
+   tema claro do app. Mesma guarda que styles.css já usa para as
+   variáveis de cor, então isto só entra em ação no modo "Sistema".
    ============================================================ */
 @media (prefers-color-scheme: dark) {
-  /* Esta regra rodava incondicionalmente sempre que o SISTEMA estava em
-     modo escuro — inclusive dentro do app principal (auth.css é
-     carregado também em index.html), ignorando por completo a escolha
-     manual "Claro" feita em Configurações > Aparência. Resultado: o
-     <body> ficava preto (essa cor aqui) por baixo do topbar/cards, que
-     seguem corretamente a var(--bg) clara — daí o "tema branco
-     estourado" (cards/topbar claros flutuando sobre um fundo preto).
-     O :not([data-theme=...]) abaixo replica a mesma guarda que
-     styles.css já usa para as variáveis de cor, então isto só entra em
-     ação quando NINGUÉM escolheu tema manualmente (modo "Sistema"). */
-  html:not([data-theme="light"]):not([data-theme="dark"]) body {
-    background: #0b0d12;
-    color: #f4f6fb;
-  }
-
-  .auth-brand strong { color: #f4f6fb; }
-  .auth-brand span { color: #828ea3; }
-
-  .auth-card {
-    background: rgba(26, 29, 39, 0.92);
-    border-color: rgba(255, 255, 255, 0.08);
-    box-shadow:
-      0 4px 24px rgba(0, 0, 0, 0.35),
-      0 1px 3px rgba(0, 0, 0, 0.25),
-      inset 0 1px 0 rgba(255, 255, 255, 0.04);
-  }
-
-  .auth-tabs { background: #12151c; }
-  .auth-tab { color: #828ea3; }
-  .auth-tab.active {
-    background: #20242f;
-    color: #8f7dfb;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
-  }
-
-  .auth-title { color: #f4f6fb; }
-  .auth-subtitle { color: #828ea3; }
-  .field-label { color: #b6c0d6; }
-
-  .field-input {
-    background: #12151c;
-    border-color: #2e3342;
-    color: #f4f6fb;
-  }
-  .field-input:focus {
-    border-color: #8f7dfb;
-    box-shadow: 0 0 0 3px rgba(91, 158, 248, 0.2);
-    background: #181c26;
-  }
-  .field-input::placeholder { color: #5a6478; }
-
-  .toggle-pw { color: #828ea3; }
-
-  .pw-strength-bar { background: #2e3342; }
-  .pw-strength-label { color: #828ea3; }
-
-  .auth-error {
-    background: #3a1614;
-    border-color: #7a2a26;
-    color: #ff8a85;
-  }
-
-  .google-btn {
-    background: #181c26;
-    color: #f4f6fb;
-    border-color: #2e3342;
-  }
-  .google-btn:hover { border-color: #3e4456; box-shadow: 0 3px 12px rgba(0,0,0,0.3); }
-
-  .auth-divider { color: #5a6478; }
-  .auth-divider::before, .auth-divider::after { background: #2e3342; }
-
-  .auth-link { color: #8f7dfb; }
-  .auth-link:hover { color: #79b3ff; }
-  .auth-switch { color: #828ea3; }
-
-  .auth-info-box {
-    background: #3a3008;
-    border-color: #6b5a18;
-    color: #ffe49a;
-  }
-
   html:not([data-theme="light"]):not([data-theme="dark"]) .pwa-fixed-install-btn {
     background: rgba(91, 158, 248, 0.15);
     color: #8f7dfb;
