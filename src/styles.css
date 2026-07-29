@@ -301,6 +301,10 @@ html {
   overflow-x: hidden;
   width: 100%;
   max-width: 100%;
+  /* Sem isso, em navegadores com "puxar para recarregar" nativo (Chrome/
+     Android fora do modo instalado), o gesto customizado abaixo brigava
+     com o do navegador — às vezes disparava os dois, às vezes nenhum. */
+  overscroll-behavior-y: contain;
   /* Antes só o <body> tinha cor de fundo. Em PWA instalado no iOS
      (viewport-fit=cover), a área de safe-area/notch fica fora da caixa
      do <body> — sem isso aqui, aquela faixa podia "vazar" com a cor
@@ -1973,10 +1977,13 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   bottom: 28px;
   right: 28px;
   z-index: 999;
-  padding: 12px 18px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 18px 10px 10px;
   background: var(--text);
   color: var(--bg);
-  border-radius: 14px;
+  border-radius: 999px;
   font-weight: 600;
   font-size: 0.88rem;
   box-shadow: var(--shadow-float);
@@ -1987,6 +1994,33 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   max-width: 360px;
 }
 .toast.show { opacity: 1; transform: translateY(0); }
+.toast-text { line-height: 1.35; }
+
+/* Pulsinho no toast — dá "voz" às mensagens do app, incluindo o
+   fallback do sistema de notificações (window.PulseNoteShowToast,
+   usado quando notificações do sistema não estão disponíveis). */
+.toast-mascot {
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: linear-gradient(155deg, var(--accent), var(--purple));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: pulsinhoBob 2.6s ease-in-out infinite;
+}
+.toast-mascot .pulsinho__eyes { display: flex; gap: 4px; }
+.toast-mascot .pulsinho__eye {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: #0c0d1c;
+  animation: pulsinhoBlink 4.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .toast-mascot, .toast-mascot .pulsinho__eye { animation: none !important; }
+}
 
 /* ---------- SYNC STATUS PILL ---------- */
 /* Antes era criado só com estilo inline (JS), então não dava pra reposicionar
@@ -2202,7 +2236,7 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
      uma largura mínima garantida (ver também o novo teto em .search-box). */
   .topbar > div:first-child {
     flex: 1 1 auto;
-    min-width: 130px;
+    min-width: 160px;
     overflow: hidden;
   }
 
@@ -2226,28 +2260,77 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
        filtro + o botão "Tudo ⌘K"), ambas espremidas — dava a impressão de
        duas lupas quebradas. Agora só existe UMA busca no app inteiro, que
        preenche o espaço que sobrar entre o avatar/instalar PWA e o botão
-       de adicionar tarefa. */
-    flex-shrink: 1;
+       de adicionar tarefa.
+       CORREÇÃO: sem "flex-shrink: 0" aqui, o layout externo podia
+       espremer .topbar-actions abaixo do tamanho que o avatar + busca +
+       botão precisam de verdade (todos de tamanho fixo agora) — os
+       filhos não tinham como encolher e o botão "+" vazava pra fora da
+       tela. A saudação (texto, com elipse) é quem deve ceder espaço,
+       não os botões de ação. */
+    flex: 0 0 auto;
     min-width: 0;
   }
 
-  /* Único busca do app: no celular ela vira flexível (em vez da largura
-     fixa de 240px do desktop) para caber ao lado dos outros botões sem
-     cortar texto nem empurrar nada pra fora da tela.
-     CORREÇÃO: "flex: 1 1 auto" deixava a busca crescer sem limite e,
-     como a saudação usa flex-basis:0 (herdado de "flex:1"), ela nunca
-     ganhava espaço nenhum na disputa — a saudação inteira ("Bom dia,
-     Douglas...") ficava com largura 0 e sumia por completo no celular,
-     mesmo antes do mascote existir. Agora a busca tem um teto (150px)
-     em vez de crescer livremente, sobrando espaço garantido pra
-     saudação. */
+  /* CORREÇÃO 2: a correção anterior ainda deixava a busca espremida
+     perto do mínimo (só "Pe" aparecia) porque um quarto elemento não
+     tinha entrado na conta — o botão de avatar (foto de perfil) é
+     inserido via JS dentro de .topbar-actions (ver renderProfileButton
+     em app.js), na frente de tudo. Com saudação + avatar + busca +
+     botão de adicionar todos competindo, sobrava pouco pra busca.
+     Solução definitiva: no celular, a busca vira só o ícone (mesmo
+     tamanho compacto do avatar/botão) por padrão, e expande por cima
+     dos outros elementos apenas quando a pessoa toca nela pra digitar
+     — libera espaço de verdade pra saudação o tempo todo, sem brigar
+     por sobras. */
   .search-box {
-    flex: 0 1 150px;
-    min-width: 90px;
-    width: auto;
-    padding: 0 10px;
+    flex: 0 0 40px;
+    width: 40px;
+    min-width: 40px;
+    padding: 0;
+    justify-content: center;
+    overflow: hidden;
+    transition: flex-basis 200ms ease, width 200ms ease, background 200ms ease;
   }
-  .search-box input { min-width: 0; }
+  .search-box input {
+    width: 0;
+    opacity: 0;
+    transition: opacity 120ms ease;
+  }
+  /* Com foco na busca, ela vira prioridade: cresce pra ocupar o espaço,
+     a saudação recua ao mínimo (o texto encolhe com elipse, tudo bem —
+     quem está digitando não está olhando pra saudação), e avatar/botão
+     de adicionar saem do caminho.
+     Usa ".topbar:focus-within" (não só ".topbar-actions") porque tanto
+     a saudação quanto .topbar-actions precisam mudar de comportamento —
+     sem isso, .topbar-actions ficava "flex:0 0 auto" mesmo com foco,
+     e seu tamanho "auto" passava a ser calculado a partir do campo de
+     busca já sem largura travada (bem maior), vazando pra fora da tela. */
+  .topbar:focus-within > div:first-child {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+  .topbar:focus-within .topbar-actions {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .topbar:focus-within .search-box {
+    flex: 1 1 auto;
+    width: auto;
+    min-width: 0;
+    padding: 0 12px;
+    justify-content: flex-start;
+    background: var(--surface);
+  }
+  .topbar:focus-within .search-box input {
+    width: 100%;
+    opacity: 1;
+    transition: opacity 200ms ease 80ms;
+  }
+  .topbar:focus-within .user-avatar-btn,
+  .topbar:focus-within .topbar-actions > div:has(> .user-avatar-btn),
+  .topbar:focus-within #quickAddTask {
+    display: none;
+  }
 
   /* Botão de adicionar tarefa: só o ícone no mobile (mesma largura do
      avatar, formato consistente), o rótulo "Tarefa" some visualmente —
@@ -2371,7 +2454,7 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   .goal-grid, .achievement-grid { grid-template-columns: 1fr; }
 
   /* Toast above nav */
-  .toast { bottom: calc(var(--nav-height) + 12px); right: 16px; left: 16px; text-align: center; }
+  .toast { bottom: calc(var(--nav-height) + 12px); right: 16px; left: 16px; justify-content: center; }
 
   /* Indicador de sincronização também acima da barra — e mais alto ainda
      que o toast, para nunca sobrepor um ao outro quando os dois aparecem
@@ -4989,4 +5072,36 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
 @media (max-width: 720px) {
   .topbar-greeting { gap: 8px; }
   .pulsinho--greeting { width: 30px; height: 30px; }
+}
+
+/* ---------- Puxar para atualizar (pull-to-refresh) ----------
+   Substitui o botão "Buscar versão mais recente" como o jeito
+   principal de atualizar o app — o botão continua em Configurações
+   como alternativa (útil no desktop, sem toque). Mesma lógica de
+   limpeza de cache por trás dos dois. */
+.pull-refresh-indicator {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-align: center;
+  padding-top: 6px;
+}
+.pull-refresh-indicator.animated { transition: height 220ms ease; }
+.pull-refresh-mascot { width: 38px; height: 38px; }
+.pull-refresh-indicator.is-ready .pull-refresh-mascot { animation: pulsinhoBob 1.1s ease-in-out infinite; }
+.pull-refresh-indicator.is-ready .pulsinho__eye { animation: pulsinhoScan 700ms ease-in-out infinite; }
+.pull-refresh-indicator.is-refreshing .pull-refresh-mascot {
+  animation: none;
+}
+.pull-refresh-indicator.is-refreshing .pulsinho__pulse path {
+  stroke-dasharray: 130;
+  stroke-dashoffset: 130;
+  animation: pulsinhoDraw 500ms linear infinite;
 }

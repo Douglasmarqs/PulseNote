@@ -35,16 +35,16 @@ function fireNotification(title, body, tag, onClickView, itemId) {
         registration.showNotification(title, {
           body,
           tag,                       // evita duplicar notificações com o mesmo "tag"
-          icon: "icons/icon-192.png",
-          badge: "icons/icon-192.png",
+          icon: "icons/pulsinho-notification-icon.png",
+          badge: "icons/pulsinho-notification-icon.png",
           vibrate: [120, 60, 120],
           data: { view: onClickView || "dashboard", itemId: itemId || null },
           renotify: false,
         }).catch(() => {
           // Fallback simples caso showNotification falhe
-          new Notification(title, { body, icon: "icons/icon-192.png" });
+          new Notification(title, { body, icon: "icons/pulsinho-notification-icon.png" });
         });
-      }) || new Notification(title, { body, icon: "icons/icon-192.png" });
+      }) || new Notification(title, { body, icon: "icons/pulsinho-notification-icon.png" });
     } catch (err) {
       console.warn("Falha ao exibir notificação do sistema:", err);
     }

@@ -22,6 +22,16 @@
 
   <div class="auth-bg"></div>
 
+  <div id="pullRefreshIndicator" class="pull-refresh-indicator" aria-hidden="true">
+    <div class="pulsinho pull-refresh-mascot" id="pullRefreshMascot">
+      <div class="pulsinho__face">
+        <div class="pulsinho__eyes"><span class="pulsinho__eye"></span><span class="pulsinho__eye"></span></div>
+        <svg class="pulsinho__pulse" viewBox="0 0 120 26"><path d="M0,13 L28,13 L36,3 L44,23 L52,13 L64,13 L70,6 L76,20 L82,13 L120,13"/></svg>
+      </div>
+    </div>
+    <span class="pull-refresh-label" id="pullRefreshLabel">Puxe para atualizar</span>
+  </div>
+
   <main class="auth-shell">
 
     <!-- Brand: a marca é o traço de pulso (abstrato, profissional) —
@@ -97,7 +107,14 @@
           </div>
         </div>
 
-        <div id="loginError" class="auth-error" hidden></div>
+        <div id="loginError" class="auth-error" hidden>
+          <div class="pulsinho auth-error-mascot mood-worried" aria-hidden="true">
+            <div class="pulsinho__face">
+              <div class="pulsinho__eyes"><span class="pulsinho__eye"></span><span class="pulsinho__eye"></span></div>
+            </div>
+          </div>
+          <span class="auth-error-text" id="loginErrorText"></span>
+        </div>
 
         <button type="submit" class="auth-btn" id="loginBtn">
           <span class="btn-text">Entrar</span>
@@ -153,7 +170,14 @@
           </div>
         </div>
 
-        <div id="registerError" class="auth-error" hidden></div>
+        <div id="registerError" class="auth-error" hidden>
+          <div class="pulsinho auth-error-mascot mood-worried" aria-hidden="true">
+            <div class="pulsinho__face">
+              <div class="pulsinho__eyes"><span class="pulsinho__eye"></span><span class="pulsinho__eye"></span></div>
+            </div>
+          </div>
+          <span class="auth-error-text" id="registerErrorText"></span>
+        </div>
 
         <button type="submit" class="auth-btn" id="registerBtn">
           <span class="btn-text">Criar conta</span>

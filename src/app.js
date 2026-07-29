@@ -649,6 +649,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   setInterval(updateEventCountdowns, 30000);
 
   bindNavigation();
+  bindPullToRefresh();
   bindPlannerNav();
   bindPlannerQuickAdd();
   bindForms();
@@ -1003,6 +1004,99 @@ function renderWhatsAppSettings() {
 // Liga todos os eventos da página de Configurações. Chamada uma única vez,
 // na inicialização do app (a página é estática no HTML, não um modal
 // criado/destruído via JS).
+// Forçar atualização: desregistra o Service Worker, limpa os caches
+// locais e recarrega direto do servidor. Não mexe em nenhum dado (que
+// vive no Firestore, não no cache do navegador) — só garante que a
+// pessoa está vendo a versão mais nova do app, sem depender do ciclo
+// de atualização automático (que pode levar mais de uma visita pra
+// "pegar" dependendo do navegador). Compartilhada pelo botão em
+// Configurações e pelo gesto de puxar para atualizar.
+async function forceAppUpdate() {
+  try {
+    if ("caches" in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((key) => caches.delete(key)));
+    }
+    if ("serviceWorker" in navigator) {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(registrations.map((reg) => reg.unregister()));
+    }
+  } catch (err) {
+    console.warn("Erro ao limpar cache:", err);
+  }
+  window.location.reload(true);
+}
+
+// Puxar para atualizar (pull-to-refresh) — funciona em qualquer tela,
+// já que ".main-area" é o mesmo elemento persistente por trás de todas
+// as views. Só ativa quando a página já está no topo do scroll (senão
+// atrapalharia rolar uma lista comprida pra cima). Usa touch bruto em
+// vez de alguma lib — é só comparar a posição do dedo entre os eventos.
+function bindPullToRefresh() {
+  const indicator = document.getElementById("pullRefreshIndicator");
+  const label = document.getElementById("pullRefreshLabel");
+  if (!indicator || !label) return;
+
+  const TRIGGER_DISTANCE = 72; // px que precisa puxar pra soltar e atualizar
+  const MAX_DISTANCE = 96;     // altura máxima do indicador, mesmo puxando mais
+  let startY = null;
+  let pulling = false;
+  let refreshing = false;
+
+  function atTop() {
+    return (window.scrollY || document.documentElement.scrollTop || 0) <= 0;
+  }
+
+  window.addEventListener("touchstart", (e) => {
+    if (refreshing || !atTop() || e.touches.length !== 1) { startY = null; return; }
+    startY = e.touches[0].clientY;
+    pulling = false;
+    indicator.classList.remove("animated");
+  }, { passive: true });
+
+  window.addEventListener("touchmove", (e) => {
+    if (startY === null || refreshing) return;
+    const delta = e.touches[0].clientY - startY;
+    if (delta <= 0 || !atTop()) { pulling = false; return; }
+    pulling = true;
+    const dist = Math.min(delta * 0.5, MAX_DISTANCE); // resistência: metade do quanto o dedo anda
+    indicator.style.height = `${dist}px`;
+    const ready = dist >= TRIGGER_DISTANCE * 0.5;
+    indicator.classList.toggle("is-ready", ready);
+    label.textContent = ready ? "Solte para atualizar" : "Puxe para atualizar";
+  }, { passive: true });
+
+  window.addEventListener("touchend", () => {
+    if (!pulling || startY === null) { startY = null; return; }
+    const dist = parseFloat(indicator.style.height) || 0;
+    startY = null;
+    pulling = false;
+    indicator.classList.add("animated");
+
+    if (dist >= TRIGGER_DISTANCE * 0.5) {
+      refreshing = true;
+      indicator.classList.remove("is-ready");
+      indicator.classList.add("is-refreshing");
+      indicator.style.height = "56px";
+      label.textContent = "Atualizando...";
+      forceAppUpdate(); // recarrega a página — não precisa "desfazer" o indicador depois disso
+    } else {
+      indicator.classList.remove("is-ready");
+      indicator.style.height = "0px";
+    }
+  });
+
+  window.addEventListener("touchcancel", () => {
+    if (refreshing) return;
+    startY = null;
+    pulling = false;
+    indicator.classList.add("animated");
+    indicator.classList.remove("is-ready");
+    indicator.style.height = "0px";
+  });
+}
+
+
 function bindSettingsView() {
   const msgEl = document.getElementById("settingsMessage");
   function showSettingsMsg(text, type) {
@@ -1218,30 +1312,15 @@ function bindSettingsView() {
     reader.readAsText(file);
   });
 
-  // ── Forçar atualização: desregistra o Service Worker, limpa os caches
-  // locais e recarrega direto do servidor. Não mexe em nenhum dado (que
-  // vive no Firestore, não no cache do navegador) — só garante que a
-  // pessoa está vendo a versão mais nova do app, sem depender do ciclo
-  // de atualização automático (que pode levar mais de uma visita pra
-  // "pegar" dependendo do navegador). ──
+  // Botão de atualização manual (alternativa ao gesto de puxar, útil no
+  // desktop ou pra quem preferir um botão explícito) — mesma função
+  // compartilhada forceAppUpdate(), definida no escopo do módulo.
   document.getElementById("settingsForceUpdate")?.addEventListener("click", async (e) => {
     const btn = e.currentTarget;
     const originalHtml = btn.innerHTML;
     btn.disabled = true;
     btn.innerHTML = "<span>Atualizando…</span>";
-    try {
-      if ("caches" in window) {
-        const keys = await caches.keys();
-        await Promise.all(keys.map((key) => caches.delete(key)));
-      }
-      if ("serviceWorker" in navigator) {
-        const registrations = await navigator.serviceWorker.getRegistrations();
-        await Promise.all(registrations.map((reg) => reg.unregister()));
-      }
-    } catch (err) {
-      console.warn("Erro ao limpar cache:", err);
-    }
-    window.location.reload(true);
+    await forceAppUpdate();
   });
 
   // ── Excluir conta permanentemente ─────────────────────────────────
@@ -3536,7 +3615,8 @@ function escapeHtml(value) {
 }
 
 function showToast(message) {
-  elements.toast.textContent = message;
+  const textEl = document.getElementById("toastText") || elements.toast;
+  textEl.textContent = message;
   elements.toast.classList.add("show");
   window.clearTimeout(showToast.timer);
   showToast.timer = window.setTimeout(() => elements.toast.classList.remove("show"), 2200);
