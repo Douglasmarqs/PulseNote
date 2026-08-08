@@ -19,6 +19,91 @@ import {
 // boas-vindas de quem nunca usou o PulseNote aqui (ver script no login.html).
 const KNOWN_DEVICE_KEY = "pulsenote_known_device";
 
+// Puxar para atualizar — igual ao app principal, mas ainda mais importante
+// aqui: se a tela de login travar numa versão antiga em cache, não existe
+// um menu de Configurações nesta página pra forçar a atualização por lá.
+// Roda incondicionalmente (não depende de login nem do Firebase carregar).
+async function forceAppUpdate() {
+  try {
+    if ("caches" in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((key) => caches.delete(key)));
+    }
+    if ("serviceWorker" in navigator) {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(registrations.map((reg) => reg.unregister()));
+    }
+  } catch (err) {
+    console.warn("Erro ao limpar cache:", err);
+  }
+  window.location.reload(true);
+}
+
+function bindPullToRefresh() {
+  const indicator = document.getElementById("pullRefreshIndicator");
+  const label = document.getElementById("pullRefreshLabel");
+  if (!indicator || !label) return;
+
+  const TRIGGER_DISTANCE = 72;
+  const MAX_DISTANCE = 96;
+  let startY = null;
+  let pulling = false;
+  let refreshing = false;
+
+  function atTop() {
+    return (window.scrollY || document.documentElement.scrollTop || 0) <= 0;
+  }
+
+  window.addEventListener("touchstart", (e) => {
+    if (refreshing || !atTop() || e.touches.length !== 1) { startY = null; return; }
+    startY = e.touches[0].clientY;
+    pulling = false;
+    indicator.classList.remove("animated");
+  }, { passive: true });
+
+  window.addEventListener("touchmove", (e) => {
+    if (startY === null || refreshing) return;
+    const delta = e.touches[0].clientY - startY;
+    if (delta <= 0 || !atTop()) { pulling = false; return; }
+    pulling = true;
+    const dist = Math.min(delta * 0.5, MAX_DISTANCE);
+    indicator.style.height = `${dist}px`;
+    const ready = dist >= TRIGGER_DISTANCE * 0.5;
+    indicator.classList.toggle("is-ready", ready);
+    label.textContent = ready ? "Solte para atualizar" : "Puxe para atualizar";
+  }, { passive: true });
+
+  window.addEventListener("touchend", () => {
+    if (!pulling || startY === null) { startY = null; return; }
+    const dist = parseFloat(indicator.style.height) || 0;
+    startY = null;
+    pulling = false;
+    indicator.classList.add("animated");
+
+    if (dist >= TRIGGER_DISTANCE * 0.5) {
+      refreshing = true;
+      indicator.classList.remove("is-ready");
+      indicator.classList.add("is-refreshing");
+      indicator.style.height = "56px";
+      label.textContent = "Atualizando...";
+      forceAppUpdate();
+    } else {
+      indicator.classList.remove("is-ready");
+      indicator.style.height = "0px";
+    }
+  });
+
+  window.addEventListener("touchcancel", () => {
+    if (refreshing) return;
+    startY = null;
+    pulling = false;
+    indicator.classList.add("animated");
+    indicator.classList.remove("is-ready");
+    indicator.style.height = "0px";
+  });
+}
+bindPullToRefresh();
+
 function markDeviceAsKnown() {
   try { localStorage.setItem(KNOWN_DEVICE_KEY, "1"); } catch (e) {}
 }

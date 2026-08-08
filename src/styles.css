@@ -301,6 +301,10 @@ html {
   overflow-x: hidden;
   width: 100%;
   max-width: 100%;
+  /* Sem isso, em navegadores com "puxar para recarregar" nativo (Chrome/
+     Android fora do modo instalado), o gesto customizado abaixo brigava
+     com o do navegador — às vezes disparava os dois, às vezes nenhum. */
+  overscroll-behavior-y: contain;
   /* Antes só o <body> tinha cor de fundo. Em PWA instalado no iOS
      (viewport-fit=cover), a área de safe-area/notch fica fora da caixa
      do <body> — sem isso aqui, aquela faixa podia "vazar" com a cor
@@ -2216,25 +2220,25 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 
   .topbar {
     padding: calc(10px + env(safe-area-inset-top)) 16px 10px;
-    gap: 8px 10px;
-    /* CORREÇÃO DEFINITIVA: depois de três rodadas tentando encaixar
-       saudação + avatar + busca (+ botão, agora removido) numa única
-       linha via proporções de flex, ficou claro que o problema era a
-       abordagem — sempre que um elemento crescia um pouco (nome mais
-       longo, saudação diferente), outro tinha que perder espaço, e o
-       equilíbrio quebrava nesse cabo de guerra. Solução robusta: a
-       saudação ocupa a linha inteira, e avatar/busca ficam numa
-       segunda linha, à direita, sem disputar espaço com o texto.
-       O cabeçalho fica um pouco mais alto, mas nunca mais corta nome
-       nem empurra botão pra fora da tela — troca que vale a pena. */
-    flex-wrap: wrap;
+    gap: 10px;
+    /* Em mobile não pode ser flex-wrap porque o topbar é sticky e ficaria
+       muito alto — os itens se ajustam com gap menor */
     min-height: var(--header-height, 60px);
   }
 
-  .topbar-greeting {
-    flex: 1 1 100%;
-    min-width: 0;
-    order: 1;
+  /* todayLabel costumava transbordar em mobile (ex.: "Quarta-Feira, 01 De Julho")
+     porque é um texto longo e o topbar não tem espaço para ele + ações.
+     Resolvido com white-space:nowrap + overflow:hidden + text-overflow:ellipsis
+     no container principal, e um max-width para não empurrar os botões de ação.
+     CORREÇÃO: "min-width:0" sozinho, competindo com a busca em "flex:1 1 auto"
+     (que crescia sem limite), deixava esse container zerado — a saudação
+     inteira sumia no celular. Agora ele tem prioridade de crescimento e
+     uma largura mínima garantida (ver também o novo teto em .search-box). */
+  .topbar > div:first-child {
+    flex: 1 1 auto;
+    min-width: 160px;
+    overflow: hidden;
+
   }
 
   #todayLabel {
@@ -2253,19 +2257,82 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   }
 
   .topbar-actions {
-    order: 2;
+    /* Antes existiam duas "barras" de busca lado a lado no celular (a de
+       filtro + o botão "Tudo ⌘K"), ambas espremidas — dava a impressão de
+       duas lupas quebradas. Agora só existe UMA busca no app inteiro, que
+       preenche o espaço que sobrar entre o avatar/instalar PWA e o botão
+       de adicionar tarefa.
+       CORREÇÃO: sem "flex-shrink: 0" aqui, o layout externo podia
+       espremer .topbar-actions abaixo do tamanho que o avatar + busca +
+       botão precisam de verdade (todos de tamanho fixo agora) — os
+       filhos não tinham como encolher e o botão "+" vazava pra fora da
+       tela. A saudação (texto, com elipse) é quem deve ceder espaço,
+       não os botões de ação. */
     flex: 0 0 auto;
-    margin-left: auto;
+    min-width: 0;
   }
 
-  /* Busca com largura fixa e confortável — sem precisar expandir por
-     cima de outros elementos, porque agora ela não disputa espaço com
-     mais ninguém na sua própria linha. */
+  /* CORREÇÃO 2: a correção anterior ainda deixava a busca espremida
+     perto do mínimo (só "Pe" aparecia) porque um quarto elemento não
+     tinha entrado na conta — o botão de avatar (foto de perfil) é
+     inserido via JS dentro de .topbar-actions (ver renderProfileButton
+     em app.js), na frente de tudo. Com saudação + avatar + busca +
+     botão de adicionar todos competindo, sobrava pouco pra busca.
+     Solução definitiva: no celular, a busca vira só o ícone (mesmo
+     tamanho compacto do avatar/botão) por padrão, e expande por cima
+     dos outros elementos apenas quando a pessoa toca nela pra digitar
+     — libera espaço de verdade pra saudação o tempo todo, sem brigar
+     por sobras. */
   .search-box {
-    width: 160px;
-    flex-shrink: 0;
+    flex: 0 0 40px;
+    width: 40px;
+    min-width: 40px;
+    padding: 0;
+    justify-content: center;
+    overflow: hidden;
+    transition: flex-basis 200ms ease, width 200ms ease, background 200ms ease;
   }
-  .search-box input { min-width: 0; }
+  .search-box input {
+    width: 0;
+    opacity: 0;
+    transition: opacity 120ms ease;
+  }
+  /* Com foco na busca, ela vira prioridade: cresce pra ocupar o espaço,
+     a saudação recua ao mínimo (o texto encolhe com elipse, tudo bem —
+     quem está digitando não está olhando pra saudação), e avatar/botão
+     de adicionar saem do caminho.
+     Usa ".topbar:focus-within" (não só ".topbar-actions") porque tanto
+     a saudação quanto .topbar-actions precisam mudar de comportamento —
+     sem isso, .topbar-actions ficava "flex:0 0 auto" mesmo com foco,
+     e seu tamanho "auto" passava a ser calculado a partir do campo de
+     busca já sem largura travada (bem maior), vazando pra fora da tela. */
+  .topbar:focus-within > div:first-child {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+  .topbar:focus-within .topbar-actions {
+    flex: 1 1 auto;
+    min-width: 0;
+
+  }
+  .topbar:focus-within .search-box {
+    flex: 1 1 auto;
+    width: auto;
+    min-width: 0;
+    padding: 0 12px;
+    justify-content: flex-start;
+    background: var(--surface);
+  }
+  .topbar:focus-within .search-box input {
+    width: 100%;
+    opacity: 1;
+    transition: opacity 200ms ease 80ms;
+  }
+  .topbar:focus-within .user-avatar-btn,
+  .topbar:focus-within .topbar-actions > div:has(> .user-avatar-btn),
+  .topbar:focus-within #quickAddTask {
+    display: none;
+  }
 
   /* Avatar e botão de instalar PWA (quando aparece) do mesmo tamanho,
      alinhados com a busca. */
@@ -5001,3 +5068,35 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
   .topbar-greeting { gap: 8px; }
   .pulsinho--greeting { width: 30px; height: 30px; }
 }
+/* ---------- Puxar para atualizar (pull-to-refresh) ----------
+   Substitui o botão "Buscar versão mais recente" como o jeito
+   principal de atualizar o app — o botão continua em Configurações
+   como alternativa (útil no desktop, sem toque). Mesma lógica de
+   limpeza de cache por trás dos dois. */
+.pull-refresh-indicator {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-align: center;
+  padding-top: 6px;
+}
+.pull-refresh-indicator.animated { transition: height 220ms ease; }
+.pull-refresh-mascot { width: 38px; height: 38px; }
+.pull-refresh-indicator.is-ready .pull-refresh-mascot { animation: pulsinhoBob 1.1s ease-in-out infinite; }
+.pull-refresh-indicator.is-ready .pulsinho__eye { animation: pulsinhoScan 700ms ease-in-out infinite; }
+.pull-refresh-indicator.is-refreshing .pull-refresh-mascot {
+  animation: none;
+}
+.pull-refresh-indicator.is-refreshing .pulsinho__pulse path {
+  stroke-dasharray: 130;
+  stroke-dashoffset: 130;
+  animation: pulsinhoDraw 500ms linear infinite;
+}
+
