@@ -649,7 +649,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   setInterval(updateEventCountdowns, 30000);
 
   bindNavigation();
-  bindPullToRefresh();
   bindPlannerNav();
   bindPlannerQuickAdd();
   bindForms();
@@ -1025,75 +1024,6 @@ async function forceAppUpdate() {
     console.warn("Erro ao limpar cache:", err);
   }
   window.location.reload(true);
-}
-
-// Puxar para atualizar (pull-to-refresh) — funciona em qualquer tela,
-// já que ".main-area" é o mesmo elemento persistente por trás de todas
-// as views. Só ativa quando a página já está no topo do scroll (senão
-// atrapalharia rolar uma lista comprida pra cima). Usa touch bruto em
-// vez de alguma lib — é só comparar a posição do dedo entre os eventos.
-function bindPullToRefresh() {
-  const indicator = document.getElementById("pullRefreshIndicator");
-  const label = document.getElementById("pullRefreshLabel");
-  if (!indicator || !label) return;
-
-  const TRIGGER_DISTANCE = 72; // px que precisa puxar pra soltar e atualizar
-  const MAX_DISTANCE = 96;     // altura máxima do indicador, mesmo puxando mais
-  let startY = null;
-  let pulling = false;
-  let refreshing = false;
-
-  function atTop() {
-    return (window.scrollY || document.documentElement.scrollTop || 0) <= 0;
-  }
-
-  window.addEventListener("touchstart", (e) => {
-    if (refreshing || !atTop() || e.touches.length !== 1) { startY = null; return; }
-    startY = e.touches[0].clientY;
-    pulling = false;
-    indicator.classList.remove("animated");
-  }, { passive: true });
-
-  window.addEventListener("touchmove", (e) => {
-    if (startY === null || refreshing) return;
-    const delta = e.touches[0].clientY - startY;
-    if (delta <= 0 || !atTop()) { pulling = false; return; }
-    pulling = true;
-    const dist = Math.min(delta * 0.5, MAX_DISTANCE); // resistência: metade do quanto o dedo anda
-    indicator.style.height = `${dist}px`;
-    const ready = dist >= TRIGGER_DISTANCE * 0.5;
-    indicator.classList.toggle("is-ready", ready);
-    label.textContent = ready ? "Solte para atualizar" : "Puxe para atualizar";
-  }, { passive: true });
-
-  window.addEventListener("touchend", () => {
-    if (!pulling || startY === null) { startY = null; return; }
-    const dist = parseFloat(indicator.style.height) || 0;
-    startY = null;
-    pulling = false;
-    indicator.classList.add("animated");
-
-    if (dist >= TRIGGER_DISTANCE * 0.5) {
-      refreshing = true;
-      indicator.classList.remove("is-ready");
-      indicator.classList.add("is-refreshing");
-      indicator.style.height = "56px";
-      label.textContent = "Atualizando...";
-      forceAppUpdate(); // recarrega a página — não precisa "desfazer" o indicador depois disso
-    } else {
-      indicator.classList.remove("is-ready");
-      indicator.style.height = "0px";
-    }
-  });
-
-  window.addEventListener("touchcancel", () => {
-    if (refreshing) return;
-    startY = null;
-    pulling = false;
-    indicator.classList.add("animated");
-    indicator.classList.remove("is-ready");
-    indicator.style.height = "0px";
-  });
 }
 
 
