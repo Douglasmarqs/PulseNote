@@ -121,9 +121,17 @@
 
         <!-- TOP BAR -->
         <header class="topbar">
-          <div>
-            <p id="todayLabel">Hoje</p>
-            <h1 id="viewTitle">Seu dia em foco</h1>
+          <div class="topbar-greeting">
+            <div class="pulsinho pulsinho--greeting" id="greetingMascot">
+              <div class="pulsinho__face">
+                <div class="pulsinho__eyes"><span class="pulsinho__eye"></span><span class="pulsinho__eye"></span></div>
+                <svg class="pulsinho__pulse" viewBox="0 0 120 26"><path d="M0,13 L28,13 L36,3 L44,23 L52,13 L64,13 L70,6 L76,20 L82,13 L120,13"/></svg>
+              </div>
+            </div>
+            <div>
+              <p id="todayLabel">Hoje</p>
+              <h1 id="viewTitle">Seu dia em foco</h1>
+            </div>
           </div>
           <div class="topbar-actions">
             <!-- O botão "Instalar app" é inserido aqui pelo pwa-install.js,
@@ -133,10 +141,6 @@
               <span class="icon">🔍</span>
               <input id="globalSearch" type="text" inputmode="search" autocomplete="off" autocorrect="off" placeholder="Pesquisar... (Enter busca tudo)" />
             </label>
-            <button id="quickAddTask" class="primary-button" aria-label="Adicionar" title="Adicionar">
-              <span class="icon">＋</span>
-              <span>Adicionar</span>
-            </button>
           </div>
         </header>
 
@@ -410,6 +414,10 @@
                 <h2 id="plannerHeaderLabel">Tudo em um só lugar</h2>
               </div>
               <div class="planner-header-actions">
+                <button class="mini-button" type="button" id="plannerNewTaskBtn">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+                  <span>Nova tarefa</span>
+                </button>
                 <div class="segmented planner-tabs" role="tablist" aria-label="Visão do planner">
                   <button class="active" data-planner-tab="list"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg><span>Lista</span></button>
                   <button data-planner-tab="day"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg><span>Dia</span></button>
@@ -428,7 +436,7 @@
                   <p class="eyebrow">Foco da semana</p>
                   <h2>Metas</h2>
                 </div>
-                <button class="mini-button" type="button" onclick="openPlannerQuickAdd('goal')">
+                <button class="mini-button" type="button" id="plannerNewGoalBtn">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.8"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/></svg>
                   <span>Nova meta</span>
                 </button>
@@ -663,6 +671,15 @@
             </div>
 
             <div class="panel fin-budget-bar">
+              <div class="fin-mood-row" id="finMoodRow">
+                <div class="pulsinho pulsinho--sm fin-mood-pulsinho" id="finMoodBlob">
+                  <div class="pulsinho__face">
+                    <div class="pulsinho__eyes"><span class="pulsinho__eye"></span><span class="pulsinho__eye"></span></div>
+                    <svg class="pulsinho__pulse" viewBox="0 0 120 26"><path d="M0,13 L28,13 L36,3 L44,23 L52,13 L64,13 L70,6 L76,20 L82,13 L120,13"/></svg>
+                  </div>
+                </div>
+                <span class="fin-mood-text" id="finMoodText">Analisando o mês...</span>
+              </div>
               <div class="fin-budget-bar-top">
                 <span class="fin-budget-bar-title">Uso do orçamento</span>
                 <span id="finUsedLabel" class="fin-budget-bar-label">0% das receitas usadas</span>
@@ -701,6 +718,15 @@
                       <button type="button" id="aiQuickSubmit" class="primary-button">
                         <span id="aiQuickSubmitLabel">Preencher</span>
                       </button>
+                    </div>
+                    <div class="ai-quick-mascot" id="aiQuickMascot" hidden>
+                      <div class="pulsinho pulsinho--sm" id="aiQuickMascotBlob">
+                        <div class="pulsinho__face">
+                          <div class="pulsinho__eyes"><span class="pulsinho__eye"></span><span class="pulsinho__eye"></span></div>
+                          <svg class="pulsinho__pulse" viewBox="0 0 120 26"><path d="M0,13 L28,13 L36,3 L44,23 L52,13 L64,13 L70,6 L76,20 L82,13 L120,13"/></svg>
+                        </div>
+                      </div>
+                      <span class="ai-quick-mascot-text" id="aiQuickMascotText">Pulsinho tá com a IA nisso...</span>
                     </div>
                   </div>
                   <div class="fin-type-toggle">
@@ -1028,9 +1054,9 @@
                   <h2>Backup</h2>
                 </div>
               </div>
-              <p class="task-meta" style="margin-bottom:10px">Baixe uma cópia completa de tudo (notas, tarefas, agenda, metas e finanças) em um arquivo .json, ou restaure a partir de um backup anterior.</p>
+              <p class="task-meta" style="margin-bottom:10px">Baixe uma cópia completa de tudo (notas, tarefas, agenda, metas e finanças), ou restaure a partir de um backup anterior.</p>
               <div class="form-actions" style="gap:8px">
-                <button id="settingsExportBackup" class="ghost-button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v13"/><path d="m7 11 5 5 5-5"/><path d="M4.5 19.5h15"/></svg><span>Exportar backup (.json)</span></button>
+                <button id="settingsExportBackup" class="ghost-button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v13"/><path d="m7 11 5 5 5-5"/><path d="M4.5 19.5h15"/></svg><span>Baixar backup completo</span></button>
                 <button id="settingsImportBackup" class="ghost-button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V3"/><path d="m7 8 5-5 5 5"/><path d="M4.5 19.5h15"/></svg><span>Importar backup</span></button>
                 <input id="settingsImportFile" type="file" accept="application/json" hidden />
               </div>
@@ -1040,10 +1066,10 @@
               <div class="panel-header">
                 <div>
                   <p class="eyebrow">Seus dados</p>
-                  <h2>Forçar atualização</h2>
+                  <h2>Atualizar o app</h2>
                 </div>
               </div>
-              <p class="task-meta" style="margin-bottom:10px">Se o app parecer travado numa versão antiga (tela em branco, botão que não responde, algo que deveria ter mudado mas não mudou), toque aqui. Isso limpa o cache local e recarrega a versão mais recente — não apaga nenhum dado, tudo fica salvo na nuvem.</p>
+              <p class="task-meta" style="margin-bottom:10px">Se o app parecer travado numa versão antiga (tela em branco, botão que não responde, algo que deveria ter mudado mas não mudou), toque no botão abaixo. Isso limpa o cache local e recarrega a versão mais recente — não apaga nenhum dado, tudo fica salvo na nuvem.</p>
               <button id="settingsForceUpdate" class="ghost-button">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.3-6.4L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.3 6.4L3 16"/><path d="M3 21v-5h5"/></svg>
                 <span>Buscar versão mais recente</span>
@@ -1104,7 +1130,12 @@
     </nav>
 
     <!-- Toast -->
-    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <div id="toast" class="toast" role="status" aria-live="polite">
+      <div class="toast-mascot" aria-hidden="true">
+        <div class="pulsinho__eyes"><span class="pulsinho__eye"></span><span class="pulsinho__eye"></span></div>
+      </div>
+      <span class="toast-text" id="toastText"></span>
+    </div>
 
     <!-- Datalists -->
     <datalist id="categoryOptions">

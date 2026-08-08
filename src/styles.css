@@ -532,14 +532,18 @@ p, h1, h2, h3 { margin: 0; }
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 14px 28px;
+  /* env(safe-area-inset-top) reserva o espaço da barra de status do
+     aparelho (relógio, sinal, bateria) — sem isso, o cabeçalho
+     renderiza por baixo dela em qualquer tela com notch/status bar
+     (afeta todas as views, já que o topbar é compartilhado). */
+  padding: calc(14px + env(safe-area-inset-top)) 28px 14px;
   background: color-mix(in srgb, var(--bg) 85%, transparent);
   backdrop-filter: blur(20px);
   border-bottom: 1px solid var(--line);
   min-height: var(--header-height);
 }
 
-.topbar > div:first-child { flex: 1; }
+.topbar-greeting { flex: 1; }
 
 #todayLabel {
   font-size: 0.78rem;
@@ -940,9 +944,9 @@ p, h1, h2, h3 { margin: 0; }
   display: none;
   flex-direction: column;
   gap: 6px;
-  padding: 8px 10px 2px 38px;
+  padding: 10px 10px 2px 42px;
   border-top: 1px dashed var(--line);
-  margin-top: 2px;
+  margin-top: 10px;
 }
 .task-subtasks.open { display: flex; }
 .task-subtask-row {
@@ -964,13 +968,19 @@ p, h1, h2, h3 { margin: 0; }
 }
 .task-subtask-check.done { background: var(--green); border-color: var(--green); color: #fff; }
 
+/* Botão de concluir — deliberadamente o maior alvo de toque da linha:
+   é a ação mais usada do Planner ("dar o check-in"), então precisa ser
+   fácil de mirar e satisfatório de usar, no padrão dos apps de tarefas
+   de referência (Things, Todoist). O anel usa a cor da prioridade da
+   própria tarefa (definida inline por renderPlannerTaskRow) — dá uma
+   pista visual de urgência sem precisar ler o badge de texto. */
 .task-check {
-  width: 28px;
-  height: 28px;
-  min-width: 28px;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
   border-radius: 50%;
   background: transparent;
-  border: 2px solid var(--line);
+  border: 2.5px solid var(--line);
   display: grid;
   place-items: center;
   color: var(--green);
@@ -980,9 +990,20 @@ p, h1, h2, h3 { margin: 0; }
   position: relative;
 }
 .task-check:hover { border-color: var(--green); background: var(--green-soft); }
+.task-check.is-done {
+  background: var(--green);
+  border-color: var(--green);
+  color: #fff;
+  animation: checkPop 260ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes checkPop {
+  0% { transform: scale(0.7); }
+  55% { transform: scale(1.18); }
+  100% { transform: scale(1); }
+}
 
 @media (max-width: 720px) {
-  .task-check::after { content: ""; position: absolute; inset: -8px; }
+  .task-check::after { content: ""; position: absolute; inset: -9px; }
 }
 
 .task-title { font-weight: 600; font-size: 0.9rem; overflow-wrap: anywhere; color: var(--text); }
@@ -1952,10 +1973,13 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   bottom: 28px;
   right: 28px;
   z-index: 999;
-  padding: 12px 18px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 18px 10px 10px;
   background: var(--text);
   color: var(--bg);
-  border-radius: 14px;
+  border-radius: 999px;
   font-weight: 600;
   font-size: 0.88rem;
   box-shadow: var(--shadow-float);
@@ -1966,6 +1990,33 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   max-width: 360px;
 }
 .toast.show { opacity: 1; transform: translateY(0); }
+.toast-text { line-height: 1.35; }
+
+/* Pulsinho no toast — dá "voz" às mensagens do app, incluindo o
+   fallback do sistema de notificações (window.PulseNoteShowToast,
+   usado quando notificações do sistema não estão disponíveis). */
+.toast-mascot {
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: linear-gradient(155deg, var(--accent), var(--purple));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: pulsinhoBob 2.6s ease-in-out infinite;
+}
+.toast-mascot .pulsinho__eyes { display: flex; gap: 4px; }
+.toast-mascot .pulsinho__eye {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: #0c0d1c;
+  animation: pulsinhoBlink 4.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .toast-mascot, .toast-mascot .pulsinho__eye { animation: none !important; }
+}
 
 /* ---------- SYNC STATUS PILL ---------- */
 /* Antes era criado só com estilo inline (JS), então não dava pra reposicionar
@@ -2027,6 +2078,34 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 @keyframes confettiBurst {
   0%   { opacity: 1; transform: translate(-50%,-50%) scale(0.5); }
   100% { opacity: 0; transform: translate(calc(-50% + var(--x,0px)), calc(-50% + var(--y,0px))) rotate(240deg) scale(1.3); }
+}
+
+/* O Pulsinho no centro da comemoração — mesma explosão de confete de
+   sempre, só que agora com uma carinha pulando no meio. Cobre concluir
+   tarefa, concluir meta e converter nota em tarefa de uma vez só,
+   porque os três chamam celebrate(). */
+.celebration-burst .pulsinho {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  margin: -32px 0 0 -32px;
+  animation: pulsinhoCelebrateBounce 900ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.celebration-burst .pulsinho__pulse path {
+  stroke-dasharray: 130;
+  stroke-dashoffset: 130;
+  animation: pulsinhoDraw 420ms linear infinite;
+}
+@keyframes pulsinhoCelebrateBounce {
+  0% { transform: scale(0.3); opacity: 0; }
+  40% { transform: scale(1.15) translateY(-14px); opacity: 1; }
+  60% { transform: scale(0.95) translateY(0); }
+  80% { transform: scale(1.05) translateY(-6px); }
+  100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .celebration-burst .pulsinho { animation: none; }
+  .celebration-burst .pulsinho__pulse path { animation: none; }
 }
 
 /* Destaque temporário ao abrir um item específico a partir de uma notificação */
@@ -2136,27 +2215,33 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   .main-area { padding-bottom: var(--nav-height); }
 
   .topbar {
-    padding: 12px 16px;
-    gap: 10px;
-    /* Em mobile não pode ser flex-wrap porque o topbar é sticky e ficaria
-       muito alto — os itens se ajustam com gap menor */
+    padding: calc(10px + env(safe-area-inset-top)) 16px 10px;
+    gap: 8px 10px;
+    /* CORREÇÃO DEFINITIVA: depois de três rodadas tentando encaixar
+       saudação + avatar + busca (+ botão, agora removido) numa única
+       linha via proporções de flex, ficou claro que o problema era a
+       abordagem — sempre que um elemento crescia um pouco (nome mais
+       longo, saudação diferente), outro tinha que perder espaço, e o
+       equilíbrio quebrava nesse cabo de guerra. Solução robusta: a
+       saudação ocupa a linha inteira, e avatar/busca ficam numa
+       segunda linha, à direita, sem disputar espaço com o texto.
+       O cabeçalho fica um pouco mais alto, mas nunca mais corta nome
+       nem empurra botão pra fora da tela — troca que vale a pena. */
+    flex-wrap: wrap;
     min-height: var(--header-height, 60px);
   }
 
-  /* todayLabel costumava transbordar em mobile (ex.: "Quarta-Feira, 01 De Julho")
-     porque é um texto longo e o topbar não tem espaço para ele + ações.
-     Resolvido com white-space:nowrap + overflow:hidden + text-overflow:ellipsis
-     no container principal, e um max-width para não empurrar os botões de ação. */
-  .topbar > div:first-child {
+  .topbar-greeting {
+    flex: 1 1 100%;
     min-width: 0;
-    overflow: hidden;
+    order: 1;
   }
 
   #todayLabel {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 220px;
+    max-width: 100%;
   }
 
   #viewTitle {
@@ -2164,51 +2249,38 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 220px;
+    max-width: 100%;
   }
 
   .topbar-actions {
-    /* Antes existiam duas "barras" de busca lado a lado no celular (a de
-       filtro + o botão "Tudo ⌘K"), ambas espremidas — dava a impressão de
-       duas lupas quebradas. Agora só existe UMA busca no app inteiro, que
-       preenche o espaço que sobrar entre o avatar/instalar PWA e o botão
-       de adicionar tarefa. */
-    flex-shrink: 1;
-    min-width: 0;
+    order: 2;
+    flex: 0 0 auto;
+    margin-left: auto;
   }
 
-  /* Única busca do app: no celular ela vira flexível (em vez da largura
-     fixa de 240px do desktop) para caber ao lado dos outros botões sem
-     cortar texto nem empurrar nada pra fora da tela. */
+  /* Busca com largura fixa e confortável — sem precisar expandir por
+     cima de outros elementos, porque agora ela não disputa espaço com
+     mais ninguém na sua própria linha. */
   .search-box {
-    flex: 1 1 auto;
-    min-width: 0;
-    width: auto;
-    padding: 0 10px;
+    width: 160px;
+    flex-shrink: 0;
   }
   .search-box input { min-width: 0; }
 
-  /* Botão de adicionar tarefa: só o ícone no mobile (mesma largura do
-     avatar, formato consistente), o rótulo "Tarefa" some visualmente —
-     a ação continua identificável via aria-label no HTML. O botão de
-     instalar PWA (quando aparece) recebe o mesmo tratamento. */
-  /* Alinha o avatar com a mesma altura da busca e do botão "+" (44px),
-     em vez do tamanho de 40px herdado do desktop — evita que o avatar
-     pareça "flutuar" um pouco acima/abaixo dos outros elementos da barra. */
+  /* Avatar e botão de instalar PWA (quando aparece) do mesmo tamanho,
+     alinhados com a busca. */
   .topbar-actions .user-avatar-btn {
-    width: 44px;
-    height: 44px;
+    width: 40px;
+    height: 40px;
   }
 
-  #quickAddTask.primary-button,
   .pwa-fixed-install-btn {
     flex-shrink: 0;
-    width: 44px;
-    height: 44px;
+    width: 40px;
+    height: 40px;
     padding: 0;
     justify-content: center;
   }
-  #quickAddTask.primary-button span:last-child,
   .pwa-fixed-install-btn span:last-child {
     display: none;
   }
@@ -2310,7 +2382,7 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   .goal-grid, .achievement-grid { grid-template-columns: 1fr; }
 
   /* Toast above nav */
-  .toast { bottom: calc(var(--nav-height) + 12px); right: 16px; left: 16px; text-align: center; }
+  .toast { bottom: calc(var(--nav-height) + 12px); right: 16px; left: 16px; justify-content: center; }
 
   /* Indicador de sincronização também acima da barra — e mais alto ainda
      que o toast, para nunca sobrepor um ao outro quando os dois aparecem
@@ -3837,16 +3909,65 @@ align-items:stretch;
   border: 1.5px solid var(--line);
   border-radius: 20px;
   width: 100%; max-width: 400px;
+  max-height: 90dvh;
   box-shadow: var(--shadow-float);
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 .modal-header {
   display: flex; align-items: center; justify-content: space-between;
   padding: 16px 20px 12px;
   border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
 }
 .modal-header h2 { font-size: 1rem; font-weight: 800; color: var(--text); }
-.modal-body { padding: 16px 20px 20px; }
+.modal-body { padding: 16px 20px 20px; overflow-y: auto; }
+
+/* Menu único de ações da tarefa no Planner (status + repetição +
+   excluir) — substitui os 3 botões de ícone que existiam antes na
+   linha por um só ("⋮"), reduzindo bastante a poluição visual. */
+.planner-action-sheet { max-width: 420px; }
+.planner-action-sheet-body { display: grid; gap: 16px; }
+.planner-action-sheet-label {
+  font-size: 0.72rem; font-weight: 800; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--muted); margin-bottom: 8px;
+}
+.planner-action-sheet-options { display: grid; gap: 8px; }
+.planner-action-option {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1.5px solid var(--line);
+  background: var(--surface2);
+  color: var(--text);
+  font-weight: 700;
+  font-size: 0.88rem;
+  width: 100%;
+  text-align: left;
+  transition: all 140ms ease;
+}
+.planner-action-option:active { transform: scale(0.98); }
+.planner-action-option.is-active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.planner-action-danger {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; height: 46px;
+  border-radius: 14px;
+  border: none;
+  background: var(--red-soft);
+  color: var(--red);
+  font-weight: 800;
+  font-size: 0.9rem;
+}
+.planner-action-danger:active { transform: scale(0.98); }
+
+@media (max-width: 360px) {
+  #plannerQuickAddModal .form-grid { grid-template-columns: 1fr; }
+}
 
 /* ---- Banner de instalação PWA ---- */
 #pwaInstallBanner strong, #pwaInstallBanner span {
@@ -4115,23 +4236,29 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
 .planner-tabs::-webkit-scrollbar { display: none; }
 .planner-tabs button { white-space: nowrap; }
 
-/* ---------- Metas (fita horizontal, sempre visível) ---------- */
+/* ---------- Metas: grade vertical de largura total ----------
+   Antes era uma fita horizontal com cards de largura fixa (220px);
+   no mobile, com 1 meta só, sobrava um vão vazio estranho à direita
+   e exigia rolagem lateral pouco óbvia. Uma grade de largura total
+   (1 coluna no celular, várias em telas largas) é o padrão mais
+   comum nos apps de produtividade e não deixa "buraco" nenhum. */
 .planner-goals-strip {
-  display: flex;
-  gap: 12px;
-  overflow-x: auto;
-  padding-bottom: 4px;
-  scrollbar-width: thin;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+@media (min-width: 640px) {
+  .planner-goals-strip { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
 }
 .planner-goal-chip {
-  flex: 0 0 auto;
-  width: 220px;
+  width: auto;
   background: var(--surface2);
   border: 1.5px solid var(--line);
   border-radius: 16px;
-  padding: 12px 14px;
+  padding: 14px 16px;
   display: grid;
-  gap: 8px;
+  gap: 10px;
+  box-shadow: var(--shadow-card);
   transition: transform 160ms, box-shadow 160ms;
 }
 .planner-goal-chip:hover { transform: translateY(-2px); box-shadow: var(--shadow-card-hover); }
@@ -4140,10 +4267,11 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
 }
 .planner-goal-chip-top strong {
-  font-size: 0.86rem; font-weight: 700; color: var(--text);
+  font-size: 0.92rem; font-weight: 700; color: var(--text);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.planner-goal-chip-controls { display: flex; align-items: center; gap: 6px; }
+.planner-goal-chip-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.planner-goal-stepper { display: flex; align-items: center; gap: 6px; }
 
 /* ---------- Sub-visões (Lista / Dia / Semana / Mês / Notas) ---------- */
 .planner-subview { display: none; }
@@ -4157,21 +4285,66 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
   font-size: 0.82rem; font-weight: 800; color: var(--text2);
   padding: 0 2px;
 }
-.planner-section-body { display: grid; gap: 8px; }
+.planner-section-body { display: grid; gap: 10px; }
 
+/* .planner-row é o cartão de cada tarefa/compromisso no Planner.
+   Fica em coluna (não em linha) de propósito: a "cabeça" sempre
+   visível (check + título + botão de ações) mora em .planner-row-head,
+   e qualquer conteúdo expansível (checklist da tarefa) entra como um
+   bloco por baixo, na largura toda. Antes .planner-row era um único
+   flex row sem quebra — quando a checklist abria, ela virava só mais
+   um item espremido na mesma linha dos botões, causando a sobreposição
+   visual reportada ("elementos quebrados ao adicionar tarefas"). */
 .planner-row {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
+  flex-direction: column;
+  padding: 12px 14px;
   background: var(--surface2);
-  border-radius: 14px;
-  transition: background 160ms;
+  border: 1.5px solid var(--line);
+  border-radius: 16px;
+  box-shadow: var(--shadow-card);
+  transition: box-shadow 160ms, border-color 160ms;
 }
-.planner-row:hover { background: var(--line); }
-.planner-row-main { flex: 1; min-width: 0; display: grid; gap: 3px; }
-.planner-row-main strong { font-size: 0.9rem; color: var(--text); overflow-wrap: anywhere; }
+.planner-row:hover { box-shadow: var(--shadow-card-hover); }
+.planner-row-head { display: flex; align-items: center; gap: 10px; }
+.planner-row-main { flex: 1; min-width: 0; display: grid; gap: 4px; cursor: pointer; }
+.planner-row-main strong { font-size: 0.92rem; color: var(--text); overflow-wrap: anywhere; }
 .planner-row-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+
+/* Botão único de "mais opções" — substitui os 3 botões separados
+   (repetir / mudar status / excluir) que existiam antes na linha. */
+.planner-row-kebab {
+  width: 34px; height: 34px; flex-shrink: 0;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  color: var(--muted);
+  display: grid; place-items: center;
+  position: relative;
+  transition: all 150ms;
+}
+.planner-row-kebab:hover, .planner-row-kebab:active {
+  background: var(--accent-soft); color: var(--accent); border-color: var(--accent);
+}
+@media (max-width: 720px) {
+  .planner-row-kebab::after { content: ""; position: absolute; inset: -6px; }
+}
+
+/* Formulário inline de "adicionar item" (checklist da tarefa / marco da
+   meta) — substitui o antigo window.prompt(), que não funciona (fica
+   em silêncio) num PWA instalado em modo standalone no iOS. */
+.planner-inline-add-form { display: flex; gap: 8px; margin-top: 8px; }
+.planner-inline-add-form input {
+  flex: 1; min-width: 0; height: 34px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1.5px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.82rem;
+}
+.planner-inline-add-form input:focus { outline: none; border-color: var(--accent); }
+.planner-inline-add-form button { flex-shrink: 0; width: 34px; height: 34px; padding: 0; display: grid; place-items: center; }
 
 .planner-row-time {
   flex-shrink: 0;
@@ -4291,7 +4464,6 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
     box-shadow: 0 6px 16px color-mix(in srgb, var(--accent) 35%, transparent);
   }
 
-  .planner-goal-chip { width: 190px; }
   .planner-timeline-hour { grid-template-columns: 42px 1fr; height: 50px; }
   .planner-timeline-events { left: 50px; }
 }
@@ -4356,17 +4528,20 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
 .empty-state-compact-pro .tone-accent { color: var(--accent); display: flex; }
 
 /* ---------- Metas: card expansível com marcos ---------- */
-.planner-goals-strip { align-items: flex-start; }
 .planner-goal-chip-top { cursor: pointer; }
 .planner-goal-ms-toggle {
-  display: flex; align-items: center; gap: 6px;
-  background: none; border: none; padding: 2px 0;
-  font-size: 0.74rem; font-weight: 700; color: var(--text2);
+  display: flex; align-items: center; gap: 6px; justify-content: center;
+  flex: 1;
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  border-radius: 10px;
+  padding: 7px 10px;
+  font-size: 0.78rem; font-weight: 700; color: var(--text2);
   cursor: pointer;
+  min-height: 34px;
 }
-.planner-goal-ms-toggle .planner-goal-chevron { margin-left: auto; transition: transform 180ms ease; }
+.planner-goal-ms-toggle .planner-goal-chevron { margin-left: 2px; transition: transform 180ms ease; }
 .planner-goal-chip.is-expanded .planner-goal-chevron { transform: rotate(90deg); }
-.planner-goal-chip.is-expanded { width: 260px; }
 
 .planner-goal-milestones {
   display: grid; gap: 6px;
@@ -4378,11 +4553,9 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
 .planner-goal-milestones-empty { font-size: 0.76rem; color: var(--muted); padding: 2px 0; }
 .planner-goal-milestones .goal-milestone-row { display: flex; align-items: center; gap: 8px; }
 .planner-ms-remove { width: 22px; height: 22px; padding: 0; margin-left: auto; display: grid; place-items: center; flex-shrink: 0; }
-.planner-add-milestone { width: 100%; justify-content: center; margin-top: 2px; padding: 7px 10px; font-size: 0.76rem; }
 
 /* ---------- Linhas: micro polimento + feedback de toque ---------- */
 .planner-row { animation: fadeUp 200ms ease both; }
-.task-check.is-done { background: var(--green); border-color: var(--green); color: #fff; }
 .is-done-text { text-decoration: line-through; opacity: 0.5; }
 .planner-row-delete:active,
 .mini-button:active,
@@ -4464,7 +4637,6 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
 
 @media (max-width: 720px) {
   .planner-month-cell { border-radius: 10px; }
-  .planner-goal-chip.is-expanded { width: 230px; }
 }
 
 /* ============================================================
@@ -4601,4 +4773,231 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
 @media (max-width: 720px) {
   .profile-stats-grid { grid-template-columns: repeat(2, 1fr); }
   .profile-achievements-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ============================================================
+   MASCOTE — "Pulsinho"
+   Componente compartilhado: usado na tela de carregamento
+   inicial (app-loading-overlay) e no estado de "pensando" da
+   IA em Finanças (ai-quick-mascot). Um blob que respira/pisca,
+   com uma linha de pulso (batimento) no peito — referência
+   direta ao nome PulseNote, esse é o elemento de assinatura.
+   Deliberadamente contextual (aparece só nesses momentos),
+   não um widget flutuante permanente.
+   ============================================================ */
+.pulsinho {
+  width: 64px;
+  height: 64px;
+  border-radius: 58% 42% 53% 47% / 55% 48% 52% 45%;
+  background: linear-gradient(155deg, var(--accent), var(--purple));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  box-shadow: 0 12px 30px color-mix(in srgb, var(--accent) 35%, transparent);
+  animation: pulsinhoBob 3.2s ease-in-out infinite, pulsinhoMorph 6s ease-in-out infinite;
+  flex-shrink: 0;
+}
+.pulsinho--sm { width: 40px; height: 40px; }
+.pulsinho__face { width: 68%; }
+.pulsinho__eyes { display: flex; justify-content: center; gap: 22%; margin-bottom: 12%; }
+.pulsinho__eye {
+  width: 16%;
+  padding-top: 16%;
+  border-radius: 50%;
+  background: #0c0d1c;
+  animation: pulsinhoBlink 4.4s ease-in-out infinite;
+}
+.pulsinho__pulse { width: 100%; display: block; overflow: visible; }
+.pulsinho__pulse path {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.88);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Estado "pensando" (aguardando resposta da IA) */
+.pulsinho.is-thinking .pulsinho__eye { animation: pulsinhoScan 900ms ease-in-out infinite; }
+.pulsinho.is-thinking .pulsinho__eye:nth-child(2) { animation-delay: 120ms; }
+.pulsinho.is-thinking .pulsinho__pulse path {
+  stroke-dasharray: 130;
+  stroke-dashoffset: 130;
+  animation: pulsinhoDraw 550ms linear infinite;
+}
+
+/* Estado "concluído" — check rápido antes de sumir */
+.pulsinho.is-done { animation: none; }
+.pulsinho.is-done .pulsinho__face { opacity: 0; transition: opacity 120ms; }
+.pulsinho.is-done::after {
+  content: "✓";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: #fff;
+  animation: pulsinhoPopIn 260ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes pulsinhoBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+@keyframes pulsinhoMorph {
+  0%, 100% { border-radius: 58% 42% 53% 47% / 55% 48% 52% 45%; }
+  50% { border-radius: 46% 54% 44% 56% / 48% 55% 45% 52%; }
+}
+@keyframes pulsinhoBlink { 0%, 92%, 100% { transform: scaleY(1); } 96% { transform: scaleY(0.1); } }
+@keyframes pulsinhoScan { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(1.5px); } }
+@keyframes pulsinhoDraw { to { stroke-dashoffset: -130; } }
+@keyframes pulsinhoPopIn { from { transform: scale(0.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+/* Respeita quem prefere menos movimento na tela */
+@media (prefers-reduced-motion: reduce) {
+  .pulsinho, .pulsinho__eye, .pulsinho.is-thinking .pulsinho__pulse path, .pulsinho.is-done::after {
+    animation: none !important;
+  }
+}
+
+/* ---------- Tela de carregamento inicial ---------- */
+.app-loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+.app-loading-word { font-size: 1.15rem; font-weight: 800; color: var(--text); font-family: inherit; }
+.app-loading-track { width: 120px; height: 3px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.app-loading-track span {
+  display: block;
+  height: 100%;
+  width: 40%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--accent), var(--green));
+  animation: appLoadingSlide 1.1s ease-in-out infinite;
+}
+@keyframes appLoadingSlide {
+  0% { transform: translateX(-150%); }
+  100% { transform: translateX(350%); }
+}
+
+/* ---------- IA "pensando" em Finanças (lançar por texto) ---------- */
+.ai-quick-mascot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: var(--surface2);
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  animation: fadeUp 200ms ease;
+}
+.ai-quick-mascot-text { font-size: 0.82rem; font-weight: 600; color: var(--text2); }
+
+/* ---------- Humor do Pulsinho (feliz/preocupado/aflito) ----------
+   Generalizado: nasceu no painel de Finanças ("Uso do orçamento") mas
+   qualquer .pulsinho pode usar essas classes — por exemplo o recap de
+   fechamento de mês reaproveita exatamente as mesmas. */
+.fin-mood-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.fin-mood-text { font-size: 0.84rem; font-weight: 700; color: var(--text2); line-height: 1.3; }
+
+.pulsinho.mood-happy {
+  background: linear-gradient(155deg, var(--green), var(--accent));
+  animation: pulsinhoBob 2.6s ease-in-out infinite, pulsinhoMorph 6s ease-in-out infinite;
+}
+.pulsinho.mood-concerned {
+  background: linear-gradient(155deg, var(--orange), var(--accent));
+  animation: pulsinhoWobble 2.8s ease-in-out infinite, pulsinhoMorph 6s ease-in-out infinite;
+}
+.pulsinho.mood-worried {
+  background: linear-gradient(155deg, var(--red), var(--purple));
+  animation: pulsinhoDroop 3.4s ease-in-out infinite, pulsinhoMorph 7s ease-in-out infinite;
+}
+.pulsinho.mood-worried .pulsinho__eye { height: 3px; border-radius: 3px; animation: none; }
+
+@keyframes pulsinhoWobble {
+  0%, 100% { transform: rotate(-4deg) translateY(0); }
+  50% { transform: rotate(4deg) translateY(-3px); }
+}
+@keyframes pulsinhoDroop {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(3px) rotate(-2deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fin-mood-pulsinho { animation: none !important; }
+}
+
+/* ---------- Recap de fechamento de mês (Finanças) ---------- */
+.month-close-recap { max-width: 380px; }
+.month-close-recap-body { display: grid; justify-items: center; gap: 12px; text-align: center; }
+.month-close-mascot { width: 64px; height: 64px; }
+.month-close-recap-message { font-size: 0.9rem; color: var(--text2); line-height: 1.5; max-width: 300px; }
+.month-close-recap-stats {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 4px;
+}
+.month-close-recap-stats > div {
+  display: grid;
+  gap: 4px;
+  padding: 10px 6px;
+  background: var(--surface2);
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+}
+.month-close-recap-stats span { font-size: 0.68rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
+.month-close-recap-stats strong { font-size: 0.86rem; font-weight: 800; }
+.month-close-recap-stats strong.pos { color: var(--green); }
+.month-close-recap-stats strong.neg { color: var(--red); }
+
+/* ---------- Pulsinho nos estados vazios (Notas / Metas) ---------- */
+.empty-state-pro-mascot {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  animation: emptyBadgeIn 420ms cubic-bezier(0.2, 0.9, 0.3, 1.3) both;
+}
+.empty-state-pro-mascot .pulsinho { width: 64px; height: 64px; }
+.empty-state-pro-mascot-badge {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 2px solid var(--bg);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
+}
+
+/* ---------- Saudação do Dashboard (Pulsinho reage à hora do dia) ---------- */
+.topbar-greeting { display: flex; align-items: center; gap: 10px; min-width: 0; overflow: hidden; }
+.topbar-greeting > div:last-child { min-width: 0; overflow: hidden; }
+.pulsinho--greeting { width: 40px; height: 40px; flex-shrink: 0; }
+
+/* Noite: mesma calma que o estado "sonolento" já usa em outros lugares
+   do app (olhos semicerrados, movimento mais lento) — a ideia não é
+   assustar ninguém que abre o app de madrugada, é combinar com o
+   "Boa noite" que já aparece no texto. */
+.pulsinho--greeting.mood-night {
+  animation: pulsinhoBob 4.6s ease-in-out infinite, pulsinhoMorph 8s ease-in-out infinite;
+}
+.pulsinho--greeting.mood-night .pulsinho__eye { height: 3px; border-radius: 3px; animation: none; }
+.pulsinho--greeting.mood-night .pulsinho__pulse path { opacity: 0.55; }
+
+@media (max-width: 720px) {
+  .topbar-greeting { gap: 8px; }
+  .pulsinho--greeting { width: 30px; height: 30px; }
 }

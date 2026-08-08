@@ -563,6 +563,7 @@ let plannerDayDate = todayIso;
 let plannerWeekAnchor = todayIso; // qualquer data dentro da semana ativa
 let plannerMonthAnchor = todayIso; // qualquer data dentro do mês ativo
 let plannerExpandedGoals = new Set();
+let plannerExpandedTaskDetails = new Set(); // ids de tarefas com a checklist aberta — sem isso, qualquer alteração num item (concluir/excluir/adicionar) recriava a linha do zero e fechava a checklist na cara do usuário
 let notesFolderFilter = "all"; // filtro de pasta ativo na biblioteca de Notas
 // Mês ativo na view de Finanças. Formato "YYYY-MM". Começa no mês atual.
 let finActiveMonth = todayIso.slice(0, 7);
@@ -575,26 +576,23 @@ const elements = {
 };
 
 document.addEventListener("DOMContentLoaded", async () => {
-  // Mostra overlay de carregamento enquanto o Firebase autentica
+  // Mostra overlay de carregamento enquanto o Firebase autentica.
+  // O Pulsinho (mascote) "acorda" aqui — é o único trecho do carregamento
+  // que dá pra animar; o splash "de fábrica" do PWA (antes do JS rodar)
+  // só aceita imagem estática, então essa é a primeira coisa animada
+  // que a pessoa vê.
   const overlay = document.createElement("div");
   overlay.id = "appLoadingOverlay";
+  overlay.className = "app-loading-overlay";
   overlay.innerHTML = `
-    <div style="position:fixed;inset:0;z-index:9998;background:var(--bg,#f5f7fa);
-      display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px">
-      <div style="width:52px;height:52px;border-radius:16px;
-        background:linear-gradient(145deg,#6c5ce7,#af52de);
-        display:grid;place-items:center;font-size:1.5rem;
-        box-shadow:0 6px 20px rgba(79,142,247,0.35)">⚡</div>
-      <strong style="font-size:1.1rem;font-weight:800;color:var(--text,#1a1f2e);
-        font-family:-apple-system,sans-serif">PulseNote</strong>
-      <div style="width:32px;height:3px;border-radius:999px;
-        background:var(--line,#e8ecf2);overflow:hidden">
-        <div style="height:100%;border-radius:inherit;
-          background:linear-gradient(90deg,#6c5ce7,#af52de);
-          animation:loadingBar 1.2s ease-in-out infinite alternate;width:60%"></div>
+    <div class="pulsinho">
+      <div class="pulsinho__face">
+        <div class="pulsinho__eyes"><span class="pulsinho__eye"></span><span class="pulsinho__eye"></span></div>
+        <svg class="pulsinho__pulse" viewBox="0 0 120 26"><path d="M0,13 L28,13 L36,3 L44,23 L52,13 L64,13 L70,6 L76,20 L82,13 L120,13"/></svg>
       </div>
     </div>
-    <style>@keyframes loadingBar{from{transform:translateX(-100%)}to{transform:translateX(180%)}}</style>
+    <strong class="app-loading-word">PulseNote</strong>
+    <div class="app-loading-track"><span></span></div>
   `;
   document.body.appendChild(overlay);
 
@@ -624,6 +622,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const hour = now.getHours();
   const greeting = hour < 12 ? "Bom dia" : hour < 18 ? "Boa tarde" : "Boa noite";
   const icon = hour < 12 ? "☀️" : hour < 18 ? "🌤️" : "🌙";
+  const greetingMood = hour < 12 ? "morning" : hour < 18 ? "afternoon" : "night";
   const dateStr = new Intl.DateTimeFormat("pt-BR", {
     weekday: "long",
     day: "2-digit",
@@ -633,6 +632,12 @@ document.addEventListener("DOMContentLoaded", async () => {
   const user = getUser();
   const firstName = user?.name?.split(" ")[0] || "Usuário";
   elements.todayLabel.textContent = `${greeting}, ${firstName} ${icon}  ·  ${dateStr.charAt(0).toUpperCase() + dateStr.slice(1)}`;
+
+  const greetingMascot = document.querySelector("#greetingMascot");
+  if (greetingMascot) {
+    greetingMascot.classList.remove("mood-morning", "mood-afternoon", "mood-night");
+    greetingMascot.classList.add(`mood-${greetingMood}`);
+  }
 
   renderProfileButton(user);
 
@@ -998,6 +1003,30 @@ function renderWhatsAppSettings() {
 // Liga todos os eventos da página de Configurações. Chamada uma única vez,
 // na inicialização do app (a página é estática no HTML, não um modal
 // criado/destruído via JS).
+// Forçar atualização: desregistra o Service Worker, limpa os caches
+// locais e recarrega direto do servidor. Não mexe em nenhum dado (que
+// vive no Firestore, não no cache do navegador) — só garante que a
+// pessoa está vendo a versão mais nova do app, sem depender do ciclo
+// de atualização automático (que pode levar mais de uma visita pra
+// "pegar" dependendo do navegador). Compartilhada pelo botão em
+// Configurações e pelo gesto de puxar para atualizar.
+async function forceAppUpdate() {
+  try {
+    if ("caches" in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((key) => caches.delete(key)));
+    }
+    if ("serviceWorker" in navigator) {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(registrations.map((reg) => reg.unregister()));
+    }
+  } catch (err) {
+    console.warn("Erro ao limpar cache:", err);
+  }
+  window.location.reload(true);
+}
+
+
 function bindSettingsView() {
   const msgEl = document.getElementById("settingsMessage");
   function showSettingsMsg(text, type) {
@@ -1213,30 +1242,15 @@ function bindSettingsView() {
     reader.readAsText(file);
   });
 
-  // ── Forçar atualização: desregistra o Service Worker, limpa os caches
-  // locais e recarrega direto do servidor. Não mexe em nenhum dado (que
-  // vive no Firestore, não no cache do navegador) — só garante que a
-  // pessoa está vendo a versão mais nova do app, sem depender do ciclo
-  // de atualização automático (que pode levar mais de uma visita pra
-  // "pegar" dependendo do navegador). ──
+  // Botão de atualização manual (alternativa ao gesto de puxar, útil no
+  // desktop ou pra quem preferir um botão explícito) — mesma função
+  // compartilhada forceAppUpdate(), definida no escopo do módulo.
   document.getElementById("settingsForceUpdate")?.addEventListener("click", async (e) => {
     const btn = e.currentTarget;
     const originalHtml = btn.innerHTML;
     btn.disabled = true;
     btn.innerHTML = "<span>Atualizando…</span>";
-    try {
-      if ("caches" in window) {
-        const keys = await caches.keys();
-        await Promise.all(keys.map((key) => caches.delete(key)));
-      }
-      if ("serviceWorker" in navigator) {
-        const registrations = await navigator.serviceWorker.getRegistrations();
-        await Promise.all(registrations.map((reg) => reg.unregister()));
-      }
-    } catch (err) {
-      console.warn("Erro ao limpar cache:", err);
-    }
-    window.location.reload(true);
+    await forceAppUpdate();
   });
 
   // ── Excluir conta permanentemente ─────────────────────────────────
@@ -1441,17 +1455,6 @@ function bindForms() {
   document.querySelector("#taskForm")?.addEventListener("submit", saveTask);
   document.querySelector("#eventForm")?.addEventListener("submit", saveEvent);
   document.querySelector("#goalForm")?.addEventListener("submit", saveGoal);
-  document.querySelector("#quickAddTask").addEventListener("click", () => {
-    if (activeView === "planner") {
-      openPlannerQuickAdd();
-    } else if (activeView === "notes") {
-      document.querySelector("#noteTitle").focus();
-    } else if (activeView === "finances") {
-      document.querySelector("#expenseDescription")?.focus() || document.querySelector("#aiQuickText")?.focus();
-    } else {
-      openPlannerQuickAdd();
-    }
-  });
   elements.globalSearch.addEventListener("input", renderAll);
 
   // Filter chips (new UI)
@@ -2145,6 +2148,7 @@ const ICONS = {
   inbox: '<path d="M21.5 12h-5.6l-1.8 3h-4.2l-1.8-3H2.5"/><path d="M5.6 5.3 2.5 12v6a2 2 0 0 0 2 2h15a2 2 0 0 0 2-2v-6l-3.1-6.7A2 2 0 0 0 16.6 4H7.4a2 2 0 0 0-1.8 1.3z"/>',
   sparkle: '<path d="M11 2.5 12.6 7l4.4 1.6-4.4 1.6L11 14.7l-1.6-4.5L5 8.6l4.4-1.6z"/><path d="M18.5 14l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/>',
   compass: '<circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5z"/>',
+  moreVertical: '<circle cx="12" cy="5" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="19" r="1.6" fill="currentColor" stroke="none"/>',
 };
 
 function icon(name, size = 18, extraClass = "") {
@@ -2153,10 +2157,25 @@ function icon(name, size = 18, extraClass = "") {
 }
 
 // ── Estado vazio premium (nunca caixa tracejada / texto seco) ──
-function emptyStateHtml({ iconName = "sparkle", tone = "accent", title, desc, ctaLabel, ctaOnClick, secondaryLabel, secondaryOnClick }) {
+function emptyStateHtml({ iconName = "sparkle", tone = "accent", title, desc, ctaLabel, ctaOnClick, secondaryLabel, secondaryOnClick, mascot = false, mascotBadgeIcon }) {
+  // "mascot" é opt-in de propósito: só troca o ícone padrão pelo Pulsinho
+  // nos lugares que pedirem explicitamente (hoje: Notas e Metas), sem
+  // mudar nada nos outros estados vazios do app (Finanças, listas, etc.)
+  // que continuam com o selo de ícone de sempre.
+  const badge = mascot
+    ? `<div class="empty-state-pro-mascot">
+         <div class="pulsinho">
+           <div class="pulsinho__face">
+             <div class="pulsinho__eyes"><span class="pulsinho__eye"></span><span class="pulsinho__eye"></span></div>
+             <svg class="pulsinho__pulse" viewBox="0 0 120 26"><path d="M0,13 L28,13 L36,3 L44,23 L52,13 L64,13 L70,6 L76,20 L82,13 L120,13"/></svg>
+           </div>
+         </div>
+         ${mascotBadgeIcon ? `<span class="empty-state-pro-mascot-badge">${icon(mascotBadgeIcon, 12)}</span>` : ""}
+       </div>`
+    : `<div class="empty-state-pro-badge tone-${tone}">${icon(iconName, 26)}</div>`;
   return `
     <div class="empty-state-pro">
-      <div class="empty-state-pro-badge tone-${tone}">${icon(iconName, 26)}</div>
+      ${badge}
       <h3>${title}</h3>
       <p>${desc}</p>
       ${ctaLabel ? `
@@ -2215,6 +2234,8 @@ function bindPlannerNav() {
   document.querySelector("#plannerMonthPrev")?.addEventListener("click", () => changePlannerMonth(-1));
   document.querySelector("#plannerMonthNext")?.addEventListener("click", () => changePlannerMonth(1));
   document.querySelector("#plannerMonthToday")?.addEventListener("click", goToPlannerThisMonth);
+  document.querySelector("#plannerNewGoalBtn")?.addEventListener("click", () => openPlannerQuickAdd("goal"));
+  document.querySelector("#plannerNewTaskBtn")?.addEventListener("click", () => openPlannerQuickAdd("task"));
 }
 
 // ── Cor determinística por item (mesma paleta pastel das notas) —
@@ -2258,6 +2279,8 @@ function renderPlannerGoalsStrip() {
       iconName: "target",
       title: "Defina sua primeira meta",
       desc: "Metas ficam fixadas aqui em cima, com marcos que você vai riscando conforme avança. Toque em \"Nova meta\" ali em cima pra criar a primeira.",
+      mascot: true,
+      mascotBadgeIcon: "target",
     });
     return;
   }
@@ -2268,6 +2291,10 @@ function renderPlannerGoalsStrip() {
       const milestones = goal.milestones || [];
       const msDone = milestones.filter((m) => m.done).length;
       const expanded = plannerExpandedGoals.has(goal.id);
+      // O formulário de novo marco fica sempre disponível dentro do painel
+      // expandido — antes dependia de window.prompt(), que não funciona
+      // (retorna null em silêncio) num PWA instalado em modo standalone no
+      // iOS, deixando "Adicionar marco" sem nenhum efeito visível.
       const milestonesHtml = expanded
         ? `
         <div class="planner-goal-milestones">
@@ -2285,7 +2312,10 @@ function renderPlannerGoalsStrip() {
                   .join("")
               : `<p class="planner-goal-milestones-empty">Sem marcos ainda.</p>`
           }
-          <button class="ghost-button planner-add-milestone" type="button" onclick="addGoalMilestone('${goal.id}', event)">${icon("plus", 13)}<span>Marco</span></button>
+          <form class="planner-inline-add-form" onsubmit="return submitGoalMilestoneForm('${goal.id}', event)">
+            <input type="text" maxlength="60" placeholder="Novo marco..." autocomplete="off" />
+            <button type="submit" class="mini-button" title="Adicionar marco">${icon("plus", 13)}</button>
+          </form>
         </div>`
         : "";
       return `
@@ -2295,23 +2325,42 @@ function renderPlannerGoalsStrip() {
           <span class="pill" style="${isComplete ? "background:var(--green);color:#fff;border-color:var(--green);" : ""}">${percent}%</span>
         </div>
         <div class="progress-track"><div style="width:${percent}%;background:${isComplete ? "var(--green)" : "linear-gradient(90deg,var(--accent),var(--purple))"}"></div></div>
-        ${
-          milestones.length
-            ? `<button class="planner-goal-ms-toggle" type="button" onclick="togglePlannerGoalExpand('${goal.id}', event)">${icon("flag", 13)}<span>${msDone}/${milestones.length} marcos</span>${icon("chevronRight", 13, "planner-goal-chevron")}</button>`
-            : ""
-        }
         <div class="planner-goal-chip-controls">
-          <button class="mini-button" onclick="changeGoal('${goal.id}', -1)">−</button>
-          <span class="task-meta">${goal.current}/${goal.target}</span>
-          <button class="mini-button" onclick="changeGoal('${goal.id}', 1)">+</button>
-          <button class="mini-button" onclick="addGoalMilestone('${goal.id}', event)" title="Adicionar marco">${icon("flag", 13)}</button>
-          <button class="mini-button planner-row-delete" onclick="deleteGoal('${goal.id}')" title="Excluir" style="margin-left:auto">${icon("trash", 13)}</button>
+          <div class="planner-goal-stepper">
+            <button class="mini-button" onclick="changeGoal('${goal.id}', -1)" title="Diminuir">−</button>
+            <span class="task-meta">${goal.current}/${goal.target}</span>
+            <button class="mini-button" onclick="changeGoal('${goal.id}', 1)" title="Aumentar">+</button>
+          </div>
+          <button class="planner-goal-ms-toggle" type="button" onclick="togglePlannerGoalExpand('${goal.id}', event)">
+            ${icon("flag", 13)}<span>${milestones.length ? `${msDone}/${milestones.length} marcos` : "Marcos"}</span>${icon("chevronRight", 13, "planner-goal-chevron")}
+          </button>
+          <button class="mini-button planner-row-delete" onclick="deleteGoal('${goal.id}')" title="Excluir meta">${icon("trash", 13)}</button>
         </div>
         ${milestonesHtml}
       </article>
     `;
     })
     .join("");
+}
+
+// Cria um marco a partir do input do próprio card (sem prompt() nativo —
+// ver comentário acima). Mantém o goal expandido e devolve o foco ao
+// campo pra permitir adicionar vários marcos em sequência rapidamente.
+function submitGoalMilestoneForm(id, event) {
+  event.preventDefault();
+  const input = event.target.querySelector("input");
+  const title = (input?.value || "").trim();
+  if (!title) return false;
+  const goal = state.goals.find((g) => g.id === id);
+  if (!goal) return false;
+  if (!goal.milestones) goal.milestones = [];
+  goal.milestones.push({ id: crypto.randomUUID(), title, done: false });
+  saveState();
+  renderPlannerGoalsStrip();
+  renderGoals();
+  const freshInput = document.querySelector(`[data-goal-id="${id}"] .planner-inline-add-form input`);
+  freshInput?.focus();
+  return false;
 }
 
 // ── Lista: agrupa tarefas + compromissos por proximidade da data,
@@ -2393,29 +2442,40 @@ function renderPlannerList() {
     });
 }
 
+// Cor do anel do check por prioridade — dá uma pista visual de urgência
+// sem precisar ler o badge, e torna o botão de concluir mais chamativo
+// (antes era um círculo cinza neutro, fácil de ignorar/perder no meio
+// dos outros botões).
+const PRIORITY_RING = {
+  Baixa: "var(--green)",
+  Media: "var(--orange)",
+  Alta: "var(--red)",
+  Urgente: "var(--red)",
+};
+
 function renderPlannerTaskRow(task) {
   const isDone = task.status === "Concluida";
   const subtasks = task.subtasks || [];
   const doneCount = subtasks.filter((s) => s.done).length;
-  const recTitle = task.recurrence
-    ? `Repete: ${{ diaria: "diariamente", semanal: "semanalmente", mensal: "mensalmente" }[task.recurrence]} (toque pra mudar)`
-    : "Sem repetição (toque pra ativar)";
+  const detailsOpen = plannerExpandedTaskDetails.has(task.id);
+  const ringColor = PRIORITY_RING[task.priority] || "var(--line)";
   return `
     <article class="planner-row planner-row--task" data-task-id="${task.id}">
-      <button class="task-check ${isDone ? "is-done" : ""}" onclick="toggleTask('${task.id}')" title="Concluir">${isDone ? icon("check", 13) : ""}</button>
-      <div class="planner-row-main" onclick="toggleTaskDetails('${task.id}', event)" style="cursor:pointer">
-        <strong class="${isDone ? "is-done-text" : ""}">${escapeHtml(task.title)}</strong>
-        <div class="planner-row-meta">
-          <span class="priority-pill priority-${task.priority}">${escapeHtml(task.priority)}</span>
-          ${task.status === "Em andamento" || task.status === "Cancelada" ? `<span class="status-pill status-${task.status.replace(" ", "-")}">${task.status}</span>` : ""}
-          ${task.dueDate ? `<span class="task-meta">${icon("calendarWeek", 12)}${formatDate(task.dueDate)}</span>` : ""}
-          ${subtasks.length ? `<span class="task-meta">${icon("checkCircle", 12)}${doneCount}/${subtasks.length}</span>` : ""}
+      <div class="planner-row-head">
+        <button class="task-check ${isDone ? "is-done" : ""}" onclick="toggleTask('${task.id}')" title="Concluir tarefa" style="${isDone ? "" : `border-color:${ringColor}`}">${isDone ? icon("check", 15) : ""}</button>
+        <div class="planner-row-main" onclick="toggleTaskDetails('${task.id}', event)">
+          <strong class="${isDone ? "is-done-text" : ""}">${escapeHtml(task.title)}</strong>
+          <div class="planner-row-meta">
+            <span class="priority-pill priority-${task.priority}">${escapeHtml(task.priority)}</span>
+            ${task.status === "Em andamento" || task.status === "Cancelada" ? `<span class="status-pill status-${task.status.replace(" ", "-")}">${task.status}</span>` : ""}
+            ${task.dueDate ? `<span class="task-meta">${icon("calendarWeek", 12)}${formatDate(task.dueDate)}</span>` : ""}
+            ${task.recurrence ? `<span class="task-meta">${icon("repeat", 12)}${{ diaria: "Diária", semanal: "Semanal", mensal: "Mensal" }[task.recurrence]}</span>` : ""}
+            ${subtasks.length ? `<span class="task-meta">${icon("checkCircle", 12)}${doneCount}/${subtasks.length}</span>` : ""}
+          </div>
         </div>
+        <button class="planner-row-kebab" onclick="openPlannerTaskActions('${task.id}', event)" title="Mais opções">${icon("moreVertical", 16)}</button>
       </div>
-      <button class="mini-button" onclick="cycleTaskRecurrence('${task.id}', event)" title="${recTitle}" style="${task.recurrence ? "color:var(--accent);" : ""}">${icon("repeat", 14)}</button>
-      <button class="mini-button" onclick="openTaskMoveMenu('${task.id}', event)" title="Mudar status (${task.status})">${icon("arrowLeftRight", 14)}</button>
-      <button class="mini-button planner-row-delete" onclick="deleteTask('${task.id}')" title="Excluir">${icon("trash", 14)}</button>
-      <div class="task-subtasks">
+      <div class="task-subtasks ${detailsOpen ? "open" : ""}">
         ${
           subtasks
             .map(
@@ -2428,7 +2488,10 @@ function renderPlannerTaskRow(task) {
             )
             .join("") || `<p class="planner-goal-milestones-empty">Sem itens na checklist ainda.</p>`
         }
-        <button class="ghost-button planner-add-milestone" type="button" onclick="addSubtask('${task.id}', event)">${icon("plus", 13)}<span>Item da checklist</span></button>
+        <form class="planner-inline-add-form" onsubmit="return submitSubtaskForm('${task.id}', event)">
+          <input type="text" maxlength="80" placeholder="Item da checklist..." autocomplete="off" />
+          <button type="submit" class="mini-button" title="Adicionar item">${icon("plus", 13)}</button>
+        </form>
       </div>
     </article>
   `;
@@ -2438,15 +2501,17 @@ function renderPlannerEventRow(ev) {
   const tone = plannerColorTone(ev.id);
   return `
     <article class="planner-row planner-row--event" data-event-id="${ev.id}" style="border-left:4px solid ${tone.border}">
-      <div class="planner-row-time" style="background:${tone.bg};color:${tone.border}">${ev.time || "—"}</div>
-      <div class="planner-row-main">
-        <strong>${escapeHtml(ev.title)}</strong>
-        <div class="planner-row-meta">
-          <span class="task-meta">${icon("calendarWeek", 12)}${formatDate(ev.date)}</span>
-          ${ev.location && ev.location !== "Sem local" ? `<span class="task-meta">${icon("mapPin", 12)}${escapeHtml(ev.location)}</span>` : ""}
+      <div class="planner-row-head">
+        <div class="planner-row-time" style="background:${tone.bg};color:${tone.border}">${ev.time || "—"}</div>
+        <div class="planner-row-main">
+          <strong>${escapeHtml(ev.title)}</strong>
+          <div class="planner-row-meta">
+            <span class="task-meta">${icon("calendarWeek", 12)}${formatDate(ev.date)}</span>
+            ${ev.location && ev.location !== "Sem local" ? `<span class="task-meta">${icon("mapPin", 12)}${escapeHtml(ev.location)}</span>` : ""}
+          </div>
         </div>
+        <button class="mini-button planner-row-delete" onclick="deleteEvent('${ev.id}')" title="Excluir">${icon("trash", 14)}</button>
       </div>
-      <button class="mini-button planner-row-delete" onclick="deleteEvent('${ev.id}')" title="Excluir">${icon("trash", 14)}</button>
     </article>
   `;
 }
@@ -2672,6 +2737,9 @@ function bindPlannerQuickAdd() {
   document.querySelector("#plannerQuickAddModal")?.addEventListener("click", (e) => {
     if (e.target.id === "plannerQuickAddModal") closePlannerQuickAdd();
   });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && document.querySelector("#plannerQuickAddModal")?.hidden === false) closePlannerQuickAdd();
+  });
   document.querySelectorAll("#plannerQuickAddType button").forEach((btn) => {
     btn.addEventListener("click", () => setPlannerQuickAddType(btn.dataset.quickType));
   });
@@ -2736,6 +2804,8 @@ function renderNotes() {
             desc: "Ideias, lembretes e recados soltos — tudo cabe aqui, sem formulário complicado.",
             ctaLabel: "Nova nota",
             ctaOnClick: "document.querySelector('#noteTitle').focus()",
+            mascot: true,
+            mascotBadgeIcon: "notebook",
           }
     ),
     ""
@@ -3109,7 +3179,9 @@ function cycleTaskRecurrence(id, event) {
 // usam o mesmo data-task-id.
 function toggleTaskDetails(id, event) {
   event?.stopPropagation();
-  document.querySelector(`[data-task-id="${id}"] .task-subtasks`)?.classList.toggle("open");
+  if (plannerExpandedTaskDetails.has(id)) plannerExpandedTaskDetails.delete(id);
+  else plannerExpandedTaskDetails.add(id);
+  document.querySelector(`[data-task-id="${id}"] .task-subtasks`)?.classList.toggle("open", plannerExpandedTaskDetails.has(id));
 }
 
 function addSubtask(id, event) {
@@ -3145,10 +3217,129 @@ function deleteSubtask(taskId, subId, event) {
   renderPlanner();
 }
 
+// Substitui addSubtask (prompt() nativo) por um formulário inline que já
+// fica dentro do próprio painel de checklist — funciona igual em qualquer
+// navegador e também dentro do PWA instalado no iOS. Mantém a checklist
+// aberta e devolve o foco ao campo pra permitir adicionar vários itens
+// em sequência.
+function submitSubtaskForm(id, event) {
+  event.preventDefault();
+  const input = event.target.querySelector("input");
+  const title = (input?.value || "").trim();
+  if (!title) return false;
+  const task = state.tasks.find((t) => t.id === id);
+  if (!task) return false;
+  if (!task.subtasks) task.subtasks = [];
+  task.subtasks.push({ id: crypto.randomUUID(), title, done: false });
+  saveState();
+  renderTasks();
+  renderPlanner();
+  const freshInput = document.querySelector(`[data-task-id="${id}"] .planner-inline-add-form input`);
+  freshInput?.focus();
+  return false;
+}
+
 function deleteTask(id) {
   state.tasks = state.tasks.filter((task) => task.id !== id);
   saveState();
   renderAll();
+}
+
+// Menu único de ações de uma tarefa no Planner: status + repetição +
+// excluir num só lugar. Substitui os 3 botões separados que existiam
+// antes na linha (repetir / mover / excluir) por um único botão "⋮" —
+// mesma capacidade, um terço da poluição visual.
+const RECURRENCE_OPTIONS = [
+  { value: "", label: "Não repete" },
+  { value: "diaria", label: "Diariamente" },
+  { value: "semanal", label: "Semanalmente" },
+  { value: "mensal", label: "Mensalmente" },
+];
+
+function closePlannerTaskActions() {
+  document.querySelector("#plannerTaskActionsSheet")?.remove();
+  document.removeEventListener("keydown", handlePlannerTaskActionsEscape);
+}
+
+function handlePlannerTaskActionsEscape(event) {
+  if (event.key === "Escape") closePlannerTaskActions();
+}
+
+function openPlannerTaskActions(taskId, event) {
+  event?.stopPropagation();
+  closePlannerTaskActions();
+  const task = state.tasks.find((t) => t.id === taskId);
+  if (!task) return;
+
+  const sheet = document.createElement("div");
+  sheet.id = "plannerTaskActionsSheet";
+  sheet.className = "modal-backdrop";
+  sheet.innerHTML = `
+    <div class="modal-card planner-action-sheet">
+      <div class="modal-header">
+        <h2>${escapeHtml(task.title)}</h2>
+        <button class="icon-button" id="plannerTaskActionsClose">${icon("x", 18)}</button>
+      </div>
+      <div class="modal-body planner-action-sheet-body">
+        <div>
+          <p class="planner-action-sheet-label">Status</p>
+          <div class="planner-action-sheet-options">
+            ${statusList
+              .map(
+                (status) => `
+              <button type="button" class="planner-action-option ${status === task.status ? "is-active" : ""}" data-status="${status}">
+                <span>${status}</span>${status === task.status ? icon("check", 14) : ""}
+              </button>`
+              )
+              .join("")}
+          </div>
+        </div>
+        <div>
+          <p class="planner-action-sheet-label">Repetição</p>
+          <div class="planner-action-sheet-options">
+            ${RECURRENCE_OPTIONS.map(
+              (opt) => `
+              <button type="button" class="planner-action-option ${(task.recurrence || "") === opt.value ? "is-active" : ""}" data-recurrence="${opt.value}">
+                <span>${opt.label}</span>${(task.recurrence || "") === opt.value ? icon("check", 14) : ""}
+              </button>`
+            ).join("")}
+          </div>
+        </div>
+        <button type="button" class="planner-action-danger" id="plannerTaskActionsDelete">${icon("trash", 15)}<span>Excluir tarefa</span></button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(sheet);
+  document.addEventListener("keydown", handlePlannerTaskActionsEscape);
+
+  sheet.addEventListener("click", (e) => { if (e.target === sheet) closePlannerTaskActions(); });
+  sheet.querySelector("#plannerTaskActionsClose").addEventListener("click", closePlannerTaskActions);
+
+  sheet.querySelectorAll("[data-status]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      updateTaskStatus(taskId, btn.dataset.status);
+      closePlannerTaskActions();
+    });
+  });
+
+  sheet.querySelectorAll("[data-recurrence]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const current = state.tasks.find((t) => t.id === taskId);
+      if (!current) return closePlannerTaskActions();
+      current.recurrence = btn.dataset.recurrence || null;
+      saveState();
+      renderTasks();
+      renderPlanner();
+      const labels = { diaria: "Repete diariamente", semanal: "Repete semanalmente", mensal: "Repete mensalmente" };
+      showToast(current.recurrence ? labels[current.recurrence] : "Repetição desativada.");
+      closePlannerTaskActions();
+    });
+  });
+
+  sheet.querySelector("#plannerTaskActionsDelete").addEventListener("click", () => {
+    deleteTask(taskId);
+    closePlannerTaskActions();
+  });
 }
 
 function renderCalendar() {
@@ -3344,7 +3535,8 @@ function escapeHtml(value) {
 }
 
 function showToast(message) {
-  elements.toast.textContent = message;
+  const textEl = document.getElementById("toastText") || elements.toast;
+  textEl.textContent = message;
   elements.toast.classList.add("show");
   window.clearTimeout(showToast.timer);
   showToast.timer = window.setTimeout(() => elements.toast.classList.remove("show"), 2200);
@@ -3355,7 +3547,15 @@ function celebrate(message) {
   showToast(message);
   const burst = document.createElement("div");
   burst.className = "celebration-burst";
-  burst.innerHTML = "<span></span><span></span><span></span><span></span><span></span><span></span>";
+  burst.innerHTML = `
+    <span></span><span></span><span></span><span></span><span></span><span></span>
+    <div class="pulsinho">
+      <div class="pulsinho__face">
+        <div class="pulsinho__eyes"><span class="pulsinho__eye"></span><span class="pulsinho__eye"></span></div>
+        <svg class="pulsinho__pulse" viewBox="0 0 120 26"><path d="M0,13 L28,13 L36,3 L44,23 L52,13 L64,13 L70,6 L76,20 L82,13 L120,13"/></svg>
+      </div>
+    </div>
+  `;
   document.body.appendChild(burst);
   window.setTimeout(() => burst.remove(), 900);
 }
@@ -3440,7 +3640,49 @@ function closeMonth(monthKey) {
   });
   saveState();
   renderFinances();
-  showToast(`🔒 ${finMonthLabel(monthKey)} fechado com sucesso!`);
+  showMonthCloseRecap(monthKey, receitas, despesas, saldoFinal);
+}
+
+// Fechar o mês é um momento natural de parar e olhar pro resultado —
+// em vez de só um toast, o Pulsinho reage ao saldo final (o mesmo dado
+// que já vira o card "Saldo" e a barra de orçamento), dando um resumo
+// rápido antes de seguir pro próximo mês.
+function showMonthCloseRecap(monthKey, receitas, despesas, saldoFinal) {
+  document.querySelector("#monthCloseRecap")?.remove();
+  const isPositive = saldoFinal >= 0;
+  const mood = isPositive ? "happy" : "worried";
+  const message = isPositive
+    ? `Fechou no azul! O saldo de ${formatCurrency(saldoFinal)} segue automaticamente pro próximo mês.`
+    : `Fechou no vermelho — o saldo de ${formatCurrency(saldoFinal)} vai começar o próximo mês já negativo.`;
+
+  const overlay = document.createElement("div");
+  overlay.id = "monthCloseRecap";
+  overlay.className = "modal-backdrop";
+  overlay.innerHTML = `
+    <div class="modal-card month-close-recap">
+      <div class="modal-header">
+        <h2>${finMonthLabel(monthKey)} fechado 🔒</h2>
+        <button class="icon-button" id="closeMonthRecap">${icon("x", 18)}</button>
+      </div>
+      <div class="modal-body month-close-recap-body">
+        <div class="pulsinho month-close-mascot mood-${mood}">
+          <div class="pulsinho__face">
+            <div class="pulsinho__eyes"><span class="pulsinho__eye"></span><span class="pulsinho__eye"></span></div>
+            <svg class="pulsinho__pulse" viewBox="0 0 120 26"><path d="M0,13 L28,13 L36,3 L44,23 L52,13 L64,13 L70,6 L76,20 L82,13 L120,13"/></svg>
+          </div>
+        </div>
+        <p class="month-close-recap-message">${message}</p>
+        <div class="month-close-recap-stats">
+          <div><span>Receitas</span><strong class="pos">${formatCurrency(receitas)}</strong></div>
+          <div><span>Despesas</span><strong class="neg">${formatCurrency(despesas)}</strong></div>
+          <div><span>Saldo final</span><strong class="${isPositive ? "pos" : "neg"}">${formatCurrency(saldoFinal)}</strong></div>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
+  overlay.querySelector("#closeMonthRecap").addEventListener("click", () => overlay.remove());
 }
 
 // Remove o fechamento do mês (reabre para edições)
@@ -4056,7 +4298,7 @@ function exportMonthReport(monthKey) {
         const barColor = g.pct > 100 ? "#ff3b30" : g.pct > 80 ? "#ff9500" : "#34c759";
         return `<div class="goal-row">
           <div class="goal-header">
-            <span class="goal-name">${g.cat.label}</span>
+            <span class="goal-name">${escapeHtml(g.cat.label)}</span>
             <span class="goal-val ${g.pct > 100 ? "over" : ""}">${formatCurrency(g.spent)} / ${formatCurrency(g.limit)} (${g.pct}%)</span>
           </div>
           <div class="bar-wrap"><div class="bar-fill" style="width:${Math.min(100,g.pct)}%;background:${barColor}"></div></div>
@@ -4079,7 +4321,7 @@ function exportMonthReport(monthKey) {
             return `<tr>
               <td>${formatDate(f.date)}</td>
               <td style="font-weight:600">${escapeHtml(f.description || "")}</td>
-              <td>${cat.label}</td>
+              <td>${escapeHtml(cat.label)}</td>
               <td><span class="badge ${isRec ? "badge-r" : "badge-d"}">${isRec ? "Receita" : "Despesa"}</span></td>
               <td style="text-align:right;font-weight:700;color:${isRec ? "#34c759" : "#ff3b30"}">${isRec ? "+" : "-"}${formatCurrency(f.amount)}</td>
             </tr>`;
@@ -4124,7 +4366,7 @@ function exportMonthReport(monthKey) {
         const cat = findCategory(r.categoryId);
         return `<div class="recur-card">
           <strong>${escapeHtml(r.description)}</strong>
-          <span>${cat.label} · Dia ${r.day}</span>
+          <span>${escapeHtml(cat.label)} · Dia ${r.day}</span>
           <span class="rv">-${formatCurrency(r.amount)}/mês</span>
         </div>`;
       }).join("")}
@@ -4422,6 +4664,25 @@ function bindAiQuickEntry() {
     ai_rate_limited: "O limite gratuito da IA foi atingido por agora.",
   };
 
+  function showAiQuickMascot(mode) {
+    const wrap = document.querySelector("#aiQuickMascot");
+    const blob = document.querySelector("#aiQuickMascotBlob");
+    const text = document.querySelector("#aiQuickMascotText");
+    if (!wrap || !blob || !text) return;
+    wrap.hidden = false;
+    blob.classList.toggle("is-thinking", mode === "thinking");
+    blob.classList.toggle("is-done", mode === "done");
+    text.textContent = mode === "done" ? "Prontinho! ✓" : "Pulsinho tá com a IA nisso...";
+    if (mode === "done") setTimeout(hideAiQuickMascot, 1100);
+  }
+
+  function hideAiQuickMascot() {
+    const wrap = document.querySelector("#aiQuickMascot");
+    const blob = document.querySelector("#aiQuickMascotBlob");
+    if (wrap) wrap.hidden = true;
+    if (blob) blob.classList.remove("is-thinking", "is-done");
+  }
+
   async function runAiQuickEntry() {
     const text = input.value.trim();
     if (text.length < 3) {
@@ -4442,6 +4703,8 @@ function bindAiQuickEntry() {
     button.disabled = true;
     input.disabled  = true;
     if (label) label.textContent = "Pensando...";
+    hideAiQuickMascot(); // reseta qualquer estado preso de uma tentativa anterior
+    showAiQuickMascot("thinking");
 
     try {
       const token = await currentUser?.getIdToken();
@@ -4458,11 +4721,16 @@ function bindAiQuickEntry() {
 
       input.value = "";
       fillExpenseFormFrom(data);
+      showAiQuickMascot("done");
       showToast("✨ Preenchido pela IA! Confira os dados e clique em Registrar.");
     } catch (err) {
       // Se a IA falhar por qualquer motivo (cota grátis esgotada, sem
       // internet, backend ainda não configurado...), caímos para o
       // reconhecimento local — assim o recurso nunca trava de vez.
+      // O mascote some na hora aqui: ele representa especificamente a IA
+      // funcionando, então não faz sentido "comemorar" um resultado que
+      // veio do reconhecimento local.
+      hideAiQuickMascot();
       if (!err?.handled) console.error("Erro ao chamar a IA:", err);
 
       const local = parseFinanceText(text);
@@ -4762,6 +5030,7 @@ function renderFinances() {
   document.querySelector("#finProgressBar").style.width = `${usedPct}%`;
   document.querySelector("#finProgressBar").style.background = usedPct > 80 ? "var(--red)" : usedPct > 60 ? "var(--orange)" : "var(--green)";
   document.querySelector("#finUsedLabel").textContent = `${usedPct}% das receitas usadas`;
+  updateFinMood(saldo, usedPct);
 
   // Distribuição por categoria
   const byCat = {};
@@ -4779,7 +5048,7 @@ function renderFinances() {
         <div class="fin-cat-row">
           <div class="fin-cat-info">
             <span class="fin-cat-dot" style="background:${cat.color}"></span>
-            <span class="fin-cat-label">${cat.label}</span>
+            <span class="fin-cat-label">${escapeHtml(cat.label)}</span>
           </div>
           <div class="fin-cat-bar-wrap">
             <div class="fin-cat-bar" style="width:${pct}%;background:${cat.color}20;outline:2px solid ${cat.color}40"></div>
@@ -4802,6 +5071,33 @@ function renderFinances() {
   renderFinGoals();
   renderFinClosures();
   renderFinRecurrents();
+}
+
+// Reação de humor do Pulsinho ao saldo do mês — mesmos números que já
+// alimentam os cards e a barra de orçamento, só que agora com uma
+// carinha em vez de só cor. Saldo negativo pesa mais que o % gasto:
+// mesmo tendo gastado pouco das receitas, saldo negativo (por causa de
+// saldo anterior negativo, por exemplo) ainda é o sinal mais importante.
+function updateFinMood(saldo, usedPct) {
+  const blob = document.querySelector("#finMoodBlob");
+  const text = document.querySelector("#finMoodText");
+  if (!blob || !text) return;
+
+  let mood, message;
+  if (saldo < 0) {
+    mood = "worried";
+    message = "Saldo negativo esse mês — bora dar uma olhada nas despesas.";
+  } else if (usedPct > 80) {
+    mood = "concerned";
+    message = `Já foram ${usedPct}% das receitas — segura um pouco até o fim do mês.`;
+  } else {
+    mood = "happy";
+    message = "Saldo tranquilo por enquanto — continue assim!";
+  }
+
+  blob.classList.remove("mood-happy", "mood-concerned", "mood-worried");
+  blob.classList.add(`mood-${mood}`);
+  text.textContent = message;
 }
 
 function renderFinTransaction(f) {
@@ -4828,7 +5124,7 @@ function renderFinTransaction(f) {
           <span class="fin-tx-amount ${isReceita ? "receita" : "despesa"}">${isReceita ? "+" : "-"}${formatCurrency(f.amount)}</span>
         </div>
         <div class="fin-tx-bottom">
-          <span class="task-meta fin-tx-meta">${catName} · ${formatDate(f.date)}</span>
+          <span class="task-meta fin-tx-meta">${escapeHtml(catName)} · ${formatDate(f.date)}</span>
           <div class="fin-tx-actions">
             <button class="mini-button" onclick="editFinance('${f.id}')" title="Editar">✏️</button>
             <button class="mini-button" onclick="deleteFinance('${f.id}')" title="Excluir">🗑️</button>
@@ -5416,6 +5712,17 @@ function openNewCategoryPrompt(prefillName) {
       return;
     }
 
+    // SEGURANÇA: nome de categoria não precisa (e não deve) conter
+    // caracteres de HTML — cat.label é usado em dezenas de lugares no
+    // app (lista de lançamentos, recorrentes, seletores...) e nem todos
+    // escapam na hora de exibir. Bloquear esses caracteres aqui, na
+    // criação, fecha o problema na raiz — mais confiável do que
+    // caçar cada ponto de exibição um por um.
+    if (/[<>&"']/.test(name)) {
+      showError("O nome não pode conter os caracteres < > & \" '.");
+      return;
+    }
+
     const activeType = document.querySelector("#expenseType")?.value || "despesa";
 
     // Evita duas categorias iguais (mesmo nome, mesmo tipo) — compara sem
@@ -5684,7 +5991,7 @@ function renderFinGoals() {
     return `
       <div class="fin-goal-row">
         <div class="fin-goal-top">
-          <span class="fin-goal-label">${cat.label}</span>
+          <span class="fin-goal-label">${escapeHtml(cat.label)}</span>
           <span class="fin-goal-val" style="color:${color}">${formatCurrency(spent)} / ${formatCurrency(g.limit)}</span>
           <button class="icon-button" style="padding:2px 6px;font-size:0.7rem" onclick="deleteFinGoal('${g.id}')">${icon("x", 12)}</button>
         </div>
@@ -5740,7 +6047,7 @@ function bindFinGoalsModal() {
   openBtn?.addEventListener("click", () => {
     // Popula select com categorias de despesa
     catSel.innerHTML = expenseCategories.concat(state.customCategories?.filter((c) => (c.type || "despesa") === "despesa") || [])
-      .map((c) => `<option value="${c.id}">${c.label}</option>`).join("");
+      .map((c) => `<option value="${c.id}">${escapeHtml(c.label)}</option>`).join("");
     modal.hidden = false;
   });
   closeBtn?.addEventListener("click", () => { modal.hidden = true; });
@@ -5787,7 +6094,7 @@ function renderFinRecurrents() {
         <span class="fin-recur-icon" style="background:${cat.color}22;color:${cat.color}">${cat.label.split(" ")[0]}</span>
         <div class="fin-recur-info">
           <strong>${escapeHtml(r.description)}</strong>
-          <span class="task-meta">Dia ${r.day} · ${cat.label.replace(/^\S+\s*/, "")}${skipped ? ` · pulado em ${finMonthLabel(finActiveMonth)}` : ""}</span>
+          <span class="task-meta">Dia ${r.day} · ${escapeHtml(cat.label.replace(/^\S+\s*/, ""))}${skipped ? ` · pulado em ${finMonthLabel(finActiveMonth)}` : ""}</span>
         </div>
         <span class="fin-recur-amount ${isRec ? "receita" : "despesa"}">${isRec ? "+" : "-"}${formatCurrency(r.amount)}</span>
         <div class="fin-recur-status" aria-hidden="true">${skipped ? '<span class="fin-recur-status-dot skipped"></span>' : '<span class="fin-recur-status-dot"></span>'}</div>
@@ -5925,7 +6232,7 @@ function bindFinRecurModal() {
 
   function updateCatOptions() {
     const type = typeSel?.value || "despesa";
-    catSel.innerHTML = getAllCategories(type).map((c) => `<option value="${c.id}">${c.label}</option>`).join("");
+    catSel.innerHTML = getAllCategories(type).map((c) => `<option value="${c.id}">${escapeHtml(c.label)}</option>`).join("");
   }
 
   openBtn?.addEventListener("click", () => { updateCatOptions(); modal.hidden = false; });
@@ -6022,3 +6329,25 @@ window.applyRecurrent = applyRecurrent;
 window.toggleSkipRecurrentMonth = toggleSkipRecurrentMonth;
 window.goToFinMonth = goToFinMonth;
 window.reopenMonth = reopenMonth;
+
+// Planner (Fase 2 — reformulação). Auditoria completa: todo onclick="fn(...)"
+// e onsubmit="return fn(...)" gerado dinamicamente precisa da função
+// correspondente aqui, porque o app.js roda como <script type="module"> e,
+// nesse modo, declarações de função no topo do arquivo NÃO viram
+// propriedades de window automaticamente. Esquecer uma linha aqui é
+// exatamente o que causava os "Algo quebrou nesta tela" no Planner —
+// ao adicionar uma função nova chamada via onclick/onsubmit em HTML
+// gerado dinamicamente, ela tem que ser exposta aqui também.
+window.openPlannerQuickAdd = openPlannerQuickAdd;
+window.jumpPlannerToDay = jumpPlannerToDay;
+window.togglePlannerGoalExpand = togglePlannerGoalExpand;
+window.openPlannerTaskActions = openPlannerTaskActions;
+window.submitGoalMilestoneForm = submitGoalMilestoneForm;
+window.submitSubtaskForm = submitSubtaskForm;
+
+// Mesma causa raiz, encontrada durante a auditoria fora do Planner —
+// corrigidas de brinde por serem idênticas e triviais (uma linha cada):
+// "Editar perfil" no Perfil e os chips de pasta nas Notas também
+// silenciosamente não faziam nada.
+window.setView = setView;
+window.setNotesFolderFilter = setNotesFolderFilter;
