@@ -75,9 +75,9 @@ window.addEventListener("unhandledrejection", (event) => {
 const THEME_STORAGE_KEY = "pulsenote-theme";
 
 function syncThemeColorMeta(choice) {
-  const isDark = choice === "aurora" || (choice !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  const isDark = choice === "aurora" || choice === "eclipse" || (choice !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
   const meta = document.getElementById("themeColorMeta");
-  if (meta) meta.setAttribute("content", isDark ? "#060a18" : "#f5f7fa");
+  if (meta) meta.setAttribute("content", choice === "eclipse" ? "#000000" : (isDark ? "#060a18" : "#f5f7fa"));
   // Mantém o <meta name="color-scheme"> alinhado ao tema escolhido, para que
   // selects, calendário nativo, barra de rolagem etc. nunca fiquem brancos
   // por cima de um app configurado como escuro (ver comentário no <head>).
@@ -86,7 +86,7 @@ function syncThemeColorMeta(choice) {
 }
 
 function applyTheme(choice) {
-  if (choice === "light" || choice === "aurora") {
+  if (choice === "light" || choice === "aurora" || choice === "eclipse") {
     document.documentElement.setAttribute("data-theme", choice);
   } else {
     document.documentElement.removeAttribute("data-theme"); // = "automático"
@@ -109,7 +109,7 @@ function getSavedTheme() {
     // Valor antigo "dark", de quem já tinha escolhido o extinto tema
     // "Escuro", cai automaticamente em "system" (que agora é o Aurora
     // quando o aparelho está escuro) — sem quebrar nada pra quem já usava.
-    return t === "light" || t === "aurora" ? t : "system";
+    return t === "light" || t === "aurora" || t === "eclipse" ? t : "system";
   } catch { return "system"; }
 }
 
@@ -405,7 +405,7 @@ const appReady = new Promise((resolve) => {
 
 const statusList = ["Pendente", "Em andamento", "Concluida", "Cancelada"];
 const viewTitles = {
-  dashboard: "Seu dia em foco ✨",
+  dashboard: "Seu dia em foco",
   planner: "Planner",
   notes: "Anotações",
   finances: "Finanças",

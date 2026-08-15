@@ -63,6 +63,10 @@
   --shadow-card: 0 2px 12px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.04);
   --shadow-card-hover: 0 8px 28px rgba(0,0,0,0.10), 0 3px 8px rgba(0,0,0,0.06);
   --shadow-float: 0 20px 60px rgba(0,0,0,0.12);
+  /* Usado para "separar" sidebar/topbar do resto do app com uma sombra
+     suave e direcional, em vez de uma linha reta de 1px cortando a
+     tela — dá sensação de profundidade/camadas em vez de um corte seco. */
+  --shadow-edge-color: rgba(20, 22, 45, 0.12);
   --nav-height: 80px;
   --header-height: 70px;
 
@@ -159,6 +163,7 @@
   --shadow-card: 0 1px 0 rgba(255,255,255,0.06) inset, 0 8px 24px rgba(2,4,16,0.65);
   --shadow-card-hover: 0 1px 0 rgba(255,255,255,0.09) inset, 0 14px 38px color-mix(in srgb, var(--accent) 22%, rgba(2,4,16,0.7));
   --shadow-float: 0 26px 80px rgba(2,4,16,0.8);
+  --shadow-edge-color: rgba(2, 4, 16, 0.6);
 }
 
 /* Aurora: hero e "linha do topo" ganham o gradiente de três cores que dá
@@ -167,7 +172,7 @@
    quanto para o modo Automático quando o aparelho está escuro (ambos
    compartilham a mesma aparência). */
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]):not([data-theme="aurora"]) .daily-hero {
+  :root:not([data-theme="light"]):not([data-theme="aurora"]):not([data-theme="eclipse"]) .daily-hero {
     background: linear-gradient(120deg, #5546e0 0%, #8451e6 45%, #29b6d8 100%);
     box-shadow: 0 16px 46px rgba(84, 70, 224, 0.35), 0 4px 16px rgba(41, 182, 216, 0.18);
   }
@@ -182,6 +187,82 @@
   height: 260px;
 }
 :root[data-theme="aurora"] ::selection { background: color-mix(in srgb, var(--accent) 45%, transparent); }
+
+/* Modo "Eclipse" — preto verdadeiro (bom pra tela OLED) + dourado, no
+   lugar do azul-violeta do Aurora. Mesma estrutura do Aurora (cartões
+   ligeiramente mais claros que o fundo pra criar profundidade sobre o
+   preto puro, glow sutil dourado no hero e atrás do topo da tela). */
+:root[data-theme="eclipse"] {
+  color-scheme: dark;
+  --bg: #000000;
+  --bg2: #0a0a0a;
+  --surface: #121212;
+  --surface2: #1a1a1a;
+  --text: #f7f2e7;
+  --text2: #cec5b0;
+  --muted: #8f8873;
+  --line: #2c2818;
+  --accent: #e8ac3d;
+  --accent2: #c98f22;
+  --accent-soft: #2c2210;
+  --green: #35d488;
+  --green-soft: #0d2a1c;
+  --orange: #ffab4d;
+  --orange-soft: #332309;
+  --red: #ff6b6b;
+  --red-soft: #331313;
+  --purple: #b98af0;
+  --purple-soft: #241c30;
+  --pink: #ff86bd;
+  --pink-soft: #331522;
+  --teal: #4fd8ff;
+  --teal-soft: #0c2830;
+  --yellow: #ffe066;
+  --yellow-soft: #332c0c;
+  --note-yellow: #302a12;
+  --note-blue: #0f2038;
+  --note-green: #0d2c2a;
+  --note-pink: #301230;
+  --note-purple: #221238;
+  --note-orange: #2e1c0e;
+  --note-teal: #0c2838;
+  --note-red: #301220;
+  --note-yellow-border: #6b5a18;
+  --note-blue-border: #2c5c9a;
+  --note-green-border: #1f8f76;
+  --note-pink-border: #9a3286;
+  --note-purple-border: #6c3ca0;
+  --note-orange-border: #a05a20;
+  --note-teal-border: #1d8fa8;
+  --note-red-border: #a02a5a;
+  --shadow-card: 0 1px 0 rgba(255,255,255,0.05) inset, 0 8px 24px rgba(0,0,0,0.85);
+  --shadow-card-hover: 0 1px 0 rgba(255,255,255,0.08) inset, 0 14px 38px color-mix(in srgb, var(--accent) 25%, rgba(0,0,0,0.85));
+  --shadow-float: 0 26px 80px rgba(0,0,0,0.9);
+  --shadow-edge-color: rgba(0, 0, 0, 0.75);
+}
+
+/* Eclipse: hero escuro com um brilho dourado tipo "corona" no canto,
+   em vez do degradê roxo/ciano do Aurora — mantém o preto como
+   protagonista e usa o dourado como destaque, não como cor de fundo. */
+:root[data-theme="eclipse"] .daily-hero {
+  background: linear-gradient(135deg, #141008 0%, #241a08 55%, #4a3410 100%);
+  box-shadow: 0 16px 46px rgba(232, 172, 61, 0.22), 0 4px 16px rgba(0, 0, 0, 0.6);
+}
+:root[data-theme="eclipse"] .daily-hero::before {
+  background: radial-gradient(circle, rgba(240, 180, 60, 0.3), transparent 70%);
+  width: 260px;
+  height: 260px;
+}
+:root[data-theme="eclipse"] ::selection { background: color-mix(in srgb, var(--accent) 45%, transparent); }
+
+:root[data-theme="eclipse"] body {
+  background:
+    radial-gradient(620px 380px at 12% 0%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 65%),
+    radial-gradient(560px 360px at 100% 8%, color-mix(in srgb, var(--orange) 12%, transparent), transparent 62%),
+    radial-gradient(680px 480px at 50% 115%, color-mix(in srgb, var(--accent2) 12%, transparent), transparent 62%),
+    var(--bg);
+  background-attachment: fixed;
+}
 
 /* No tema escuro, os cartões sólidos (--surface) cobrem quase toda a
    tela no mobile, sobrando só uma fresta entre eles pra mostrar o
@@ -204,7 +285,7 @@
    usa a MESMA paleta do Aurora (em vez do antigo "Escuro" neutro), já
    que essa é a versão escura que realmente ficou boa. */
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]):not([data-theme="aurora"]) {
+  :root:not([data-theme="light"]):not([data-theme="aurora"]):not([data-theme="eclipse"]) {
     color-scheme: dark;
     --bg: #060a18;
     --bg2: #0a1024;
@@ -250,13 +331,14 @@
     --shadow-card: 0 1px 0 rgba(255,255,255,0.06) inset, 0 8px 24px rgba(2,4,16,0.65);
     --shadow-card-hover: 0 1px 0 rgba(255,255,255,0.09) inset, 0 14px 38px color-mix(in srgb, var(--accent) 22%, rgba(2,4,16,0.7));
     --shadow-float: 0 26px 80px rgba(2,4,16,0.8);
+    --shadow-edge-color: rgba(2, 4, 16, 0.6);
   }
-  :root:not([data-theme="light"]):not([data-theme="aurora"]) .daily-hero::before {
+  :root:not([data-theme="light"]):not([data-theme="aurora"]):not([data-theme="eclipse"]) .daily-hero::before {
     background: radial-gradient(circle, rgba(79, 224, 255, 0.25), transparent 70%);
     width: 260px;
     height: 260px;
   }
-  :root:not([data-theme="light"]):not([data-theme="aurora"]) body {
+  :root:not([data-theme="light"]):not([data-theme="aurora"]):not([data-theme="eclipse"]) body {
     background:
       radial-gradient(620px 380px at 12% 0%, color-mix(in srgb, var(--accent) 30%, transparent), transparent 65%),
       radial-gradient(560px 360px at 100% 8%, color-mix(in srgb, var(--teal) 24%, transparent), transparent 62%),
@@ -291,6 +373,7 @@
   --shadow-card: 0 2px 12px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.04);
   --shadow-card-hover: 0 8px 28px rgba(0,0,0,0.10), 0 3px 8px rgba(0,0,0,0.06);
   --shadow-float: 0 20px 60px rgba(0,0,0,0.12);
+  --shadow-edge-color: rgba(20, 22, 45, 0.12);
 }
 
 /* ---------- Reset & Base ---------- */
@@ -383,7 +466,12 @@ p, h1, h2, h3 { margin: 0; }
   padding: 28px 16px 24px;
   background: color-mix(in srgb, var(--surface) 90%, transparent);
   backdrop-filter: blur(24px);
-  border-right: 1px solid var(--line);
+  /* Antes: border-right: 1px solid var(--line) — uma linha reta e seca
+     separando a sidebar do conteúdo. Agora: um fio bem sutil + uma
+     sombra suave "caindo" sobre o conteúdo ao lado, dando sensação de
+     camadas/profundidade em vez de um corte. */
+  border-right: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
+  box-shadow: 14px 0 32px -18px var(--shadow-edge-color);
   overflow-y: auto;
 }
 
@@ -531,22 +619,25 @@ p, h1, h2, h3 { margin: 0; }
   z-index: 20;
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
   /* env(safe-area-inset-top) reserva o espaço da barra de status do
      aparelho (relógio, sinal, bateria) — sem isso, o cabeçalho
      renderiza por baixo dela em qualquer tela com notch/status bar
      (afeta todas as views, já que o topbar é compartilhado). */
-  padding: calc(14px + env(safe-area-inset-top)) 28px 14px;
+  padding: calc(13px + env(safe-area-inset-top)) 24px 13px;
   background: color-mix(in srgb, var(--bg) 85%, transparent);
   backdrop-filter: blur(20px);
-  border-bottom: 1px solid var(--line);
+  /* Mesmo raciocínio da sidebar: fio sutil + sombra suave por baixo,
+     em vez de uma linha reta de 1px cortando a tela. */
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
+  box-shadow: 0 14px 32px -18px var(--shadow-edge-color);
   min-height: var(--header-height);
 }
 
 .topbar-greeting { flex: 1; }
 
 #todayLabel {
-  font-size: 0.78rem;
+  font-size: 0.76rem;
   font-weight: 600;
   color: var(--muted);
   text-transform: capitalize;
@@ -554,7 +645,7 @@ p, h1, h2, h3 { margin: 0; }
 }
 
 #viewTitle {
-  font-size: 1.55rem;
+  font-size: 1.4rem;
   font-weight: 800;
   letter-spacing: -0.03em;
   color: var(--text);
@@ -563,19 +654,19 @@ p, h1, h2, h3 { margin: 0; }
 .topbar-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .search-box {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 14px;
-  height: 44px;
+  padding: 0 13px;
+  height: 40px;
   background: var(--surface);
   border: 1.5px solid var(--line);
-  border-radius: 14px;
-  width: 240px;
+  border-radius: 13px;
+  width: 220px;
   transition: border-color 200ms, box-shadow 200ms;
 }
 .search-box:focus-within {
@@ -627,10 +718,10 @@ p, h1, h2, h3 { margin: 0; }
 /* ---------- HERO SECTION ---------- */
 .daily-hero {
   background: linear-gradient(135deg, var(--accent), var(--purple));
-  border-radius: 24px;
-  padding: 28px;
+  border-radius: 20px;
+  padding: 22px 24px;
   color: #fff;
-  margin-bottom: 20px;
+  margin-bottom: 18px;
   position: relative;
   overflow: hidden;
   box-shadow: 0 12px 40px color-mix(in srgb, var(--accent) 30%, transparent);
@@ -657,11 +748,11 @@ p, h1, h2, h3 { margin: 0; }
 }
 
 .daily-hero h2 {
-  font-size: clamp(1.4rem, 2.5vw, 2rem);
+  font-size: clamp(1.25rem, 2.2vw, 1.75rem);
   font-weight: 800;
   letter-spacing: -0.02em;
   line-height: 1.2;
-  margin-bottom: 16px;
+  margin-bottom: 14px;
 }
 
 .hero-progress { display: flex; align-items: center; gap: 12px; max-width: 400px; margin-bottom: 16px; }
@@ -725,8 +816,8 @@ p, h1, h2, h3 { margin: 0; }
 
 .overview-card {
   background: var(--surface);
-  border-radius: 18px;
-  padding: 14px;
+  border-radius: 16px;
+  padding: 13px;
   border: 1.5px solid var(--line);
   box-shadow: var(--shadow-card);
   display: grid;
@@ -755,9 +846,9 @@ p, h1, h2, h3 { margin: 0; }
 .overview-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-card-hover); }
 
 .overview-icon {
-  width: 38px;
-  height: 38px;
-  border-radius: 12px;
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
   background: var(--accent-soft);
   color: var(--accent);
   display: grid;
@@ -765,7 +856,7 @@ p, h1, h2, h3 { margin: 0; }
   margin-bottom: 2px;
   transition: transform 260ms cubic-bezier(.34,1.56,.64,1);
 }
-.overview-icon svg { width: 19px; height: 19px; }
+.overview-icon svg { width: 17px; height: 17px; }
 .overview-card:hover .overview-icon { transform: scale(1.08) rotate(-4deg); }
 
 .overview-card:nth-child(1) .overview-icon {
@@ -844,7 +935,7 @@ p, h1, h2, h3 { margin: 0; }
 
 .panel, .list-panel, .calendar-panel {
   background: var(--surface);
-  border-radius: 20px;
+  border-radius: 18px;
   border: 1.5px solid var(--line);
   box-shadow: var(--shadow-card);
   padding: 14px 16px;
@@ -2239,8 +2330,8 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   .main-area { padding-bottom: var(--nav-height); }
 
   .topbar {
-    padding: calc(10px + env(safe-area-inset-top)) 16px 10px;
-    gap: 8px 10px;
+    padding: calc(9px + env(safe-area-inset-top)) 16px 9px;
+    gap: 6px 10px;
     /* CORREÇÃO DEFINITIVA: depois de três rodadas tentando encaixar
        saudação + avatar + busca (+ botão, agora removido) numa única
        linha via proporções de flex, ficou claro que o problema era a
@@ -2269,7 +2360,7 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   }
 
   #viewTitle {
-    font-size: 1.3rem;
+    font-size: 1.2rem;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -2465,7 +2556,7 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 /* Cabeçalho fixo (mês + resumo), visível em todas as abas de Finanças */
 .fin-header { display: grid; gap: 14px; margin-bottom: 18px; }
 
-.fin-budget-bar { padding: 16px 18px; display: grid; gap: 10px; }
+.fin-budget-bar { padding: 14px 16px; display: grid; gap: 10px; }
 .fin-budget-bar-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .fin-budget-bar-title { font-weight: 700; font-size: 0.88rem; color: var(--text); }
 .fin-budget-bar-label { font-size: 0.8rem; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -2829,7 +2920,7 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 /* Seletor de tema (Claro / Aurora / Automático) — Configurações > Aparência */
 .theme-toggle {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 8px;
 }
 
@@ -3089,7 +3180,7 @@ align-items:stretch;
 
 .fin-summary-card{
   background: var(--surface);
-  border-radius: 18px;
+  border-radius: 16px;
   border: 1.5px solid var(--line);
   box-shadow: var(--shadow-card);
   transition: transform 180ms ease, box-shadow 180ms ease;
@@ -3102,9 +3193,9 @@ align-items:stretch;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 8px;
-  padding: 16px;
-  min-height: 92px;
+  gap: 6px;
+  padding: 14px;
+  min-height: 78px;
   width: 100%;
   min-width: 0;
   overflow: hidden;
@@ -5009,22 +5100,29 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
 
 /* ---------- Saudação do Dashboard (Pulsinho reage à hora do dia) ----------
    IMPORTANTE: esta linha (.topbar-greeting) não pode ter overflow:hidden.
-   O mascote (.pulsinho--greeting) "respira" com uma animação que o move
-   alguns pixels para cima (pulsinhoBob) e muda sutilmente sua forma
-   (pulsinhoMorph) — com overflow:hidden no container pai, o topo do
-   mascote fica cortado sempre que a animação sobe, em qualquer largura
-   de tela. A truncagem de texto (title/data compridos) já é resolvida
-   no elemento de texto logo abaixo, então o corte não é necessário aqui. */
-.topbar-greeting { display: flex; align-items: center; gap: 12px; min-width: 0; }
+   A truncagem de texto (title/data compridos) já é resolvida no elemento
+   de texto logo abaixo, então o corte não é necessário na linha toda. */
+.topbar-greeting { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .topbar-greeting > div:last-child { min-width: 0; overflow: hidden; }
 .pulsinho--greeting {
-  width: 42px;
-  height: 42px;
+  width: 34px;
+  height: 34px;
   flex-shrink: 0;
-  /* Pequena margem "invisível" ao redor do mascote: dá espaço de sobra
-     para o bob/morph sem que ele chegue perto de qualquer borda vizinha,
-     em vez de depender só do line-height do texto ao lado. */
-  margin: 6px 0;
+  margin: 4px 0;
+  /* O mascote do header usa uma animação própria — só um flutuar bem
+     sutil (translateY). O componente base (.pulsinho, usado na tela de
+     carregamento e no "pensando" da IA) combina bob + morph de forma
+     (border-radius mudando de forma junto com a posição), o que nesse
+     contexto pequeno, ao lado de texto, parecia "travado"/dessincronizado
+     — duas animações concorrentes com durações diferentes (3.2s e 6s)
+     competindo por atenção. Uma única animação simples fica muito mais
+     fluida e discreta — um gesto, não uma performance. */
+  animation: pulsinhoGreetingFloat 4.4s ease-in-out infinite;
+  will-change: transform;
+}
+@keyframes pulsinhoGreetingFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2.5px); }
 }
 
 /* Noite: mesma calma que o estado "sonolento" já usa em outros lugares
@@ -5032,12 +5130,16 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
    assustar ninguém que abre o app de madrugada, é combinar com o
    "Boa noite" que já aparece no texto. */
 .pulsinho--greeting.mood-night {
-  animation: pulsinhoBob 4.6s ease-in-out infinite, pulsinhoMorph 8s ease-in-out infinite;
+  animation: pulsinhoGreetingFloat 6.5s ease-in-out infinite;
 }
 .pulsinho--greeting.mood-night .pulsinho__eye { height: 3px; border-radius: 3px; animation: none; }
 .pulsinho--greeting.mood-night .pulsinho__pulse path { opacity: 0.55; }
 
+@media (prefers-reduced-motion: reduce) {
+  .pulsinho--greeting { animation: none !important; }
+}
+
 @media (max-width: 720px) {
   .topbar-greeting { gap: 8px; }
-  .pulsinho--greeting { width: 30px; height: 30px; }
+  .pulsinho--greeting { width: 26px; height: 26px; margin: 3px 0; }
 }

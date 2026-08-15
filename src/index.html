@@ -29,10 +29,10 @@
       (function () {
         try {
           var t = localStorage.getItem("pulsenote-theme");
-          var isDark = t === "aurora" || ((t !== "light") && window.matchMedia("(prefers-color-scheme: dark)").matches);
-          if (t === "light" || t === "aurora") document.documentElement.setAttribute("data-theme", t);
+          var isDark = t === "aurora" || t === "eclipse" || ((t !== "light") && window.matchMedia("(prefers-color-scheme: dark)").matches);
+          if (t === "light" || t === "aurora" || t === "eclipse") document.documentElement.setAttribute("data-theme", t);
           var meta = document.getElementById("themeColorMeta");
-          if (meta) meta.setAttribute("content", isDark ? "#060a18" : "#f5f7fa");
+          if (meta) meta.setAttribute("content", t === "eclipse" ? "#000000" : (isDark ? "#060a18" : "#f5f7fa"));
           var csMeta = document.getElementById("colorSchemeMeta");
           if (csMeta) csMeta.setAttribute("content", isDark ? "dark" : "light");
         } catch (e) {}
@@ -984,6 +984,9 @@
                 </button>
                 <button type="button" class="theme-toggle-btn" data-theme-choice="aurora" role="radio">
                   <span class="theme-toggle-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 13.5a8.5 8.5 0 1 1-9-10.9 7 7 0 0 0 9 10.9z"/></svg></span><span>Aurora</span>
+                </button>
+                <button type="button" class="theme-toggle-btn" data-theme-choice="eclipse" role="radio">
+                  <span class="theme-toggle-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="12" r="7"/><circle cx="14.2" cy="12" r="7" fill="currentColor" stroke="none"/></svg></span><span>Eclipse</span>
                 </button>
                 <button type="button" class="theme-toggle-btn" data-theme-choice="system" role="radio">
                   <span class="theme-toggle-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4.5" width="19" height="13" rx="2"/><path d="M8 21h8"/><path d="M12 17.5V21"/></svg></span><span>Automático</span>
