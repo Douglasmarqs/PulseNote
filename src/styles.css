@@ -712,6 +712,10 @@ p, h1, h2, h3 { margin: 0; }
    duplicação o principal motivo do dashboard parecer bagunçado). Agora é
    um grid só, com 6 cartões do mesmo tamanho/estilo, cada um com um dado
    único: tarefas, saldo, progresso, agenda, meta e XP. */
+/* 6 colunas é o padrão para telas largas (>=1400px, ver breakpoint no
+   fim do arquivo). Entre 1101px e 1399px isso é sobrescrito para 3
+   colunas (ver bloco "Desktop padrão" abaixo) — nessa faixa 6 cartões
+   numa linha só ficavam espremidos ao lado da sidebar de 260px. */
 .overview-grid {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
@@ -812,17 +816,30 @@ p, h1, h2, h3 { margin: 0; }
 }
 .overview-card small { font-size: 0.74rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* ---------- DASHBOARD LAYOUT ---------- */
+/* ---------- DASHBOARD LAYOUT ----------
+   Reformulado: antes era um grid de 3 colunas com "dense" auto-flow, que
+   reordenava os cartões sozinho pra preencher buracos deixados pelo
+   painel "wide" (2 colunas) — o resultado era imprevisível (a ordem
+   visual não batia com a ordem no HTML, o card de Metas às vezes subia
+   pra linha 1, às vezes não) e é essa imprevisibilidade que dava a
+   sensação de "bagunçado" no desktop. Agora é uma estrutura fixa e
+   legível, igual a qualquer dashboard profissional: uma coluna principal
+   mais larga (tarefas do dia + gráfico semanal) e uma barra lateral mais
+   estreita (agenda, metas, finanças) — cada uma é o seu próprio grid de
+   1 coluna, então a ordem dos cartões é sempre exatamente a do HTML. */
 .dashboard-layout {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  /* "dense" faz o grid preencher automaticamente qualquer buraco deixado
-     por um cartão "wide" (2 colunas) — sem isso, o painel "Finanças do
-     mês" (1 coluna) ficava sozinho na última linha, com um vão vazio de
-     2 colunas do lado dele. Com dense, o próximo cartão de 1 coluna
-     "sobe" pra preencher esse espaço, sem precisar mudar a ordem no HTML. */
-  grid-auto-flow: dense;
-  gap: 16px;
+  grid-template-columns: minmax(0, 1.7fr) minmax(280px, 1fr);
+  align-items: start;
+  gap: 20px;
+}
+
+.dashboard-main,
+.dashboard-side {
+  display: grid;
+  gap: 20px;
+  align-content: start;
+  min-width: 0;
 }
 
 .panel, .list-panel, .calendar-panel {
@@ -2125,6 +2142,12 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
    RESPONSIVE
    ============================================================ */
 
+/* ---- Desktop padrão (sidebar completa, mas sem espaço pra 6 cartões
+   confortáveis lado a lado) ---- */
+@media (min-width: 1101px) and (max-width: 1399px) {
+  .overview-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
 /* ---- Tablet ---- */
 @media (max-width: 1100px) {
   .app-shell { grid-template-columns: 72px 1fr; }
@@ -2138,7 +2161,8 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   .nav-item .icon { margin: 0; }
 
   .overview-grid { grid-template-columns: repeat(3, 1fr); }
-  .dashboard-layout { grid-template-columns: 1fr 1fr; }
+  .dashboard-layout { grid-template-columns: 1fr; }
+  .dashboard-side { grid-template-columns: repeat(2, 1fr); }
   .task-board { grid-template-columns: repeat(2, 1fr); }
 
   .daily-hero { grid-template-columns: 1fr; }
@@ -2314,6 +2338,8 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 
   /* Mobile dashboard */
   .dashboard-layout { grid-template-columns: 1fr; gap: 10px; }
+  .dashboard-main, .dashboard-side { gap: 10px; }
+  .dashboard-side { grid-template-columns: 1fr; }
   .wide { grid-column: auto; }
   .panel, .list-panel, .calendar-panel { padding: 12px 14px; border-radius: 16px; }
   .panel-header { margin-bottom: 8px; gap: 8px; }
@@ -2429,7 +2455,6 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 
 /* Note grid já se adapta sozinha em telas grandes via auto-fill */
 @media (min-width: 1400px) {
-  .dashboard-layout { grid-template-columns: repeat(3, 1fr); }
   .overview-grid { grid-template-columns: repeat(6, 1fr); }
 }
 
@@ -4982,10 +5007,25 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
 }
 
-/* ---------- Saudação do Dashboard (Pulsinho reage à hora do dia) ---------- */
-.topbar-greeting { display: flex; align-items: center; gap: 10px; min-width: 0; overflow: hidden; }
+/* ---------- Saudação do Dashboard (Pulsinho reage à hora do dia) ----------
+   IMPORTANTE: esta linha (.topbar-greeting) não pode ter overflow:hidden.
+   O mascote (.pulsinho--greeting) "respira" com uma animação que o move
+   alguns pixels para cima (pulsinhoBob) e muda sutilmente sua forma
+   (pulsinhoMorph) — com overflow:hidden no container pai, o topo do
+   mascote fica cortado sempre que a animação sobe, em qualquer largura
+   de tela. A truncagem de texto (title/data compridos) já é resolvida
+   no elemento de texto logo abaixo, então o corte não é necessário aqui. */
+.topbar-greeting { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .topbar-greeting > div:last-child { min-width: 0; overflow: hidden; }
-.pulsinho--greeting { width: 40px; height: 40px; flex-shrink: 0; }
+.pulsinho--greeting {
+  width: 42px;
+  height: 42px;
+  flex-shrink: 0;
+  /* Pequena margem "invisível" ao redor do mascote: dá espaço de sobra
+     para o bob/morph sem que ele chegue perto de qualquer borda vizinha,
+     em vez de depender só do line-height do texto ao lado. */
+  margin: 6px 0;
+}
 
 /* Noite: mesma calma que o estado "sonolento" já usa em outros lugares
    do app (olhos semicerrados, movimento mais lento) — a ideia não é

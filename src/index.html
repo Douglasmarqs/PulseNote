@@ -254,86 +254,93 @@
                próxima vez que abrir o app). O botão "→" continua levando
                pra tela cheia daquele assunto; o chevron só encolhe/expande
                o cartão aqui no início. -->
+          <!-- Coluna principal + barra lateral, como qualquer dashboard
+               profissional: a ordem visual sempre bate com a ordem aqui
+               no HTML (nada de grid "dense" reordenando cartões sozinho). -->
           <div class="dashboard-layout">
-            <section class="panel dash-panel" data-panel-id="tasks">
-              <div class="panel-header">
-                <div>
-                  <p class="eyebrow">Resumo</p>
-                  <h2>Prioridades do dia</h2>
+            <div class="dashboard-main">
+              <section class="panel dash-panel" data-panel-id="tasks">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Resumo</p>
+                    <h2>Prioridades do dia</h2>
+                  </div>
+                  <div class="dash-panel-actions">
+                    <button class="icon-button" data-view-shortcut="tasks" title="Ver tarefas">→</button>
+                    <button class="icon-button dash-panel-collapse-btn" type="button" data-collapse-toggle aria-expanded="true" title="Minimizar">⌄</button>
+                  </div>
                 </div>
-                <div class="dash-panel-actions">
-                  <button class="icon-button" data-view-shortcut="tasks" title="Ver tarefas">→</button>
-                  <button class="icon-button dash-panel-collapse-btn" type="button" data-collapse-toggle aria-expanded="true" title="Minimizar">⌄</button>
+                <div class="dash-panel-body">
+                  <div id="todayTasks" class="compact-list"></div>
                 </div>
-              </div>
-              <div class="dash-panel-body">
-                <div id="todayTasks" class="compact-list"></div>
-              </div>
-            </section>
+              </section>
 
-            <section class="panel dash-panel" data-panel-id="events">
-              <div class="panel-header">
-                <div>
-                  <p class="eyebrow">Agenda</p>
-                  <h2>Próximos compromissos</h2>
+              <section class="panel dash-panel" data-panel-id="chart">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Produtividade</p>
+                    <h2>Desempenho semanal</h2>
+                  </div>
+                  <div class="dash-panel-actions">
+                    <span class="pill" id="weeklySummary">0 concluídas</span>
+                    <button class="icon-button dash-panel-collapse-btn" type="button" data-collapse-toggle aria-expanded="true" title="Minimizar">⌄</button>
+                  </div>
                 </div>
-                <div class="dash-panel-actions">
-                  <button class="icon-button" data-view-shortcut="calendar" title="Ver agenda">→</button>
-                  <button class="icon-button dash-panel-collapse-btn" type="button" data-collapse-toggle aria-expanded="true" title="Minimizar">⌄</button>
+                <div class="dash-panel-body">
+                  <div id="chartBars" class="bar-chart"></div>
                 </div>
-              </div>
-              <div class="dash-panel-body">
-                <div id="upcomingEvents" class="event-list"></div>
-              </div>
-            </section>
+              </section>
+            </div>
 
-            <section class="panel wide dash-panel" data-panel-id="chart">
-              <div class="panel-header">
-                <div>
-                  <p class="eyebrow">Produtividade</p>
-                  <h2>Desempenho semanal</h2>
+            <div class="dashboard-side">
+              <section class="panel dash-panel" data-panel-id="events">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Agenda</p>
+                    <h2>Próximos compromissos</h2>
+                  </div>
+                  <div class="dash-panel-actions">
+                    <button class="icon-button" data-view-shortcut="calendar" title="Ver agenda">→</button>
+                    <button class="icon-button dash-panel-collapse-btn" type="button" data-collapse-toggle aria-expanded="true" title="Minimizar">⌄</button>
+                  </div>
                 </div>
-                <div class="dash-panel-actions">
-                  <span class="pill" id="weeklySummary">0 concluídas</span>
-                  <button class="icon-button dash-panel-collapse-btn" type="button" data-collapse-toggle aria-expanded="true" title="Minimizar">⌄</button>
+                <div class="dash-panel-body">
+                  <div id="upcomingEvents" class="event-list"></div>
                 </div>
-              </div>
-              <div class="dash-panel-body">
-                <div id="chartBars" class="bar-chart"></div>
-              </div>
-            </section>
+              </section>
 
-            <section class="panel dash-panel" data-panel-id="goals">
-              <div class="panel-header">
-                <div>
-                  <p class="eyebrow">Metas</p>
-                  <h2>Foco da semana</h2>
+              <section class="panel dash-panel" data-panel-id="goals">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Metas</p>
+                    <h2>Foco da semana</h2>
+                  </div>
+                  <div class="dash-panel-actions">
+                    <button class="icon-button" data-view-shortcut="goals" title="Ver metas">→</button>
+                    <button class="icon-button dash-panel-collapse-btn" type="button" data-collapse-toggle aria-expanded="true" title="Minimizar">⌄</button>
+                  </div>
                 </div>
-                <div class="dash-panel-actions">
-                  <button class="icon-button" data-view-shortcut="goals" title="Ver metas">→</button>
-                  <button class="icon-button dash-panel-collapse-btn" type="button" data-collapse-toggle aria-expanded="true" title="Minimizar">⌄</button>
+                <div class="dash-panel-body">
+                  <div id="goalSummary" class="goal-stack"></div>
                 </div>
-              </div>
-              <div class="dash-panel-body">
-                <div id="goalSummary" class="goal-stack"></div>
-              </div>
-            </section>
+              </section>
 
-            <section class="panel dash-panel" data-panel-id="finance-mini">
-              <div class="panel-header">
-                <div>
-                  <p class="eyebrow">Finanças</p>
-                  <h2>Este mês</h2>
+              <section class="panel dash-panel" data-panel-id="finance-mini">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Finanças</p>
+                    <h2>Este mês</h2>
+                  </div>
+                  <div class="dash-panel-actions">
+                    <button class="icon-button" data-view-shortcut="finances" title="Ver finanças">→</button>
+                    <button class="icon-button dash-panel-collapse-btn" type="button" data-collapse-toggle aria-expanded="true" title="Minimizar">⌄</button>
+                  </div>
                 </div>
-                <div class="dash-panel-actions">
-                  <button class="icon-button" data-view-shortcut="finances" title="Ver finanças">→</button>
-                  <button class="icon-button dash-panel-collapse-btn" type="button" data-collapse-toggle aria-expanded="true" title="Minimizar">⌄</button>
+                <div class="dash-panel-body">
+                  <div id="dashFinancePanel"></div>
                 </div>
-              </div>
-              <div class="dash-panel-body">
-                <div id="dashFinancePanel"></div>
-              </div>
-            </section>
+              </section>
+            </div>
           </div>
         </section>
 
