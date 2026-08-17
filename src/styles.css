@@ -1116,6 +1116,44 @@ p, h1, h2, h3 { margin: 0; }
 
 .task-title { font-weight: 600; font-size: 0.9rem; overflow-wrap: anywhere; color: var(--text); }
 .task-meta, .note-meta, .event-meta { color: var(--muted); font-size: 0.8rem; margin-top: 1px; }
+.event-meta .pn-icon { margin-right: 2px; opacity: 0.8; }
+.event-meta-dot { margin: 0 1px; }
+
+/* Contador de compromisso ("Faltam 20min" / "Atrasado 4h") — um ponto
+   colorido + texto, no lugar do emoji de círculo/aviso de antes (que
+   além de não combinar com o resto do app, renderiza diferente — às
+   vezes feio — dependendo do sistema/fonte de quem está usando). */
+.event-countdown {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--surface2);
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.event-countdown-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--muted);
+}
+.event-countdown.tone-now .event-countdown-dot { background: var(--red); box-shadow: 0 0 0 3px color-mix(in srgb, var(--red) 25%, transparent); animation: eventPulseDot 1.4s ease-in-out infinite; }
+.event-countdown.tone-now { color: var(--red); }
+.event-countdown.tone-late .event-countdown-dot { background: var(--red); }
+.event-countdown.tone-late { color: var(--red); }
+.event-countdown.tone-soon .event-countdown-dot { background: var(--orange); }
+.event-countdown.tone-soon { color: var(--orange); }
+.event-countdown.tone-ok .event-countdown-dot { background: var(--green); }
+.event-countdown.tone-ok { color: var(--green); }
+
+@keyframes eventPulseDot {
+  0%, 100% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--red) 25%, transparent); }
+  50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--red) 12%, transparent); }
+}
 
 .tag-list { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 
@@ -1141,9 +1179,9 @@ p, h1, h2, h3 { margin: 0; }
   font-weight: 700;
 }
 
-.priority-Alta    { background: var(--red-soft);    color: var(--red); }
+.priority-Alta    { background: var(--orange-soft); color: var(--orange); }
 .priority-Urgente { background: var(--red-soft);    color: var(--red); }
-.priority-Media   { background: var(--orange-soft); color: var(--orange); }
+.priority-Media   { background: var(--accent-soft); color: var(--accent); }
 .priority-Baixa   { background: var(--green-soft);  color: var(--green); }
 
 .status-Concluida   { background: var(--green-soft);  color: var(--green); }
@@ -1791,6 +1829,26 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   position: relative;
 }
 .cl-check .pn-icon { width: 9px; height: 9px; margin: 0; }
+
+/* Itens além do 3º ficam escondidos até a nota expandir — antes disso
+   o "+N mais itens" era só texto, sem nenhum jeito de ver o resto sem
+   abrir "Editar". */
+.cl-item-extra { display: none; }
+.checklist-preview.expanded .cl-item-extra { display: flex; }
+
+.cl-toggle-btn {
+  background: none;
+  border: none;
+  padding: 2px 0;
+  margin-top: 1px;
+  color: var(--accent);
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: left;
+  width: fit-content;
+}
+.cl-toggle-btn:hover { text-decoration: underline; }
 
 @media (max-width: 720px) {
   .cl-check::after { content: ""; position: absolute; inset: -12px; }

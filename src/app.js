@@ -1619,11 +1619,24 @@ function renderPaletteResults(query) {
   window.__paletteResults = results;
 }
 
+// Tarefas, Agenda e Metas moram todas dentro da view "planner" — não têm
+// view própria. searchEverything() mantém o "type" original (tasks/
+// calendar/goals) porque é útil pra distinguir o resultado, mas a
+// navegação precisa ir pra view que existe de verdade (mesma causa raiz
+// dos atalhos do início que apontavam pra "calendar"/"tasks"/"goals").
+const PALETTE_TYPE_TO_VIEW = {
+  notes: "notes",
+  tasks: "planner",
+  calendar: "planner",
+  goals: "planner",
+  finances: "finances",
+};
+
 function openPaletteResult(i) {
   const r = window.__paletteResults?.[i];
   if (!r) return;
   document.querySelector("#globalPaletteModal").hidden = true;
-  setView(r.type);
+  setView(PALETTE_TYPE_TO_VIEW[r.type] || r.type);
 }
 
 function bindGlobalPalette() {
@@ -1669,6 +1682,16 @@ function bindGlobalPalette() {
 window.openPaletteResult = openPaletteResult;
 
 function setView(view) {
+  const target = document.querySelector(`#${view}View`);
+  if (!target) {
+    // Segurança: se algum botão apontar pra uma view que não existe (foi
+    // exatamente o que causava a tela ficar em branco ao clicar na seta
+    // de "Ver agenda"/"Ver tarefas"/"Ver metas" no início), a navegação
+    // é ignorada em vez de apagar a tela atual inteira sem colocar nada
+    // no lugar.
+    console.warn(`setView: view "${view}" não existe.`);
+    return;
+  }
   activeView = view;
   // Sync sidebar nav
   document.querySelectorAll(".nav-item").forEach((item) => {
@@ -1679,7 +1702,7 @@ function setView(view) {
     item.classList.toggle("active", item.dataset.view === view);
   });
   document.querySelectorAll(".view").forEach((section) => section.classList.remove("active-view"));
-  document.querySelector(`#${view}View`).classList.add("active-view");
+  target.classList.add("active-view");
   elements.viewTitle.textContent = viewTitles[view];
   // Scroll to top on mobile
   window.scrollTo({ top: 0, behavior: "smooth" });
@@ -2448,8 +2471,8 @@ function renderPlannerList() {
 // dos outros botões).
 const PRIORITY_RING = {
   Baixa: "var(--green)",
-  Media: "var(--orange)",
-  Alta: "var(--red)",
+  Media: "var(--accent)",
+  Alta: "var(--orange)",
   Urgente: "var(--red)",
 };
 
@@ -2849,9 +2872,15 @@ function renderNoteCard(note, searchQuery) {
   const checklistHtml =
     note.checklist && note.checklist.length
       ? `<div class="checklist-preview">${note.checklist
-          .slice(0, 3)
-          .map((item) => `<div class="cl-item"><span class="cl-check">${icon("check", 11)}</span><span class="cl-text">${escapeHtml(item)}</span></div>`)
-          .join("")}${note.checklist.length > 3 ? `<div class="cl-item"><span class="task-meta">+${note.checklist.length - 3} mais itens</span></div>` : ""}</div>`
+          .map(
+            (item, i) =>
+              `<div class="cl-item${i >= 3 ? " cl-item-extra" : ""}"><span class="cl-check">${icon("check", 11)}</span><span class="cl-text">${escapeHtml(item)}</span></div>`
+          )
+          .join("")}${
+          note.checklist.length > 3
+            ? `<button type="button" class="cl-toggle-btn" onclick="toggleNoteChecklistPreview(this)">+${note.checklist.length - 3} mais itens</button>`
+            : ""
+        }</div>`
       : "";
 
   const tagsHtml =
@@ -3040,7 +3069,7 @@ function renderTaskRow(task) {
         </div>
       </div>
       <div class="task-row-bottom">
-        <span class="task-meta">📅 ${formatDate(task.dueDate)}</span>
+        <span class="task-meta">${icon("calendarWeek", 12)}${formatDate(task.dueDate)}</span>
         <span class="priority-pill priority-${task.priority}">${escapeHtml(task.priority)}</span>
         <span class="status-pill status-${task.status.replace(" ", "-")}">${task.status}</span>
         <button class="mini-button task-subtasks-toggle" onclick="toggleTaskDetails('${task.id}', event)" style="margin-left:auto;padding:2px 8px;font-size:0.7rem">☑ ${doneCount}/${subtasks.length}</button>
@@ -3177,6 +3206,19 @@ function cycleTaskRecurrence(id, event) {
 // O seletor não fica mais preso a ".task-row" — assim funciona tanto na
 // tela antiga de Tarefas quanto nas linhas de tarefa do Planner, que
 // usam o mesmo data-task-id.
+// ── Preview de checklist na nota (Biblioteca de Anotações) ──
+// O cartão da nota só mostra os 3 primeiros itens por padrão pra não
+// ficar gigante — antes disso, os itens extras ("+N mais itens") eram só
+// um texto estático, sem nenhum jeito de vê-los sem abrir "Editar". Agora
+// é um botão de verdade que revela o resto ali mesmo, no cartão.
+function toggleNoteChecklistPreview(btn) {
+  const wrap = btn.closest(".checklist-preview");
+  if (!wrap) return;
+  const expanded = wrap.classList.toggle("expanded");
+  const extraCount = wrap.querySelectorAll(".cl-item-extra").length;
+  btn.textContent = expanded ? "Mostrar menos" : `+${extraCount} mais itens`;
+}
+
 function toggleTaskDetails(id, event) {
   event?.stopPropagation();
   if (plannerExpandedTaskDetails.has(id)) plannerExpandedTaskDetails.delete(id);
@@ -3386,45 +3428,57 @@ function filterEventsByDate(date) {
 }
 
 function renderEventRow(event) {
+  const cd = countdownLabel(event.date, event.time);
   return `
     <article class="event-row" data-event-id="${event.id}">
       <div style="flex:1;min-width:0">
         <strong style="font-size:0.9rem">${escapeHtml(event.title)}</strong>
-        <div class="event-meta">📅 ${formatDate(event.date)} às ${event.time} · 📍 ${escapeHtml(event.location)}</div>
+        <div class="event-meta">${icon("calendar", 12)}${formatDate(event.date)} às ${event.time} <span class="event-meta-dot">·</span> ${icon("mapPin", 12)}${escapeHtml(event.location)}</div>
       </div>
       <div class="tag-list" style="flex-shrink:0">
-        <span class="event-countdown" data-event-date="${event.date}" data-event-time="${event.time}">${countdownLabel(event.date, event.time)}</span>
-        <button class="mini-button" onclick="deleteEvent('${event.id}')" title="Excluir" style="padding:0;width:28px;height:28px">🗑️</button>
+        <span class="event-countdown tone-${cd.tone}" data-event-date="${event.date}" data-event-time="${event.time}">
+          <span class="event-countdown-dot"></span><span class="event-countdown-text">${escapeHtml(cd.text)}</span>
+        </span>
+        <button class="mini-button" onclick="deleteEvent('${event.id}')" title="Excluir" style="padding:0;width:28px;height:28px">${icon("trash", 14)}</button>
       </div>
     </article>
   `;
 }
 
-// Calcula quanto tempo falta (ou já passou) para um compromisso, em texto amigável.
+// Calcula quanto tempo falta (ou já passou) para um compromisso, em texto
+// amigável. Retorna { text, tone } em vez de já embutir emoji/cor no texto,
+// pra quem consome poder estilizar (ponto colorido + CSS) em vez de
+// depender de emoji — que rendeririam diferente (ou feio, tipo o 📅 que
+// alguns sistemas mostram como um ícone genérico de "dia 17") em cada
+// aparelho/fonte.
 function countdownLabel(date, time) {
-  if (!date || !time) return "";
+  if (!date || !time) return { text: "", tone: "ok" };
   const target = new Date(`${date}T${time}`);
   const diffMs = target - new Date();
   const diffMin = Math.round(diffMs / 60000);
 
-  if (diffMin <= 0 && diffMin > -30) return "🔴 Agora";
+  if (diffMin <= 0 && diffMin > -30) return { text: "Agora", tone: "now" };
   if (diffMin <= -30) {
     const hoursAgo = Math.round(Math.abs(diffMin) / 60);
-    return hoursAgo >= 1 ? `⚠️ Atrasado ${hoursAgo}h` : `⚠️ Atrasado ${Math.abs(diffMin)}min`;
+    return { text: hoursAgo >= 1 ? `Atrasado ${hoursAgo}h` : `Atrasado ${Math.abs(diffMin)}min`, tone: "late" };
   }
-  if (diffMin < 60) return `🟠 Faltam ${diffMin}min`;
+  if (diffMin < 60) return { text: `Faltam ${diffMin}min`, tone: "soon" };
   const hours = Math.floor(diffMin / 60);
   const minutes = diffMin % 60;
-  if (hours < 24) return `🟢 Faltam ${hours}h${minutes ? ` ${minutes}min` : ""}`;
+  if (hours < 24) return { text: `Faltam ${hours}h${minutes ? ` ${minutes}min` : ""}`, tone: "ok" };
   const days = Math.floor(hours / 24);
-  return `🟢 Faltam ${days} dia${days > 1 ? "s" : ""}`;
+  return { text: `Faltam ${days} dia${days > 1 ? "s" : ""}`, tone: "ok" };
 }
 
-// Atualiza só o texto dos contadores já na tela, sem re-renderizar a lista inteira
-// (evita perder scroll/seleção e é muito mais leve do que chamar renderCalendar a cada minuto).
+// Atualiza só o texto/cor dos contadores já na tela, sem re-renderizar a
+// lista inteira (evita perder scroll/seleção e é muito mais leve do que
+// chamar renderCalendar a cada minuto).
 function updateEventCountdowns() {
   document.querySelectorAll(".event-countdown").forEach((el) => {
-    el.textContent = countdownLabel(el.dataset.eventDate, el.dataset.eventTime);
+    const cd = countdownLabel(el.dataset.eventDate, el.dataset.eventTime);
+    el.className = `event-countdown tone-${cd.tone}`;
+    const textEl = el.querySelector(".event-countdown-text");
+    if (textEl) textEl.textContent = cd.text;
   });
 }
 
@@ -6301,6 +6355,7 @@ function autoApplyRecurrents() {
 
 window.editNote = editNote;
 window.toggleFavorite = toggleFavorite;
+window.toggleNoteChecklistPreview = toggleNoteChecklistPreview;
 window.convertNoteToTask = convertNoteToTask;
 window.deleteNote = deleteNote;
 window.exportNoteMarkdown = exportNoteMarkdown;
