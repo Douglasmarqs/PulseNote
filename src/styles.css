@@ -667,7 +667,7 @@ p, h1, h2, h3 { margin: 0; }
   border: 1.5px solid var(--line);
   border-radius: 13px;
   width: 220px;
-  transition: border-color 200ms, box-shadow 200ms;
+  transition: border-color 200ms, box-shadow 200ms, width 200ms ease;
 }
 .search-box:focus-within {
   border-color: var(--accent);
@@ -1832,9 +1832,15 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 
 /* Itens além do 3º ficam escondidos até a nota expandir — antes disso
    o "+N mais itens" era só texto, sem nenhum jeito de ver o resto sem
-   abrir "Editar". */
-.cl-item-extra { display: none; }
-.checklist-preview.expanded .cl-item-extra { display: flex; }
+   abrir "Editar".
+   IMPORTANTE sobre especificidade: essa regra precisa ser MAIS específica
+   que ".checklist-preview .cl-item" acima (2 classes) pra realmente
+   escondê-los — só ".cl-item-extra" sozinha (1 classe) SEMPRE perdia
+   pra ela, então os itens "extras" nunca ficavam escondidos de verdade
+   (aaí sim o botão "+N mais itens" parecia inútil, porque não escondia
+   nada mesmo). */
+.checklist-preview .cl-item.cl-item-extra { display: none; }
+.checklist-preview.expanded .cl-item.cl-item-extra { display: flex; }
 
 .cl-toggle-btn {
   background: none;
@@ -2388,26 +2394,21 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   .main-area { padding-bottom: var(--nav-height); }
 
   .topbar {
-    padding: calc(9px + env(safe-area-inset-top)) 16px 9px;
-    gap: 6px 10px;
-    /* CORREÇÃO DEFINITIVA: depois de três rodadas tentando encaixar
-       saudação + avatar + busca (+ botão, agora removido) numa única
-       linha via proporções de flex, ficou claro que o problema era a
-       abordagem — sempre que um elemento crescia um pouco (nome mais
-       longo, saudação diferente), outro tinha que perder espaço, e o
-       equilíbrio quebrava nesse cabo de guerra. Solução robusta: a
-       saudação ocupa a linha inteira, e avatar/busca ficam numa
-       segunda linha, à direita, sem disputar espaço com o texto.
-       O cabeçalho fica um pouco mais alto, mas nunca mais corta nome
-       nem empurra botão pra fora da tela — troca que vale a pena. */
-    flex-wrap: wrap;
+    padding: calc(9px + env(safe-area-inset-top)) 14px 9px;
+    gap: 8px;
+    /* Antes: cabeçalho em duas linhas (saudação numa linha inteira, depois
+       avatar+busca embaixo) — resolvia o corte de texto, mas ficava alto
+       e "espalhado". Voltamos pra uma linha só: agora a saudação tem
+       min-width:0 + texto com ellipsis (encolhe sem quebrar) e as ações
+       (avatar/busca) têm largura fixa que não estica — cada lado cede da
+       forma certa, então não tem mais aquele cabo de guerra por espaço. */
+    flex-wrap: nowrap;
     min-height: var(--header-height, 60px);
   }
 
   .topbar-greeting {
-    flex: 1 1 100%;
+    flex: 1 1 auto;
     min-width: 0;
-    order: 1;
   }
 
   #todayLabel {
@@ -2418,7 +2419,7 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   }
 
   #viewTitle {
-    font-size: 1.2rem;
+    font-size: 1.05rem;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -2426,19 +2427,24 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   }
 
   .topbar-actions {
-    order: 2;
     flex: 0 0 auto;
-    margin-left: auto;
+    gap: 6px;
   }
 
-  /* Busca com largura fixa e confortável — sem precisar expandir por
-     cima de outros elementos, porque agora ela não disputa espaço com
-     mais ninguém na sua própria linha. */
+  /* Busca compacta — cabe ao lado da saudação numa única linha; o texto
+     do placeholder também recebe reticências se não couber inteiro.
+     Ao focar, ela cresce um pouco (a saudação cede espaço suavemente,
+     já que tem min-width:0) — melhora a usabilidade sem precisar de
+     mais espaço fixo o tempo todo. */
   .search-box {
-    width: 160px;
+    width: 108px;
     flex-shrink: 0;
   }
-  .search-box input { min-width: 0; }
+  .search-box:focus-within { width: 160px; }
+  .search-box input {
+    min-width: 0;
+    text-overflow: ellipsis;
+  }
 
   /* Avatar e botão de instalar PWA (quando aparece) do mesmo tamanho,
      alinhados com a busca. */
@@ -2456,6 +2462,16 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   }
   .pwa-fixed-install-btn span:last-child {
     display: none;
+  }
+
+  /* Rede de segurança pros aparelhos mais estreitos comuns (iPhone SE e
+     afins, ~375px) — encolhe só mais um pouco a busca e o título, sem
+     precisar voltar pra duas linhas. */
+  @media (max-width: 380px) {
+    .search-box { width: 92px; }
+    .search-box:focus-within { width: 140px; }
+    #viewTitle { font-size: 0.98rem; }
+    .topbar { padding-left: 12px; padding-right: 12px; }
   }
 
   /* Em formulários verticais (Tarefas/Metas), o botão não deve crescer em

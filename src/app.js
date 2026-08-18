@@ -3053,35 +3053,29 @@ function renderTaskRow(task) {
   const isDone = task.status === "Concluida";
   const subtasks = task.subtasks || [];
   const doneCount = subtasks.filter((s) => s.done).length;
-  const recIcon = task.recurrence ? "🔁" : "🔄";
-  const recTitle = task.recurrence
-    ? `Repete: ${{ diaria: "diariamente", semanal: "semanalmente", mensal: "mensalmente" }[task.recurrence]} (toque pra mudar)`
-    : "Sem repetição (toque pra ativar)";
   return `
-    <article class="task-row" data-task-id="${task.id}" draggable="true" ondragstart="dragTask('${task.id}')">
+    <article class="task-row" data-task-id="${task.id}">
       <div class="task-row-top">
-        <button class="task-check" onclick="toggleTask('${task.id}')" title="Concluir" style="${isDone ? "background:var(--green);border-color:var(--green);color:#fff;" : ""}">${isDone ? "✓" : ""}</button>
+        <button class="task-check ${isDone ? "is-done" : ""}" onclick="toggleTask('${task.id}')" title="Concluir">${isDone ? icon("check", 15) : ""}</button>
         <div class="task-title" style="${isDone ? "text-decoration:line-through;opacity:0.5;" : ""}" onclick="toggleTaskDetails('${task.id}', event)">${escapeHtml(task.title)}</div>
         <div class="task-row-actions">
-          <button class="mini-button" onclick="cycleTaskRecurrence('${task.id}', event)" title="${recTitle}" style="padding:0;width:28px;height:28px;${task.recurrence ? "color:var(--accent);" : ""}">${recIcon}</button>
-          <button class="mini-button" onclick="openTaskMoveMenu('${task.id}', event)" title="Mover para outra coluna" style="padding:0;width:28px;height:28px;">↔️</button>
-          <button class="mini-button" onclick="deleteTask('${task.id}')" title="Excluir" style="padding:0;width:28px;height:28px;">🗑️</button>
+          <button class="mini-button" onclick="openPlannerTaskActions('${task.id}', event)" title="Mais opções">${icon("moreVertical", 16)}</button>
         </div>
       </div>
       <div class="task-row-bottom">
         <span class="task-meta">${icon("calendarWeek", 12)}${formatDate(task.dueDate)}</span>
         <span class="priority-pill priority-${task.priority}">${escapeHtml(task.priority)}</span>
         <span class="status-pill status-${task.status.replace(" ", "-")}">${task.status}</span>
-        <button class="mini-button task-subtasks-toggle" onclick="toggleTaskDetails('${task.id}', event)" style="margin-left:auto;padding:2px 8px;font-size:0.7rem">☑ ${doneCount}/${subtasks.length}</button>
+        <button class="mini-button task-subtasks-toggle" onclick="toggleTaskDetails('${task.id}', event)" style="margin-left:auto;padding:2px 8px;font-size:0.7rem">${icon("checkCircle", 12)} ${doneCount}/${subtasks.length}</button>
       </div>
       <div class="task-subtasks">
         ${subtasks.map((s) => `
           <div class="task-subtask-row">
-            <button class="task-subtask-check ${s.done ? "done" : ""}" onclick="toggleSubtask('${task.id}','${s.id}', event)">${s.done ? "✓" : ""}</button>
+            <button class="task-subtask-check ${s.done ? "done" : ""}" onclick="toggleSubtask('${task.id}','${s.id}', event)">${s.done ? icon("check", 11) : ""}</button>
             <span class="${s.done ? "done" : ""}">${escapeHtml(s.title)}</span>
-            <button class="mini-button" onclick="deleteSubtask('${task.id}','${s.id}', event)" style="padding:0;width:22px;height:22px;margin-left:auto">✕</button>
+            <button class="mini-button" onclick="deleteSubtask('${task.id}','${s.id}', event)" style="padding:0;width:22px;height:22px;margin-left:auto">${icon("x", 11)}</button>
           </div>`).join("") || `<div class="empty-state" style="padding:8px 0">Sem itens na checklist.</div>`}
-        <button class="mini-button" onclick="addSubtask('${task.id}', event)" style="width:100%;margin-top:4px">+ Item da checklist</button>
+        <button class="mini-button" onclick="addSubtask('${task.id}', event)" style="width:100%;margin-top:4px">${icon("plus", 13)} Item da checklist</button>
       </div>
     </article>
   `;
