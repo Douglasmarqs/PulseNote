@@ -634,6 +634,13 @@ p, h1, h2, h3 { margin: 0; }
   min-height: var(--header-height);
 }
 
+/* .topbar-row existe só pra poder virar uma linha própria no mobile (ver
+   media query) sem afetar o desktop: aqui em cima ela "desaparece" do
+   layout (display:contents), então .topbar-greeting e .topbar-actions
+   se comportam exatamente como se fossem filhos diretos do .topbar —
+   don't mind essa div, ela é só um "gancho" pro mobile. */
+.topbar-row { display: contents; }
+
 .topbar-greeting { flex: 1; }
 
 #todayLabel {
@@ -2394,16 +2401,26 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   .main-area { padding-bottom: var(--nav-height); }
 
   .topbar {
-    padding: calc(9px + env(safe-area-inset-top)) 14px 9px;
-    gap: 8px;
-    /* Antes: cabeçalho em duas linhas (saudação numa linha inteira, depois
-       avatar+busca embaixo) — resolvia o corte de texto, mas ficava alto
-       e "espalhado". Voltamos pra uma linha só: agora a saudação tem
-       min-width:0 + texto com ellipsis (encolhe sem quebrar) e as ações
-       (avatar/busca) têm largura fixa que não estica — cada lado cede da
-       forma certa, então não tem mais aquele cabo de guerra por espaço. */
-    flex-wrap: nowrap;
+    padding: calc(10px + env(safe-area-inset-top)) 16px 12px;
+    gap: 10px;
+    /* .topbar-row (mascote+saudação+avatar) e a busca agora são duas
+       linhas de verdade — mas diferente da tentativa anterior de
+       "tudo numa linha só" (que cortava o texto e a busca virava só
+       "P..."), aqui só a BUSCA desce pra sua própria linha, com a
+       largura inteira da tela. A linha de cima (mascote/saudação/
+       avatar) fica com espaço de sobra, então nada precisa truncar. */
+    flex-wrap: wrap;
     min-height: var(--header-height, 60px);
+  }
+
+  /* No mobile a .topbar-row deixa de ser "invisível" (display:contents
+     do desktop) e vira uma linha de verdade, ocupando a largura toda,
+     com a saudação flexível de um lado e o avatar fixo do outro. */
+  .topbar-row {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    gap: 10px;
   }
 
   .topbar-greeting {
@@ -2411,7 +2428,16 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
     min-width: 0;
   }
 
+  /* Mascote maior no mobile — como não divide mais espaço com a busca
+     nessa linha, dá pra deixar ele com presença de verdade. */
+  .pulsinho--greeting {
+    width: 58px;
+    height: 58px;
+    margin: 4px 0;
+  }
+
   #todayLabel {
+    font-size: 0.82rem;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -2419,7 +2445,7 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   }
 
   #viewTitle {
-    font-size: 1.05rem;
+    font-size: 1.35rem;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -2431,23 +2457,18 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
     gap: 6px;
   }
 
-  /* Busca compacta — cabe ao lado da saudação numa única linha; o texto
-     do placeholder também recebe reticências se não couber inteiro.
-     Ao focar, ela cresce um pouco (a saudação cede espaço suavemente,
-     já que tem min-width:0) — melhora a usabilidade sem precisar de
-     mais espaço fixo o tempo todo. */
+  /* Busca em linha própria, largura total — sem precisar encolher texto
+     nem virar "P..." feito antes. */
   .search-box {
-    width: 108px;
-    flex-shrink: 0;
+    width: 100%;
+    flex: 1 1 100%;
   }
-  .search-box:focus-within { width: 160px; }
+  .search-box:focus-within { width: 100%; }
   .search-box input {
     min-width: 0;
-    text-overflow: ellipsis;
   }
 
-  /* Avatar e botão de instalar PWA (quando aparece) do mesmo tamanho,
-     alinhados com a busca. */
+  /* Avatar e botão de instalar PWA (quando aparece) do mesmo tamanho. */
   .topbar-actions .user-avatar-btn {
     width: 40px;
     height: 40px;
@@ -2465,13 +2486,11 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   }
 
   /* Rede de segurança pros aparelhos mais estreitos comuns (iPhone SE e
-     afins, ~375px) — encolhe só mais um pouco a busca e o título, sem
-     precisar voltar pra duas linhas. */
+     afins, ~375px) — só encolhe um pouco mais o mascote/título. */
   @media (max-width: 380px) {
-    .search-box { width: 92px; }
-    .search-box:focus-within { width: 140px; }
-    #viewTitle { font-size: 0.98rem; }
-    .topbar { padding-left: 12px; padding-right: 12px; }
+    .pulsinho--greeting { width: 48px; height: 48px; }
+    #viewTitle { font-size: 1.15rem; }
+    .topbar { padding-left: 14px; padding-right: 14px; }
   }
 
   /* Em formulários verticais (Tarefas/Metas), o botão não deve crescer em
@@ -5215,5 +5234,8 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
 
 @media (max-width: 720px) {
   .topbar-greeting { gap: 8px; }
-  .pulsinho--greeting { width: 26px; height: 26px; margin: 3px 0; }
+  /* Tamanho do mascote no mobile é definido junto com o resto do topbar
+     (ver bloco principal do cabeçalho, mais acima no arquivo) — não
+     duplicar aqui de novo pra não repetir a mesma armadilha de duas
+     regras divergindo por ordem no arquivo. */
 }

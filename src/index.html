@@ -121,27 +121,29 @@
 
         <!-- TOP BAR -->
         <header class="topbar">
-          <div class="topbar-greeting">
-            <div class="pulsinho pulsinho--greeting" id="greetingMascot">
-              <div class="pulsinho__face">
-                <div class="pulsinho__eyes"><span class="pulsinho__eye"></span><span class="pulsinho__eye"></span></div>
-                <svg class="pulsinho__pulse" viewBox="0 0 120 26"><path d="M0,13 L28,13 L36,3 L44,23 L52,13 L64,13 L70,6 L76,20 L82,13 L120,13"/></svg>
+          <div class="topbar-row">
+            <div class="topbar-greeting">
+              <div class="pulsinho pulsinho--greeting" id="greetingMascot">
+                <div class="pulsinho__face">
+                  <div class="pulsinho__eyes"><span class="pulsinho__eye"></span><span class="pulsinho__eye"></span></div>
+                  <svg class="pulsinho__pulse" viewBox="0 0 120 26"><path d="M0,13 L28,13 L36,3 L44,23 L52,13 L64,13 L70,6 L76,20 L82,13 L120,13"/></svg>
+                </div>
+              </div>
+              <div>
+                <p id="todayLabel">Hoje</p>
+                <h1 id="viewTitle">Seu dia em foco</h1>
               </div>
             </div>
-            <div>
-              <p id="todayLabel">Hoje</p>
-              <h1 id="viewTitle">Seu dia em foco</h1>
+            <div class="topbar-actions">
+              <!-- O botão "Instalar app" é inserido aqui pelo pwa-install.js,
+                   apenas se o navegador permitir instalação como PWA -->
+              <div data-pwa-install-slot></div>
             </div>
           </div>
-          <div class="topbar-actions">
-            <!-- O botão "Instalar app" é inserido aqui pelo pwa-install.js,
-                 apenas se o navegador permitir instalação como PWA -->
-            <div data-pwa-install-slot></div>
-            <label class="search-box" title="Filtra esta tela — aperte Enter para buscar em tudo (ou Ctrl/Cmd+K)">
-              <span class="icon">🔍</span>
-              <input id="globalSearch" type="text" inputmode="search" autocomplete="off" autocorrect="off" placeholder="Pesquisar... (Enter busca tudo)" />
-            </label>
-          </div>
+          <label class="search-box" title="Filtra esta tela — aperte Enter para buscar em tudo (ou Ctrl/Cmd+K)">
+            <span class="icon">🔍</span>
+            <input id="globalSearch" type="text" inputmode="search" autocomplete="off" autocorrect="off" placeholder="Pesquisar... (Enter busca tudo)" />
+          </label>
         </header>
 
         <!-- Busca global (Ctrl/Cmd+K) — procura em notas, tarefas, agenda e
