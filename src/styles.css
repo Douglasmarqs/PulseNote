@@ -1286,10 +1286,10 @@ p, h1, h2, h3 { margin: 0; }
 /* Editor Panel */
 .editor-panel {
   background: var(--surface);
-  border-radius: 20px;
+  border-radius: 18px;
   border: 1.5px solid var(--line);
   box-shadow: var(--shadow-card);
-  padding: 20px;
+  padding: 14px 16px;
   display: grid;
   gap: 12px;
 }
@@ -2525,7 +2525,7 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   .dashboard-main, .dashboard-side { gap: 10px; }
   .dashboard-side { grid-template-columns: 1fr; }
   .wide { grid-column: auto; }
-  .panel, .list-panel, .calendar-panel { padding: 12px 14px; border-radius: 16px; }
+  .panel, .list-panel, .calendar-panel, .editor-panel { padding: 12px 14px; border-radius: 16px; }
   .panel-header { margin-bottom: 8px; gap: 8px; }
   .panel-header h2 { font-size: 0.9rem; }
   .icon-button { width: 30px; height: 30px; border-radius: 9px; font-size: 0.82rem; }
@@ -3424,8 +3424,9 @@ font-variant-numeric:tabular-nums;
 
 .fin-cal-grid {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 5px;
+  grid-template-columns: repeat(7, minmax(0, 54px));
+  gap: 6px;
+  justify-content: center;
 }
 
 .fin-cal-day {
@@ -4220,6 +4221,7 @@ align-items:stretch;
   display: grid;
   gap: 16px;
   max-width: 640px;
+  margin: 0 auto;
 }
 
 .settings-section-label {
