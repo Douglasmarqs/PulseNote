@@ -16,7 +16,63 @@
 // atualização em quem ainda estava preso numa versão antiga do cache —
 // junto com uma checagem de atualização mais agressiva em pwa-install.js
 // (agora também verifica ao voltar pra aba, não só ao abrir o app).
-const CACHE_NAME = "pulsenote-v11";
+// v12: adiciona o bloco de Firebase Cloud Messaging abaixo (push em
+// segundo plano) — bump só pra garantir que quem já tinha o SW instalado
+// receba essa versão nova o quanto antes.
+const CACHE_NAME = "pulsenote-v12";
+
+// ── Firebase Cloud Messaging (push em segundo plano) ──────────────
+// Isso é o que permite uma notificação aparecer mesmo com o PulseNote
+// fechado: o servidor (api/send-reminders.js) manda um push pro FCM, o
+// FCM entrega pro navegador, e o navegador "acorda" este Service Worker
+// só pra rodar o onBackgroundMessage abaixo.
+//
+// Usa o SDK "compat" (não o modular usado em app.js/push-notifications.js)
+// porque é o único formato que o importScripts() de dentro de um Service
+// Worker aceita carregar.
+//
+// Ficam num try/catch: se o import falhar por qualquer motivo (ex.: sem
+// internet no exato instante em que o navegador reinstala o SW), o resto
+// deste arquivo continua funcionando normal — cache e PWA não dependem
+// disso.
+try {
+  importScripts("https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js");
+  importScripts("https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js");
+
+  // Mesmos valores públicos de src/firebase-config.js (chave de API de app
+  // web não é segredo — é sempre visível no navegador; a segurança real
+  // vem das regras do Firestore/Auth, não de esconder isso).
+  firebase.initializeApp({
+    apiKey: "AIzaSyC6SmmVCWogvtaOdN3NPPPKDreGClIGvlE",
+    authDomain: "pulsenote-f99e2.firebaseapp.com",
+    projectId: "pulsenote-f99e2",
+    storageBucket: "pulsenote-f99e2.firebasestorage.app",
+    messagingSenderId: "244574278691",
+    appId: "1:244574278691:web:68835a5fdff4f178340d96",
+  });
+
+  const messaging = firebase.messaging();
+
+  // O envio em api/send-reminders.js manda a notificação como "data"
+  // (não "notification") DE PROPÓSITO — assim o FCM nunca mostra uma
+  // notificação genérica sozinho, e a gente controla 100% da aparência
+  // aqui, igual às notificações locais (ícone do Pulsinho, "tag" pra
+  // evitar duplicata, e os mesmos dados usados pelo notificationclick
+  // logo abaixo pra abrir a tela certa).
+  messaging.onBackgroundMessage((payload) => {
+    const data = payload.data || {};
+    self.registration.showNotification(data.title || "PulseNote", {
+      body: data.body || "",
+      icon: "icons/pulsinho-notification-icon.png",
+      badge: "icons/pulsinho-notification-icon.png",
+      tag: data.tag || "pulsenote-push",
+      vibrate: [120, 60, 120],
+      data: { view: data.view || "dashboard", itemId: data.itemId || null },
+    });
+  });
+} catch (err) {
+  console.warn("Firebase Messaging não pôde ser inicializado no Service Worker:", err);
+}
 
 // Arquivos essenciais para o app abrir mesmo sem internet.
 // Usamos os caminhos REAIS (dentro de /src/), não os caminhos "bonitos"

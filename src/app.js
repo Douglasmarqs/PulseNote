@@ -974,6 +974,8 @@ function renderWhatsAppSettings() {
     unlinkedBlock.hidden = true;
     const phoneLabel = document.getElementById("whatsappLinkedPhoneLabel");
     if (phoneLabel) phoneLabel.textContent = `+${state.whatsappLinkedPhone}`;
+    const reminderCheckbox = document.getElementById("whatsappReminderOptIn");
+    if (reminderCheckbox) reminderCheckbox.checked = !!state.whatsappReminderOptIn;
     return;
   }
 
@@ -1172,6 +1174,14 @@ function bindSettingsView() {
     showToast("Código gerado! Envie a mensagem pelo WhatsApp em até 10 minutos.");
   });
 
+  // ── WhatsApp: opt-in de lembretes (tarefas/eventos/metas/orçamento
+  //    também por WhatsApp, além do push) ──────────────────────────
+  document.getElementById("whatsappReminderOptIn")?.addEventListener("change", (e) => {
+    state.whatsappReminderOptIn = e.target.checked;
+    saveState();
+    showToast(e.target.checked ? "🔔 Lembretes por WhatsApp ativados!" : "Lembretes por WhatsApp desativados.");
+  });
+
   // ── WhatsApp: desvincular ──────────────────────────────────────────
   document.getElementById("settingsWhatsappUnlinkBtn")?.addEventListener("click", async () => {
     hideSettingsMsg();
@@ -1348,6 +1358,12 @@ function normalizeState(parsed) {
   if (parsed.whatsappLinkCode === undefined) parsed.whatsappLinkCode = null;
   if (parsed.whatsappLinkCodeExpiresAt === undefined) parsed.whatsappLinkCodeExpiresAt = null;
   if (parsed.whatsappLinkedPhone === undefined) parsed.whatsappLinkedPhone = null;
+  // Notificações fora do app (ver push-notifications.js e
+  // api/send-reminders.js): tokens do FCM deste(s) aparelho(s) e se a
+  // pessoa também quer receber lembrete por WhatsApp (só faz sentido
+  // perguntar isso quando já está vinculado — ver renderWhatsAppSettings).
+  if (!Array.isArray(parsed.fcmTokens)) parsed.fcmTokens = [];
+  if (parsed.whatsappReminderOptIn === undefined) parsed.whatsappReminderOptIn = false;
   // Retrocompatibilidade: lançamentos, tarefas e metas antigos não tinham
   // esses campos — garantimos que existam pra não quebrar o restante do app.
   parsed.tasks.forEach((t) => { if (!t.subtasks) t.subtasks = []; if (t.recurrence === undefined) t.recurrence = null; });
@@ -1371,6 +1387,8 @@ function loadDefaultState() {
     whatsappLinkCode: null,
     whatsappLinkCodeExpiresAt: null,
     whatsappLinkedPhone: null,
+    fcmTokens: [],
+    whatsappReminderOptIn: false,
   };
 }
 

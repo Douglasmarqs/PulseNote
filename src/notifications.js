@@ -67,6 +67,12 @@ async function requestNotificationPermission() {
   if (result === "granted") {
     (window.PulseNoteShowToast || console.log)("🔔 Notificações ativadas!");
     localStorage.setItem("pn_notifications_enabled", "1");
+    // Registra também o push do FCM (ver push-notifications.js) — é isso
+    // que permite a notificação chegar mesmo com o app/aba fechados, via
+    // um servidor externo (api/send-reminders.js). Não bloqueia o fluxo
+    // se falhar (ex.: navegador sem suporte): as notificações locais
+    // (enquanto o app está aberto) continuam funcionando normalmente.
+    window.PulseNotePush?.enablePushNotifications?.().catch(() => {});
     runAllNotificationChecks(); // checa imediatamente após ativar
     return true;
   }

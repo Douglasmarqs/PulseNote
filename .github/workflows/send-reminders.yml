@@ -1,0 +1,35 @@
+name: PulseNote — lembretes periódicos
+
+# O plano Hobby da Vercel só permite Cron Jobs 1x por dia (e olhe lá, sem
+# hora exata — só "em algum minuto dentro da hora marcada") — não serve
+# pra lembrete de compromisso, que precisa disparar minutos antes do
+# horário certo. Usamos o agendador do GitHub Actions como "despertador"
+# externo, de graça: ele não faz nada além de chamar a rota
+# /api/send-reminders, que é quem faz o trabalho de verdade (ver
+# api/send-reminders.js).
+#
+# Configuração necessária, uma vez só:
+#   1. Vercel > Settings > Environment Variables: crie
+#      REMINDERS_CRON_SECRET com um valor aleatório
+#      (gere um com, por exemplo, `openssl rand -hex 32`).
+#   2. Neste repositório no GitHub: Settings > Secrets and variables >
+#      Actions > New repository secret. Nome: REMINDERS_CRON_SECRET.
+#      Valor: o MESMO valor do passo 1.
+#
+# Aviso do próprio GitHub: workflows agendados são desativados
+# automaticamente depois de 60 dias sem nenhum commit no repositório —
+# qualquer push reativa sozinho, então não é motivo de preocupação num
+# projeto com atividade normal.
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {} # permite rodar manualmente pela aba "Actions", pra testar
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Chamar /api/send-reminders
+        run: |
+          curl -sS -f -X GET "https://pulse-note-5erj.vercel.app/api/send-reminders" \
+            -H "Authorization: Bearer ${{ secrets.REMINDERS_CRON_SECRET }}"
