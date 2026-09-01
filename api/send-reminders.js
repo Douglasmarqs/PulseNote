@@ -14,10 +14,14 @@
 // externo: o GitHub Actions do próprio repositório bate nesta rota a
 // cada 15 minutos, de graça (ver o workflow).
 //
-// Idempotência: cada checagem só dispara UMA vez por dia por usuário
-// (mesma ideia do alreadyNotifiedToday() do notifications.js), guardada
-// em userData/{uid}.data.serverNotifications — sem isso, rodar a cada
-// 15 min mandaria a mesma notificação repetida o dia inteiro.
+// Idempotência: cada tipo de aviso tem um "cooldown" próprio — em vez de
+// só 1x por dia, uma tarefa atrasada pode lembrar de novo a cada 4h, um
+// orçamento crítico a cada 4h, uma meta quase batida a cada 12h, etc.
+// Compromissos (eventos) são a exceção: por serem pontuais, avisam só 1
+// vez (não faz sentido repetir depois que já avisou que está perto).
+// Tudo isso fica guardado em userData/{uid}.data.serverNotifications —
+// sem isso, rodar a cada 15 min mandaria a mesma notificação repetida
+// sem parar.
 //
 // Variáveis de ambiente necessárias (Vercel > Settings > Environment
 // Variables):
@@ -42,6 +46,25 @@
 // ============================================================
 
 const admin = require("firebase-admin");
+
+// Cooldown (em horas) até poder notificar de novo o MESMO tipo de aviso
+// pro MESMO usuário. 0 = avisa só uma vez e nunca mais repete (é o caso
+// de eventos: são pontuais, não faz sentido lembrar de novo depois que
+// já avisou que está perto).
+const COOLDOWN_HOURS = {
+  tasksOverdue: 4,
+  tasksToday: 6,
+  event: 0,
+  goalAlmost: 12,
+  financeWarning: 6,
+  financeCritical: 24,
+};
+
+function cooldownHoursFor(key) {
+  if (key.startsWith("event_")) return COOLDOWN_HOURS.event;
+  if (key.startsWith("goal_")) return COOLDOWN_HOURS.goalAlmost;
+  return COOLDOWN_HOURS[key] ?? 24;
+}
 
 function getFirebaseAdmin() {
   if (admin.apps.length) return admin;
@@ -170,7 +193,15 @@ function buildNotifications(state, todayIso, now) {
     const eventDateTime = new Date(`${event.date}T${event.time}`);
     const minutesUntil = (eventDateTime - now) / 60000;
     const reminderMinutes = Number(event.reminder) || 15;
-    if (minutesUntil > 0 && minutesUntil <= reminderMinutes) {
+    // A checagem roda a cada 15 min (ver .github/workflows/send-reminders.yml).
+    // Se alguém configurar um lembrete de menos de 15 min de antecedência,
+    // a janela poderia "passar batido" entre uma rodada e outra — por
+    // isso o mínimo aqui é sempre 15, não o valor exato escolhido. O
+    // "-15" no início também cobre o caso do cron atrasar/falhar uma
+    // rodada: se o evento começou há pouco e ainda não foi avisado,
+    // ainda avisamos (tarde, mas avisamos) em vez de ficar em silêncio.
+    const windowMinutes = Math.max(reminderMinutes, 15);
+    if (minutesUntil > -15 && minutesUntil <= windowMinutes) {
       results.push({
         key: `event_${event.id}`,
         title: "📅 Compromisso em breve",
@@ -258,7 +289,14 @@ module.exports = async (req, res) => {
       if (notifications.length === 0) continue;
 
       const serverNotifications = state.serverNotifications || {};
-      const pending = notifications.filter((n) => serverNotifications[n.key] !== todayIso);
+      const pending = notifications.filter((n) => {
+        const lastSentIso = serverNotifications[n.key];
+        if (!lastSentIso) return true; // nunca avisou esse tipo pra esse usuário
+        const cooldownHours = cooldownHoursFor(n.key);
+        if (cooldownHours === 0) return false; // já avisou 1x, não repete (ex.: evento)
+        const hoursSinceLastSent = (now - new Date(lastSentIso)) / 3600000;
+        return hoursSinceLastSent >= cooldownHours;
+      });
       if (pending.length === 0) continue;
 
       const tokens = Array.isArray(state.fcmTokens) ? state.fcmTokens : [];
@@ -279,11 +317,13 @@ module.exports = async (req, res) => {
         }
       }
 
-      // Marca como notificado hoje + remove tokens mortos, tudo numa
-      // escrita só. O Admin SDK ignora o firestore.rules (é só pro
-      // cliente), então isso funciona mesmo sem mexer nas regras.
-      const updates = { updatedAt: new Date().toISOString() };
-      pending.forEach((n) => { updates[`data.serverNotifications.${n.key}`] = todayIso; });
+      // Marca o horário exato deste aviso (usado pelo cooldown na próxima
+      // rodada) + remove tokens mortos, tudo numa escrita só. O Admin SDK
+      // ignora o firestore.rules (é só pro cliente), então isso funciona
+      // mesmo sem mexer nas regras.
+      const nowIso = now.toISOString();
+      const updates = { updatedAt: nowIso };
+      pending.forEach((n) => { updates[`data.serverNotifications.${n.key}`] = nowIso; });
       if (invalidTokens.length > 0) {
         updates["data.fcmTokens"] = admin.firestore.FieldValue.arrayRemove(...invalidTokens);
       }
