@@ -27,7 +27,7 @@ import { app, db, auth } from "./firebase-init.js";
 // Configurações do projeto (⚙️) > aba "Cloud Messaging" > seção
 // "Web Push certificates" > gerar par de chaves. Sem isso, getToken()
 // abaixo sempre falha (silenciosamente, sem quebrar o resto do app).
-const VAPID_KEY = "COLOQUE_SUA_VAPID_KEY_AQUI";
+const VAPID_KEY = "BO3KVuh5vaHoF0p4euHHYg_auFN756eXyUiHb7D4FLL-XW2E2H2uZyab_xEUyhRdwgWKOr8ATfcdbjkqgnbCL4g";
 
 let messagingInstance = null;
 let foregroundListenerAttached = false;
