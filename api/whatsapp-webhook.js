@@ -53,7 +53,8 @@
 // ============================================================
 
 const admin = require("firebase-admin");
-const { parseTransactionText, parseTransactionImage } = require("./_lib/parseTransactionAI");
+const { parseTransactionImage } = require("./_lib/parseTransactionAI");
+const { parseTextIntent } = require("./_lib/parseCommandIntent");
 
 // Espelha as categorias padrão de src/app.js (expenseCategories /
 // incomeCategories) — precisam bater com as do app para os ids que a IA
@@ -449,6 +450,127 @@ async function buildBalanceSummary(fb, uid, todayIso) {
   return { income, expense, balance: income - expense, monthName };
 }
 
+// Relatório de UM mês específico (passado ou não) — diferente do
+// buildBalanceSummary (que é sempre o mês atual, usado pelo comando
+// rápido "saldo"). Além do total, traz os 5 maiores gastos por
+// categoria — é o que "relatório do mês passado" pede de verdade, não
+// só um número solto.
+async function buildMonthlyReport(fb, uid, month, year) {
+  const doc = await fb.firestore().collection("userData").doc(uid).get();
+  const state = doc.exists ? doc.data().data || {} : {};
+  const finances = Array.isArray(state.finances) ? state.finances : [];
+  const monthPrefix = `${year}-${String(month).padStart(2, "0")}`;
+
+  const entries = finances.filter((f) => typeof f.date === "string" && f.date.startsWith(monthPrefix));
+  let income = 0;
+  let expense = 0;
+  const byCategory = {};
+  for (const f of entries) {
+    const amount = Number(f.amount) || 0;
+    if (f.type === "receita") {
+      income += amount;
+    } else {
+      expense += amount;
+      byCategory[f.category] = (byCategory[f.category] || 0) + amount;
+    }
+  }
+
+  const topCategories = Object.entries(byCategory).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  const monthName = new Date(`${monthPrefix}-01T12:00:00`).toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+  return { income, expense, balance: income - expense, monthName, topCategories, hasEntries: entries.length > 0 };
+}
+
+function formatMonthlyReport(summary, categories) {
+  const { income, expense, balance, monthName, topCategories, hasEntries } = summary;
+  if (!hasEntries) return `📊 Não encontrei nenhum lançamento em ${monthName}.`;
+
+  const balanceIcon = balance >= 0 ? "✅" : "⚠️";
+  let msg = `📊 Relatório de ${monthName}:\n💰 Receitas: R$ ${income.toFixed(2)}\n💸 Gastos: R$ ${expense.toFixed(2)}\n${balanceIcon} Saldo: R$ ${balance.toFixed(2)}`;
+  if (topCategories.length > 0) {
+    msg += `\n\nMaiores gastos:`;
+    for (const [categoryId, total] of topCategories) {
+      const label = categories.find((c) => c.id === categoryId)?.label || categoryId || "Outros";
+      msg += `\n${label}: R$ ${total.toFixed(2)}`;
+    }
+  }
+  return msg;
+}
+
+function formatDateBr(iso) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso;
+  const [, m, d] = iso.split("-");
+  return `${d}/${m}`;
+}
+
+// Consulta tarefas/compromissos direto do Firestore (mesma lógica de
+// "aberto" usada em api/send-reminders.js: status diferente de
+// Concluida/Cancelada) — pra responder "minhas tarefas" sem precisar
+// abrir o app.
+async function buildAgendaMessage(fb, uid, filter, todayIso) {
+  const doc = await fb.firestore().collection("userData").doc(uid).get();
+  const state = doc.exists ? doc.data().data || {} : {};
+  const tasks = Array.isArray(state.tasks) ? state.tasks : [];
+  const events = Array.isArray(state.events) ? state.events : [];
+  const isOpen = (t) => t.status !== "Concluida" && t.status !== "Cancelada";
+  const weekAheadIso = new Date(new Date(`${todayIso}T00:00:00`).getTime() + 7 * 86400000)
+    .toISOString().slice(0, 10);
+
+  let title = "";
+  let relevantTasks = [];
+  let relevantEvents = [];
+
+  if (filter === "hoje") {
+    title = "📋 Hoje";
+    relevantTasks = tasks.filter((t) => isOpen(t) && t.dueDate === todayIso);
+    relevantEvents = events.filter((e) => e.date === todayIso);
+  } else if (filter === "atrasadas") {
+    title = "⏰ Tarefas atrasadas";
+    relevantTasks = tasks.filter((t) => isOpen(t) && t.dueDate && t.dueDate < todayIso);
+  } else if (filter === "semana") {
+    title = "📅 Essa semana";
+    relevantTasks = tasks.filter((t) => isOpen(t) && t.dueDate && t.dueDate >= todayIso && t.dueDate <= weekAheadIso);
+    relevantEvents = events.filter((e) => e.date && e.date >= todayIso && e.date <= weekAheadIso);
+  } else {
+    title = "🗒️ Suas pendências";
+    relevantTasks = tasks.filter(isOpen)
+      .sort((a, b) => (a.dueDate || "9999").localeCompare(b.dueDate || "9999")).slice(0, 10);
+    relevantEvents = events.filter((e) => e.date && e.date >= todayIso)
+      .sort((a, b) => a.date.localeCompare(b.date)).slice(0, 5);
+  }
+
+  if (relevantTasks.length === 0 && relevantEvents.length === 0) {
+    if (filter === "atrasadas") return "✅ Nenhuma tarefa atrasada — tudo em dia!";
+    return `${title}: nada por aqui no momento 🎉`;
+  }
+
+  let msg = `${title}:`;
+  if (relevantTasks.length > 0) {
+    msg += `\n\n📌 Tarefas:`;
+    for (const t of relevantTasks) {
+      msg += `\n• ${t.title}${t.dueDate ? ` (${formatDateBr(t.dueDate)})` : ""}`;
+    }
+  }
+  if (relevantEvents.length > 0) {
+    msg += `\n\n📅 Compromissos:`;
+    for (const e of relevantEvents) {
+      msg += `\n• ${e.title}${e.time ? ` às ${e.time}` : ""} (${formatDateBr(e.date)})`;
+    }
+  }
+  return msg;
+}
+
+const HELP_MESSAGE = `🤖 O que eu entendo por aqui:
+
+💸 Lançar gasto/receita — ex.: "gastei 45 no mercado", "recebi 200 de freela"
+📷 Foto de cupom fiscal — eu leio sozinho
+📊 "saldo" ou "resumo" — resumo do mês atual
+📊 "relatório de [mês]" — ex.: "relatório do mês passado", "quanto gastei em julho"
+📋 "minhas tarefas" / "tarefas de hoje" / "tarefas atrasadas" / "tarefas da semana"
+📅 "compromissos de hoje" / "compromissos da semana"
+🗑️ "apagar último" — desfaz o último lançamento feito por aqui
+
+Tudo sincronizado direto com o seu painel do PulseNote.`;
+
 module.exports = async (req, res) => {
   // ── Verificação do webhook — a Meta chama isso 1x só, ao salvar a
   //    configuração no painel do WhatsApp Business ──────────────────
@@ -540,10 +662,29 @@ module.exports = async (req, res) => {
         return res.status(200).end();
       }
 
-      const result = await parseTransactionText({ text: message.text.body, categories, today });
+      const result = await parseTextIntent({ text: message.text.body, categories, today });
+
+      if (result.ok && result.intent === "report") {
+        const summary = await buildMonthlyReport(fb, uid, result.report.month, result.report.year);
+        await sendWhatsAppMessage(fromPhone, formatMonthlyReport(summary, categories));
+        return res.status(200).end();
+      }
+
+      if (result.ok && result.intent === "agenda") {
+        const agendaMsg = await buildAgendaMessage(fb, uid, result.agenda.filter, today);
+        await sendWhatsAppMessage(fromPhone, agendaMsg);
+        return res.status(200).end();
+      }
+
+      if (result.ok && result.intent === "help") {
+        await sendWhatsAppMessage(fromPhone, HELP_MESSAGE);
+        return res.status(200).end();
+      }
+
+      // intent "expense" (ou falha da IA) — mesmo fluxo de sempre
       await finishParsedResult({
         fb, uid, fromPhone, categories, result,
-        failureMsg: 'Não consegui entender esse lançamento 🤔 Tenta descrever de outro jeito, tipo "gastei 45 no mercado".',
+        failureMsg: 'Não consegui entender essa mensagem 🤔 Manda "ajuda" pra ver o que eu entendo, ou descreve um gasto tipo "gastei 45 no mercado".',
       });
       return res.status(200).end();
     }
