@@ -139,11 +139,19 @@ function bindThemeToggle() {
 
 const BASE_STORAGE_KEY = "pulsenote-state-v1";
 
-// Número (com DDI) do WhatsApp do PulseNote, mostrado em Configurações >
-// Integrações. TROQUE pelo número real assim que ele estiver ativo —
-// hoje aponta pro número de teste do Meta for Developers (Configuração
-// da API > "De"). Formato livre, é só texto exibido pra pessoa.
-const WHATSAPP_BOT_NUMBER = "+1 555 150 1087";
+// Número oficial do assistente do PulseNote no WhatsApp.
+// WHATSAPP_BOT_NUMBER: formato livre, só pra EXIBIR pra pessoa (fallback
+// manual, caso o link de ativação abaixo não abra a conversa sozinho).
+// WHATSAPP_BOT_NUMBER_DIGITS: só dígitos, formato E.164 sem "+" — é o
+// que o link wa.me exige pra abrir a conversa certa. O Cloud API da
+// Meta tem um bug conhecido com números BR: o 9º dígito do celular
+// precisa estar presente pra abrir/aceitar conversa com o número (o
+// mesmo motivo pelo qual api/whatsapp-webhook.js corrige esse dígito
+// ao RESPONDER — ver fixBrazilianMobileNumber lá). Se o link não abrir
+// a conversa certa, confira o número exato cadastrado no Meta Business
+// Manager e ajuste as duas constantes abaixo.
+const WHATSAPP_BOT_NUMBER_DIGITS = "5531987737488";
+const WHATSAPP_BOT_NUMBER = "+55 31 98773-7488";
 
 // Retorna a chave de cache ISOLADA para o usuário atual.
 // Isso é essencial: sem isso, o navegador misturaria os dados em cache
@@ -1163,7 +1171,12 @@ function bindSettingsView() {
     await logout();
   });
 
-  // ── WhatsApp: gerar código de vinculação ──────────────────────────
+  // ── WhatsApp: ativar assistente (1 clique) ─────────────────────────
+  // Gera o código de vinculação E já abre a conversa no WhatsApp oficial
+  // com a mensagem "vincular <código>" pré-preenchida (link wa.me — a
+  // pessoa só precisa apertar enviar). O bloco com o código também fica
+  // visível na tela como fallback manual, caso o link não abra sozinho
+  // (ex.: desktop sem WhatsApp instalado, ou pop-up bloqueado).
   document.getElementById("settingsWhatsappGenerateBtn")?.addEventListener("click", () => {
     hideSettingsMsg();
     const code = String(Math.floor(Math.random() * 1000000)).padStart(6, "0");
@@ -1171,7 +1184,12 @@ function bindSettingsView() {
     state.whatsappLinkCodeExpiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 min
     saveState();
     renderWhatsAppSettings();
-    showToast("Código gerado! Envie a mensagem pelo WhatsApp em até 10 minutos.");
+
+    const prefilledText = encodeURIComponent(`vincular ${code}`);
+    const waLink = `https://wa.me/${WHATSAPP_BOT_NUMBER_DIGITS}?text=${prefilledText}`;
+    window.open(waLink, "_blank", "noopener,noreferrer");
+
+    showToast("Abrindo o WhatsApp — é só apertar enviar! 🚀");
   });
 
   // ── WhatsApp: opt-in de lembretes (tarefas/eventos/metas/orçamento

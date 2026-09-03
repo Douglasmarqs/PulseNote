@@ -1002,14 +1002,14 @@
               <div class="panel-header">
                 <div>
                   <p class="eyebrow">Integrações</p>
-                  <h2>WhatsApp</h2>
+                  <h2>Conecte seu WhatsApp ao Pulsinho</h2>
                 </div>
               </div>
 
               <div id="whatsappLinkedBlock" hidden>
                 <p class="task-meta" style="margin-bottom:10px">
-                  <span style="display:inline-flex;align-items:center;gap:4px;color:var(--green)">${""}<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Vinculado</span> ao número <strong id="whatsappLinkedPhoneLabel"></strong>. Mande uma mensagem tipo
-                  <em>"gastei 45 no mercado"</em> pelo WhatsApp que eu lanço direto em Finanças.
+                  <span style="display:inline-flex;align-items:center;gap:4px;color:var(--green)">${""}<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Assistente ativo</span> no número <strong id="whatsappLinkedPhoneLabel"></strong>. Mande uma mensagem tipo
+                  <em>"gastei 45 no mercado"</em> ou <em>"me lembra de pagar o boleto sexta"</em> que o Pulsinho cuida do resto.
                 </p>
                 <label style="display:flex;align-items:center;gap:8px;margin-bottom:14px;cursor:pointer">
                   <input type="checkbox" id="whatsappReminderOptIn" style="width:16px;height:16px" />
@@ -1021,18 +1021,18 @@
               </div>
 
               <div id="whatsappUnlinkedBlock">
-                <p class="task-meta" style="margin-bottom:10px">Vincule seu WhatsApp para lançar gastos e receitas direto por mensagem, sem abrir o app.</p>
+                <p class="task-meta" style="margin-bottom:10px">Ative o assistente do Pulsinho no seu WhatsApp: lance gastos e receitas, crie tarefas, notas, metas e compromissos, tudo por mensagem, sem abrir o app.</p>
 
                 <div id="whatsappCodeBlock" hidden style="margin-bottom:14px">
                   <label style="display:grid;gap:6px">
-                    Envie esta mensagem para <strong id="whatsappBotNumberLabel"></strong> no WhatsApp:
+                    Se o WhatsApp não abrir sozinho, envie esta mensagem para <strong id="whatsappBotNumberLabel"></strong>:
                     <input id="whatsappCodeText" class="settings-code-input" readonly onclick="this.select()" />
                   </label>
                   <p class="task-meta" id="whatsappCodeExpiry"></p>
                 </div>
 
                 <div class="form-actions">
-                  <button id="settingsWhatsappGenerateBtn" class="ghost-button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 15 15 9"/><path d="M13.5 6.5 15 5a3.5 3.5 0 0 1 5 5l-1.5 1.5"/><path d="M10.5 17.5 9 19a3.5 3.5 0 0 1-5-5l1.5-1.5"/></svg><span>Gerar código de vinculação</span></button>
+                  <button id="settingsWhatsappGenerateBtn" class="primary-button"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21l1.65-4.95A9 9 0 1 1 8 19.5z"/><path d="M9 10a1 1 0 0 0 1 1h.5a1 1 0 0 0 .9-.6l.2-.4a1 1 0 0 0-.1-1L11 8.5a2.5 2.5 0 0 1 2-1c1 0 2 1 2.5 2 1 2 2.5 3.5 4.5 4.5.5.25 1.5.5 2 0"/></svg><span>Ativar assistente no WhatsApp</span></button>
                 </div>
               </div>
             </section>

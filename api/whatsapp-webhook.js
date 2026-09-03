@@ -1,60 +1,64 @@
 // api/whatsapp-webhook.js
 // ============================================================
-// Ponto de entrada do agente de IA no WhatsApp (WhatsApp Business Cloud
-// API, da Meta): a pessoa manda "gastei 45 no mercado" pro número do
-// PulseNote, e este webhook lança sozinho em Finanças — mesma ideia do
-// exemplo do TaskLine que você mandou.
+// Ponto de entrada do assistente de IA no WhatsApp (WhatsApp Business
+// Cloud API, da Meta) — o Pulsinho do outro lado da linha: a pessoa
+// manda uma mensagem em linguagem natural pro número do PulseNote e
+// este webhook entende a intenção e age sozinho: lança gasto/receita,
+// cria/conclui/apaga tarefa, cria/busca/apaga anotação, cria/atualiza
+// meta, marca compromisso, edita ou busca lançamentos, gera relatório
+// e estatísticas, e responde confirmando cada ação.
 //
-// ⚠️ ESQUELETO FUNCIONAL, AINDA NÃO É PRA PRODUÇÃO. Falta:
+// Status: os fluxos de ponta a ponta (vínculo, lançamento por texto e
+// foto, comandos, lembretes) estão implementados e testados
+// isoladamente. Falta só a confirmação de negócio no Meta Business
+// Manager pro número oficial (+55 31 8773-7488) sair do modo teste —
+// sem isso, a Cloud API só entrega mensagem pra números cadastrados
+// como testadores (ver histórico do bloqueio #130497 em versões
+// anteriores, quando o número de teste era +1).
 //
-//   1) Criar um app em developers.facebook.com > WhatsApp, pegar um
-//      número de teste, e configurar a URL deste endpoint (depois de
-//      publicado, ex.: https://seu-dominio.app/api/whatsapp-webhook)
-//      como Webhook lá, junto com WHATSAPP_VERIFY_TOKEN.
+// Segurança: TODA requisição POST precisa vir assinada pela Meta
+// (cabeçalho X-Hub-Signature-256, verificado com HMAC-SHA256 usando
+// WHATSAPP_APP_SECRET — ver verifyMetaSignature() abaixo). Sem o
+// segredo configurado, o endpoint recusa QUALQUER POST (falha fechado,
+// não aberto) — sem essa checagem, qualquer pessoa que descobrisse essa
+// URL poderia forjar uma mensagem da Meta e mexer nos dados de outro
+// usuário só sabendo o telefone dele.
 //
-//   2) VINCULAÇÃO — implementada. A tela Configurações > Integrações >
-//      WhatsApp (src/index.html + src/app.js) gera um código de 6
-//      dígitos, válido por 10 min, salvo em
-//      userData/{uid}.data.whatsappLinkCode. A pessoa manda
-//      "vincular 123456" pra este número, o handleLinkCommand() abaixo
-//      confirma e cria whatsappLinks/{numero} → { uid }.
-//
-//   3) Foto de cupom fiscal — implementada (downloadWhatsAppMedia() +
-//      parseTransactionImage()). Falta só ÁUDIO: mesma ideia de
-//      download usando message.audio.id — o Gemini aceita áudio direto
-//      e já entende o que foi dito.
-//
-//   4) Diferente do "✨ Lançar por texto" do app (que só PREENCHE o
-//      formulário e espera a pessoa confirmar), este webhook LANÇA
-//      DIRETO, sem revisão — igual ao TaskLine. Se preferir revisão
-//      antes de salvar, dá pra mandar uma mensagem com botões
-//      "Confirmar/Editar" em vez de salvar na hora.
-//
-//   5) Comandos além do lançamento normal (tudo case/acento-insensível):
-//      - "apagar último" / "desfazer" → apaga o último lançamento FEITO
-//        PELO WHATSAPP (nunca mexe em algo lançado pelo app)
-//      - "saldo" / "resumo" / "quanto gastei" → resumo rápido do mês
-//        atual (receitas, gastos, saldo), sem precisar abrir o app
-//
-//   6) Data de "hoje" calculada no fuso de Brasília (getTodayInBrazil),
-//      não em UTC — evita lançamento tardio (21h–23:59 em BR) cair com a
-//      data do dia seguinte.
-//
-//   7) Mensagens repetidas da Meta (reenvio por instabilidade de rede)
-//      são ignoradas via claimMessageOnce() — sem isso, um reenvio
-//      duplicaria o lançamento.
-//
-// Variáveis de ambiente novas (além de GEMINI_API_KEY e FIREBASE_* que
-// já existem em parse-transaction.js):
+// Variáveis de ambiente necessárias (além de GEMINI_API_KEY e
+// FIREBASE_* que já existem em parse-transaction.js):
 //   WHATSAPP_VERIFY_TOKEN     — string secreta escolhida por você, só
 //                               para a etapa de verificação do webhook
+//                               (GET, feita 1x pelo painel da Meta)
 //   WHATSAPP_ACCESS_TOKEN     — token permanente do WhatsApp Cloud API
 //   WHATSAPP_PHONE_NUMBER_ID  — id do número, gerado pelo Meta
+//   WHATSAPP_APP_SECRET       — "App Secret" do app criado em
+//                               developers.facebook.com (Configurações
+//                               básicas) — usado só pra VERIFICAR a
+//                               assinatura de cada requisição recebida,
+//                               nunca enviado em nenhuma chamada.
+//
+// Comandos entendidos (tudo em linguagem natural, case/acento-insensível
+// — classificados por api/_lib/parseCommandIntent.js):
+//   Finanças  — lançar gasto/receita, "editar último", buscar
+//               lançamentos, "saldo"/"resumo", "relatório de mês X",
+//               estatísticas/comparação entre meses, foto de cupom
+//   Tarefas   — criar, concluir, apagar; consultar (hoje/atrasadas/semana)
+//   Notas     — criar (conteúdo salvo EXATAMENTE como escrito — ver
+//               stripNoteCommandPrefix), buscar, apagar
+//   Metas     — criar, atualizar progresso
+//   Agenda    — marcar compromisso; consultar compromissos
+//   Utilidade — "vincular 123456", "apagar último" (finanças), "ajuda"
+//
+// Cada ação é sempre confirmada de volta por mensagem — nunca falha em
+// silêncio. Mensagens repetidas da Meta (reenvio por instabilidade de
+// rede) são ignoradas via claimMessageOnce(). Data de "hoje" sempre no
+// fuso de Brasília (getTodayInBrazil), nunca em UTC.
 // ============================================================
 
+const crypto = require("node:crypto");
 const admin = require("firebase-admin");
 const { parseTransactionImage } = require("./_lib/parseTransactionAI");
-const { parseTextIntent } = require("./_lib/parseCommandIntent");
+const { parseTextIntent, findBestMatch } = require("./_lib/parseCommandIntent");
 
 // Espelha as categorias padrão de src/app.js (expenseCategories /
 // incomeCategories) — precisam bater com as do app para os ids que a IA
@@ -114,6 +118,41 @@ function getFirebaseAdmin() {
   return admin;
 }
 
+// ── Segurança: verificação de assinatura da Meta ───────────────────
+// A Cloud API assina todo POST com HMAC-SHA256 do corpo bruto (raw
+// bytes, ANTES de qualquer parse), usando o App Secret como chave —
+// cabeçalho "X-Hub-Signature-256: sha256=<hex>". Por isso este arquivo
+// desliga o bodyParser padrão da Vercel (ver module.exports.config no
+// final) e lê o stream bruto ele mesmo: assinar depois de já ter sido
+// re-serializado por um JSON.parse()+JSON.stringify() poderia não bater
+// mais byte a byte com o que a Meta assinou.
+async function readRawBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    req.on("data", (chunk) => chunks.push(chunk));
+    req.on("end", () => resolve(Buffer.concat(chunks)));
+    req.on("error", reject);
+  });
+}
+
+// Compara em tempo constante (timingSafeEqual) — comparar strings de
+// assinatura com "===" vazaria, por timing, quantos bytes iniciais
+// bateram, o que author malicioso poderia usar pra forjar a assinatura
+// byte a byte. FALHA FECHADO: sem WHATSAPP_APP_SECRET configurado,
+// recusa tudo (não faz sentido "aceitar sem verificar").
+function verifyMetaSignature(rawBody, signatureHeader, appSecret) {
+  if (!appSecret) return false;
+  if (!signatureHeader || !signatureHeader.startsWith("sha256=")) return false;
+  const provided = signatureHeader.slice("sha256=".length);
+  const expected = crypto.createHmac("sha256", appSecret).update(rawBody).digest("hex");
+  const providedBuf = Buffer.from(provided, "hex");
+  const expectedBuf = Buffer.from(expected, "hex");
+  // Buffers de tamanho diferente fariam timingSafeEqual lançar exceção
+  // em vez de devolver false — checa antes.
+  if (providedBuf.length !== expectedBuf.length) return false;
+  return crypto.timingSafeEqual(providedBuf, expectedBuf);
+}
+
 // A Cloud API tem um bug conhecido com números BR: ela entrega o número
 // no webhook (`message.from`) SEM o 9º dígito do celular (ex.:
 // "553195361992", 12 dígitos), mas exige esse 9 presente pra aceitar o
@@ -152,10 +191,6 @@ async function sendWhatsAppMessage(to, body) {
       const errBody = await res.text();
       console.error("Meta recusou o envio da mensagem:", res.status, errBody);
     } else {
-      // Log de sucesso também — a Meta devolve o id da mensagem quando
-      // aceita de verdade. Útil pra confirmar entrega sem precisar do
-      // plano pago "Observability Plus" da Vercel pra ver o corpo da
-      // chamada externa.
       const okBody = await res.text();
       console.log("Meta aceitou o envio da mensagem:", okBody);
     }
@@ -170,29 +205,41 @@ async function findUidForPhone(fb, phone) {
   return snap.exists ? snap.data().uid : null;
 }
 
-// Grava o vínculo confirmado (mesma técnica em duas escritas de
-// appendFinanceEntry: lê o doc inteiro, mescla só os campos do vínculo,
-// escreve de volta o objeto "data" inteiro — evita apagar outros campos
-// que porventura não estejam carregados aqui).
-async function confirmWhatsAppLink(fb, uid, phone) {
+// ── Helper genérico de leitura+mutação+escrita ─────────────────────
+// Toda ação disparada pelo WhatsApp que precisa ler o estado do usuário,
+// alterá-lo, e escrever de volta segue o MESMO padrão (transação:
+// lê o doc inteiro, muda só os campos relevantes, escreve o "data"
+// inteiro de volta com merge:true — pra nunca apagar campos que essa
+// função nem carregou). Esse helper existe pra não repetir esse padrão
+// em cada handler (lançar/editar/apagar finança, tarefa, nota, meta,
+// compromisso) — reduz o risco de um deles divergir e introduzir um bug
+// sutil de concorrência.
+//
+// `mutator(state)` recebe uma CÓPIA rasa do estado atual (segura pra
+// mutar os arrays de topo direto) e deve devolver:
+//   - `undefined` → aborta, NADA é escrito (ex.: item não encontrado)
+//   - qualquer outro valor → escreve `state` de volta e devolve esse
+//     valor como resultado de withUserData()
+async function withUserData(fb, uid, mutator) {
   const ref = fb.firestore().collection("userData").doc(uid);
+  let result;
   await fb.firestore().runTransaction(async (tx) => {
     const snap = await tx.get(ref);
     const current = snap.exists ? snap.data() : { data: {} };
-    const state = current.data || {};
-    tx.set(
-      ref,
-      {
-        data: {
-          ...state,
-          whatsappLinkCode: null,
-          whatsappLinkCodeExpiresAt: null,
-          whatsappLinkedPhone: phone,
-        },
-        updatedAt: new Date().toISOString(),
-      },
-      { merge: true }
-    );
+    const state = { ...(current.data || {}) };
+    result = await mutator(state);
+    if (result === undefined) return;
+    tx.set(ref, { data: state, updatedAt: new Date().toISOString() }, { merge: true });
+  });
+  return result;
+}
+
+async function confirmWhatsAppLink(fb, uid, phone) {
+  await withUserData(fb, uid, (state) => {
+    state.whatsappLinkCode = null;
+    state.whatsappLinkCodeExpiresAt = null;
+    state.whatsappLinkedPhone = phone;
+    return true;
   });
 }
 
@@ -200,7 +247,8 @@ async function confirmWhatsAppLink(fb, uid, phone) {
 // doc em whatsappLinks) virar conhecido pelo webhook. Ver tela
 // Configurações > Integrações > WhatsApp em src/index.html, que gera
 // esse código de 6 dígitos e grava em userData/{uid}.data.whatsappLinkCode
-// (válido por 10 min).
+// (válido por 10 min). Após confirmar, manda a mensagem de boas-vindas
+// completa (WELCOME_MESSAGE) — não só um "ok, vinculado".
 async function handleLinkCommand(fb, phone, text) {
   const match = text.trim().match(/^vincular\s+(\d{4,8})$/i);
   const code = match?.[1];
@@ -247,7 +295,7 @@ async function handleLinkCommand(fb, phone, text) {
 
   await db.collection("whatsappLinks").doc(phone).set({ uid: matchUid, linkedAt: new Date().toISOString() });
   await confirmWhatsAppLink(fb, matchUid, phone);
-  await sendWhatsAppMessage(phone, '✅ Vinculado! Agora é só mandar uma mensagem tipo "gastei 45 no mercado" que eu lanço direto em Finanças.');
+  await sendWhatsAppMessage(phone, WELCOME_MESSAGE);
 }
 
 // Categorias fixas + as que o usuário criou (state.customCategories),
@@ -270,22 +318,17 @@ async function getUserCategories(fb, uid) {
   return [...despesa, ...receita];
 }
 
-// Grava no MESMO documento que o app usa (userData/{uid}.data.finances),
-// numa transação — assim não corre o risco de sobrescrever uma edição
-// feita ao mesmo tempo pelo app (o app também usa setDoc no documento
-// inteiro; a transação garante leitura+escrita atômica).
-async function appendFinanceEntry(fb, uid, entry) {
-  const ref = fb.firestore().collection("userData").doc(uid);
-  await fb.firestore().runTransaction(async (tx) => {
-    const snap = await tx.get(ref);
-    const current = snap.exists ? snap.data() : { data: {} };
-    const state = current.data || {};
-    const finances = Array.isArray(state.finances) ? state.finances : [];
-    // IMPORTANTE: o app guarda a categoria no campo "category" (não
-    // "categoryId" — esse é só o nome usado durante o parsing da IA).
-    // Sem esse mapeamento, o lançamento aparece "sem categoria" em
-    // gráficos, metas e no detalhamento por categoria dentro do app.
-    finances.unshift({
+// Grava no MESMO documento que o app usa (userData/{uid}.data.finances).
+// IMPORTANTE: o app guarda a categoria no campo "category" (não
+// "categoryId" — esse é só o nome usado durante o parsing da IA). Sem
+// esse mapeamento, o lançamento aparece "sem categoria" em gráficos,
+// metas e no detalhamento por categoria dentro do app.
+// `rawMessage`: o texto exatamente como a pessoa mandou (ou um marcador
+// pra lançamentos por foto) — guardado pra auditoria, nunca reescrito.
+async function appendFinanceEntry(fb, uid, entry, rawMessage) {
+  return withUserData(fb, uid, (state) => {
+    const finances = Array.isArray(state.finances) ? state.finances : (state.finances = []);
+    const record = {
       id: `wa_${Date.now()}`,
       source: "whatsapp",
       createdAt: new Date().toISOString(),
@@ -294,8 +337,10 @@ async function appendFinanceEntry(fb, uid, entry) {
       category: entry.categoryId,
       description: entry.description,
       date: entry.date,
-    });
-    tx.set(ref, { data: { ...state, finances }, updatedAt: new Date().toISOString() }, { merge: true });
+      whatsappRawMessage: rawMessage || "",
+    };
+    finances.unshift(record);
+    return record;
   });
 }
 
@@ -342,13 +387,13 @@ async function downloadWhatsAppMedia(mediaId) {
 // Compartilhado entre texto e foto: salva o lançamento e manda a
 // confirmação com o emoji da categoria, ou a mensagem de "não entendi"
 // se o Gemini não conseguiu extrair nada válido.
-async function finishParsedResult({ fb, uid, fromPhone, categories, result, failureMsg }) {
+async function finishParsedResult({ fb, uid, fromPhone, categories, result, failureMsg, rawMessage }) {
   if (!result.ok) {
     await sendWhatsAppMessage(fromPhone, failureMsg);
     return;
   }
 
-  await appendFinanceEntry(fb, uid, result.entry);
+  await appendFinanceEntry(fb, uid, result.entry, rawMessage);
   const { type, amount, description, date, categoryId } = result.entry;
 
   // Categorias já guardam o emoji como primeiro "token" do label (ex.:
@@ -413,20 +458,56 @@ function isBalanceCommand(norm) {
 // usa unshift() (mais novo primeiro), procuramos do topo pra baixo o
 // primeiro com source "whatsapp".
 async function deleteLastWhatsAppEntry(fb, uid) {
-  const ref = fb.firestore().collection("userData").doc(uid);
-  let deletedEntry = null;
-  await fb.firestore().runTransaction(async (tx) => {
-    const snap = await tx.get(ref);
-    const current = snap.exists ? snap.data() : { data: {} };
-    const state = current.data || {};
+  return withUserData(fb, uid, (state) => {
     const finances = Array.isArray(state.finances) ? state.finances : [];
     const idx = finances.findIndex((f) => f.source === "whatsapp");
-    if (idx === -1) return;
-    deletedEntry = finances[idx];
-    const newFinances = [...finances.slice(0, idx), ...finances.slice(idx + 1)];
-    tx.set(ref, { data: { ...state, finances: newFinances }, updatedAt: new Date().toISOString() }, { merge: true });
+    if (idx === -1) return undefined;
+    const deletedEntry = finances[idx];
+    state.finances = [...finances.slice(0, idx), ...finances.slice(idx + 1)];
+    return deletedEntry;
   });
-  return deletedEntry;
+}
+
+// Corrige o ÚLTIMO lançamento feito pelo WhatsApp com só os campos que
+// vieram na intenção "finance_edit_last" (o resto fica como estava).
+async function editLastWhatsAppEntry(fb, uid, patch) {
+  return withUserData(fb, uid, (state) => {
+    const finances = Array.isArray(state.finances) ? state.finances : [];
+    const idx = finances.findIndex((f) => f.source === "whatsapp");
+    if (idx === -1) return undefined;
+    const current = finances[idx];
+    const updated = {
+      ...current,
+      type: patch.type || current.type,
+      amount: patch.amount !== undefined ? patch.amount : current.amount,
+      category: patch.categoryId || current.category,
+      description: patch.description || current.description,
+      date: patch.date || current.date,
+    };
+    finances[idx] = updated;
+    return updated;
+  });
+}
+
+// Busca lançamentos por palavra-chave (descrição OU categoria), com
+// filtro opcional de mês/ano — usado pela intenção "finance_search".
+// Só leitura, não passa por withUserData.
+async function searchFinanceEntries(fb, uid, { query, month, year }, categories) {
+  const doc = await fb.firestore().collection("userData").doc(uid).get();
+  const state = doc.exists ? doc.data().data || {} : {};
+  const finances = Array.isArray(state.finances) ? state.finances : [];
+  const norm = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const q = norm(query);
+
+  let filtered = finances.filter((f) => {
+    const label = categories.find((c) => c.id === f.category)?.label || "";
+    return norm(f.description).includes(q) || norm(f.category).includes(q) || norm(label).includes(q);
+  });
+  if (month && year) {
+    const prefix = `${year}-${String(month).padStart(2, "0")}`;
+    filtered = filtered.filter((f) => typeof f.date === "string" && f.date.startsWith(prefix));
+  }
+  return filtered.slice(0, 8);
 }
 
 // Resumo do mês atual (baseado no fuso de Brasília) — pra responder
@@ -454,7 +535,7 @@ async function buildBalanceSummary(fb, uid, todayIso) {
 // buildBalanceSummary (que é sempre o mês atual, usado pelo comando
 // rápido "saldo"). Além do total, traz os 5 maiores gastos por
 // categoria — é o que "relatório do mês passado" pede de verdade, não
-// só um número solto.
+// só um número solto. Também é a base de "estatísticas"/comparação.
 async function buildMonthlyReport(fb, uid, month, year) {
   const doc = await fb.firestore().collection("userData").doc(uid).get();
   const state = doc.exists ? doc.data().data || {} : {};
@@ -477,7 +558,7 @@ async function buildMonthlyReport(fb, uid, month, year) {
 
   const topCategories = Object.entries(byCategory).sort((a, b) => b[1] - a[1]).slice(0, 5);
   const monthName = new Date(`${monthPrefix}-01T12:00:00`).toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
-  return { income, expense, balance: income - expense, monthName, topCategories, hasEntries: entries.length > 0 };
+  return { income, expense, balance: income - expense, monthName, topCategories, hasEntries: entries.length > 0, expenseCount: entries.filter((f) => f.type !== "receita").length };
 }
 
 function formatMonthlyReport(summary, categories) {
@@ -492,6 +573,27 @@ function formatMonthlyReport(summary, categories) {
       const label = categories.find((c) => c.id === categoryId)?.label || categoryId || "Outros";
       msg += `\n${label}: R$ ${total.toFixed(2)}`;
     }
+  }
+  return msg;
+}
+
+// Mensagem de "estatísticas" — sempre mostra o período principal, e se
+// a pessoa pediu comparação explícita ("comparado ao mês passado"),
+// soma a variação percentual de gasto entre os dois períodos.
+function formatStatsMessage(main, compareData) {
+  const { income, expense, balance, monthName, hasEntries, expenseCount } = main;
+  if (!hasEntries) return `📈 Não encontrei nenhum lançamento em ${monthName} pra calcular estatísticas.`;
+
+  const avgExpense = expenseCount > 0 ? expense / expenseCount : 0;
+  const balanceIcon = balance >= 0 ? "✅" : "⚠️";
+  let msg = `📈 Estatísticas de ${monthName}:\n💰 Receitas: R$ ${income.toFixed(2)}\n💸 Gastos: R$ ${expense.toFixed(2)} (${expenseCount} lançamento${expenseCount === 1 ? "" : "s"}, média de R$ ${avgExpense.toFixed(2)})\n${balanceIcon} Saldo: R$ ${balance.toFixed(2)}`;
+
+  if (compareData && compareData.hasEntries) {
+    const diff = expense - compareData.expense;
+    const pct = compareData.expense > 0 ? (diff / compareData.expense) * 100 : null;
+    const arrow = diff > 0 ? "📈 mais" : diff < 0 ? "📉 menos" : "igual";
+    const pctText = pct !== null ? ` (${pct >= 0 ? "+" : ""}${pct.toFixed(0)}%)` : "";
+    msg += `\n\nComparado a ${compareData.monthName}: gastou R$ ${Math.abs(diff).toFixed(2)} ${arrow}${pctText}.`;
   }
   return msg;
 }
@@ -559,21 +661,204 @@ async function buildAgendaMessage(fb, uid, filter, todayIso) {
   return msg;
 }
 
-const HELP_MESSAGE = `🤖 O que eu entendo por aqui:
+// ── Tarefas ─────────────────────────────────────────────────────
+async function createTaskFromWhatsApp(fb, uid, { title, dueDate, priority }, todayIso, rawMessage) {
+  return withUserData(fb, uid, (state) => {
+    const tasks = Array.isArray(state.tasks) ? state.tasks : (state.tasks = []);
+    const task = {
+      id: crypto.randomUUID(),
+      title,
+      status: "Pendente",
+      priority: priority || "Media",
+      dueDate: dueDate || "",
+      createdAt: todayIso,
+      completedAt: "",
+      sourceNoteId: "",
+      subtasks: [],
+      recurrence: null,
+      source: "whatsapp",
+      whatsappRawMessage: rawMessage || "",
+    };
+    tasks.unshift(task);
+    return task;
+  });
+}
 
-💸 Lançar gasto/receita — ex.: "gastei 45 no mercado", "recebi 200 de freela"
-📷 Foto de cupom fiscal — eu leio sozinho
-📊 "saldo" ou "resumo" — resumo do mês atual
-📊 "relatório de [mês]" — ex.: "relatório do mês passado", "quanto gastei em julho"
-📋 "minhas tarefas" / "tarefas de hoje" / "tarefas atrasadas" / "tarefas da semana"
-📅 "compromissos de hoje" / "compromissos da semana"
-🗑️ "apagar último" — desfaz o último lançamento feito por aqui
+async function completeTaskByQuery(fb, uid, query, todayIso) {
+  return withUserData(fb, uid, (state) => {
+    const tasks = Array.isArray(state.tasks) ? state.tasks : [];
+    const open = tasks.filter((t) => t.status !== "Concluida" && t.status !== "Cancelada");
+    const match = findBestMatch(query, open, "title");
+    if (!match) return undefined;
+    const idx = tasks.findIndex((t) => t.id === match.id);
+    tasks[idx] = { ...tasks[idx], status: "Concluida", completedAt: todayIso };
+    return tasks[idx];
+  });
+}
 
-Tudo sincronizado direto com o seu painel do PulseNote.`;
+async function deleteTaskByQuery(fb, uid, query) {
+  return withUserData(fb, uid, (state) => {
+    const tasks = Array.isArray(state.tasks) ? state.tasks : [];
+    const match = findBestMatch(query, tasks, "title");
+    if (!match) return undefined;
+    state.tasks = tasks.filter((t) => t.id !== match.id);
+    return match;
+  });
+}
+
+// ── Notas ───────────────────────────────────────────────────────
+// Remove só o prefixo de comando reconhecível ("anota:", "nota -",
+// "anotar" etc.) — o RESTO da mensagem é gravado exatamente como veio,
+// sem nenhuma reescrita. Se nenhum prefixo bater, usa a mensagem
+// inteira como está (mais seguro do que arriscar cortar conteúdo real).
+function stripNoteCommandPrefix(rawText) {
+  const m = rawText.match(/^\s*(anotar?|nota)\s*[:\-–—]?\s*/i);
+  if (m && m[0].length < rawText.length) {
+    return rawText.slice(m[0].length).trim();
+  }
+  return rawText.trim();
+}
+
+async function createNoteFromWhatsApp(fb, uid, { title, description }, todayIso, rawMessage) {
+  return withUserData(fb, uid, (state) => {
+    const notes = Array.isArray(state.notes) ? state.notes : (state.notes = []);
+    const note = {
+      id: crypto.randomUUID(),
+      title: title || description.slice(0, 40),
+      description,
+      category: "Geral",
+      folder: "Entrada",
+      tags: [],
+      priority: "Media",
+      checklist: [],
+      attachments: [],
+      goal: "",
+      observations: "",
+      favorite: false,
+      createdAt: todayIso,
+      source: "whatsapp",
+      whatsappRawMessage: rawMessage || "",
+    };
+    notes.unshift(note);
+    return note;
+  });
+}
+
+// Busca (só leitura) por título OU conteúdo — usado por "note_action"
+// com action "search". Devolve até 5 resultados, mais recentes primeiro.
+async function searchNotes(fb, uid, query) {
+  const doc = await fb.firestore().collection("userData").doc(uid).get();
+  const state = doc.exists ? doc.data().data || {} : {};
+  const notes = Array.isArray(state.notes) ? state.notes : [];
+  const norm = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const q = norm(query);
+  if (!q) return [];
+  return notes.filter((n) => norm(n.title).includes(q) || norm(n.description).includes(q)).slice(0, 5);
+}
+
+async function deleteNoteByQuery(fb, uid, query) {
+  return withUserData(fb, uid, (state) => {
+    const notes = Array.isArray(state.notes) ? state.notes : [];
+    const match = findBestMatch(query, notes, "title")
+      || findBestMatch(query, notes, "description");
+    if (!match) return undefined;
+    state.notes = notes.filter((n) => n.id !== match.id);
+    return match;
+  });
+}
+
+// ── Metas ───────────────────────────────────────────────────────
+async function createGoalFromWhatsApp(fb, uid, { title, target }, rawMessage) {
+  return withUserData(fb, uid, (state) => {
+    const goals = Array.isArray(state.goals) ? state.goals : (state.goals = []);
+    const goal = {
+      id: crypto.randomUUID(),
+      title,
+      target,
+      current: 0,
+      milestones: [],
+      source: "whatsapp",
+      whatsappRawMessage: rawMessage || "",
+    };
+    goals.unshift(goal);
+    return goal;
+  });
+}
+
+async function updateGoalProgress(fb, uid, { query, mode, value }) {
+  return withUserData(fb, uid, (state) => {
+    const goals = Array.isArray(state.goals) ? state.goals : [];
+    const match = findBestMatch(query, goals, "title");
+    if (!match) return undefined;
+    const idx = goals.findIndex((g) => g.id === match.id);
+    const base = Number(goals[idx].current) || 0;
+    const newCurrent = mode === "absolute" ? value : base + value;
+    goals[idx] = { ...goals[idx], current: Math.max(0, newCurrent) };
+    return goals[idx];
+  });
+}
+
+// ── Compromissos ────────────────────────────────────────────────
+async function createEventFromWhatsApp(fb, uid, { title, date, time, location }, rawMessage) {
+  return withUserData(fb, uid, (state) => {
+    const events = Array.isArray(state.events) ? state.events : (state.events = []);
+    const event = {
+      id: crypto.randomUUID(),
+      title,
+      date,
+      time,
+      location: location || "Sem local",
+      reminder: 15,
+      notes: "",
+      source: "whatsapp",
+      whatsappRawMessage: rawMessage || "",
+    };
+    events.push(event); // mesmo padrão do saveEvent() no app — push, não unshift
+    return event;
+  });
+}
+
+const HELP_MESSAGE = `🤖 O que eu entendo por aqui (tudo em linguagem natural, não precisa decorar comando):
+
+💸 *Finanças*
+"gastei 45 no mercado" / "recebi 200 de freela"
+📷 foto de cupom fiscal — eu leio sozinho
+"errei, era 60 não 45" — corrige o último lançamento
+"quanto gastei com uber esse mês" — busca lançamentos
+"saldo" / "resumo" — resumo do mês atual
+"relatório do mês passado" / "quanto gastei em julho"
+"comparado ao mês passado, gastei mais?" — estatísticas
+"apagar último" — desfaz o último lançamento feito por aqui
+
+📋 *Tarefas*
+"me lembra de pagar o boleto sexta"
+"concluí a tarefa do dentista"
+"apaga a tarefa de comprar ração"
+"minhas tarefas" / "tarefas de hoje" / "atrasadas" / "da semana"
+
+📝 *Notas*
+"anota: ideia pro projeto X é fazer Y" — salvo exatamente como você escreveu
+"busca minhas notas sobre viagem"
+"apaga a nota do mercado"
+
+🎯 *Metas*
+"criar meta economizar 5000 esse ano"
+"avancei 200 na minha meta de economia"
+
+📅 *Agenda*
+"marca reunião com o cliente sexta às 15h"
+"compromissos de hoje" / "da semana"
+
+Tudo sincronizado direto com o seu painel do PulseNote, e cada ação eu confirmo por aqui mesmo.`;
+
+const WELCOME_MESSAGE = `✅ Vinculado! Eu sou o Pulsinho — a partir de agora é só me mandar mensagem por aqui que eu cuido do resto. 🎉
+
+${HELP_MESSAGE}`;
 
 module.exports = async (req, res) => {
   // ── Verificação do webhook — a Meta chama isso 1x só, ao salvar a
-  //    configuração no painel do WhatsApp Business ──────────────────
+  //    configuração no painel do WhatsApp Business. Não é assinado
+  //    (não tem corpo), então não passa pela verificação de HMAC abaixo.
   if (req.method === "GET") {
     const mode = req.query["hub.mode"];
     const token = req.query["hub.verify_token"];
@@ -586,17 +871,33 @@ module.exports = async (req, res) => {
 
   if (req.method !== "POST") return res.status(405).end();
 
+  // ── Verificação de assinatura (ver comentário no topo do arquivo) ──
+  const rawBody = await readRawBody(req);
+  const signature = req.headers["x-hub-signature-256"];
+  if (!verifyMetaSignature(rawBody, signature, process.env.WHATSAPP_APP_SECRET)) {
+    console.error("Webhook do WhatsApp: assinatura ausente/inválida (ou WHATSAPP_APP_SECRET não configurado) — recusando.");
+    return res.status(401).end();
+  }
+
+  let body;
+  try {
+    body = rawBody.length ? JSON.parse(rawBody.toString("utf8")) : {};
+  } catch (err) {
+    console.error("Webhook do WhatsApp: corpo não é JSON válido.");
+    return res.status(400).end();
+  }
+
   // A Meta espera 200 rapidamente, mesmo em erro — senão ela reenvia o
   // mesmo evento várias vezes. Por isso o catch abaixo sempre responde
   // 200 (o erro real vai só pro log).
   try {
-    const message = req.body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
+    const message = body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
     if (!message) {
       // Não é mensagem recebida — é status de entrega (enviado/entregue/
       // lido/FALHOU) de uma mensagem que O PRÓPRIO webhook mandou. Só
       // logamos quando falha de verdade, pra não poluir os logs com
       // "sent"/"delivered"/"read" de cada mensagem enviada.
-      const statuses = req.body?.entry?.[0]?.changes?.[0]?.value?.statuses;
+      const statuses = body?.entry?.[0]?.changes?.[0]?.value?.statuses;
       const failed = statuses?.find((s) => s.status === "failed");
       if (failed) {
         console.error("Entrega de mensagem falhou:", JSON.stringify(failed.errors));
@@ -636,7 +937,8 @@ module.exports = async (req, res) => {
     const today = getTodayInBrazil();
 
     if (message.type === "text") {
-      const norm = normalizeCommand(message.text.body);
+      const rawText = message.text.body;
+      const norm = normalizeCommand(rawText);
 
       if (isDeleteCommand(norm)) {
         const deleted = await deleteLastWhatsAppEntry(fb, uid);
@@ -662,11 +964,21 @@ module.exports = async (req, res) => {
         return res.status(200).end();
       }
 
-      const result = await parseTextIntent({ text: message.text.body, categories, today });
+      const result = await parseTextIntent({ text: rawText, categories, today });
 
       if (result.ok && result.intent === "report") {
         const summary = await buildMonthlyReport(fb, uid, result.report.month, result.report.year);
         await sendWhatsAppMessage(fromPhone, formatMonthlyReport(summary, categories));
+        return res.status(200).end();
+      }
+
+      if (result.ok && result.intent === "stats") {
+        const main = await buildMonthlyReport(fb, uid, result.stats.month, result.stats.year);
+        let compareData = null;
+        if (result.stats.compare) {
+          compareData = await buildMonthlyReport(fb, uid, result.stats.compare.month, result.stats.compare.year);
+        }
+        await sendWhatsAppMessage(fromPhone, formatStatsMessage(main, compareData));
         return res.status(200).end();
       }
 
@@ -681,9 +993,120 @@ module.exports = async (req, res) => {
         return res.status(200).end();
       }
 
+      if (result.ok && result.intent === "finance_edit_last") {
+        const updated = await editLastWhatsAppEntry(fb, uid, result.patch);
+        if (!updated) {
+          await sendWhatsAppMessage(fromPhone, "Não achei nenhum lançamento feito por aqui pra corrigir 🤷");
+        } else {
+          const verb = updated.type === "receita" ? "Receita" : "Gasto";
+          await sendWhatsAppMessage(
+            fromPhone,
+            `✏️ Corrigido: ${verb} de R$ ${Number(updated.amount || 0).toFixed(2)} — ${updated.description || "sem descrição"} (${updated.date}).`
+          );
+        }
+        return res.status(200).end();
+      }
+
+      if (result.ok && result.intent === "finance_search") {
+        const matches = await searchFinanceEntries(fb, uid, result.search, categories);
+        if (matches.length === 0) {
+          await sendWhatsAppMessage(fromPhone, `🔍 Não encontrei nenhum lançamento com "${result.search.query}".`);
+        } else {
+          let msg = `🔍 Encontrei ${matches.length} lançamento${matches.length === 1 ? "" : "s"}:`;
+          for (const f of matches) {
+            const verb = f.type === "receita" ? "+" : "-";
+            msg += `\n• ${verb}R$ ${Number(f.amount || 0).toFixed(2)} — ${f.description || "sem descrição"} (${formatDateBr(f.date)})`;
+          }
+          await sendWhatsAppMessage(fromPhone, msg);
+        }
+        return res.status(200).end();
+      }
+
+      if (result.ok && result.intent === "task_action") {
+        const { action } = result.task;
+        if (action === "create") {
+          const task = await createTaskFromWhatsApp(fb, uid, result.task, today, rawText);
+          await sendWhatsAppMessage(
+            fromPhone,
+            `✅ 📋 Tarefa criada: "${task.title}"${task.dueDate ? ` — vence em ${formatDateBr(task.dueDate)}` : ""}${task.priority === "Alta" ? " 🔴 prioridade alta" : ""}.`
+          );
+        } else if (action === "complete") {
+          const task = await completeTaskByQuery(fb, uid, result.task.query, today);
+          await sendWhatsAppMessage(
+            fromPhone,
+            task ? `✅ Concluí: "${task.title}". Mandou bem! 🎉` : `Não achei nenhuma tarefa parecida com "${result.task.query}" 🤔`
+          );
+        } else {
+          const task = await deleteTaskByQuery(fb, uid, result.task.query);
+          await sendWhatsAppMessage(
+            fromPhone,
+            task ? `🗑️ Apaguei a tarefa "${task.title}".` : `Não achei nenhuma tarefa parecida com "${result.task.query}" 🤔`
+          );
+        }
+        return res.status(200).end();
+      }
+
+      if (result.ok && result.intent === "note_action") {
+        const { action } = result.note;
+        if (action === "create") {
+          const content = stripNoteCommandPrefix(rawText);
+          if (!content) {
+            await sendWhatsAppMessage(fromPhone, "Manda o conteúdo da anotação junto, tipo: \"anota: ideia pro projeto X\".");
+          } else {
+            const note = await createNoteFromWhatsApp(fb, uid, { title: result.note.title, description: content }, today, rawText);
+            await sendWhatsAppMessage(fromPhone, `✅ 📝 Anotado! "${note.title}" salvo nas suas notas — o conteúdo foi salvo exatamente como você escreveu.`);
+          }
+        } else if (action === "search") {
+          const matches = await searchNotes(fb, uid, result.note.query);
+          if (matches.length === 0) {
+            await sendWhatsAppMessage(fromPhone, `🔍 Não encontrei nenhuma nota com "${result.note.query}".`);
+          } else {
+            let msg = `🔍 Encontrei ${matches.length} nota${matches.length === 1 ? "" : "s"}:`;
+            for (const n of matches) {
+              const preview = (n.description || "").slice(0, 60);
+              msg += `\n• *${n.title}*${preview ? ` — ${preview}${n.description.length > 60 ? "…" : ""}` : ""}`;
+            }
+            await sendWhatsAppMessage(fromPhone, msg);
+          }
+        } else {
+          const note = await deleteNoteByQuery(fb, uid, result.note.query);
+          await sendWhatsAppMessage(
+            fromPhone,
+            note ? `🗑️ Apaguei a nota "${note.title}".` : `Não achei nenhuma nota parecida com "${result.note.query}" 🤔`
+          );
+        }
+        return res.status(200).end();
+      }
+
+      if (result.ok && result.intent === "goal_action") {
+        const { action } = result.goal;
+        if (action === "create") {
+          const goal = await createGoalFromWhatsApp(fb, uid, result.goal, rawText);
+          await sendWhatsAppMessage(fromPhone, `✅ 🎯 Meta criada: "${goal.title}" (alvo: ${goal.target}).`);
+        } else {
+          const goal = await updateGoalProgress(fb, uid, result.goal);
+          if (!goal) {
+            await sendWhatsAppMessage(fromPhone, `Não achei nenhuma meta parecida com "${result.goal.query}" 🤔`);
+          } else {
+            const pct = goal.target > 0 ? Math.round((goal.current / goal.target) * 100) : 0;
+            await sendWhatsAppMessage(fromPhone, `✅ 🎯 Atualizei "${goal.title}": agora está em ${goal.current}/${goal.target} (${pct}%)${pct >= 100 ? " — meta batida! 🏆" : ""}.`);
+          }
+        }
+        return res.status(200).end();
+      }
+
+      if (result.ok && result.intent === "event_create") {
+        const event = await createEventFromWhatsApp(fb, uid, result.event, rawText);
+        await sendWhatsAppMessage(
+          fromPhone,
+          `✅ 📅 Compromisso marcado: "${event.title}" em ${formatDateBr(event.date)}${event.time ? ` às ${event.time}` : ""}${event.location && event.location !== "Sem local" ? ` — ${event.location}` : ""}.`
+        );
+        return res.status(200).end();
+      }
+
       // intent "expense" (ou falha da IA) — mesmo fluxo de sempre
       await finishParsedResult({
-        fb, uid, fromPhone, categories, result,
+        fb, uid, fromPhone, categories, result, rawMessage: rawText,
         failureMsg: 'Não consegui entender essa mensagem 🤔 Manda "ajuda" pra ver o que eu entendo, ou descreve um gasto tipo "gastei 45 no mercado".',
       });
       return res.status(200).end();
@@ -703,7 +1126,7 @@ module.exports = async (req, res) => {
         today,
       });
       await finishParsedResult({
-        fb, uid, fromPhone, categories, result,
+        fb, uid, fromPhone, categories, result, rawMessage: "[foto de cupom fiscal]",
         failureMsg: "Não consegui ler esse cupom 🤔 Tenta uma foto mais nítida, com o valor total visível, ou descreve o gasto em texto mesmo.",
       });
       return res.status(200).end();
@@ -719,3 +1142,8 @@ module.exports = async (req, res) => {
     return res.status(200).end();
   }
 };
+
+// Desliga o parse automático de body da Vercel — precisamos dos bytes
+// BRUTOS da requisição pra verificar a assinatura HMAC da Meta antes de
+// qualquer parse (ver readRawBody()/verifyMetaSignature() acima).
+module.exports.config = { api: { bodyParser: false } };
