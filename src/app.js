@@ -143,15 +143,17 @@ const BASE_STORAGE_KEY = "pulsenote-state-v1";
 // WHATSAPP_BOT_NUMBER: formato livre, só pra EXIBIR pra pessoa (fallback
 // manual, caso o link de ativação abaixo não abra a conversa sozinho).
 // WHATSAPP_BOT_NUMBER_DIGITS: só dígitos, formato E.164 sem "+" — é o
-// que o link wa.me exige pra abrir a conversa certa. O Cloud API da
-// Meta tem um bug conhecido com números BR: o 9º dígito do celular
-// precisa estar presente pra abrir/aceitar conversa com o número (o
-// mesmo motivo pelo qual api/whatsapp-webhook.js corrige esse dígito
-// ao RESPONDER — ver fixBrazilianMobileNumber lá). Se o link não abrir
-// a conversa certa, confira o número exato cadastrado no Meta Business
-// Manager e ajuste as duas constantes abaixo.
-const WHATSAPP_BOT_NUMBER_DIGITS = "5531987737488";
-const WHATSAPP_BOT_NUMBER = "+55 31 98773-7488";
+// que o link wa.me exige pra abrir a conversa certa.
+// SEM o 9º dígito mesmo — confirmado na prática: a versão com 9
+// (5531987737488) não existe no WhatsApp, o wa.me abre "número não
+// está no WhatsApp" pra ela. É diferente do bug da Cloud API em
+// api/whatsapp-webhook.js (fixBrazilianMobileNumber) — aquele corrige
+// o número que a META entrega no webhook pra poder RESPONDER pela API;
+// este aqui é o número real cadastrado como conta do WhatsApp, usado
+// só pelo link wa.me. Se um dia trocar o número oficial, atualize as
+// duas constantes abaixo com o número exato (sem adicionar dígitos).
+const WHATSAPP_BOT_NUMBER_DIGITS = "553187737488";
+const WHATSAPP_BOT_NUMBER = "+55 31 8773-7488";
 
 // Retorna a chave de cache ISOLADA para o usuário atual.
 // Isso é essencial: sem isso, o navegador misturaria os dados em cache
