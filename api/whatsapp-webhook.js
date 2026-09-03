@@ -11,7 +11,7 @@
 // Status: os fluxos de ponta a ponta (vínculo, lançamento por texto e
 // foto, comandos, lembretes) estão implementados e testados
 // isoladamente. Falta só a confirmação de negócio no Meta Business
-// Manager pro número oficial (+55 31 8773-7488) sair do modo teste —
+// Manager pro número oficial (+55 31 98773-7048) sair do modo teste —
 // sem isso, a Cloud API só entrega mensagem pra números cadastrados
 // como testadores (ver histórico do bloqueio #130497 em versões
 // anteriores, quando o número de teste era +1).
