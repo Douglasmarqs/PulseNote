@@ -15,7 +15,7 @@
 // bem antes disso — foi o que apareceu nos logs do webhook). Trocado
 // para o sucessor indicado pela própria Google, mesmo nível
 // rápido/barato/gratuito. O mesmo modelo lê imagem também (multimodal).
-const GEMINI_MODEL = "gemini-3.1-flash-lite";
+const { fetchGeminiJson, GEMINI_MODEL } = require("./geminiFetch");
 
 function buildSystemPrompt({ todayIso, categoryList }) {
   return `Você extrai dados de um lançamento financeiro a partir do que o usuário mandou (uma frase em português, OU a foto de um cupom fiscal/comprovante).
@@ -61,57 +61,31 @@ async function callGeminiForEntry({ contents, categories, today }) {
   const categoryList = categories.map((c) => `- ${c.id} (${c.type}): ${c.label}`).join("\n");
   const systemPrompt = buildSystemPrompt({ todayIso, categoryList });
 
-  let raw;
-  try {
-    const aiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: systemPrompt }] },
-          contents: [{ parts: contents }],
-          generationConfig: {
-            maxOutputTokens: 200,
-            responseMimeType: "application/json",
-            responseSchema: {
-              type: "object",
-              properties: {
-                type: { type: "string", enum: ["despesa", "receita"] },
-                amount: { type: "number" },
-                categoryId: { type: "string", enum: categoryIds },
-                description: { type: "string" },
-                date: { type: "string" },
-              },
-              required: ["type", "amount", "categoryId", "description", "date"],
-            },
-          },
-        }),
-      }
-    );
+  const aiResult = await fetchGeminiJson({
+    model: GEMINI_MODEL,
+    apiKey: process.env.GEMINI_API_KEY,
+    systemPrompt,
+    contents,
+    label: "transaction",
+    generationConfig: {
+      maxOutputTokens: 200,
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: "object",
+        properties: {
+          type: { type: "string", enum: ["despesa", "receita"] },
+          amount: { type: "number" },
+          categoryId: { type: "string", enum: categoryIds },
+          description: { type: "string" },
+          date: { type: "string" },
+        },
+        required: ["type", "amount", "categoryId", "description", "date"],
+      },
+    },
+  });
 
-    if (!aiRes.ok) {
-      const errBody = await aiRes.text();
-      console.error("Erro na API do Gemini:", aiRes.status, errBody);
-      if (aiRes.status === 429) return { ok: false, status: 429, error: "ai_rate_limited" };
-      return { ok: false, status: 502, error: "ai_request_failed" };
-    }
-
-    const data = await aiRes.json();
-    raw = (data.candidates?.[0]?.content?.parts || []).map((p) => p.text || "").join("");
-  } catch (err) {
-    console.error("Erro inesperado chamando o Gemini:", err);
-    return { ok: false, status: 502, error: "ai_request_failed" };
-  }
-
-  let parsed;
-  try {
-    const jsonMatch = raw.match(/\{[\s\S]*\}/);
-    parsed = JSON.parse(jsonMatch ? jsonMatch[0] : raw);
-  } catch (err) {
-    console.error("Resposta do Gemini não é um JSON válido:", raw);
-    return { ok: false, status: 502, error: "ai_bad_response" };
-  }
+  if (!aiResult.ok) return aiResult;
+  const parsed = aiResult.parsed;
 
   const validIds = new Set(categoryIds);
   const type = parsed.type === "receita" ? "receita" : "despesa";

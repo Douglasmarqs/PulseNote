@@ -29,9 +29,39 @@
 // chamada de IA à toa): "vincular", "apagar último" (finanças),
 // "saldo"/"resumo" do mês atual — ver isBalanceCommand()/isDeleteCommand()
 // em whatsapp-webhook.js.
+//
+// REDE DE SEGURANÇA (localTextFallback.js): o schema JSON abaixo só
+// EXIGE o campo "intent" — os demais (amount, taskTitle, eventDate...)
+// ficam opcionais de propósito, porque um schema só cobre TODAS as
+// intenções. Isso significa que uma resposta "preguiçosa" do Gemini
+// pode acertar a intenção e ainda assim deixar de preencher o campo que
+// a gente mais precisa. Diferente do fluxo do app (parseTransactionAI.js
+// — usado no "✨ Lançar por texto" e em foto de cupom), que SEMPRE exige
+// os 5 campos do lançamento no schema e por isso raramente falha, esse
+// arquivo cobre 10 intenções diferentes na mesma chamada e não pode
+// exigir tudo sempre (senão "finance_edit_last" seria forçado a inventar
+// valor pra correções que só mudam a categoria, por exemplo).
+// Por isso, cada ponto de validação abaixo que falharia direto agora
+// tenta primeiro recuperar o campo faltante analisando o TEXTO BRUTO da
+// mensagem com regex (mesma heurística que o app já usa há tempos em
+// parseFinanceText() pro "Lançar por texto" nunca travar) — só devolve
+// "não entendi" quando nem a IA nem a extração local acham nada.
 // ============================================================
 
-const GEMINI_MODEL = "gemini-3.1-flash-lite";
+const { fetchGeminiJson, GEMINI_MODEL } = require("./geminiFetch");
+const {
+  localExpenseFallback,
+  extractAmountFromText,
+  extractFutureDateIso,
+  guessType,
+  guessCategoryId,
+  stripKnownTriggers,
+  TASK_CREATE_TRIGGERS,
+  GOAL_CREATE_TRIGGERS,
+  EVENT_CREATE_TRIGGERS,
+  FINANCE_SEARCH_TRIGGERS,
+  NOTE_SEARCH_TRIGGERS,
+} = require("./localTextFallback");
 
 const INTENTS = [
   "expense", "report", "agenda", "help",
@@ -123,104 +153,94 @@ async function parseTextIntent({ text, categories, today }) {
   const categoryIds = categories.map((c) => c.id);
   const categoryList = categories.map((c) => `- ${c.id} (${c.type}): ${c.label}`).join("\n");
   const systemPrompt = buildIntentPrompt({ todayIso, categoryList });
+  const rawMessage = text.trim().slice(0, 400);
 
-  let raw;
-  try {
-    const aiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: systemPrompt }] },
-          contents: [{ parts: [{ text: text.trim().slice(0, 400) }] }],
-          generationConfig: {
-            maxOutputTokens: 400,
-            responseMimeType: "application/json",
-            responseSchema: {
-              type: "object",
-              properties: {
-                intent: { type: "string", enum: INTENTS },
-                // expense / finance_edit_last
-                type: { type: "string", enum: ["despesa", "receita"] },
-                amount: { type: "number" },
-                categoryId: { type: "string", enum: categoryIds },
-                description: { type: "string" },
-                date: { type: "string" },
-                // report / stats
-                reportMonth: { type: "integer" },
-                reportYear: { type: "integer" },
-                statsCompareMonth: { type: "integer" },
-                statsCompareYear: { type: "integer" },
-                // agenda
-                agendaFilter: { type: "string", enum: ["hoje", "atrasadas", "semana", "todas"] },
-                // finance_search
-                searchQuery: { type: "string" },
-                searchMonth: { type: "integer" },
-                searchYear: { type: "integer" },
-                // task_action
-                taskAction: { type: "string", enum: ["create", "complete", "delete"] },
-                taskTitle: { type: "string" },
-                taskDueDate: { type: "string" },
-                taskPriority: { type: "string", enum: ["Baixa", "Media", "Alta"] },
-                taskQuery: { type: "string" },
-                // note_action
-                noteAction: { type: "string", enum: ["create", "search", "delete"] },
-                noteTitle: { type: "string" },
-                noteQuery: { type: "string" },
-                // goal_action
-                goalAction: { type: "string", enum: ["create", "update"] },
-                goalTitle: { type: "string" },
-                goalTarget: { type: "number" },
-                goalQuery: { type: "string" },
-                goalProgressMode: { type: "string", enum: ["delta", "absolute"] },
-                goalProgressValue: { type: "number" },
-                // event_create
-                eventTitle: { type: "string" },
-                eventDate: { type: "string" },
-                eventTime: { type: "string" },
-                eventLocation: { type: "string" },
-              },
-              required: ["intent"],
-            },
-          },
-        }),
-      }
-    );
+  const aiResult = await fetchGeminiJson({
+    model: GEMINI_MODEL,
+    apiKey: process.env.GEMINI_API_KEY,
+    systemPrompt,
+    contents: [{ text: rawMessage }],
+    label: "intent",
+    generationConfig: {
+      maxOutputTokens: 400,
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: "object",
+        properties: {
+          intent: { type: "string", enum: INTENTS },
+          // expense / finance_edit_last
+          type: { type: "string", enum: ["despesa", "receita"] },
+          amount: { type: "number" },
+          categoryId: { type: "string", enum: categoryIds },
+          description: { type: "string" },
+          date: { type: "string" },
+          // report / stats
+          reportMonth: { type: "integer" },
+          reportYear: { type: "integer" },
+          statsCompareMonth: { type: "integer" },
+          statsCompareYear: { type: "integer" },
+          // agenda
+          agendaFilter: { type: "string", enum: ["hoje", "atrasadas", "semana", "todas"] },
+          // finance_search
+          searchQuery: { type: "string" },
+          searchMonth: { type: "integer" },
+          searchYear: { type: "integer" },
+          // task_action
+          taskAction: { type: "string", enum: ["create", "complete", "delete"] },
+          taskTitle: { type: "string" },
+          taskDueDate: { type: "string" },
+          taskPriority: { type: "string", enum: ["Baixa", "Media", "Alta"] },
+          taskQuery: { type: "string" },
+          // note_action
+          noteAction: { type: "string", enum: ["create", "search", "delete"] },
+          noteTitle: { type: "string" },
+          noteQuery: { type: "string" },
+          // goal_action
+          goalAction: { type: "string", enum: ["create", "update"] },
+          goalTitle: { type: "string" },
+          goalTarget: { type: "number" },
+          goalQuery: { type: "string" },
+          goalProgressMode: { type: "string", enum: ["delta", "absolute"] },
+          goalProgressValue: { type: "number" },
+          // event_create
+          eventTitle: { type: "string" },
+          eventDate: { type: "string" },
+          eventTime: { type: "string" },
+          eventLocation: { type: "string" },
+        },
+        required: ["intent"],
+      },
+    },
+  });
 
-    if (!aiRes.ok) {
-      const errBody = await aiRes.text();
-      console.error("Erro na API do Gemini (intent):", aiRes.status, errBody);
-      if (aiRes.status === 429) return { ok: false, status: 429, error: "ai_rate_limited" };
-      return { ok: false, status: 502, error: "ai_request_failed" };
+  if (!aiResult.ok) {
+    // O Gemini falhou de vez (rede/HTTP/JSON inválido), mesmo depois do
+    // retry do fetchGeminiJson. Último recurso antes de desistir: se a
+    // mensagem tem cara de lançamento financeiro (tem um valor em reais
+    // reconhecível), monta o lançamento só com regex — cobre exatamente
+    // o caso "escrevi um gasto simples e a IA deu uma engasgada".
+    const local = localExpenseFallback({ text: rawMessage, categories, todayIso });
+    if (local) {
+      console.warn("Intent do WhatsApp recuperada localmente após falha do Gemini:", rawMessage);
+      return { ok: true, intent: "expense", entry: local };
     }
-
-    const data = await aiRes.json();
-    raw = (data.candidates?.[0]?.content?.parts || []).map((p) => p.text || "").join("");
-  } catch (err) {
-    console.error("Erro inesperado chamando o Gemini (intent):", err);
-    return { ok: false, status: 502, error: "ai_request_failed" };
+    console.error("Não deu pra recuperar a intenção localmente (sem valor reconhecível):", rawMessage, aiResult.error);
+    return aiResult;
   }
 
-  let parsed;
-  try {
-    const jsonMatch = raw.match(/\{[\s\S]*\}/);
-    parsed = JSON.parse(jsonMatch ? jsonMatch[0] : raw);
-  } catch (err) {
-    console.error("Resposta do Gemini (intent) não é um JSON válido:", raw);
-    return { ok: false, status: 502, error: "ai_bad_response" };
-  }
-
+  const parsed = aiResult.parsed;
   const intent = INTENTS.includes(parsed.intent) ? parsed.intent : "expense";
   const validIds = new Set(categoryIds);
 
   // ── report ──────────────────────────────────────────────────────
   if (intent === "report") {
-    const month = Number(parsed.reportMonth);
-    const year = Number(parsed.reportYear);
-    if (!Number.isInteger(month) || month < 1 || month > 12 || !Number.isInteger(year)) {
-      return { ok: false, status: 422, error: "ai_invalid_report" };
-    }
+    const [curY, curM] = todayIso.split("-").map(Number);
+    // Sem período claro, assume o mês atual (mesmo default já usado em
+    // "stats" e "saldo") em vez de falhar — "relatório" sozinho é um
+    // pedido razoável mesmo sem mês explícito.
+    const month = Number.isInteger(Number(parsed.reportMonth)) && parsed.reportMonth >= 1 && parsed.reportMonth <= 12
+      ? Number(parsed.reportMonth) : curM;
+    const year = Number.isInteger(Number(parsed.reportYear)) ? Number(parsed.reportYear) : curY;
     return { ok: true, intent: "report", report: { month, year } };
   }
 
@@ -248,8 +268,17 @@ async function parseTextIntent({ text, categories, today }) {
 
   // ── finance_search ──────────────────────────────────────────────
   if (intent === "finance_search") {
-    const searchQuery = String(parsed.searchQuery || "").trim().slice(0, 60);
-    if (!searchQuery) return { ok: false, status: 422, error: "ai_invalid_search" };
+    let searchQuery = String(parsed.searchQuery || "").trim().slice(0, 60);
+    if (!searchQuery) {
+      // A IA acertou "quer buscar algo" mas não isolou a palavra-chave —
+      // tira as frases de comando conhecidas ("busca meus gastos com",
+      // "quanto gastei com"...) e usa o que sobrar.
+      searchQuery = stripKnownTriggers(rawMessage, FINANCE_SEARCH_TRIGGERS).slice(0, 60);
+    }
+    if (!searchQuery) {
+      console.error("finance_search sem palavra-chave recuperável:", rawMessage);
+      return { ok: false, status: 422, error: "ai_invalid_search" };
+    }
     const month = Number.isInteger(Number(parsed.searchMonth)) ? Number(parsed.searchMonth) : null;
     const year = Number.isInteger(Number(parsed.searchYear)) ? Number(parsed.searchYear) : null;
     return { ok: true, intent: "finance_search", search: { query: searchQuery, month, year } };
@@ -267,82 +296,135 @@ async function parseTextIntent({ text, categories, today }) {
       patch.description = parsed.description.trim().slice(0, 60);
     }
     if (/^\d{4}-\d{2}-\d{2}$/.test(parsed.date)) patch.date = parsed.date;
-    if (Object.keys(patch).length === 0) return { ok: false, status: 422, error: "ai_empty_edit" };
+    if (Object.keys(patch).length === 0) {
+      // Correção quase sempre é só um número solto ("errei, era 60") —
+      // tenta achar o valor direto no texto antes de desistir.
+      const localAmount = extractAmountFromText(rawMessage);
+      if (Number.isFinite(localAmount) && localAmount > 0) {
+        patch.amount = localAmount;
+      } else {
+        console.error("finance_edit_last sem nenhum campo recuperável:", rawMessage);
+        return { ok: false, status: 422, error: "ai_empty_edit" };
+      }
+    }
     return { ok: true, intent: "finance_edit_last", patch };
   }
 
   // ── task_action ─────────────────────────────────────────────────
   if (intent === "task_action") {
-    const action = ["create", "complete", "delete"].includes(parsed.taskAction) ? parsed.taskAction : null;
-    if (!action) return { ok: false, status: 422, error: "ai_invalid_task_action" };
+    const action = ["create", "complete", "delete"].includes(parsed.taskAction) ? parsed.taskAction : "create";
     if (action === "create") {
-      const title = String(parsed.taskTitle || "").trim().slice(0, 120);
-      if (!title) return { ok: false, status: 422, error: "ai_invalid_task_title" };
-      const dueDate = /^\d{4}-\d{2}-\d{2}$/.test(parsed.taskDueDate) ? parsed.taskDueDate : "";
+      let title = String(parsed.taskTitle || "").trim().slice(0, 120);
+      if (!title) title = stripKnownTriggers(rawMessage, TASK_CREATE_TRIGGERS).slice(0, 120);
+      if (!title) {
+        console.error("task_action create sem título recuperável:", rawMessage);
+        return { ok: false, status: 422, error: "ai_invalid_task_title" };
+      }
+      const dueDate = /^\d{4}-\d{2}-\d{2}$/.test(parsed.taskDueDate)
+        ? parsed.taskDueDate
+        : (extractFutureDateIso(rawMessage, todayIso) || "");
       const priority = ["Baixa", "Media", "Alta"].includes(parsed.taskPriority) ? parsed.taskPriority : "Media";
       return { ok: true, intent: "task_action", task: { action, title, dueDate, priority } };
     }
-    const query = String(parsed.taskQuery || "").trim().slice(0, 80);
-    if (!query) return { ok: false, status: 422, error: "ai_invalid_task_query" };
+    const query = String(parsed.taskQuery || "").trim().slice(0, 80)
+      || stripKnownTriggers(rawMessage, TASK_CREATE_TRIGGERS).slice(0, 80);
+    if (!query) {
+      console.error("task_action complete/delete sem alvo recuperável:", rawMessage);
+      return { ok: false, status: 422, error: "ai_invalid_task_query" };
+    }
     return { ok: true, intent: "task_action", task: { action, query } };
   }
 
   // ── note_action ─────────────────────────────────────────────────
   if (intent === "note_action") {
-    const action = ["create", "search", "delete"].includes(parsed.noteAction) ? parsed.noteAction : null;
-    if (!action) return { ok: false, status: 422, error: "ai_invalid_note_action" };
+    const action = ["create", "search", "delete"].includes(parsed.noteAction) ? parsed.noteAction : "create";
     if (action === "create") {
       const title = String(parsed.noteTitle || "").trim().slice(0, 80);
       return { ok: true, intent: "note_action", note: { action, title } };
     }
-    const query = String(parsed.noteQuery || "").trim().slice(0, 80);
-    if (!query) return { ok: false, status: 422, error: "ai_invalid_note_query" };
+    const query = String(parsed.noteQuery || "").trim().slice(0, 80)
+      || stripKnownTriggers(rawMessage, NOTE_SEARCH_TRIGGERS).slice(0, 80);
+    if (!query) {
+      console.error("note_action search/delete sem alvo recuperável:", rawMessage);
+      return { ok: false, status: 422, error: "ai_invalid_note_query" };
+    }
     return { ok: true, intent: "note_action", note: { action, query } };
   }
 
   // ── goal_action ─────────────────────────────────────────────────
   if (intent === "goal_action") {
-    const action = ["create", "update"].includes(parsed.goalAction) ? parsed.goalAction : null;
-    if (!action) return { ok: false, status: 422, error: "ai_invalid_goal_action" };
+    const action = ["create", "update"].includes(parsed.goalAction) ? parsed.goalAction : "update";
     if (action === "create") {
-      const title = String(parsed.goalTitle || "").trim().slice(0, 120);
-      const target = Number(parsed.goalTarget);
+      let title = String(parsed.goalTitle || "").trim().slice(0, 120);
+      let target = Number(parsed.goalTarget);
+      if (!Number.isFinite(target) || target <= 0) target = extractAmountFromText(rawMessage);
+      if (!title) title = stripKnownTriggers(rawMessage, GOAL_CREATE_TRIGGERS).slice(0, 120);
       if (!title || !Number.isFinite(target) || target <= 0) {
+        console.error("goal_action create sem título/alvo recuperável:", rawMessage);
         return { ok: false, status: 422, error: "ai_invalid_goal_create" };
       }
       return { ok: true, intent: "goal_action", goal: { action, title, target } };
     }
-    const query = String(parsed.goalQuery || "").trim().slice(0, 80);
+    const query = String(parsed.goalQuery || "").trim().slice(0, 80)
+      || stripKnownTriggers(rawMessage, GOAL_CREATE_TRIGGERS).slice(0, 80);
     const mode = parsed.goalProgressMode === "absolute" ? "absolute" : "delta";
-    const value = Number(parsed.goalProgressValue);
-    if (!query || !Number.isFinite(value)) return { ok: false, status: 422, error: "ai_invalid_goal_update" };
+    let value = Number(parsed.goalProgressValue);
+    if (!Number.isFinite(value)) value = extractAmountFromText(rawMessage);
+    if (!query || !Number.isFinite(value)) {
+      console.error("goal_action update sem alvo/valor recuperável:", rawMessage);
+      return { ok: false, status: 422, error: "ai_invalid_goal_update" };
+    }
     return { ok: true, intent: "goal_action", goal: { action, query, mode, value } };
   }
 
   // ── event_create ────────────────────────────────────────────────
   if (intent === "event_create") {
-    const title = String(parsed.eventTitle || "").trim().slice(0, 120);
-    const date = /^\d{4}-\d{2}-\d{2}$/.test(parsed.eventDate) ? parsed.eventDate : "";
-    if (!title || !date) return { ok: false, status: 422, error: "ai_invalid_event" };
+    let title = String(parsed.eventTitle || "").trim().slice(0, 120);
+    if (!title) title = stripKnownTriggers(rawMessage, EVENT_CREATE_TRIGGERS).slice(0, 120);
+    let date = /^\d{4}-\d{2}-\d{2}$/.test(parsed.eventDate) ? parsed.eventDate : "";
+    if (!date) date = extractFutureDateIso(rawMessage, todayIso) || "";
+    if (!title || !date) {
+      console.error("event_create sem título/data recuperável:", rawMessage);
+      return { ok: false, status: 422, error: "ai_invalid_event" };
+    }
     const time = /^\d{2}:\d{2}$/.test(parsed.eventTime) ? parsed.eventTime : "";
     const location = String(parsed.eventLocation || "").trim().slice(0, 80);
     return { ok: true, intent: "event_create", event: { title, date, time, location } };
   }
 
-  // ── intent "expense" (ou falha da IA) — mesma validação de sempre ──
-  const type = parsed.type === "receita" ? "receita" : "despesa";
-  const amount = Math.round(Number(parsed.amount) * 100) / 100;
-  const categoryId = validIds.has(parsed.categoryId)
-    ? parsed.categoryId
-    : type === "receita" ? "outros_receita" : "outros";
-  const description = String(parsed.description || "").slice(0, 60).trim();
-  const date = /^\d{4}-\d{2}-\d{2}$/.test(parsed.date) ? parsed.date : todayIso;
+  // ── intent "expense" (ou falha da classificação) ──────────────────
+  // Esse é o caminho mais comum de longe ("gastei X com/em Y"), e
+  // também o default de qualquer mensagem que a IA não classificou com
+  // confiança — por isso é o que mais precisa de uma rede de segurança
+  // sólida. Só usa o que o Gemini extraiu quando é válido; qualquer
+  // campo ausente/errado é recuperado localmente do texto bruto antes
+  // de considerar a mensagem "não entendida".
+  const type = parsed.type === "receita" ? "receita" : (parsed.type === "despesa" ? "despesa" : null);
+  let amount = Number(parsed.amount);
+  amount = Number.isFinite(amount) && amount > 0 ? Math.round(amount * 100) / 100 : null;
+  let categoryId = validIds.has(parsed.categoryId) ? parsed.categoryId : null;
+  let description = String(parsed.description || "").slice(0, 60).trim();
+  let date = /^\d{4}-\d{2}-\d{2}$/.test(parsed.date) ? parsed.date : null;
 
+  if (amount === null) {
+    // Campo mais crítico do lançamento — sem ele não tem gasto pra
+    // registrar. Tenta achar direto no texto antes de desistir de vez.
+    amount = extractAmountFromText(rawMessage);
+  }
   if (!Number.isFinite(amount) || amount <= 0) {
+    console.error("expense sem nenhum valor recuperável (IA e regex local falharam):", rawMessage);
     return { ok: false, status: 422, error: "ai_invalid_amount" };
   }
 
-  return { ok: true, intent: "expense", entry: { type, amount, categoryId, description, date } };
+  const finalType = type || guessType(rawMessage);
+  if (!categoryId) categoryId = guessCategoryId(rawMessage, finalType, categories);
+  if (!description) {
+    const local = localExpenseFallback({ text: rawMessage, categories, todayIso });
+    description = local?.description || (finalType === "receita" ? "Recebimento" : "Gasto");
+  }
+  if (!date) date = todayIso;
+
+  return { ok: true, intent: "expense", entry: { type: finalType, amount, categoryId, description, date } };
 }
 
 // Casamento aproximado (acento/caixa-insensível, por inclusão de termos)

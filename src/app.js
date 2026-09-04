@@ -2143,7 +2143,7 @@ function renderChart() {
   document.querySelector("#weeklySummary").textContent = `${counts.reduce((sum, count) => sum + count, 0)} concluidas`;
   chart.innerHTML = days
     .map((date, index) => {
-      const label = new Intl.DateTimeFormat("pt-BR", { weekday: "short" }).format(new Date(`${date}T12:00:00`));
+      const label = safeFormatDate(`${date}T12:00:00`, { weekday: "short" }, "-");
       const height = 14 + (counts[index] / max) * 90;
       return `<div class="bar-item"><div class="bar" style="height:${height}px" title="${counts[index]} tarefas"></div><span>${label}</span></div>`;
     })
@@ -2603,7 +2603,7 @@ function renderPlannerDay() {
   const label = document.querySelector("#plannerDayLabel");
   if (label) {
     const date = new Date(`${plannerDayDate}T12:00:00`);
-    let text = new Intl.DateTimeFormat("pt-BR", { weekday: "long", day: "2-digit", month: "long" }).format(date);
+    let text = safeFormatDate(date, { weekday: "long", day: "2-digit", month: "long" }, plannerDayDate || "");
     text = text.charAt(0).toUpperCase() + text.slice(1);
     label.textContent = plannerDayDate === todayIso ? `Hoje · ${text}` : text;
   }
@@ -2677,8 +2677,8 @@ function renderPlannerWeek() {
     const first = new Date(`${days[0]}T12:00:00`);
     const last = new Date(`${days[6]}T12:00:00`);
     const sameMonth = first.getMonth() === last.getMonth();
-    const fmtDay = (d) => new Intl.DateTimeFormat("pt-BR", { day: "2-digit" }).format(d);
-    const fmtMonthFull = new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" }).format(last);
+    const fmtDay = (d) => safeFormatDate(d, { day: "2-digit" }, "--");
+    const fmtMonthFull = safeFormatDate(last, { month: "long", year: "numeric" }, "");
     label.textContent = sameMonth ? `${fmtDay(first)} – ${fmtDay(last)} de ${fmtMonthFull}` : `${fmtDay(first)} – ${fmtDay(last)} de ${fmtMonthFull}`;
   }
 
@@ -2690,7 +2690,7 @@ function renderPlannerWeek() {
       const dayEvents = state.events.filter((e) => e.date === date).sort(sortEvent);
       const isToday = date === todayIso;
       const d = new Date(`${date}T12:00:00`);
-      let weekdayLabel = new Intl.DateTimeFormat("pt-BR", { weekday: "short" }).format(d).replace(".", "");
+      let weekdayLabel = safeFormatDate(d, { weekday: "short" }, "-").replace(".", "");
       weekdayLabel = weekdayLabel.charAt(0).toUpperCase() + weekdayLabel.slice(1);
       const items = [...dayTasks.map((t) => ({ kind: "task", data: t })), ...dayEvents.map((e) => ({ kind: "event", data: e }))];
       return `
@@ -2732,7 +2732,7 @@ function renderPlannerMonth() {
   const anchor = new Date(`${plannerMonthAnchor}T12:00:00`);
   const label = document.querySelector("#plannerMonthLabel");
   if (label) {
-    let text = new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" }).format(anchor);
+    let text = safeFormatDate(anchor, { month: "long", year: "numeric" }, plannerMonthAnchor || "");
     label.textContent = text.charAt(0).toUpperCase() + text.slice(1);
   }
 
@@ -3611,8 +3611,28 @@ function renderList(selector, items, renderer, emptyText, emptyClass = "empty-st
   element.innerHTML = items.length ? items.map(renderer).join("") : `<div class="${emptyClass}">${emptyText}</div>`;
 }
 
+// Formata uma data (string "YYYY-MM-DD", Date já pronto, ou qualquer
+// outro valor) sem derrubar a tela quando vier ausente/malformada — dado
+// corrompido, campo vazio, ou uma data inválida que escapou de alguma
+// validação (ex.: "2026-13-40"). ANTES, isso derrubava a tela INTEIRA
+// com "date value is not finite in DateTimeFormat format()", travando
+// telas sem nenhuma relação com o dado quebrado (o Início inteiro parava
+// de renderizar por causa de UM compromisso com data ruim). Usado por
+// todo formatador de data do app que recebe um valor vindo de
+// tarefa/compromisso/lançamento salvo (não por `new Date()` fresco, que
+// nunca é inválido).
+function safeFormatDate(dateInput, options, fallback = "Data inválida") {
+  const date = dateInput instanceof Date ? dateInput : new Date(dateInput);
+  if (!Number.isFinite(date.getTime())) return fallback;
+  try {
+    return new Intl.DateTimeFormat("pt-BR", options).format(date);
+  } catch (err) {
+    return fallback;
+  }
+}
+
 function formatDate(value) {
-  return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short" }).format(new Date(`${value}T12:00:00`));
+  return safeFormatDate(`${value}T12:00:00`, { day: "2-digit", month: "short" }, "--/--");
 }
 
 function escapeHtml(value) {
@@ -3660,9 +3680,8 @@ function getActiveFinMonth() {
 
 // Retorna o label localizado do mês (ex.: "Junho 2026")
 function finMonthLabel(monthKey) {
-  const [year, month] = monthKey.split("-").map(Number);
-  return new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" })
-    .format(new Date(year, month - 1, 1));
+  const [year, month] = String(monthKey || "").split("-").map(Number);
+  return safeFormatDate(new Date(year, (month || 1) - 1, 1), { month: "long", year: "numeric" }, monthKey || "--");
 }
 
 // Retorna true se o mês está marcado como "fechado" pelo usuário
@@ -4158,7 +4177,7 @@ function exportMonthReport(monthKey) {
     const me = (state.finances || []).filter((f) => f.date.startsWith(mk));
     const mr = me.filter((f) => f.type === "receita").reduce((s, f) => s + f.amount, 0);
     const md = me.filter((f) => f.type === "despesa").reduce((s, f) => s + f.amount, 0);
-    const lbl = new Intl.DateTimeFormat("pt-BR", { month: "short" }).format(d);
+    const lbl = safeFormatDate(d, { month: "short" }, "-");
     months6.push({ mk, lbl, r: mr, d: md });
   }
   const maxVal = Math.max(...months6.flatMap((m) => [m.r, m.d]), 1);
@@ -5938,7 +5957,7 @@ function renderFinChart6m() {
     const r = entries.filter((f) => f.type === "receita").reduce((s, f) => s + f.amount, 0);
     const d = entries.filter((f) => f.type === "despesa").reduce((s, f) => s + f.amount, 0);
     const [y, m] = mk.split("-").map(Number);
-    const lbl = new Intl.DateTimeFormat("pt-BR", { month: "short" }).format(new Date(y, m - 1, 1));
+    const lbl = safeFormatDate(new Date(y, m - 1, 1), { month: "short" }, "-");
     return { mk, lbl, r, d };
   });
 
@@ -6010,7 +6029,7 @@ function renderFinSaldoEvolution() {
     const net = entries.reduce((s, f) => s + (f.type === "receita" ? f.amount : -f.amount), 0);
     running += net;
     const [y, m] = mk.split("-").map(Number);
-    const lbl = new Intl.DateTimeFormat("pt-BR", { month: "short" }).format(new Date(y, m - 1, 1));
+    const lbl = safeFormatDate(new Date(y, m - 1, 1), { month: "short" }, "-");
     return { mk, lbl, saldo: running };
   });
 
