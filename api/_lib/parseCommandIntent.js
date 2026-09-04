@@ -52,7 +52,9 @@ const { fetchGeminiJson, GEMINI_MODEL } = require("./geminiFetch");
 const {
   localExpenseFallback,
   extractAmountFromText,
-  extractFutureDateIso,
+  detectDate,
+  extractTimeFromText,
+  stripDateWordsFromDescription,
   guessType,
   guessCategoryId,
   stripKnownTriggers,
@@ -296,6 +298,8 @@ async function parseTextIntent({ text, categories, today }) {
       patch.description = parsed.description.trim().slice(0, 60);
     }
     if (/^\d{4}-\d{2}-\d{2}$/.test(parsed.date)) patch.date = parsed.date;
+    const localEditDate = detectDate(rawMessage, todayIso);
+    if (localEditDate) patch.date = localEditDate; // regex vence a IA em data mecânica
     if (Object.keys(patch).length === 0) {
       // Correção quase sempre é só um número solto ("errei, era 60") —
       // tenta achar o valor direto no texto antes de desistir.
@@ -316,13 +320,13 @@ async function parseTextIntent({ text, categories, today }) {
     if (action === "create") {
       let title = String(parsed.taskTitle || "").trim().slice(0, 120);
       if (!title) title = stripKnownTriggers(rawMessage, TASK_CREATE_TRIGGERS).slice(0, 120);
+      title = stripDateWordsFromDescription(title) || title;
       if (!title) {
         console.error("task_action create sem título recuperável:", rawMessage);
         return { ok: false, status: 422, error: "ai_invalid_task_title" };
       }
-      const dueDate = /^\d{4}-\d{2}-\d{2}$/.test(parsed.taskDueDate)
-        ? parsed.taskDueDate
-        : (extractFutureDateIso(rawMessage, todayIso) || "");
+      const dueDate = detectDate(rawMessage, todayIso) ||
+        (/^\d{4}-\d{2}-\d{2}$/.test(parsed.taskDueDate) ? parsed.taskDueDate : "");
       const priority = ["Baixa", "Media", "Alta"].includes(parsed.taskPriority) ? parsed.taskPriority : "Media";
       return { ok: true, intent: "task_action", task: { action, title, dueDate, priority } };
     }
@@ -381,13 +385,19 @@ async function parseTextIntent({ text, categories, today }) {
   if (intent === "event_create") {
     let title = String(parsed.eventTitle || "").trim().slice(0, 120);
     if (!title) title = stripKnownTriggers(rawMessage, EVENT_CREATE_TRIGGERS).slice(0, 120);
-    let date = /^\d{4}-\d{2}-\d{2}$/.test(parsed.eventDate) ? parsed.eventDate : "";
-    if (!date) date = extractFutureDateIso(rawMessage, todayIso) || "";
+    title = stripDateWordsFromDescription(title) || title;
+    // Data/hora reconhecida no texto (regex, determinística) sempre vence
+    // a que a IA devolveu — é matemática mecânica, e a IA pode "entender"
+    // a frase certa mas errar a conta (ex.: ler "amanhã" e devolver a
+    // data de hoje).
+    const date = detectDate(rawMessage, todayIso) ||
+      (/^\d{4}-\d{2}-\d{2}$/.test(parsed.eventDate) ? parsed.eventDate : "");
     if (!title || !date) {
       console.error("event_create sem título/data recuperável:", rawMessage);
       return { ok: false, status: 422, error: "ai_invalid_event" };
     }
-    const time = /^\d{2}:\d{2}$/.test(parsed.eventTime) ? parsed.eventTime : "";
+    const time = extractTimeFromText(rawMessage) ||
+      (/^\d{2}:\d{2}$/.test(parsed.eventTime) ? parsed.eventTime : "");
     const location = String(parsed.eventLocation || "").trim().slice(0, 80);
     return { ok: true, intent: "event_create", event: { title, date, time, location } };
   }
@@ -421,8 +431,18 @@ async function parseTextIntent({ text, categories, today }) {
   if (!description) {
     const local = localExpenseFallback({ text: rawMessage, categories, todayIso });
     description = local?.description || (finalType === "receita" ? "Recebimento" : "Gasto");
+  } else {
+    // A IA às vezes deixa a palavra de data solta na descrição mesmo já
+    // tendo preenchido "date" certo (ex.: description "Uber ontem") —
+    // limpa isso mesmo quando a descrição veio da própria IA.
+    description = stripDateWordsFromDescription(description) || description;
   }
-  if (!date) date = todayIso;
+  // Data reconhecida no texto (regex, cálculo mecânico) sempre vence a
+  // que a IA devolveu — "ontem"/"amanhã"/dia da semana são contas que a
+  // IA pode acertar o sentido e errar o resultado; regex não erra.
+  const localDate = detectDate(rawMessage, todayIso);
+  if (localDate) date = localDate;
+  else if (!date) date = todayIso;
 
   return { ok: true, intent: "expense", entry: { type: finalType, amount, categoryId, description, date } };
 }

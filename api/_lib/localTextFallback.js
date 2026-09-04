@@ -120,6 +120,12 @@ function extractDateAndClean(text, todayIso) {
   } else if (/\bhoje\b/.test(working)) {
     date = todayIso;
     working = working.replace(/\bhoje\b/g, " ");
+  } else if (/depois de amanh[ãa]/.test(working)) {
+    date = addDaysIso(today, 2);
+    working = working.replace(/depois de amanh[ãa]/g, " ");
+  } else if (/\bamanh[ãa](?![a-zà-ÿ0-9_])/i.test(working)) {
+    date = addDaysIso(today, 1);
+    working = working.replace(/\bamanh[ãa](?![a-zà-ÿ0-9_])/gi, " ");
   } else if (/semana passada/.test(working)) {
     date = addDaysIso(today, -7);
     working = working.replace(/semana passada/g, " ");
@@ -197,6 +203,44 @@ function extractFutureDateIso(text, todayIso) {
   return date;
 }
 
+// Devolve a data reconhecida no texto (ISO) ou null se nenhum padrão
+// bateu — usada pra decidir se a extração LOCAL deve ter prioridade
+// sobre a data que a IA devolveu. Datas relativas ("ontem", "amanhã",
+// "sexta", "dia 12"...) são cálculo mecânico, e regex acerta isso de
+// forma determinística; um modelo de linguagem pode errar a conta
+// (ex.: entender "ontem" mas devolver a data de hoje) — por isso, quando
+// o texto tem uma referência de data reconhecível, ela vence a da IA.
+function detectDate(text, todayIso) {
+  return extractDateAndClean(text, todayIso).date;
+}
+
+// Reconhece horário mencionado no texto ("às 15h", "15:30", "meio-dia",
+// "9h", "9 da manhã"...) e devolve no formato "HH:MM", ou null se nada
+// bateu. Mesma lógica do detectDate: cálculo mecânico, regex é mais
+// confiável que a IA "lembrar" de converter certo.
+function extractTimeFromText(text) {
+  const working = String(text || "").toLowerCase();
+
+  if (/meio[\s-]?dia/.test(working)) return "12:00";
+  if (/meia[\s-]?noite/.test(working)) return "00:00";
+
+  const hm = working.match(/\b(\d{1,2})[:h](\d{2})\b/);
+  if (hm) {
+    const h = Math.min(23, parseInt(hm[1], 10));
+    const m = Math.min(59, parseInt(hm[2], 10));
+    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+  }
+
+  const hOnly = working.match(/\b(?:às|as|a partir das|a partir de)\s*(\d{1,2})\s*h(?:oras)?\b/) ||
+    working.match(/\b(\d{1,2})\s*h(?:oras)?\b/) ||
+    working.match(/\b(?:às|as)\s*(\d{1,2})\b(?!\s*\/|\s*de\s)/);
+  if (hOnly) {
+    const h = parseInt(hOnly[1], 10);
+    if (h >= 0 && h <= 23) return `${String(h).padStart(2, "0")}:00`;
+  }
+  return null;
+}
+
 function extractAmountFromText(text) {
   const working = extractDateAndClean(text, new Date().toISOString().slice(0, 10)).cleaned;
   const moneyMatch =
@@ -243,9 +287,25 @@ function guessCategoryId(text, type, categories) {
   return categoryId;
 }
 
+// Remove palavras de data (ontem, hoje, amanhã, dia da semana...) de uma
+// descrição já pronta — usada tanto na extração local quanto na
+// descrição que a própria IA devolve, porque o modelo às vezes deixa a
+// palavra de data solta na descrição mesmo já tendo preenchido o campo
+// "date" corretamente (ex.: description "Uber ontem" + date certo).
+function stripDateWordsFromDescription(text) {
+  return String(text || "")
+    .replace(/\b(hoje|ontem|anteontem|amanh[ãa])(?![a-zà-ÿ0-9_])/gi, " ")
+    .replace(/\bdepois de amanh[ãa](?![a-zà-ÿ0-9_])/gi, " ")
+    .replace(/\b(domingo|segunda(?:-feira)?|ter[çc]a(?:-feira)?|quarta(?:-feira)?|quinta(?:-feira)?|sexta(?:-feira)?|s[áa]bado)\b/gi, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim()
+    .replace(/^[,.\-–—\s]+|[,.\-–—\s]+$/g, "");
+}
+
 function guessDescription(text, amountRaw) {
   let working = String(text || "").toLowerCase();
   if (amountRaw) working = working.replace(amountRaw, " ");
+  working = stripDateWordsFromDescription(working);
   const words = working
     .replace(/[.,;!?]/g, " ")
     .split(/\s+/)
@@ -331,6 +391,9 @@ module.exports = {
   extractAmountFromText,
   extractPastDateIso,
   extractFutureDateIso,
+  detectDate,
+  extractTimeFromText,
+  stripDateWordsFromDescription,
   guessType,
   guessCategoryId,
   stripKnownTriggers,
