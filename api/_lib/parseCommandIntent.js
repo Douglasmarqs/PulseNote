@@ -5,10 +5,10 @@
 // dobrar o tempo de resposta com duas chamadas de IA por mensagem.
 //
 // Intenções cobertas: lançamento financeiro, edição do último
-// lançamento, busca de lançamentos, relatório/estatísticas de um mês,
-// consulta de tarefas/compromissos, criar/concluir/apagar tarefa,
-// criar/buscar/apagar anotação, criar/atualizar meta, marcar
-// compromisso, e ajuda.
+// lançamento, apagar o último lançamento, busca de lançamentos,
+// relatório/estatísticas de um mês, consulta de tarefas/compromissos,
+// criar/concluir/apagar tarefa, criar/buscar/apagar anotação,
+// criar/atualizar meta, marcar compromisso, e ajuda.
 //
 // IMPORTANTE sobre "salvar exatamente como foi escrito": pra anotações,
 // o CONTEÚDO gravado é sempre o texto bruto da mensagem (recortado só
@@ -38,7 +38,7 @@
 // a gente mais precisa. Diferente do fluxo do app (parseTransactionAI.js
 // — usado no "✨ Lançar por texto" e em foto de cupom), que SEMPRE exige
 // os 5 campos do lançamento no schema e por isso raramente falha, esse
-// arquivo cobre 10 intenções diferentes na mesma chamada e não pode
+// arquivo cobre 11 intenções diferentes na mesma chamada e não pode
 // exigir tudo sempre (senão "finance_edit_last" seria forçado a inventar
 // valor pra correções que só mudam a categoria, por exemplo).
 // Por isso, cada ponto de validação abaixo que falharia direto agora
@@ -68,14 +68,15 @@ const {
 const INTENTS = [
   "expense", "report", "agenda", "help",
   "task_action", "note_action", "goal_action", "event_create",
-  "finance_edit_last", "finance_search", "stats",
+  "finance_edit_last", "finance_delete_last", "finance_search", "stats",
 ];
 
 function buildIntentPrompt({ todayIso, categoryList }) {
   return `Você entende o que uma pessoa quis dizer numa mensagem de WhatsApp pro PulseNote (app pessoal de notas/tarefas/agenda/metas/finanças). Classifique a intenção em UMA destas:
 
 - "expense": registrar um gasto ou receita que aconteceu — ex.: "gastei 45 no mercado", "recebi 200 de freela". Intenção padrão quando a mensagem menciona um valor sendo gasto/recebido AGORA (lançamento novo).
-- "finance_edit_last": a pessoa quer CORRIGIR o último lançamento financeiro feito por aqui — ex.: "errei, era 60 não 45", "muda o valor do último pra 80", "na verdade foi categoria transporte". Preencha os mesmos campos de "expense" só com os campos que mudaram (o resto fica como está).
+- "finance_edit_last": a pessoa quer CORRIGIR o último lançamento financeiro feito por aqui — ex.: "errei, era 60 não 45", "muda o valor do último pra 80", "na verdade foi categoria transporte". Preencha os mesmos campos de "expense" só com os campos que mudaram (o resto fica como está). Isso INCLUI uma correção que menciona só uma data solta logo depois de um lançamento (ex.: "dia 1 desse mês", "foi ontem", "não, foi sexta") — mesmo sem nenhum outro campo, classifique como "finance_edit_last" (a data é extraída à parte, por regex).
+- "finance_delete_last": a pessoa quer APAGAR/DESFAZER o último lançamento financeiro feito por aqui — ex.: "apaga o último gasto", "exclua isso", "desfaz o lançamento", "remove a última despesa", "cancela isso aí". Não precisa de nenhum campo além de "intent".
 - "finance_search": buscar/filtrar lançamentos já salvos — ex.: "quanto gastei com uber esse mês", "busca meus gastos com farmácia", "mostra os lançamentos de mercado".
 - "report": relatório/resumo financeiro de um mês (passado ou específico) — ex.: "relatório do mês passado", "quanto gastei em julho".
 - "stats": estatística ou comparação entre períodos — ex.: "comparado ao mês passado gastei mais ou menos", "qual minha média de gastos", "estatísticas desse ano".
@@ -98,7 +99,7 @@ Se "expense" ou "finance_edit_last", preencha type/amount/categoryId/description
 Categorias disponíveis (escolha exatamente um destes ids, do tipo compatível):
 ${categoryList}
 - "amount": número positivo em reais.
-- "date": resolva data relativa ("ontem", "semana passada" etc.) a partir de hoje; sem referência, use hoje.
+- "date": resolva data relativa ("ontem", "semana passada" etc.) a partir de hoje; sem referência, use hoje. IMPORTANTE: gasto/receita é sempre algo que JÁ ACONTECEU — se a pessoa citar um dia/mês sem ano (ex.: "dia 5", "10 de agosto") e essa data já tiver passado este mês/ano, use o mês/ano ATUAL ou ANTERIOR (o mais próximo no passado), NUNCA o mês/ano seguinte. Só use uma data futura se a pessoa disser isso explicitamente (ex.: "vou gastar", "vou pagar dia 5").
 - "type": "despesa" por padrão; "receita" só se for entrada de dinheiro.
 - "categoryId": o mais específico possível, do mesmo tipo de "type".
 - "description": 2 a 5 palavras do que foi gasto/recebido, sem repetir o nome da categoria.
@@ -124,6 +125,8 @@ Se não conseguir classificar com confiança em nenhuma intenção específica, 
 
 Exemplo 1 — "gastei 32 no ifood ontem" → {"intent":"expense","type":"despesa","amount":32,"categoryId":"alimentacao","description":"iFood","date":"<ontem>"}
 Exemplo 2 — "errei o valor, era 60" → {"intent":"finance_edit_last","amount":60}
+Exemplo 2b — "exclua o último gasto" → {"intent":"finance_delete_last"}
+Exemplo 2c — "dia 1 desse mês" (mandada logo após um lançamento, corrigindo a data) → {"intent":"finance_edit_last"}
 Exemplo 3 — "quanto gastei com uber esse mês" → {"intent":"finance_search","searchQuery":"uber"}
 Exemplo 4 — "relatório do mês passado" (hoje=${todayIso}) → {"intent":"report","reportMonth":<mês anterior>,"reportYear":<ano correspondente>}
 Exemplo 5 — "comparado ao mês passado, gastei mais?" → {"intent":"stats","reportMonth":<mês atual>,"reportYear":<ano atual>,"statsCompareMonth":<mês anterior>,"statsCompareYear":<ano correspondente>}
@@ -286,6 +289,12 @@ async function parseTextIntent({ text, categories, today }) {
     return { ok: true, intent: "finance_search", search: { query: searchQuery, month, year } };
   }
 
+  // ── finance_delete_last (rede de segurança pra fora do fast-path
+  // regex do webhook — ver DELETE_COMMAND_RE em whatsapp-webhook.js) ──
+  if (intent === "finance_delete_last") {
+    return { ok: true, intent: "finance_delete_last" };
+  }
+
   // ── finance_edit_last (campos parciais — só o que veio preenchido) ─
   if (intent === "finance_edit_last") {
     const patch = {};
@@ -298,7 +307,7 @@ async function parseTextIntent({ text, categories, today }) {
       patch.description = parsed.description.trim().slice(0, 60);
     }
     if (/^\d{4}-\d{2}-\d{2}$/.test(parsed.date)) patch.date = parsed.date;
-    const localEditDate = detectDate(rawMessage, todayIso);
+    const localEditDate = detectDate(rawMessage, todayIso, "past"); // correção de lançamento é sempre sobre algo já passado
     if (localEditDate) patch.date = localEditDate; // regex vence a IA em data mecânica
     if (Object.keys(patch).length === 0) {
       // Correção quase sempre é só um número solto ("errei, era 60") —
@@ -325,7 +334,7 @@ async function parseTextIntent({ text, categories, today }) {
         console.error("task_action create sem título recuperável:", rawMessage);
         return { ok: false, status: 422, error: "ai_invalid_task_title" };
       }
-      const dueDate = detectDate(rawMessage, todayIso) ||
+      const dueDate = detectDate(rawMessage, todayIso, "future") ||
         (/^\d{4}-\d{2}-\d{2}$/.test(parsed.taskDueDate) ? parsed.taskDueDate : "");
       const priority = ["Baixa", "Media", "Alta"].includes(parsed.taskPriority) ? parsed.taskPriority : "Media";
       return { ok: true, intent: "task_action", task: { action, title, dueDate, priority } };
@@ -390,7 +399,7 @@ async function parseTextIntent({ text, categories, today }) {
     // a que a IA devolveu — é matemática mecânica, e a IA pode "entender"
     // a frase certa mas errar a conta (ex.: ler "amanhã" e devolver a
     // data de hoje).
-    const date = detectDate(rawMessage, todayIso) ||
+    const date = detectDate(rawMessage, todayIso, "future") ||
       (/^\d{4}-\d{2}-\d{2}$/.test(parsed.eventDate) ? parsed.eventDate : "");
     if (!title || !date) {
       console.error("event_create sem título/data recuperável:", rawMessage);
@@ -440,7 +449,11 @@ async function parseTextIntent({ text, categories, today }) {
   // Data reconhecida no texto (regex, cálculo mecânico) sempre vence a
   // que a IA devolveu — "ontem"/"amanhã"/dia da semana são contas que a
   // IA pode acertar o sentido e errar o resultado; regex não erra.
-  const localDate = detectDate(rawMessage, todayIso);
+  // direction="past": gasto/receita é sempre sobre algo que já aconteceu,
+  // então "dia 1"/"1 de setembro" nunca deve ser empurrado pro mês/ano
+  // seguinte (era exatamente esse o bug: gasto de "1 de setembro" saindo
+  // lançado em setembro do ANO QUE VEM).
+  const localDate = detectDate(rawMessage, todayIso, "past");
   if (localDate) date = localDate;
   else if (!date) date = todayIso;
 

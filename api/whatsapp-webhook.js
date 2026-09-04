@@ -402,9 +402,10 @@ async function finishParsedResult({ fb, uid, fromPhone, categories, result, fail
   const categoryLabel = categories.find((c) => c.id === categoryId)?.label || "";
   const categoryEmoji = categoryLabel.trim().split(/\s+/)[0] || (type === "receita" ? "💰" : "💸");
 
+  const dateBr = formatDateBr(date, { includeYear: true });
   const confirmMsg = type === "receita"
-    ? `✅ ${categoryEmoji} Receita de ${description} adicionada! R$ ${amount.toFixed(2)} (${date}).`
-    : `✅ ${categoryEmoji} Gasto com ${description} adicionado! R$ ${amount.toFixed(2)} (${date}).`;
+    ? `✅ ${categoryEmoji} Receita de ${description} adicionada! R$ ${amount.toFixed(2)} (${dateBr}).`
+    : `✅ ${categoryEmoji} Gasto com ${description} adicionado! R$ ${amount.toFixed(2)} (${dateBr}).`;
   await sendWhatsAppMessage(fromPhone, confirmMsg);
 }
 
@@ -438,12 +439,22 @@ function normalizeCommand(text) {
   return text.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
 
-const DELETE_COMMANDS = new Set([
-  "apagar ultimo", "apagar o ultimo", "apagar ultimo lancamento",
-  "apagar o ultimo lancamento", "desfazer", "cancelar ultimo", "apagar",
-]);
+// Casamento por PADRÃO (verbo + objeto opcional), não mais por lista
+// fechada de frases exatas — a lista antiga (Set de frases literais)
+// só cobria "apagar ultimo"/"apagar o ultimo"/"apagar ultimo lancamento"
+// e nada além disso: "exclua o ultimo gasto", "apagar o ultimo gasto"
+// ou qualquer sinônimo (excluir/deletar/remover) caíam fora e iam pro
+// classificador de IA, que não tinha nenhuma intenção de "apagar" pra
+// devolver — por isso viravam "não entendi". Isso aqui cobre o verbo
+// (apagar/apaga/excluir/exclua/deletar/deleta/remover/remove/desfazer/
+// cancelar) com "o/a", "ultimo/ultima/penultimo" e o objeto
+// (gasto/despesa/receita/lançamento/compra/registro) todos opcionais —
+// e qualquer frase que ainda assim escapar disso cai no fallback de IA
+// (intent "finance_delete_last" em parseCommandIntent.js), então não
+// depende mais só desta lista pra funcionar.
+const DELETE_COMMAND_RE = /^(apaga|apagar|exclui|exclua|excluir|deleta|deletar|remove|remover|desfaz|desfazer|cancela|cancelar)(\s+(o|a))?(\s+(ultimo|ultima|penultimo|penultima))?(\s+(gasto|despesa|receita|lancamento|compra|registro))?$/;
 function isDeleteCommand(norm) {
-  return DELETE_COMMANDS.has(norm);
+  return DELETE_COMMAND_RE.test(norm);
 }
 
 function isBalanceCommand(norm) {
@@ -598,10 +609,14 @@ function formatStatsMessage(main, compareData) {
   return msg;
 }
 
-function formatDateBr(iso) {
+// includeYear=true pras confirmações de lançamento (o gasto pode ser de
+// um mês/ano diferente do atual, então "01/09" sozinho seria ambíguo);
+// omitido (padrão) nas listas de tarefa/compromisso/agenda, onde o ano é
+// sempre o corrente e só polui a mensagem.
+function formatDateBr(iso, { includeYear = false } = {}) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso;
-  const [, m, d] = iso.split("-");
-  return `${d}/${m}`;
+  const [y, m, d] = iso.split("-");
+  return includeYear ? `${d}/${m}/${y}` : `${d}/${m}`;
 }
 
 // Consulta tarefas/compromissos direto do Firestore (mesma lógica de
@@ -993,6 +1008,20 @@ module.exports = async (req, res) => {
         return res.status(200).end();
       }
 
+      if (result.ok && result.intent === "finance_delete_last") {
+        const deleted = await deleteLastWhatsAppEntry(fb, uid);
+        if (!deleted) {
+          await sendWhatsAppMessage(fromPhone, "Não achei nenhum lançamento feito por aqui pra apagar 🤷");
+        } else {
+          const verb = deleted.type === "receita" ? "Receita" : "Gasto";
+          await sendWhatsAppMessage(
+            fromPhone,
+            `🗑️ Apaguei: ${verb} de R$ ${Number(deleted.amount || 0).toFixed(2)} — ${deleted.description || "sem descrição"}.`
+          );
+        }
+        return res.status(200).end();
+      }
+
       if (result.ok && result.intent === "finance_edit_last") {
         const updated = await editLastWhatsAppEntry(fb, uid, result.patch);
         if (!updated) {
@@ -1001,7 +1030,7 @@ module.exports = async (req, res) => {
           const verb = updated.type === "receita" ? "Receita" : "Gasto";
           await sendWhatsAppMessage(
             fromPhone,
-            `✏️ Corrigido: ${verb} de R$ ${Number(updated.amount || 0).toFixed(2)} — ${updated.description || "sem descrição"} (${updated.date}).`
+            `✏️ Corrigido: ${verb} de R$ ${Number(updated.amount || 0).toFixed(2)} — ${updated.description || "sem descrição"} (${formatDateBr(updated.date, { includeYear: true })}).`
           );
         }
         return res.status(200).end();

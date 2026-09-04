@@ -106,7 +106,24 @@ function addDaysIso(baseDate, delta) {
 // reconhecido (deixa o chamador decidir o default apropriado pro
 // contexto — "hoje" pra lançamento financeiro, "" pra tarefa sem prazo,
 // falha mesmo pra compromisso que exige data).
-function extractDateAndClean(text, todayIso) {
+//
+// "direction" resolve a AMBIGUIDADE de dia/mês sem ano explícito
+// ("dia 1", "1 de setembro", "sexta") quando esse dia/mês já passou (ou
+// ainda vai acontecer) dentro do ano/mês corrente:
+//   - "future" (tarefas, compromissos): dia já passado -> assume a
+//     PRÓXIMA ocorrência (mês/ano seguinte). Ex.: hoje=20/09, "dia 5" ->
+//     05/10 (mês que vem), porque tarefa/compromisso são pro futuro.
+//   - "past" (gastos/receitas, edição do último lançamento): dia ainda
+//     não chegou este mês/ano -> assume a ocorrência ANTERIOR (mês/ano
+//     passado), nunca empurra pra frente. Ex.: hoje=04/09, "1 de
+//     setembro" -> 01/09 deste ano (já passou, fica); "dia 1" com hoje
+//     sendo dia 20 -> 01/09 (mês corrente, já passou, fica) — só recua
+//     pro mês/ano anterior se o dia AINDA não tiver chegado no atual.
+//     Isso existia como intenção (ver extractPastDateIso/
+//     extractFutureDateIso abaixo) mas nunca era de fato aplicado aqui —
+//     por isso um gasto de "dia 1" ou "1 de setembro" podia sair
+//     lançado no mês/ano SEGUINTE em vez do correto.
+function extractDateAndClean(text, todayIso, direction = "future") {
   let working = String(text || "").toLowerCase();
   const today = new Date(`${todayIso}T12:00:00`);
   let date = null;
@@ -151,9 +168,14 @@ function extractDateAndClean(text, todayIso) {
       if (explicitDate) {
         const day = parseInt(explicitDate[1], 10);
         const month = parseInt(explicitDate[2], 10) - 1;
-        let year = explicitDate[3] ? parseInt(explicitDate[3], 10) : today.getFullYear();
+        const hasExplicitYear = !!explicitDate[3];
+        let year = hasExplicitYear ? parseInt(explicitDate[3], 10) : today.getFullYear();
         if (year < 100) year += 2000;
-        const d = new Date(year, month, day);
+        let d = new Date(year, month, day);
+        if (!hasExplicitYear && !isNaN(d)) {
+          if (direction === "future" && d < today) d = new Date(year + 1, month, day);
+          else if (direction === "past" && d > today) d = new Date(year - 1, month, day);
+        }
         if (!isNaN(d)) date = toIsoDate(d);
         working = working.replace(explicitDate[0], " ");
       } else if (monthNameMatch) {
@@ -161,7 +183,8 @@ function extractDateAndClean(text, todayIso) {
         const monthKeyName = monthNameMatch[2].replace("ç", "c");
         const month = FIN_MONTH_NAMES[monthKeyName];
         let d = new Date(today.getFullYear(), month, day);
-        if (d < today) d = new Date(today.getFullYear() + 1, month, day); // futuro mais próximo pra compromisso
+        if (direction === "future" && d < today) d = new Date(today.getFullYear() + 1, month, day); // futuro mais próximo pra compromisso
+        else if (direction === "past" && d > today) d = new Date(today.getFullYear() - 1, month, day); // passado mais próximo pra gasto/receita
         if (!isNaN(d)) date = toIsoDate(d);
         working = working.replace(monthNameMatch[0], " ");
       } else if (weekdayMatch) {
@@ -169,7 +192,8 @@ function extractDateAndClean(text, todayIso) {
         const targetDow = FIN_WEEKDAY_NAMES[normalized];
         if (targetDow !== undefined) {
           let diff = targetDow - today.getDay();
-          if (diff <= 0) diff += 7; // próxima ocorrência (compromissos são pro futuro)
+          if (direction === "future") { if (diff <= 0) diff += 7; } // próxima ocorrência (compromissos são pro futuro)
+          else if (diff > 0) diff -= 7; // ocorrência mais recente já passada (gasto/receita são do passado)
           date = addDaysIso(today, diff);
         }
         working = working.replace(weekdayMatch[0], " ");
@@ -177,7 +201,8 @@ function extractDateAndClean(text, todayIso) {
         const day = parseInt(dayOnlyMatch[1], 10);
         if (day >= 1 && day <= 31) {
           let d = new Date(today.getFullYear(), today.getMonth(), day);
-          if (d < today) d = new Date(today.getFullYear(), today.getMonth() + 1, day);
+          if (direction === "future" && d < today) d = new Date(today.getFullYear(), today.getMonth() + 1, day);
+          else if (direction === "past" && d > today) d = new Date(today.getFullYear(), today.getMonth() - 1, day);
           if (!isNaN(d)) date = toIsoDate(d);
         }
         working = working.replace(dayOnlyMatch[0], " ");
@@ -191,7 +216,7 @@ function extractDateAndClean(text, todayIso) {
 // Versão "passado" da extração de data (lançamento financeiro — se nada
 // bater, assume hoje, igual ao parseFinanceText original).
 function extractPastDateIso(text, todayIso) {
-  const { date } = extractDateAndClean(text, todayIso);
+  const { date } = extractDateAndClean(text, todayIso, "past");
   return date || todayIso;
 }
 
@@ -199,7 +224,7 @@ function extractPastDateIso(text, todayIso) {
 // — cabe ao chamador decidir: tarefa sem prazo vira "", compromisso sem
 // data reconhecida realmente não dá pra completar).
 function extractFutureDateIso(text, todayIso) {
-  const { date } = extractDateAndClean(text, todayIso);
+  const { date } = extractDateAndClean(text, todayIso, "future");
   return date;
 }
 
@@ -210,8 +235,11 @@ function extractFutureDateIso(text, todayIso) {
 // forma determinística; um modelo de linguagem pode errar a conta
 // (ex.: entender "ontem" mas devolver a data de hoje) — por isso, quando
 // o texto tem uma referência de data reconhecível, ela vence a da IA.
-function detectDate(text, todayIso) {
-  return extractDateAndClean(text, todayIso).date;
+// "direction" precisa ser passado pelo chamador ("past" pra gasto/edição
+// de lançamento, "future" pra tarefa/compromisso) — ver comentário em
+// extractDateAndClean.
+function detectDate(text, todayIso, direction = "future") {
+  return extractDateAndClean(text, todayIso, direction).date;
 }
 
 // Reconhece horário mencionado no texto ("às 15h", "15:30", "meio-dia",
