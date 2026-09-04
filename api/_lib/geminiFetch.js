@@ -22,7 +22,7 @@
 // trocar de modelo, também damos 1 nova chance antes de desistir.
 // ============================================================
 
-const GEMINI_MODEL = "gemini-3.7-flash";
+const GEMINI_MODEL = "gemini-3.8-flash";
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
