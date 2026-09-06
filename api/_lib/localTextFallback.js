@@ -37,18 +37,25 @@ const FIN_CATEGORY_KEYWORDS = {
   tecnologia: ["celular", "notebook", "computador", "fone de ouvido", "carregador", "eletrônico", "eletronico"],
   moradia: ["aluguel", "condomínio", "condominio", "iptu"],
   contas: ["luz", "água", "agua", "internet", "gás", "gas", "conta de", "telefone", "tv a cabo", "wifi"],
-  assinaturas: ["assinatura", "spotify", "amazon prime", "youtube premium", "mensalidade do", "disney+", "disney plus", "hbo max", "globoplay", "apple music", "icloud", "google one"],
+  assinaturas: ["assinatura", "spotify", "amazon prime", "youtube premium", "mensalidade do", "disney+", "disney plus", "hbo max", "globoplay", "apple music", "icloud", "google one", "google fotos", "google photos", "chatgpt", "chat gpt", "openai", "uber one"],
   viagem: ["viagem", "hospedagem", "hotel", "pousada", "passagem aérea", "passagem aerea"],
   pet: ["ração", "racao", "veterinário", "veterinario", "petshop"],
-  seguros: ["seguro do carro", "seguro residencial", "seguro de vida"],
-  impostos: ["ipva", "imposto de renda", "irpf"],
+  seguros: ["seguro do carro", "seguro residencial", "seguro de vida", "seguro"],
+  impostos: ["ipva", "imposto de renda", "irpf", "imposto", "taxa"],
   doacoes: ["doação", "doacao", "dízimo", "dizimo"],
+  familia: ["fralda", "escola do meu filho", "escolinha", "pediatra", "babá", "baba", "brinquedo", "mesada do filho", "berçário", "bercario"],
+  investimentos_desp: ["tesouro direto", "aplicação", "aplicacao", "cdb", "poupança", "poupanca", "previdência privada", "previdencia privada"],
+  emprestimos: ["empréstimo", "emprestimo", "parcela do empréstimo", "financiamento", "dívida", "divida", "cartão de crédito atrasado", "juros"],
   salario: ["salário", "salario", "contracheque", "pagamento do trabalho", "pagamento da empresa", "holerite"],
   freelance: ["freela", "freelance", "bico", "job extra", "trampo extra", "projeto extra"],
   investimentos: ["dividendo", "rendimento", "investimento", "ação", "acoes", "ações", "cdb", "tesouro direto", "fii", "fundo imobiliário", "fundo imobiliario"],
   vendas: ["venda", "vendi", "vendeu"],
   reembolso: ["reembolso", "ressarcimento", "devolução", "devolucao"],
   presente: ["presente", "bônus", "bonus", "mesada"],
+  aluguel_receb: ["aluguel do inquilino", "recebi o aluguel", "aluguel recebido"],
+  emprestimo_receb: ["me emprestaram", "empréstimo que peguei", "emprestimo que peguei", "dinheiro emprestado"],
+  pensao: ["pensão", "pensao", "auxílio", "auxilio", "bolsa família", "bolsa familia"],
+  premio: ["prêmio", "premio", "sorteio", "loteria", "aposta ganha"],
 };
 
 const FIN_INCOME_HINTS = ["recebi", "receb", "ganhei", "caiu", "depositaram", "pix recebido", "entrou", "salário", "salario", "venda", "vendi", "freela", "freelance", "bico", "reembolso", "presente", "bônus", "bonus", "dividendo", "rendimento"];
@@ -390,10 +397,39 @@ const TASK_CREATE_TRIGGERS = [
   /^\s*tarefa\s*[:\-–—]?\s*/i,
 ];
 
+// Pra concluir/apagar uma tarefa já existente ("concluí a tarefa do
+// dentista", "apaga a tarefa de comprar ração") — frases de comando bem
+// diferentes das de CRIAR uma tarefa nova, então reaproveitar
+// TASK_CREATE_TRIGGERS aqui não batia com nada e deixava o comando
+// inteiro (verbo incluso) como "alvo" da busca por tarefa.
+const TASK_COMPLETE_DELETE_TRIGGERS = [
+  /^\s*conclu[íi][r]?\s+(a\s+)?tarefa\s*(de|do|da)?\s*/i,
+  /^\s*termin[ei][i]?\s+(a\s+)?tarefa\s*(de|do|da)?\s*/i,
+  /^\s*finaliz[ei][i]?\s+(a\s+)?tarefa\s*(de|do|da)?\s*/i,
+  /^\s*marca[r]?\s+(a\s+)?tarefa\s*(de|do|da)?\s*(como\s+(feita|conclu[íi]da))?\s*/i,
+  /^\s*apag[ae][i]?[r]?\s+(a\s+)?tarefa\s*(de|do|da)?\s*/i,
+  /^\s*exclu[íi][i]?[r]?\s+(a\s+)?tarefa\s*(de|do|da)?\s*/i,
+  /^\s*deleta[r]?\s+(a\s+)?tarefa\s*(de|do|da)?\s*/i,
+  /^\s*remov[ei][i]?[r]?\s+(a\s+)?tarefa\s*(de|do|da)?\s*/i,
+];
+
 const GOAL_CREATE_TRIGGERS = [
   /^\s*cria[r]?\s+(uma\s+)?meta\s*(de|pra|para)?\s*/i,
   /^\s*nova\s+meta\s*[:\-–—]?\s*/i,
   /^\s*meta\s*[:\-–—]?\s*/i,
+];
+
+// Pra ATUALIZAR o progresso de uma meta já existente ("avancei 200 na
+// minha meta de economia", "minha meta de ler livros já bateu 3") —
+// mesmo problema do task_action acima: GOAL_CREATE_TRIGGERS só reconhece
+// frase de CRIAR meta nova, não de progresso, então nada era cortado e o
+// "avancei 200 na minha meta de" inteiro virava ruído na busca pela
+// meta certa.
+const GOAL_UPDATE_TRIGGERS = [
+  /^\s*avanc[ei][i]?\s+[\d.,]+\s*(na|no|em)?\s*(minha\s+)?meta\s*(de)?\s*/i,
+  /^\s*consegui\s+[\d.,]+\s*(na|no|em)?\s*(minha\s+)?meta\s*(de)?\s*/i,
+  /^\s*atualiza[r]?\s+(a\s+)?(minha\s+)?meta\s*(de)?\s*/i,
+  /^\s*(a\s+)?(minha\s+)?meta\s+de\s+/i,
 ];
 
 const EVENT_CREATE_TRIGGERS = [
@@ -426,7 +462,9 @@ module.exports = {
   guessCategoryId,
   stripKnownTriggers,
   TASK_CREATE_TRIGGERS,
+  TASK_COMPLETE_DELETE_TRIGGERS,
   GOAL_CREATE_TRIGGERS,
+  GOAL_UPDATE_TRIGGERS,
   EVENT_CREATE_TRIGGERS,
   FINANCE_SEARCH_TRIGGERS,
   NOTE_SEARCH_TRIGGERS,

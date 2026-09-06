@@ -665,6 +665,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   bindNavigation();
   bindPlannerNav();
   bindPlannerQuickAdd();
+  bindNoteDetail();
   bindForms();
   bindActions();
   bindSettingsView();
@@ -1762,10 +1763,12 @@ function setView(view) {
 function saveNote(event) {
   event.preventDefault();
   const id = document.querySelector("#noteId").value;
+  const existing = state.notes.find((note) => note.id === id);
+  const newDescription = valueOf("#noteDescription");
   const payload = {
     id: id || crypto.randomUUID(),
     title: valueOf("#noteTitle"),
-    description: valueOf("#noteDescription"),
+    description: newDescription,
     category: valueOf("#noteCategory") || "Geral",
     folder: valueOf("#noteFolder") || "Entrada",
     tags: splitValues(valueOf("#noteTags")),
@@ -1774,8 +1777,16 @@ function saveNote(event) {
     attachments: splitValues(valueOf("#noteAttachments")),
     goal: valueOf("#noteGoal"),
     observations: valueOf("#noteObservations"),
-    favorite: state.notes.find((note) => note.id === id)?.favorite || false,
-    createdAt: state.notes.find((note) => note.id === id)?.createdAt || todayIso,
+    favorite: existing?.favorite || false,
+    createdAt: existing?.createdAt || todayIso,
+    convertedToTaskId: existing?.convertedToTaskId || "",
+    // Esse formulário só mexe no texto puro (#noteDescription) — se a nota
+    // já tinha formatação feita no editor em tela cheia (negrito/destaque)
+    // e o texto não mudou aqui, mantém o HTML formatado. Se o texto MUDOU
+    // por aqui, o HTML antigo ficaria desatualizado (mostrando algo
+    // diferente do texto puro atual), então descarta e volta a ser texto
+    // simples — evita a formatação "grudada" sobrepor uma edição nova.
+    descriptionHtml: existing && existing.description === newDescription ? existing.descriptionHtml || "" : "",
   };
 
   state.notes = id ? state.notes.map((note) => (note.id === id ? payload : note)) : [payload, ...state.notes];
@@ -2938,13 +2949,13 @@ function renderNoteCard(note, searchQuery) {
   const folderHtml = folderName ? `<span class="note-folder-badge">${icon("folder", 11)}${escapeHtml(folderName)}</span>` : "";
 
   return `
-    <article class="note-card" style="border-left-color:${tone.border}">
+    <article class="note-card" style="border-left-color:${tone.border}" onclick="openNoteDetail('${note.id}')">
       <header>
         <div>
           <h3>${titleHtml}</h3>
           <div class="note-meta">${escapeHtml(note.category || "Geral")} · ${formatDate(note.createdAt)}${folderHtml}</div>
         </div>
-        <button class="note-fav-btn ${note.favorite ? "is-active" : ""}" onclick="toggleFavorite('${note.id}')" title="Favoritar">
+        <button class="note-fav-btn ${note.favorite ? "is-active" : ""}" onclick="event.stopPropagation(); toggleFavorite('${note.id}')" title="Favoritar">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="${note.favorite ? "currentColor" : "none"}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></svg>
         </button>
       </header>
@@ -2956,9 +2967,11 @@ function renderNoteCard(note, searchQuery) {
         <span class="priority-pill priority-${note.priority}">${escapeHtml(note.priority)}</span>
       </div>
       <div class="card-actions note-card-actions">
-        <button onclick="editNote('${note.id}')" title="Editar">${icon("pencil", 14)}<span>Editar</span></button>
-        <button onclick="convertNoteToTask('${note.id}')" title="Virar tarefa">${icon("arrowRight", 14)}<span>Tarefa</span></button>
-        <button class="danger-action" onclick="deleteNote('${note.id}')" title="Excluir" aria-label="Excluir">${icon("trash", 14)}</button>
+        <button onclick="event.stopPropagation(); editNote('${note.id}')" title="Mais campos (categoria, pasta, tags...)">${icon("pencil", 14)}<span>Editar</span></button>
+        ${note.convertedToTaskId
+          ? `<button class="is-done-action" onclick="event.stopPropagation(); convertNoteToTask('${note.id}')" title="Já virou tarefa — toque pra ver no Planner">${icon("check", 14)}<span>Virou tarefa</span></button>`
+          : `<button onclick="event.stopPropagation(); convertNoteToTask('${note.id}')" title="Virar tarefa">${icon("arrowRight", 14)}<span>Tarefa</span></button>`}
+        <button class="danger-action" onclick="event.stopPropagation(); deleteNote('${note.id}')" title="Excluir" aria-label="Excluir">${icon("trash", 14)}</button>
       </div>
     </article>
   `;
@@ -3036,13 +3049,28 @@ function toggleFavorite(id) {
   renderAll();
 }
 
+// Vira uma nota em tarefa — some não tinha nenhum retorno visível na
+// tela de notas (só um toast rápido que passava despercebido, e a nota
+// continuava idêntica na lista, dando a impressão de "não fez nada").
+// Agora: marca a nota como já convertida (o cartão passa a mostrar
+// "Virou tarefa ✓" em vez do botão, pra não converter de novo por
+// engano e deixar claro que já aconteceu) e leva direto pro Planner,
+// onde a tarefa nova já aparece.
 function convertNoteToTask(id) {
   const note = state.notes.find((item) => item.id === id);
   if (!note) return;
-  state.tasks.unshift({ ...createTask(note.title, "Pendente", note.priority, todayIso), sourceNoteId: note.id });
+  if (note.convertedToTaskId) {
+    showToast("Essa nota já virou tarefa — abrindo o Planner.");
+    setView("planner");
+    return;
+  }
+  const task = { ...createTask(note.title, "Pendente", note.priority, todayIso), sourceNoteId: note.id };
+  state.tasks.unshift(task);
+  note.convertedToTaskId = task.id;
   saveState();
   renderAll();
-  celebrate("Anotacao convertida em tarefa.");
+  celebrate("Tarefa criada a partir da nota!");
+  setView("planner");
 }
 
 function deleteNote(id) {
@@ -3050,6 +3078,186 @@ function deleteNote(id) {
   saveState();
   renderAll();
   showToast("Anotacao excluida.");
+}
+
+// ══════════════════════════════════════════════════════════════════
+// Nota em tela cheia (estilo iPhone Notes) — título + corpo com
+// formatação de verdade (negrito, destaque colorido), aberta ao
+// tocar num cartão da lista. `note.descriptionHtml` guarda o corpo
+// formatado; `note.description` continua sendo o texto puro (dele
+// derivado), pra busca/preview e pra notas antigas ou criadas pelo
+// WhatsApp continuarem funcionando sem precisar de migração.
+// ══════════════════════════════════════════════════════════════════
+let ndCurrentNoteId = null;
+
+// Só passamos pro contenteditable o que a gente mesmo gerou (negrito e
+// destaque de cor) — filtra qualquer outra tag/atributo que apareça
+// (colar de outro app, por exemplo), pra nunca guardar HTML arbitrário
+// no Firestore.
+function sanitizeNoteHtml(html) {
+  const allowedTags = new Set(["B", "STRONG", "BR", "DIV", "SPAN", "MARK", "P", "FONT"]);
+  const template = document.createElement("template");
+  template.innerHTML = String(html || "");
+
+  const clean = (root) => {
+    [...root.childNodes].forEach((node) => {
+      if (node.nodeType === Node.TEXT_NODE) return;
+      if (node.nodeType !== Node.ELEMENT_NODE) {
+        node.remove();
+        return;
+      }
+      if (!allowedTags.has(node.tagName)) {
+        node.replaceWith(document.createTextNode(node.textContent));
+        return;
+      }
+      const bg = node.style && node.style.backgroundColor;
+      [...node.attributes].forEach((attr) => node.removeAttribute(attr.name));
+      if (bg) node.style.backgroundColor = bg;
+      clean(node);
+    });
+  };
+  clean(template.content);
+  return template.innerHTML;
+}
+
+// Corpo formatado -> texto puro (pra description/preview/busca), com
+// quebras de linha preservadas — percorre a árvore em vez de regex
+// nas tags (regex só trocando a tag de abertura por "\n" perdia a
+// quebra entre um <div> e o elemento seguinte, grudando linhas).
+function noteHtmlToPlainText(html) {
+  const template = document.createElement("template");
+  template.innerHTML = String(html || "");
+  const BLOCK_TAGS = new Set(["DIV", "P"]);
+  let text = "";
+  const walk = (root) => {
+    root.childNodes.forEach((child) => {
+      if (child.nodeType === Node.TEXT_NODE) {
+        text += child.textContent;
+      } else if (child.nodeType === Node.ELEMENT_NODE) {
+        if (child.tagName === "BR") {
+          text += "\n";
+        } else {
+          walk(child);
+          if (BLOCK_TAGS.has(child.tagName)) text += "\n";
+        }
+      }
+    });
+  };
+  walk(template.content);
+  return text.replace(/\n{3,}/g, "\n\n").trim();
+}
+
+function hexToRgba(hex, alpha) {
+  const clean = hex.replace("#", "");
+  const r = parseInt(clean.substring(0, 2), 16);
+  const g = parseInt(clean.substring(2, 4), 16);
+  const b = parseInt(clean.substring(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function openNoteDetail(id) {
+  const note = state.notes.find((item) => item.id === id);
+  if (!note) return;
+  ndCurrentNoteId = id;
+
+  document.querySelector("#ndTitle").value = note.title || "";
+  const body = document.querySelector("#ndBody");
+  body.innerHTML = note.descriptionHtml
+    ? sanitizeNoteHtml(note.descriptionHtml)
+    : escapeHtml(note.description || "").replace(/\n/g, "<br>");
+
+  document.querySelector("#ndMeta").textContent =
+    `${note.category || "Geral"} · criada em ${formatDate(note.createdAt)}`;
+  document.querySelector("#ndFavBtn").classList.toggle("is-fav", !!note.favorite);
+  document.querySelector("#ndFavBtn svg").setAttribute("fill", note.favorite ? "currentColor" : "none");
+
+  document.querySelector("#noteDetailModal").hidden = false;
+  document.body.style.overflow = "hidden";
+}
+
+function closeNoteDetail() {
+  document.querySelector("#noteDetailModal").hidden = true;
+  document.body.style.overflow = "";
+  ndCurrentNoteId = null;
+}
+
+function saveNoteDetail() {
+  if (!ndCurrentNoteId) return;
+  const title = document.querySelector("#ndTitle").value.trim() || "Sem título";
+  const cleanHtml = sanitizeNoteHtml(document.querySelector("#ndBody").innerHTML);
+  const plainText = noteHtmlToPlainText(cleanHtml);
+
+  state.notes = state.notes.map((note) =>
+    note.id === ndCurrentNoteId
+      ? { ...note, title, description: plainText, descriptionHtml: cleanHtml }
+      : note
+  );
+  saveState();
+  renderAll();
+  closeNoteDetail();
+  showToast("Anotacao salva.");
+}
+
+function bindNoteDetail() {
+  const modal = document.querySelector("#noteDetailModal");
+  const body = document.querySelector("#ndBody");
+  if (!modal || !body) return;
+
+  document.querySelector("#closeNoteDetail").addEventListener("click", closeNoteDetail);
+  // Toca fora do cartão (no fundo escurecido) fecha, igual aos outros modais do app.
+  modal.addEventListener("click", (e) => { if (e.target === modal) closeNoteDetail(); });
+
+  document.querySelector("#ndSaveBtn").addEventListener("click", saveNoteDetail);
+
+  document.querySelector("#ndDeleteBtn").addEventListener("click", () => {
+    if (!ndCurrentNoteId) return;
+    if (!confirm("Excluir essa anotação? Não dá pra desfazer.")) return;
+    const id = ndCurrentNoteId;
+    closeNoteDetail();
+    deleteNote(id);
+  });
+
+  document.querySelector("#ndFavBtn").addEventListener("click", () => {
+    if (!ndCurrentNoteId) return;
+    toggleFavorite(ndCurrentNoteId);
+    const note = state.notes.find((n) => n.id === ndCurrentNoteId);
+    document.querySelector("#ndFavBtn").classList.toggle("is-fav", !!note?.favorite);
+    document.querySelector("#ndFavBtn svg").setAttribute("fill", note?.favorite ? "currentColor" : "none");
+  });
+
+  document.querySelector("#ndConvertTaskBtn").addEventListener("click", () => {
+    if (!ndCurrentNoteId) return;
+    const id = ndCurrentNoteId;
+    closeNoteDetail();
+    convertNoteToTask(id);
+  });
+
+  document.querySelector("#ndMoreFieldsBtn").addEventListener("click", () => {
+    if (!ndCurrentNoteId) return;
+    const id = ndCurrentNoteId;
+    closeNoteDetail();
+    editNote(id);
+  });
+
+  // Formatação: negrito e 5 cores de destaque, aplicadas via
+  // execCommand na seleção atual do contenteditable. É uma API
+  // antiga (deprecated), mas ainda funciona em todo navegador atual —
+  // pra algo tão simples (negrito + cor de fundo), reimplementar do
+  // zero com Range/Selection não valeria o risco de bugs sutis sem
+  // poder testar em navegador de verdade.
+  document.querySelector("#noteDetailToolbar").addEventListener("click", (e) => {
+    const swatch = e.target.closest("[data-nd-color]");
+    const toolBtn = e.target.closest("[data-nd-cmd]");
+    if (!swatch && !toolBtn) return;
+    body.focus();
+    if (swatch) {
+      document.execCommand("backColor", false, hexToRgba(swatch.dataset.ndColor, 0.35));
+    } else if (toolBtn.dataset.ndCmd === "bold") {
+      document.execCommand("bold");
+    } else if (toolBtn.dataset.ndCmd === "clear") {
+      document.execCommand("backColor", false, "transparent");
+    }
+  });
 }
 
 function renderTasks() {
@@ -6413,6 +6621,7 @@ window.toggleFavorite = toggleFavorite;
 window.toggleNoteChecklistPreview = toggleNoteChecklistPreview;
 window.convertNoteToTask = convertNoteToTask;
 window.deleteNote = deleteNote;
+window.openNoteDetail = openNoteDetail;
 window.exportNoteMarkdown = exportNoteMarkdown;
 window.dragTask = dragTask;
 window.toggleTask = toggleTask;

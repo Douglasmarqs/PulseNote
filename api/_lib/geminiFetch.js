@@ -30,9 +30,19 @@ function sleep(ms) {
 
 // label: string curta só pra identificar a origem da chamada nos logs
 // (ex.: "intent", "transaction"). attempts: quantas tentativas no total
-// (2 = tenta 1x, e se der erro de rede/HTTP tenta mais 1x).
-async function fetchGeminiJson({ model, apiKey, systemPrompt, contents, generationConfig, label, attempts = 2 }) {
+// (2 = tenta 1x, e se der erro de rede/HTTP tenta mais 1x). thinkingLevel:
+// "low"|"medium"|"high" (família Gemini 3 — ver
+// https://ai.google.dev/gemini-api/docs/whats-new-gemini-3.5); "minimal"
+// NÃO existe no 3.8 Flash. Omitido, o modelo usa o padrão dele (medium).
+// Usar "high" onde a mensagem pode ser ambígua/composta (várias
+// intenções possíveis, correção implícita, categoria por sentido em vez
+// de palavra-chave) vale o raciocínio extra; pra chamada simples e
+// sensível a latência, deixe no padrão.
+async function fetchGeminiJson({ model, apiKey, systemPrompt, contents, generationConfig, label, attempts = 2, thinkingLevel }) {
   let lastFailure = { ok: false, status: 502, error: "ai_request_failed" };
+  const fullGenerationConfig = thinkingLevel
+    ? { ...generationConfig, thinkingConfig: { thinkingLevel } }
+    : generationConfig;
 
   for (let attempt = 1; attempt <= attempts; attempt++) {
     let raw;
@@ -45,7 +55,7 @@ async function fetchGeminiJson({ model, apiKey, systemPrompt, contents, generati
           body: JSON.stringify({
             systemInstruction: { parts: [{ text: systemPrompt }] },
             contents: [{ parts: contents }],
-            generationConfig,
+            generationConfig: fullGenerationConfig,
           }),
         }
       );

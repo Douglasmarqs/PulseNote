@@ -59,7 +59,9 @@ const {
   guessCategoryId,
   stripKnownTriggers,
   TASK_CREATE_TRIGGERS,
+  TASK_COMPLETE_DELETE_TRIGGERS,
   GOAL_CREATE_TRIGGERS,
+  GOAL_UPDATE_TRIGGERS,
   EVENT_CREATE_TRIGGERS,
   FINANCE_SEARCH_TRIGGERS,
   NOTE_SEARCH_TRIGGERS,
@@ -71,7 +73,7 @@ const INTENTS = [
   "finance_edit_last", "finance_delete_last", "finance_search", "stats",
 ];
 
-function buildIntentPrompt({ todayIso, categoryList }) {
+function buildIntentPrompt({ todayIso, categoryList, recentEntryNote }) {
   return `Você entende o que uma pessoa quis dizer numa mensagem de WhatsApp pro PulseNote (app pessoal de notas/tarefas/agenda/metas/finanças). Classifique a intenção em UMA destas:
 
 - "expense": registrar um gasto ou receita que aconteceu — ex.: "gastei 45 no mercado", "recebi 200 de freela". Intenção padrão quando a mensagem menciona um valor sendo gasto/recebido AGORA (lançamento novo).
@@ -86,7 +88,7 @@ function buildIntentPrompt({ todayIso, categoryList }) {
 - "goal_action": criar uma META nova ou atualizar o progresso de uma meta existente — ex.: "criar meta economizar 5000 esse ano", "avancei 200 na minha meta de economia", "minha meta de ler livros já bateu 3".
 - "event_create": marcar um COMPROMISSO/evento com data (reunião, consulta, compromisso social) — ex.: "marca uma reunião com o cliente sexta às 15h", "agenda consulta médica dia 20 às 9h no centro".
 - "help": pedido de ajuda/lista de comandos — ex.: "ajuda", "o que você faz", "comandos".
-
+${recentEntryNote}
 Data de hoje: ${todayIso}.
 
 Se "report": calcule "reportMonth" (1-12) e "reportYear" a partir de expressões relativas ("mês passado", "esse mês", nomes de mês, "agosto de 2025" etc.), relativo à data de hoje.
@@ -101,7 +103,7 @@ ${categoryList}
 - "amount": número positivo em reais.
 - "date": resolva data relativa ("ontem", "semana passada" etc.) a partir de hoje; sem referência, use hoje. IMPORTANTE: gasto/receita é sempre algo que JÁ ACONTECEU — se a pessoa citar um dia/mês sem ano (ex.: "dia 5", "10 de agosto") e essa data já tiver passado este mês/ano, use o mês/ano ATUAL ou ANTERIOR (o mais próximo no passado), NUNCA o mês/ano seguinte. Só use uma data futura se a pessoa disser isso explicitamente (ex.: "vou gastar", "vou pagar dia 5").
 - "type": "despesa" por padrão; "receita" só se for entrada de dinheiro.
-- "categoryId": o mais específico possível, do mesmo tipo de "type".
+- "categoryId": o mais específico possível, do mesmo tipo de "type". Cada categoria da lista já tem um emoji próprio no rótulo — escolher a categoria certa é o que decide o emoji certo na confirmação. NUNCA escolha uma categoria genérica tipo "outros"/"outros_receita" se qualquer categoria mais específica da lista puder se aplicar ao que foi dito, mesmo que a palavra exata não apareça na mensagem (use o sentido: "gastei com o veterinário" → categoria de pet, não "outros"; "comprei fralda"/"remédio do meu filho" → categoria de filhos/família; "recebi o aluguel do inquilino" → categoria de aluguel recebido, não "outros_receita"; "paguei o seguro do carro" → categoria de seguros; "juntei dinheiro no tesouro direto" → categoria de investimentos do tipo despesa correspondente). Só use "outros"/"outros_receita" quando genuinely nenhuma categoria da lista tiver relação com o que foi dito.
 - "description": 2 a 5 palavras do que foi gasto/recebido, sem repetir o nome da categoria.
 Em "finance_edit_last", só inclua os campos que a pessoa claramente quis corrigir — omita os que não foram mencionados.
 
@@ -142,7 +144,26 @@ Exemplo 14 — "ajuda" → {"intent":"help"}`;
 }
 
 // categories: [{id, type, label}], today: "YYYY-MM-DD", text: string livre
-async function parseTextIntent({ text, categories, today }) {
+// lastFinanceEntry: o último lançamento financeiro feito por WhatsApp
+// (ou null) — usado só pra dar à IA o CONTEXTO de "o que a pessoa acabou
+// de fazer por aqui", pra reconhecer uma correção curta e sem verbo
+// ("dia 1 desse mês", "foi 60 não 45") como referência a esse
+// lançamento, em vez de tratar cada mensagem isolada sem histórico
+// nenhum. Só entra no prompt se o lançamento foi feito há pouco tempo
+// (RECENT_CONTEXT_WINDOW_MS) — passado esse prazo, a pessoa
+// provavelmente não está mais "no meio" daquele lançamento, e citar ele
+// como contexto só arriscaria confundir uma mensagem nova e sem relação.
+const RECENT_CONTEXT_WINDOW_MS = 15 * 60 * 1000; // 15 minutos
+
+function buildRecentEntryNote(lastFinanceEntry) {
+  if (!lastFinanceEntry || !lastFinanceEntry.createdAt) return "";
+  const ageMs = Date.now() - new Date(lastFinanceEntry.createdAt).getTime();
+  if (!Number.isFinite(ageMs) || ageMs < 0 || ageMs > RECENT_CONTEXT_WINDOW_MS) return "";
+  const verb = lastFinanceEntry.type === "receita" ? "receita" : "gasto";
+  return `\nCONTEXTO: a pessoa acabou de lançar isto por aqui, há poucos minutos — ${verb} de R$ ${Number(lastFinanceEntry.amount || 0).toFixed(2)}, categoria "${lastFinanceEntry.category}", descrição "${lastFinanceEntry.description}", data ${lastFinanceEntry.date}. Se a PRÓXIMA mensagem for curta, sem verbo claro de outra ação (não menciona tarefa/nota/meta/compromisso novos), e só citar um valor, uma data ou uma categoria (ex.: "dia 1 desse mês", "foi 60", "era transporte"), classifique como "finance_edit_last" corrigindo ESSE lançamento — mesmo sem palavras como "corrigir"/"errei". Se a mensagem claramente descrever um lançamento NOVO e diferente (menciona outro valor E outra descrição), ignore este contexto e trate como "expense" normalmente.\n`;
+}
+
+async function parseTextIntent({ text, categories, today, lastFinanceEntry }) {
   if (!text || typeof text !== "string" || !text.trim() || text.length > 400) {
     return { ok: false, status: 400, error: "invalid_text" };
   }
@@ -157,7 +178,8 @@ async function parseTextIntent({ text, categories, today }) {
   const todayIso = /^\d{4}-\d{2}-\d{2}$/.test(today) ? today : new Date().toISOString().slice(0, 10);
   const categoryIds = categories.map((c) => c.id);
   const categoryList = categories.map((c) => `- ${c.id} (${c.type}): ${c.label}`).join("\n");
-  const systemPrompt = buildIntentPrompt({ todayIso, categoryList });
+  const recentEntryNote = buildRecentEntryNote(lastFinanceEntry);
+  const systemPrompt = buildIntentPrompt({ todayIso, categoryList, recentEntryNote });
   const rawMessage = text.trim().slice(0, 400);
 
   const aiResult = await fetchGeminiJson({
@@ -166,6 +188,14 @@ async function parseTextIntent({ text, categories, today }) {
     systemPrompt,
     contents: [{ text: rawMessage }],
     label: "intent",
+    // "high": mensagem de WhatsApp aqui cobre 11 intenções diferentes,
+    // pode ter correção implícita via CONTEXTO acima, categoria por
+    // sentido (não só palavra-chave) e referência de data ambígua — vale
+    // mais raciocínio que o padrão "medium" do modelo pra acertar isso
+    // de primeira, e o custo extra de tokens de "pensamento" é
+    // insignificante perto de gastar uma segunda mensagem pedindo pra
+    // pessoa reformular.
+    thinkingLevel: "high",
     generationConfig: {
       maxOutputTokens: 400,
       responseMimeType: "application/json",
@@ -340,7 +370,7 @@ async function parseTextIntent({ text, categories, today }) {
       return { ok: true, intent: "task_action", task: { action, title, dueDate, priority } };
     }
     const query = String(parsed.taskQuery || "").trim().slice(0, 80)
-      || stripKnownTriggers(rawMessage, TASK_CREATE_TRIGGERS).slice(0, 80);
+      || stripKnownTriggers(rawMessage, TASK_COMPLETE_DELETE_TRIGGERS).slice(0, 80);
     if (!query) {
       console.error("task_action complete/delete sem alvo recuperável:", rawMessage);
       return { ok: false, status: 422, error: "ai_invalid_task_query" };
@@ -379,7 +409,7 @@ async function parseTextIntent({ text, categories, today }) {
       return { ok: true, intent: "goal_action", goal: { action, title, target } };
     }
     const query = String(parsed.goalQuery || "").trim().slice(0, 80)
-      || stripKnownTriggers(rawMessage, GOAL_CREATE_TRIGGERS).slice(0, 80);
+      || stripKnownTriggers(rawMessage, GOAL_UPDATE_TRIGGERS).slice(0, 80);
     const mode = parsed.goalProgressMode === "absolute" ? "absolute" : "delta";
     let value = Number(parsed.goalProgressValue);
     if (!Number.isFinite(value)) value = extractAmountFromText(rawMessage);

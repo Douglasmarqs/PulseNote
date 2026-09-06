@@ -300,7 +300,15 @@ async function handleLinkCommand(fb, phone, text) {
 
 // Categorias fixas + as que o usuário criou (state.customCategories),
 // no mesmo formato que buildCategoryPayload() já monta no app.js.
-async function getUserCategories(fb, uid) {
+// Também devolve o ÚLTIMO lançamento financeiro feito por aqui (source
+// "whatsapp") com seu timestamp — de graça, já que é o MESMO documento
+// que a gente já ia buscar pras categorias, sem leitura extra no
+// Firestore. Isso alimenta o classificador de intenção com contexto
+// real da "última coisa que a pessoa fez por aqui", pra ele reconhecer
+// corrigir/apagar mesmo em mensagens curtas e sem verbo (ex.: "dia 1
+// desse mês", "foi ontem") como referência a esse lançamento — em vez de
+// tratar cada mensagem como se não houvesse conversa nenhuma antes dela.
+async function getUserCategoriesAndContext(fb, uid) {
   const doc = await fb.firestore().collection("userData").doc(uid).get();
   const state = doc.exists ? doc.data().data || {} : {};
   const custom = Array.isArray(state.customCategories) ? state.customCategories : [];
@@ -315,7 +323,11 @@ async function getUserCategories(fb, uid) {
     ...custom.filter((c) => c.type === "receita"),
   ].map((c) => ({ id: c.id, type: "receita", label: c.label }));
 
-  return [...despesa, ...receita];
+  const categories = [...despesa, ...receita];
+  const finances = Array.isArray(state.finances) ? state.finances : [];
+  const lastFinanceEntry = finances.find((f) => f.source === "whatsapp") || null;
+
+  return { categories, lastFinanceEntry };
 }
 
 // Grava no MESMO documento que o app usa (userData/{uid}.data.finances).
@@ -948,7 +960,7 @@ module.exports = async (req, res) => {
       return res.status(200).end();
     }
 
-    const categories = await getUserCategories(fb, uid);
+    const { categories, lastFinanceEntry } = await getUserCategoriesAndContext(fb, uid);
     const today = getTodayInBrazil();
 
     if (message.type === "text") {
@@ -979,7 +991,7 @@ module.exports = async (req, res) => {
         return res.status(200).end();
       }
 
-      const result = await parseTextIntent({ text: rawText, categories, today });
+      const result = await parseTextIntent({ text: rawText, categories, today, lastFinanceEntry });
 
       if (result.ok && result.intent === "report") {
         const summary = await buildMonthlyReport(fb, uid, result.report.month, result.report.year);

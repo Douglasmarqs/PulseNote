@@ -644,6 +644,62 @@
           </div>
         </section>
 
+        <!-- ===== NOTA EM TELA CHEIA (estilo iPhone Notes) =====
+             Abre ao tocar numa nota da lista — título + corpo com
+             formatação (negrito, destaque colorido), em vez do
+             textarea simples de sempre. O formulário da esquerda
+             continua existindo pra CRIAR notas novas com todos os
+             campos extras (categoria, pasta, tags...); isto aqui é o
+             editor rápido e bonito pra abrir e mexer numa nota já
+             existente, do jeito que foi pedido. -->
+        <div id="noteDetailModal" class="modal-backdrop note-detail-backdrop" hidden>
+          <div class="modal-card note-detail-card">
+            <div class="note-detail-header">
+              <button class="icon-button" id="closeNoteDetail" title="Fechar">✕</button>
+              <div class="note-detail-header-actions">
+                <button class="icon-button" id="ndFavBtn" title="Favoritar">
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></svg>
+                </button>
+                <button class="icon-button danger-action" id="ndDeleteBtn" title="Excluir">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="m19 6-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+                </button>
+              </div>
+            </div>
+
+            <input id="ndTitle" class="note-detail-title-input" maxlength="80" placeholder="Título" />
+            <div class="note-detail-meta-row">
+              <p class="note-detail-meta" id="ndMeta"></p>
+              <button type="button" class="note-detail-more-link" id="ndMoreFieldsBtn">Categoria, pasta e tags</button>
+            </div>
+
+            <div class="note-detail-toolbar" id="noteDetailToolbar">
+              <button type="button" class="nd-tool-btn" data-nd-cmd="bold" title="Negrito"><b>N</b></button>
+              <span class="nd-toolbar-sep"></span>
+              <button type="button" class="nd-swatch" data-nd-color="#ff9f0a" style="background:#ff9f0a" title="Destaque laranja"></button>
+              <button type="button" class="nd-swatch" data-nd-color="#ff375f" style="background:#ff375f" title="Destaque vermelho"></button>
+              <button type="button" class="nd-swatch" data-nd-color="#30d158" style="background:#30d158" title="Destaque verde"></button>
+              <button type="button" class="nd-swatch" data-nd-color="#0a84ff" style="background:#0a84ff" title="Destaque azul"></button>
+              <button type="button" class="nd-swatch" data-nd-color="#bf5af2" style="background:#bf5af2" title="Destaque roxo"></button>
+              <button type="button" class="nd-tool-btn" data-nd-cmd="clear" title="Remover destaque">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m4 20 3-3"/><path d="m21 3-9.9 9.9"/><path d="M12.5 6.5 9 3 3 9l3.5 3.5"/><path d="m6 15 3 3"/><path d="M14 21h7"/></svg>
+              </button>
+            </div>
+
+            <div id="ndBody" class="note-detail-body" contenteditable="true" data-placeholder="Escreva livremente aqui..."></div>
+
+            <div class="note-detail-footer">
+              <button type="button" class="ghost-button" id="ndConvertTaskBtn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8.5 12.3 2.3 2.3L16 9.6"/></svg>
+                <span>Virar tarefa</span>
+              </button>
+              <button type="button" class="primary-button" id="ndSaveBtn">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+                <span>Salvar</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
         <!-- ===== FINANCES VIEW ===== -->
         <section id="financesView" class="view">
 
