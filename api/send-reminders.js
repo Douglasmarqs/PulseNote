@@ -46,6 +46,7 @@
 // ============================================================
 
 const admin = require("firebase-admin");
+const crypto = require("node:crypto");
 
 // Cooldown (em horas) até poder notificar de novo o MESMO tipo de aviso
 // pro MESMO usuário. 0 = avisa só uma vez e nunca mais repete (é o caso
@@ -264,7 +265,19 @@ module.exports = async (req, res) => {
 
   const authHeader = req.headers.authorization || "";
   const secret = process.env.REMINDERS_CRON_SECRET;
-  if (!secret || authHeader !== `Bearer ${secret}`) {
+  // Comparação em tempo constante — mesmo padrão do HMAC do webhook do
+  // WhatsApp (verifyMetaSignature). Um "!==" comum vaza, por quanto
+  // tempo a comparação levou, quantos caracteres do começo bateram —
+  // dá pra um atacante ir "adivinhando" a secret aos poucos. Baixo
+  // risco na prática aqui (a rota nem processa nada sensível sem
+  // secret certa), mas o custo de corrigir é zero, então corrige.
+  const expected = `Bearer ${secret}`;
+  const authBuf = Buffer.from(authHeader);
+  const expectedBuf = Buffer.from(expected);
+  const isValid = !!secret
+    && authBuf.length === expectedBuf.length
+    && crypto.timingSafeEqual(authBuf, expectedBuf);
+  if (!isValid) {
     return res.status(401).json({ error: "unauthorized" });
   }
 

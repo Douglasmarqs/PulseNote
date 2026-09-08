@@ -365,14 +365,22 @@
               <form id="plannerQuickAddForm" data-type="task" style="display:grid;gap:12px">
                 <input id="pqaTitle" required placeholder="Título" />
 
-                <div id="pqaTaskFields" class="form-grid">
-                  <select id="pqaTaskPriority">
-                    <option>Baixa</option>
-                    <option selected>Media</option>
-                    <option>Alta</option>
-                    <option>Urgente</option>
-                  </select>
-                  <input id="pqaTaskDue" type="date" />
+                <div id="pqaTaskFields" class="pqa-icon-rows">
+                  <label class="pqa-icon-row">
+                    <span class="pqa-row-icon" style="color:#ff9f0a"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/></svg></span>
+                    <span class="pqa-row-label">Prioridade</span>
+                    <select id="pqaTaskPriority" class="pqa-row-control">
+                      <option>Baixa</option>
+                      <option selected>Media</option>
+                      <option>Alta</option>
+                      <option>Urgente</option>
+                    </select>
+                  </label>
+                  <label class="pqa-icon-row">
+                    <span class="pqa-row-icon" style="color:#5ac8fa"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17"/><path d="M8 3v4"/><path d="M16 3v4"/></svg></span>
+                    <span class="pqa-row-label">Vencimento</span>
+                    <input id="pqaTaskDue" type="date" class="pqa-row-control" />
+                  </label>
                 </div>
 
                 <div id="pqaEventFields" style="display:none">
@@ -422,6 +430,7 @@
                 <p class="eyebrow">Planner</p>
                 <h2 id="plannerHeaderLabel">Tudo em um só lugar</h2>
               </div>
+              <div id="plannerProgressRing" class="planner-progress-ring"></div>
               <div class="planner-header-actions">
                 <button class="mini-button" type="button" id="plannerNewTaskBtn">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
@@ -468,6 +477,7 @@
                 </div>
                 <button class="icon-button" id="plannerDayNext" title="Próximo dia"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></button>
               </div>
+              <div id="plannerDayStrip" class="planner-day-strip"></div>
               <div class="panel planner-day-allday-panel">
                 <p class="eyebrow">Tarefas do dia</p>
                 <div id="plannerDayAllday" class="planner-list-body"></div>
@@ -674,6 +684,7 @@
 
             <div class="note-detail-toolbar" id="noteDetailToolbar">
               <button type="button" class="nd-tool-btn" data-nd-cmd="bold" title="Negrito"><b>N</b></button>
+              <button type="button" class="nd-tool-btn" data-nd-cmd="italic" title="Itálico"><i>I</i></button>
               <span class="nd-toolbar-sep"></span>
               <button type="button" class="nd-swatch" data-nd-color="#ff9f0a" style="background:#ff9f0a" title="Destaque laranja"></button>
               <button type="button" class="nd-swatch" data-nd-color="#ff375f" style="background:#ff375f" title="Destaque vermelho"></button>
@@ -717,7 +728,8 @@
             <div class="fin-month-actions">
               <button id="finCloseMonth" class="fin-action-btn close"><span class="fin-action-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg></span>Fechar mês</button>
               <button id="finReopenMonth" class="fin-action-btn reopen" hidden><span class="fin-action-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 017.5-1.7"/></svg></span>Reabrir</button>
-              <button id="finExportReport" class="fin-action-btn export"><span class="fin-action-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v11"/><path d="M7.5 10.5L12 15l4.5-4.5"/><path d="M5 21h14"/></svg></span>Exportar</button>
+              <button id="finExportReport" class="fin-action-btn export"><span class="fin-action-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v11"/><path d="M7.5 10.5L12 15l4.5-4.5"/><path d="M5 21h14"/></svg></span>Exportar PDF</button>
+              <button id="finExportXlsx" class="fin-action-btn export"><span class="fin-action-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 13l2.5 5L13 13"/><path d="M15.5 13v5"/><path d="M15.5 15.5H18"/></svg></span>Exportar Excel</button>
             </div>
 
             <div class="fin-summary-grid">
@@ -1190,6 +1202,9 @@
       <button class="bottom-nav-item" data-view="planner">
         <span class="bn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17"/><path d="M8 3v4"/><path d="M16 3v4"/><path d="M8.5 14l2 2 4-4"/></svg></span>
         <span>Planner</span>
+      </button>
+      <button class="bottom-nav-fab" id="bottomNavFab" onclick="openPlannerQuickAdd()" title="Adicionar tarefa ou compromisso" aria-label="Adicionar">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
       </button>
       <button class="bottom-nav-item" data-view="notes">
         <span class="bn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h8"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></span>

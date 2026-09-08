@@ -59,6 +59,7 @@ const crypto = require("node:crypto");
 const admin = require("firebase-admin");
 const { parseTransactionImage } = require("./_lib/parseTransactionAI");
 const { parseTextIntent, findBestMatch } = require("./_lib/parseCommandIntent");
+const { buildXlsxReportBuffer } = require("./_lib/buildXlsxReport");
 
 // Espelha as categorias padrão de src/app.js (expenseCategories /
 // incomeCategories) — precisam bater com as do app para os ids que a IA
@@ -199,6 +200,59 @@ async function sendWhatsAppMessage(to, body) {
   }
 }
 
+// Envio de arquivo é em DUAS etapas na API do WhatsApp: primeiro sobe
+// os bytes (multipart/form-data) e recebe um "media id" de volta, só
+// depois manda uma mensagem do tipo "document" referenciando esse id.
+// FormData/Blob são globais nativos do Node usado aqui (18+), não
+// precisou de nenhuma lib nova só pra isso.
+async function uploadWhatsAppMedia(buffer, filename, mimeType) {
+  const url = `https://graph.facebook.com/v20.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/media`;
+  try {
+    const form = new FormData();
+    form.append("messaging_product", "whatsapp");
+    form.append("file", new Blob([buffer], { type: mimeType }), filename);
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}` },
+      body: form,
+    });
+    if (!res.ok) {
+      console.error("Meta recusou o upload do arquivo:", res.status, await res.text());
+      return null;
+    }
+    const data = await res.json();
+    return data.id || null;
+  } catch (err) {
+    console.error("Falha de rede ao subir arquivo pro WhatsApp:", err);
+    return null;
+  }
+}
+
+async function sendWhatsAppDocument(to, mediaId, filename, caption) {
+  const url = `https://graph.facebook.com/v20.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
+  const toFixed = fixBrazilianMobileNumber(to);
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
+      },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        to: toFixed,
+        type: "document",
+        document: { id: mediaId, filename, caption },
+      }),
+    });
+    if (!res.ok) {
+      console.error("Meta recusou o envio do documento:", res.status, await res.text());
+    }
+  } catch (err) {
+    console.error("Falha de rede ao mandar documento no WhatsApp:", err);
+  }
+}
+
 // Só retorna algo depois que handleLinkCommand() já criou o vínculo.
 async function findUidForPhone(fb, phone) {
   const snap = await fb.firestore().collection("whatsappLinks").doc(phone).get();
@@ -326,8 +380,60 @@ async function getUserCategoriesAndContext(fb, uid) {
   const categories = [...despesa, ...receita];
   const finances = Array.isArray(state.finances) ? state.finances : [];
   const lastFinanceEntry = finances.find((f) => f.source === "whatsapp") || null;
+  const pendingClarification = state.whatsappPendingClarification || null;
 
-  return { categories, lastFinanceEntry };
+  return { categories, lastFinanceEntry, pendingClarification };
+}
+
+// 10 minutos pra responder "qual categoria" antes da pergunta expirar
+// — mesma lógica/janela do contexto de "lançamento recente" usado pra
+// correção de data (RECENT_CONTEXT_WINDOW_MS em parseCommandIntent.js).
+const CLARIFICATION_WINDOW_MS = 10 * 60 * 1000;
+
+async function saveWhatsAppPendingClarification(fb, uid, clarification) {
+  return withUserData(fb, uid, (state) => {
+    state.whatsappPendingClarification = { ...clarification, createdAt: new Date().toISOString() };
+    return true;
+  });
+}
+
+async function clearWhatsAppPendingClarification(fb, uid) {
+  return withUserData(fb, uid, (state) => {
+    if (state.whatsappPendingClarification) delete state.whatsappPendingClarification;
+    return true;
+  });
+}
+
+// Tenta casar a resposta da pessoa com uma das opções oferecidas —
+// por número ("1", "2)", "opção 3") ou pelo nome da categoria (sem
+// acento/emoji, por inclusão parcial pra tolerar "faculdade" batendo
+// com "🎓 Faculdade"). Devolve o categoryId escolhido, ou null se a
+// mensagem não pareceu uma resposta à pergunta.
+function matchClarificationReply(text, options, categories) {
+  const raw = String(text || "").trim().toLowerCase();
+  if (!raw) return null;
+
+  const numMatch = raw.match(/^(?:op[cç][aã]o\s*)?([1-9])\b/);
+  if (numMatch) {
+    const idx = Number(numMatch[1]) - 1;
+    if (idx >= 0 && idx < options.length) return options[idx];
+  }
+
+  // Só tira acento/caixa do texto da PESSOA — nada de cortar "primeira
+  // palavra" aqui (isso é só pro emoji do RÓTULO da categoria, abaixo;
+  // aplicado na resposta também, cortava a palavra inteira quando ela
+  // não tinha espaço nenhum, tipo "educação" virando "").
+  const stripAccents = (str) => String(str || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+  const stripEmojiPrefix = (str) => stripAccents(str).replace(/^\S+\s*/, "");
+
+  const normText = stripAccents(raw);
+  if (!normText) return null;
+  for (const id of options) {
+    const label = categories.find((c) => c.id === id)?.label || "";
+    const normLabel = stripEmojiPrefix(label);
+    if (normLabel && (normText.includes(normLabel) || normLabel.includes(normText))) return id;
+  }
+  return null;
 }
 
 // Grava no MESMO documento que o app usa (userData/{uid}.data.finances).
@@ -581,7 +687,11 @@ async function buildMonthlyReport(fb, uid, month, year) {
 
   const topCategories = Object.entries(byCategory).sort((a, b) => b[1] - a[1]).slice(0, 5);
   const monthName = new Date(`${monthPrefix}-01T12:00:00`).toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
-  return { income, expense, balance: income - expense, monthName, topCategories, hasEntries: entries.length > 0, expenseCount: entries.filter((f) => f.type !== "receita").length };
+  return {
+    income, expense, balance: income - expense, monthName, topCategories,
+    hasEntries: entries.length > 0, expenseCount: entries.filter((f) => f.type !== "receita").length,
+    entries: entries.slice().sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0)),
+  };
 }
 
 function formatMonthlyReport(summary, categories) {
@@ -960,12 +1070,35 @@ module.exports = async (req, res) => {
       return res.status(200).end();
     }
 
-    const { categories, lastFinanceEntry } = await getUserCategoriesAndContext(fb, uid);
+    const { categories, lastFinanceEntry, pendingClarification } = await getUserCategoriesAndContext(fb, uid);
     const today = getTodayInBrazil();
 
     if (message.type === "text") {
       const rawText = message.text.body;
       const norm = normalizeCommand(rawText);
+
+      // Resposta a uma pergunta de "qual categoria" feita há pouco —
+      // resolve isso ANTES de tratar a mensagem como um comando novo.
+      // Se já expirou ou não bateu com nenhuma opção oferecida, limpa
+      // a pendência em silêncio e segue o fluxo normal (não trava a
+      // pessoa numa pergunta velha que ela pode nem lembrar mais).
+      if (pendingClarification && pendingClarification.createdAt) {
+        const ageMs = Date.now() - new Date(pendingClarification.createdAt).getTime();
+        if (Number.isFinite(ageMs) && ageMs >= 0 && ageMs <= CLARIFICATION_WINDOW_MS) {
+          const matchedId = matchClarificationReply(rawText, pendingClarification.options, categories);
+          if (matchedId) {
+            await clearWhatsAppPendingClarification(fb, uid);
+            await finishParsedResult({
+              fb, uid, fromPhone, categories,
+              result: { ok: true, intent: "expense", entry: { ...pendingClarification.entry, categoryId: matchedId } },
+              failureMsg: "",
+              rawMessage: rawText,
+            });
+            return res.status(200).end();
+          }
+        }
+        await clearWhatsAppPendingClarification(fb, uid);
+      }
 
       if (isDeleteCommand(norm)) {
         const deleted = await deleteLastWhatsAppEntry(fb, uid);
@@ -995,6 +1128,33 @@ module.exports = async (req, res) => {
 
       if (result.ok && result.intent === "report") {
         const summary = await buildMonthlyReport(fb, uid, result.report.month, result.report.year);
+
+        if (result.report.format === "arquivo") {
+          if (!summary.hasEntries) {
+            await sendWhatsAppMessage(fromPhone, `📊 Não encontrei nenhum lançamento em ${summary.monthName} pra exportar.`);
+            return res.status(200).end();
+          }
+          const monthKey = `${result.report.year}-${String(result.report.month).padStart(2, "0")}`;
+          const xlsxEntries = summary.entries.map((f) => ({
+            date: f.date,
+            description: f.description || "",
+            categoryLabel: (categories.find((c) => c.id === f.category)?.label || f.category || "Outros").replace(/^\S+\s*/, ""),
+            type: f.type === "receita" ? "receita" : "despesa",
+            amount: Number(f.amount) || 0,
+          }));
+          const buffer = buildXlsxReportBuffer({ monthLabel: summary.monthName, isClosed: false, entries: xlsxEntries });
+          const mediaId = await uploadWhatsAppMedia(
+            buffer, `relatorio-${monthKey}.xlsx`,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          );
+          if (!mediaId) {
+            await sendWhatsAppMessage(fromPhone, "Não consegui gerar o arquivo agora 😕 Tenta de novo em instantes.");
+            return res.status(200).end();
+          }
+          await sendWhatsAppDocument(fromPhone, mediaId, `relatorio-${monthKey}.xlsx`, `📊 Relatório de ${summary.monthName}`);
+          return res.status(200).end();
+        }
+
         await sendWhatsAppMessage(fromPhone, formatMonthlyReport(summary, categories));
         return res.status(200).end();
       }
@@ -1141,6 +1301,23 @@ module.exports = async (req, res) => {
         await sendWhatsAppMessage(
           fromPhone,
           `✅ 📅 Compromisso marcado: "${event.title}" em ${formatDateBr(event.date)}${event.time ? ` às ${event.time}` : ""}${event.location && event.location !== "Sem local" ? ` — ${event.location}` : ""}.`
+        );
+        return res.status(200).end();
+      }
+
+      if (result.ok && result.intent === "category_clarify") {
+        const { entry, options } = result.clarify;
+        await saveWhatsAppPendingClarification(fb, uid, { entry, options });
+        const listMsg = options
+          .map((id, i) => {
+            const label = categories.find((c) => c.id === id)?.label || id;
+            return `${i + 1}) ${label}`;
+          })
+          .join("\n");
+        const verb = entry.type === "receita" ? "essa receita" : "esse gasto";
+        await sendWhatsAppMessage(
+          fromPhone,
+          `Não consegui identificar bem a categoria de ${verb} (R$ ${entry.amount.toFixed(2)} — ${entry.description}). Me diz o número:\n${listMsg}`
         );
         return res.status(200).end();
       }

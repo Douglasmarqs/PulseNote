@@ -51,7 +51,7 @@
     <a href="/login" class="back">← Voltar para o login</a>
 
     <h1>Privacidade e Termos de Uso</h1>
-    <p class="updated">Última atualização: junho de 2026</p>
+    <p class="updated">Última atualização: setembro de 2026</p>
 
     <h2>O que é o PulseNote</h2>
     <p>
@@ -65,6 +65,7 @@
       <li><strong>Cadastro:</strong> nome e e-mail, usados apenas para autenticação da sua conta.</li>
       <li><strong>Conteúdo que você cria:</strong> notas, tarefas, compromissos, metas e registros financeiros que você mesmo insere no app.</li>
       <li><strong>Foto de perfil:</strong> opcional, enviada apenas se você escolher adicionar uma.</li>
+      <li><strong>Número de telefone:</strong> opcional, coletado só se você optar por vincular o WhatsApp ao PulseNote — usado apenas para identificar sua conta quando você manda uma mensagem pelo assistente.</li>
     </ul>
 
     <h2>Onde seus dados ficam armazenados</h2>
@@ -83,6 +84,26 @@
       tarefas ou registros financeiros.
     </p>
 
+    <h2>Integração com WhatsApp e Inteligência Artificial</h2>
+    <p>
+      Se você optar por vincular seu número de WhatsApp ao PulseNote, as mensagens que
+      você manda pelo assistente passam por dois serviços de terceiros, necessários
+      para esse recurso funcionar:
+    </p>
+    <ul>
+      <li><strong>Meta (WhatsApp Business Platform):</strong> processa o envio e
+      recebimento das mensagens entre você e o número oficial do PulseNote no WhatsApp.</li>
+      <li><strong>Google (Gemini AI):</strong> o texto da sua mensagem é enviado à API do
+      Gemini para ser interpretado — por exemplo, pra identificar que você quer registrar
+      um gasto ou criar uma tarefa, e escolher a categoria mais adequada entre as que
+      você já tem. O Google processa esse texto só pra gerar a resposta; não usamos isso
+      pra treinar modelo nenhum nem compartilhamos com fins de publicidade.</li>
+    </ul>
+    <p>
+      Você pode desvincular seu número quando quiser, nas Configurações do app — a
+      partir daí nenhuma mensagem nova sua passa mais por esses serviços.
+    </p>
+
     <h2>Não compartilhamos seus dados</h2>
     <p>
       O PulseNote não vende, aluga, nem compartilha seus dados pessoais com
@@ -91,11 +112,15 @@
 
     <h2>Notificações</h2>
     <p>
-      Se você ativar as notificações, o app pode avisar sobre tarefas
-      vencendo, compromissos próximos, progresso de metas e situação do
-      orçamento mensal. Essas notificações são processadas localmente no seu
-      dispositivo — você pode desativá-las a qualquer momento nas
-      configurações do navegador.
+      Se você ativar as notificações, o app pode avisar sobre tarefas vencendo,
+      compromissos próximos, progresso de metas e situação do orçamento mensal, de duas
+      formas: enquanto o app está aberto no navegador, o aviso é gerado ali mesmo, local;
+      pra chegar mesmo com o app fechado, usamos o <strong>Firebase Cloud Messaging</strong>
+      (serviço de notificação push do Google) e, se você tiver vinculado o WhatsApp, esse
+      lembrete também pode chegar por mensagem de WhatsApp. Você pode desativar cada um
+      desses canais quando quiser — o push nas configurações de notificação do navegador
+      ou do celular, e o lembrete por WhatsApp desvinculando o número nas Configurações do
+      app.
     </p>
 
     <h2>Exclusão de conta e dados</h2>

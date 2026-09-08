@@ -91,7 +91,7 @@ function buildIntentPrompt({ todayIso, categoryList, recentEntryNote }) {
 ${recentEntryNote}
 Data de hoje: ${todayIso}.
 
-Se "report": calcule "reportMonth" (1-12) e "reportYear" a partir de expressões relativas ("mês passado", "esse mês", nomes de mês, "agosto de 2025" etc.), relativo à data de hoje.
+Se "report": calcule "reportMonth" (1-12) e "reportYear" a partir de expressões relativas ("mês passado", "esse mês", nomes de mês, "agosto de 2025" etc.), relativo à data de hoje. Se a pessoa pedir explicitamente um ARQUIVO/PLANILHA/EXCEL pra baixar (ex.: "manda a planilha do mês passado", "quero o excel de agosto", "exporta isso em excel"), preencha "reportFormat":"arquivo"; se for só um resumo em texto (ex.: "relatório do mês passado", "quanto gastei em julho"), preencha "reportFormat":"texto" (esse é o padrão).
 
 Se "stats": preencha "reportMonth"/"reportYear" (o período principal perguntado; sem período claro, use o mês atual) e, se a pessoa pediu COMPARAÇÃO explícita com outro período (ex.: "comparado ao mês passado"), preencha também "statsCompareMonth"/"statsCompareYear"; senão deixe os dois de fora.
 
@@ -104,6 +104,7 @@ ${categoryList}
 - "date": resolva data relativa ("ontem", "semana passada" etc.) a partir de hoje; sem referência, use hoje. IMPORTANTE: gasto/receita é sempre algo que JÁ ACONTECEU — se a pessoa citar um dia/mês sem ano (ex.: "dia 5", "10 de agosto") e essa data já tiver passado este mês/ano, use o mês/ano ATUAL ou ANTERIOR (o mais próximo no passado), NUNCA o mês/ano seguinte. Só use uma data futura se a pessoa disser isso explicitamente (ex.: "vou gastar", "vou pagar dia 5").
 - "type": "despesa" por padrão; "receita" só se for entrada de dinheiro.
 - "categoryId": o mais específico possível, do mesmo tipo de "type". Cada categoria da lista já tem um emoji próprio no rótulo — escolher a categoria certa é o que decide o emoji certo na confirmação. NUNCA escolha uma categoria genérica tipo "outros"/"outros_receita" se qualquer categoria mais específica da lista puder se aplicar ao que foi dito, mesmo que a palavra exata não apareça na mensagem (use o sentido: "gastei com o veterinário" → categoria de pet, não "outros"; "comprei fralda"/"remédio do meu filho" → categoria de filhos/família; "recebi o aluguel do inquilino" → categoria de aluguel recebido, não "outros_receita"; "paguei o seguro do carro" → categoria de seguros; "juntei dinheiro no tesouro direto" → categoria de investimentos do tipo despesa correspondente). Só use "outros"/"outros_receita" quando genuinely nenhuma categoria da lista tiver relação com o que foi dito.
+- "categoryConfidence": "baixa" quando duas ou mais categorias da lista pareceriam igualmente plausíveis pro que foi dito e você está só chutando qual delas é a certa (ex.: uma despesa genérica tipo "gastei 50" sem nenhuma pista do que foi, ou algo que poderia caber em mais de uma categoria específica sem um sinal claro de qual). "alta" no caso comum, quando dá pra ter certeza razoável pelo que foi dito. Quando "baixa", preencha também "categoryAlternatives" com até 3 ids de categoria (do mesmo "type") que sejam os candidatos mais prováveis, do MESMO jeito que os ids existem na lista — a pessoa vai escolher entre eles na próxima mensagem, então não invente um id que não esteja na lista.
 - "description": 2 a 5 palavras do que foi gasto/recebido, sem repetir o nome da categoria.
 Em "finance_edit_last", só inclua os campos que a pessoa claramente quis corrigir — omita os que não foram mencionados.
 
@@ -131,6 +132,7 @@ Exemplo 2b — "exclua o último gasto" → {"intent":"finance_delete_last"}
 Exemplo 2c — "dia 1 desse mês" (mandada logo após um lançamento, corrigindo a data) → {"intent":"finance_edit_last"}
 Exemplo 3 — "quanto gastei com uber esse mês" → {"intent":"finance_search","searchQuery":"uber"}
 Exemplo 4 — "relatório do mês passado" (hoje=${todayIso}) → {"intent":"report","reportMonth":<mês anterior>,"reportYear":<ano correspondente>}
+Exemplo 4b — "manda a planilha do mês passado em excel" (hoje=${todayIso}) → {"intent":"report","reportMonth":<mês anterior>,"reportYear":<ano correspondente>,"reportFormat":"arquivo"}
 Exemplo 5 — "comparado ao mês passado, gastei mais?" → {"intent":"stats","reportMonth":<mês atual>,"reportYear":<ano atual>,"statsCompareMonth":<mês anterior>,"statsCompareYear":<ano correspondente>}
 Exemplo 6 — "o que tenho pra fazer hoje" → {"intent":"agenda","agendaFilter":"hoje"}
 Exemplo 7 — "me lembra de pagar o boleto sexta" → {"intent":"task_action","taskAction":"create","taskTitle":"Pagar o boleto","taskDueDate":"<sexta que vem>","taskPriority":"Media"}
@@ -207,11 +209,14 @@ async function parseTextIntent({ text, categories, today, lastFinanceEntry }) {
           type: { type: "string", enum: ["despesa", "receita"] },
           amount: { type: "number" },
           categoryId: { type: "string", enum: categoryIds },
+          categoryConfidence: { type: "string", enum: ["alta", "baixa"] },
+          categoryAlternatives: { type: "array", items: { type: "string", enum: categoryIds }, maxItems: 3 },
           description: { type: "string" },
           date: { type: "string" },
           // report / stats
           reportMonth: { type: "integer" },
           reportYear: { type: "integer" },
+          reportFormat: { type: "string", enum: ["texto", "arquivo"] },
           statsCompareMonth: { type: "integer" },
           statsCompareYear: { type: "integer" },
           // agenda
@@ -276,7 +281,8 @@ async function parseTextIntent({ text, categories, today, lastFinanceEntry }) {
     const month = Number.isInteger(Number(parsed.reportMonth)) && parsed.reportMonth >= 1 && parsed.reportMonth <= 12
       ? Number(parsed.reportMonth) : curM;
     const year = Number.isInteger(Number(parsed.reportYear)) ? Number(parsed.reportYear) : curY;
-    return { ok: true, intent: "report", report: { month, year } };
+    const format = parsed.reportFormat === "arquivo" ? "arquivo" : "texto";
+    return { ok: true, intent: "report", report: { month, year, format } };
   }
 
   // ── stats ───────────────────────────────────────────────────────
@@ -486,6 +492,26 @@ async function parseTextIntent({ text, categories, today, lastFinanceEntry }) {
   const localDate = detectDate(rawMessage, todayIso, "past");
   if (localDate) date = localDate;
   else if (!date) date = todayIso;
+
+  // Se a IA sinalizou pouca confiança na categoria (duas ou mais
+  // categorias pareciam igualmente prováveis) e deu alternativas de
+  // verdade, não finaliza o lançamento ainda — devolve um pedido de
+  // confirmação pro webhook perguntar à pessoa, em vez de arriscar
+  // encaixar num "achismo". Só ativa com pelo menos 2 alternativas
+  // válidas (com 0 ou 1, não sobra opção nenhuma real pra oferecer).
+  const lowConfidenceAlternatives = Array.isArray(parsed.categoryAlternatives)
+    ? parsed.categoryAlternatives.filter((id) => validIds.has(id) && id !== categoryId).slice(0, 3)
+    : [];
+  if (parsed.categoryConfidence === "baixa" && lowConfidenceAlternatives.length >= 1) {
+    const allOptions = [categoryId, ...lowConfidenceAlternatives].filter(Boolean).slice(0, 3);
+    if (allOptions.length >= 2) {
+      return {
+        ok: true,
+        intent: "category_clarify",
+        clarify: { entry: { type: finalType, amount, description, date }, options: allOptions },
+      };
+    }
+  }
 
   return { ok: true, intent: "expense", entry: { type: finalType, amount, categoryId, description, date } };
 }

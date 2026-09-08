@@ -757,14 +757,14 @@ function renderProfileButton(user) {
   wrapper.style.position = "relative";
 
   const avatarContent = photoURL
-    ? `<img src="${photoURL}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" alt="foto"/>`
+    ? `<img src="${escapeHtml(photoURL)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" alt="foto"/>`
     : initial;
 
   // O botão fica no topbar; o dropdown é anexado direto no <body> —
   // assim ele nunca fica "preso" num container estreito que quebra
   // o posicionamento no mobile (bug do print: dropdown cortado à esquerda).
   wrapper.innerHTML = `
-    <button class="user-avatar-btn" id="profileBtn" title="${user?.name || "Perfil"}" style="overflow:hidden">
+    <button class="user-avatar-btn" id="profileBtn" title="${escapeHtml(user?.name || "Perfil")}" style="overflow:hidden">
       ${avatarContent}
     </button>
   `;
@@ -787,12 +787,12 @@ function renderProfileButton(user) {
         color:#fff;font-weight:800;font-size:1rem;display:grid;place-items:center;
         flex-shrink:0;overflow:hidden">
         ${photoURL
-          ? `<img src="${photoURL}" style="width:100%;height:100%;object-fit:cover" alt=""/>`
+          ? `<img src="${escapeHtml(photoURL)}" style="width:100%;height:100%;object-fit:cover" alt=""/>`
           : initial}
       </div>
       <div style="min-width:0">
-        <strong style="display:block;font-size:0.9rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${user?.name || "Usuário"}</strong>
-        <span style="font-size:0.78rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block">${user?.email || ""}</span>
+        <strong style="display:block;font-size:0.9rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(user?.name || "Usuário")}</strong>
+        <span style="font-size:0.78rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block">${escapeHtml(user?.email || "")}</span>
       </div>
     </div>
     <button class="dropdown-item" id="dropdownViewProfile"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;vertical-align:-2px"><circle cx="12" cy="8.5" r="3.5"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></svg>Ver perfil</button>
@@ -924,7 +924,7 @@ function renderProfile() {
   const photoURL = state?.profilePhoto || currentUser?.photoURL || "";
   const initial = (user?.name || "U").charAt(0).toUpperCase();
   const avatarEl = document.querySelector("#profileAvatarPreview");
-  if (avatarEl) avatarEl.innerHTML = photoURL ? `<img src="${photoURL}" alt="Foto de perfil"/>` : initial;
+  if (avatarEl) avatarEl.innerHTML = photoURL ? `<img src="${escapeHtml(photoURL)}" alt="Foto de perfil"/>` : initial;
 
   const { level, levelProgress, xpIntoLevel, xpPerLevel, score } = calculateXpStats();
   document.querySelector("#profileLevelLabel").textContent = `Nível ${level}`;
@@ -967,7 +967,7 @@ function renderSettings() {
   if (userNameEl) userNameEl.textContent = user?.name || "Usuário";
   if (emailEl) emailEl.textContent = user?.email || "";
   preview.innerHTML = photoURL
-    ? `<img src="${photoURL}" alt="Foto de perfil"/>`
+    ? `<img src="${escapeHtml(photoURL)}" alt="Foto de perfil"/>`
     : initial;
 
   renderWhatsAppSettings();
@@ -1326,10 +1326,10 @@ function bindSettingsView() {
 function updateAllAvatars(photoURL) {
   const initial = (getUser()?.name || "U").charAt(0).toUpperCase();
   const content = photoURL
-    ? `<img src="${photoURL}" style="width:100%;height:100%;object-fit:cover;border-radius:50%" alt=""/>`
+    ? `<img src="${escapeHtml(photoURL)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%" alt=""/>`
     : initial;
   const contentNoRadius = photoURL
-    ? `<img src="${photoURL}" style="width:100%;height:100%;object-fit:cover" alt=""/>`
+    ? `<img src="${escapeHtml(photoURL)}" style="width:100%;height:100%;object-fit:cover" alt=""/>`
     : initial;
 
   // Botão principal no topbar
@@ -1344,13 +1344,13 @@ function updateAllAvatars(photoURL) {
   const previewEl = document.getElementById("settingsAvatarPreview");
   if (previewEl) {
     previewEl.innerHTML = photoURL
-      ? `<img src="${photoURL}" alt="Foto de perfil"/>`
+      ? `<img src="${escapeHtml(photoURL)}" alt="Foto de perfil"/>`
       : initial;
   }
 
   // Avatar grande na tela de Perfil (mesmo conteúdo do de Configurações)
   const profilePreviewEl = document.getElementById("profileAvatarPreview");
-  if (profilePreviewEl) profilePreviewEl.innerHTML = previewEl ? previewEl.innerHTML : (photoURL ? `<img src="${photoURL}" alt="Foto de perfil"/>` : initial);
+  if (profilePreviewEl) profilePreviewEl.innerHTML = previewEl ? previewEl.innerHTML : (photoURL ? `<img src="${escapeHtml(photoURL)}" alt="Foto de perfil"/>` : initial);
 }
 
 // Lê a foto atual do state (já sincronizado com o Firestore) e atualiza
@@ -1498,7 +1498,15 @@ function bindForms() {
   document.querySelector("#taskForm")?.addEventListener("submit", saveTask);
   document.querySelector("#eventForm")?.addEventListener("submit", saveEvent);
   document.querySelector("#goalForm")?.addEventListener("submit", saveGoal);
-  elements.globalSearch.addEventListener("input", renderAll);
+  // A busca global disparava renderAll() (redesenha TODAS as views —
+  // Dashboard, Planner, Notas, Tarefas, Calendário, Metas, Finanças,
+  // Perfil e Configurações, mesmo as que nem usam o termo buscado) a
+  // cada tecla digitada, sem debounce nenhum — com uma quantidade
+  // razoável de dados, digitar uma busca de 10 letras significava 10
+  // redesenhos completos do app em sequência. Debounce de 180ms:
+  // rápido o bastante pra parecer instantâneo, mas pula os redesenhos
+  // intermediários enquanto a pessoa ainda está digitando.
+  elements.globalSearch.addEventListener("input", debounce(renderAll, 180));
 
   // Filter chips (new UI)
   document.querySelectorAll("[data-note-filter]").forEach((chip) => {
@@ -2276,11 +2284,55 @@ function renderPlanner() {
     const pendingCount = state.tasks.filter((t) => t.status !== "Concluida" && t.status !== "Cancelada").length;
     label.textContent = pendingCount ? `${pendingCount} pendência${pendingCount === 1 ? "" : "s"} para organizar` : "Tudo em dia por aqui";
   }
+  renderPlannerProgressRing();
   renderPlannerGoalsStrip();
   if (plannerActiveTab === "list") renderPlannerList();
   else if (plannerActiveTab === "day") renderPlannerDay();
   else if (plannerActiveTab === "week") renderPlannerWeek();
   else if (plannerActiveTab === "month") renderPlannerMonth();
+}
+
+// Anel de progresso do cabeçalho (referência TaskifyAI) — percentual
+// REAL de tarefas de hoje já concluídas, não é enfeite. SVG puro com
+// stroke-dasharray/stroke-dashoffset (matemática de círculo simples:
+// comprimento = 2πr, quanto preencher = comprimento × percentual) —
+// não depende de nenhuma lib de gráfico nova.
+function renderPlannerProgressRing() {
+  const el = document.querySelector("#plannerProgressRing");
+  if (!el) return;
+
+  const todaysTasks = state.tasks.filter((t) => t.dueDate === todayIso && t.status !== "Cancelada");
+  const total = todaysTasks.length;
+  const done = todaysTasks.filter((t) => t.status === "Concluida").length;
+  const pct = total ? Math.round((done / total) * 100) : 0;
+
+  if (!total) {
+    el.innerHTML = `<div class="planner-ring-empty">Sem tarefas<br>pra hoje</div>`;
+    return;
+  }
+
+  const size = 56;
+  const stroke = 6;
+  const radius = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference * (1 - pct / 100);
+
+  el.innerHTML = `
+    <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+      <circle cx="${size / 2}" cy="${size / 2}" r="${radius}" fill="none" stroke="rgba(255,255,255,0.18)" stroke-width="${stroke}"></circle>
+      <circle cx="${size / 2}" cy="${size / 2}" r="${radius}" fill="none" stroke="url(#plannerRingGradient)" stroke-width="${stroke}"
+        stroke-linecap="round" stroke-dasharray="${circumference}" stroke-dashoffset="${offset}"
+        transform="rotate(-90 ${size / 2} ${size / 2})"></circle>
+      <defs>
+        <linearGradient id="plannerRingGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#ff9f0a"></stop>
+          <stop offset="50%" stop-color="#ff375f"></stop>
+          <stop offset="100%" stop-color="#bf5af2"></stop>
+        </linearGradient>
+      </defs>
+    </svg>
+    <div class="planner-ring-label"><strong>${pct}%</strong><span>hoje</span></div>
+  `;
 }
 
 function setPlannerTab(tab) {
@@ -2522,9 +2574,16 @@ function renderPlannerList() {
 // sem precisar ler o badge, e torna o botão de concluir mais chamativo
 // (antes era um círculo cinza neutro, fácil de ignorar/perder no meio
 // dos outros botões).
+// Baixa->verde, Média->teal, Alta->laranja, Urgente->vermelho: rampa
+// com 4 famílias de cor bem distintas entre si. Média usava
+// var(--accent) antes — no tema "eclipse" (fundo preto), --accent
+// (#e8ac3d, dourado) e --orange (#ffab4d) ficam quase idênticos, então
+// Média e Alta pareciam ter a mesma cor no aro da tarefa. --accent é a
+// cor de destaque geral do app (usada em botões, links...), não deveria
+// estar amarrada ao significado de "prioridade média" em primeiro lugar.
 const PRIORITY_RING = {
   Baixa: "var(--green)",
-  Media: "var(--accent)",
+  Media: "var(--teal)",
   Alta: "var(--orange)",
   Urgente: "var(--red)",
 };
@@ -2536,7 +2595,7 @@ function renderPlannerTaskRow(task) {
   const detailsOpen = plannerExpandedTaskDetails.has(task.id);
   const ringColor = PRIORITY_RING[task.priority] || "var(--line)";
   return `
-    <article class="planner-row planner-row--task" data-task-id="${task.id}">
+    <article class="planner-row planner-row--task" data-task-id="${task.id}" data-priority="${task.priority}">
       <div class="planner-row-head">
         <button class="task-check ${isDone ? "is-done" : ""}" onclick="toggleTask('${task.id}')" title="Concluir tarefa" style="${isDone ? "" : `border-color:${ringColor}`}">${isDone ? icon("check", 15) : ""}</button>
         <div class="planner-row-main" onclick="toggleTaskDetails('${task.id}', event)">
@@ -2605,12 +2664,43 @@ function goToPlannerToday() {
   renderPlannerDay();
 }
 
+// Toca num dia da faixa horizontal (referência TaskifyAI: "F S S M T
+// W T" com os números do mês, dia atual destacado) — pula direto pra
+// aquele dia, sem precisar clicar em "próximo" várias vezes.
+function selectPlannerDay(iso) {
+  plannerDayDate = iso;
+  renderPlannerDay();
+}
+
+function renderPlannerDayStrip() {
+  const el = document.querySelector("#plannerDayStrip");
+  if (!el) return;
+  const WEEKDAY_LETTER = ["D", "S", "T", "Q", "Q", "S", "S"]; // Dom Seg Ter Qua Qui Sex Sáb
+  const center = new Date(`${plannerDayDate}T12:00:00`);
+  let html = "";
+  for (let offset = -3; offset <= 3; offset++) {
+    const d = new Date(center);
+    d.setDate(d.getDate() + offset);
+    const iso = toLocalIso(d);
+    const isSelected = iso === plannerDayDate;
+    const isToday = iso === todayIso;
+    html += `
+      <button class="planner-day-chip${isSelected ? " is-selected" : ""}${isToday && !isSelected ? " is-today" : ""}" onclick="selectPlannerDay('${iso}')">
+        <span class="pdc-weekday">${WEEKDAY_LETTER[d.getDay()]}</span>
+        <span class="pdc-num">${d.getDate()}</span>
+      </button>
+    `;
+  }
+  el.innerHTML = html;
+}
+
 function jumpPlannerToDay(date) {
   plannerDayDate = date;
   setPlannerTab("day");
 }
 
 function renderPlannerDay() {
+  renderPlannerDayStrip();
   const label = document.querySelector("#plannerDayLabel");
   if (label) {
     const date = new Date(`${plannerDayDate}T12:00:00`);
@@ -3090,12 +3180,18 @@ function deleteNote(id) {
 // ══════════════════════════════════════════════════════════════════
 let ndCurrentNoteId = null;
 
-// Só passamos pro contenteditable o que a gente mesmo gerou (negrito e
-// destaque de cor) — filtra qualquer outra tag/atributo que apareça
-// (colar de outro app, por exemplo), pra nunca guardar HTML arbitrário
-// no Firestore.
+// Só passamos pro contenteditable o que a gente mesmo gerou (negrito,
+// itálico e destaque de cor) — filtra qualquer outra tag/atributo que
+// apareça (colar de outro app, por exemplo), pra nunca guardar HTML
+// arbitrário no Firestore. Preserva font-weight/font-style além de
+// background-color no style: com "styleWithCSS" ligado (ver
+// bindNoteDetail), alguns navegadores representam negrito/itálico
+// como `<span style="font-weight/font-style:...">` em vez de
+// `<b>`/`<i>` — sem isso aqui, o sanitizador jogaria essa formatação
+// fora sem querer.
 function sanitizeNoteHtml(html) {
-  const allowedTags = new Set(["B", "STRONG", "BR", "DIV", "SPAN", "MARK", "P", "FONT"]);
+  const allowedTags = new Set(["B", "STRONG", "I", "EM", "BR", "DIV", "SPAN", "MARK", "P", "FONT"]);
+  const allowedStyles = ["backgroundColor", "fontWeight", "fontStyle"];
   const template = document.createElement("template");
   template.innerHTML = String(html || "");
 
@@ -3110,9 +3206,11 @@ function sanitizeNoteHtml(html) {
         node.replaceWith(document.createTextNode(node.textContent));
         return;
       }
-      const bg = node.style && node.style.backgroundColor;
+      const keptStyles = node.style
+        ? allowedStyles.map((prop) => [prop, node.style[prop]]).filter(([, value]) => value)
+        : [];
       [...node.attributes].forEach((attr) => node.removeAttribute(attr.name));
-      if (bg) node.style.backgroundColor = bg;
+      keptStyles.forEach(([prop, value]) => { node.style[prop] = value; });
       clean(node);
     });
   };
@@ -3155,6 +3253,26 @@ function hexToRgba(hex, alpha) {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
+// Trava o scroll do fundo enquanto a nota em tela cheia está aberta.
+// `overflow:hidden` no body sozinho NÃO é confiável em PWA instalado
+// no iOS (a página por trás ainda "arrasta"/balança) — a técnica que
+// funciona de verdade em todo lugar é fixar o body na posição atual.
+let ndScrollY = 0;
+function lockBackgroundScroll() {
+  ndScrollY = window.scrollY || window.pageYOffset || 0;
+  document.body.style.position = "fixed";
+  document.body.style.top = `-${ndScrollY}px`;
+  document.body.style.left = "0";
+  document.body.style.right = "0";
+}
+function unlockBackgroundScroll() {
+  document.body.style.position = "";
+  document.body.style.top = "";
+  document.body.style.left = "";
+  document.body.style.right = "";
+  window.scrollTo(0, ndScrollY);
+}
+
 function openNoteDetail(id) {
   const note = state.notes.find((item) => item.id === id);
   if (!note) return;
@@ -3172,13 +3290,30 @@ function openNoteDetail(id) {
   document.querySelector("#ndFavBtn svg").setAttribute("fill", note.favorite ? "currentColor" : "none");
 
   document.querySelector("#noteDetailModal").hidden = false;
-  document.body.style.overflow = "hidden";
+  lockBackgroundScroll();
+  // Empurra um estado de histórico só pra isso — assim o gesto de
+  // "voltar" do celular (ou o botão físico/gesto de voltar do
+  // Android) também fecha a nota, em vez de sair do app inteiro ou
+  // deixar a pessoa sem uma saída óbvia se algum toque não registrar.
+  history.pushState({ noteDetail: true }, "");
+}
+
+// Só cuida da parte visual (esconder modal, destravar scroll) — não
+// mexe no histórico. Separado de closeNoteDetail() de propósito: essa
+// função também é chamada pelo listener de "popstate" (botão/gesto de
+// voltar do celular), e SE ela também chamasse history.back(), voltar
+// pelo celular disparava um novo popstate, que chamava ela nesse de
+// novo, que chamava history.back() de novo — um loop.
+function closeNoteDetailUI() {
+  document.querySelector("#noteDetailModal").hidden = true;
+  unlockBackgroundScroll();
+  ndCurrentNoteId = null;
 }
 
 function closeNoteDetail() {
-  document.querySelector("#noteDetailModal").hidden = true;
-  document.body.style.overflow = "";
-  ndCurrentNoteId = null;
+  if (!ndCurrentNoteId) return;
+  closeNoteDetailUI();
+  if (history.state && history.state.noteDetail) history.back();
 }
 
 function saveNoteDetail() {
@@ -3239,24 +3374,72 @@ function bindNoteDetail() {
     editNote(id);
   });
 
-  // Formatação: negrito e 5 cores de destaque, aplicadas via
-  // execCommand na seleção atual do contenteditable. É uma API
-  // antiga (deprecated), mas ainda funciona em todo navegador atual —
-  // pra algo tão simples (negrito + cor de fundo), reimplementar do
-  // zero com Range/Selection não valeria o risco de bugs sutis sem
-  // poder testar em navegador de verdade.
-  document.querySelector("#noteDetailToolbar").addEventListener("click", (e) => {
+  // ── Formatação (negrito/itálico/destaque) ──────────────────────
+  // BUG relatado: marcar um trecho e tocar numa cor não deixava nada
+  // marcado. Causa raiz confirmada: tocar num BOTÃO fora do
+  // contenteditable dispara "mousedown" -> o navegador tira o foco
+  // do texto selecionado ANTES do "click" chegar a rodar o
+  // execCommand — ou seja, quando o comando executa, a seleção já
+  // tinha sido perdida (virou só um cursor, sem texto nenhum
+  // marcado), então "aplicar cor de fundo" não tinha em quê aplicar.
+  // Duas camadas de correção (padrão usado por editores de texto
+  // rico de verdade, não é workaround improvisado):
+  //   1) `preventDefault()` no mousedown dos botões da barra — isso
+  //      IMPEDE o navegador de tirar o foco/a seleção em primeiro
+  //      lugar, então normalmente nem precisa da camada 2.
+  //   2) Como reforço pra qualquer navegador/gesto que ainda assim
+  //      perca a seleção, guardamos o último Range válido a cada
+  //      mudança de seleção dentro do corpo, e restauramos ele antes
+  //      de rodar o comando.
+  let ndSavedRange = null;
+  const saveNdSelection = () => {
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0 && body.contains(sel.anchorNode) && !sel.isCollapsed) {
+      ndSavedRange = sel.getRangeAt(0).cloneRange();
+    }
+  };
+  body.addEventListener("mouseup", saveNdSelection);
+  body.addEventListener("keyup", saveNdSelection);
+  body.addEventListener("touchend", saveNdSelection);
+
+  const toolbar = document.querySelector("#noteDetailToolbar");
+  toolbar.addEventListener("mousedown", (e) => {
+    if (e.target.closest("[data-nd-color], [data-nd-cmd]")) e.preventDefault();
+  });
+  toolbar.addEventListener("click", (e) => {
     const swatch = e.target.closest("[data-nd-color]");
     const toolBtn = e.target.closest("[data-nd-cmd]");
     if (!swatch && !toolBtn) return;
+
     body.focus();
+    const sel = window.getSelection();
+    const stillHasSelectionInBody = sel && sel.rangeCount > 0 && body.contains(sel.anchorNode) && !sel.isCollapsed;
+    if (!stillHasSelectionInBody && ndSavedRange) {
+      sel.removeAllRanges();
+      sel.addRange(ndSavedRange);
+    }
+
+    // styleWithCSS garante que backColor produza mesmo um
+    // background-color de CSS de verdade (sem isso, alguns navegadores
+    // ficam inconsistentes sobre como aplicam a cor de destaque).
+    document.execCommand("styleWithCSS", false, true);
     if (swatch) {
       document.execCommand("backColor", false, hexToRgba(swatch.dataset.ndColor, 0.35));
     } else if (toolBtn.dataset.ndCmd === "bold") {
       document.execCommand("bold");
+    } else if (toolBtn.dataset.ndCmd === "italic") {
+      document.execCommand("italic");
     } else if (toolBtn.dataset.ndCmd === "clear") {
       document.execCommand("backColor", false, "transparent");
     }
+    saveNdSelection();
+  });
+
+  // Gesto/botão físico de "voltar" do celular fecha a nota em vez de
+  // sair do app — ver comentário em closeNoteDetailUI() sobre por que
+  // isso chama a versão SEM history.back() (evita loop).
+  window.addEventListener("popstate", () => {
+    if (!modal.hidden) closeNoteDetailUI();
   });
 }
 
@@ -3852,6 +4035,17 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
+// Espera "delay" ms de silêncio antes de rodar "fn" — cada nova
+// chamada cancela a anterior que ainda não rodou. Usado na busca
+// global pra não redesenhar o app inteiro a cada tecla digitada.
+function debounce(fn, delay) {
+  let timer;
+  return (...args) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn(...args), delay);
+  };
+}
+
 function showToast(message) {
   const textEl = document.getElementById("toastText") || elements.toast;
   textEl.textContent = message;
@@ -4237,6 +4431,22 @@ ${strings.map((str) => `<si><t xml:space="preserve">${str.replace(/&/g,"&amp;").
   };
 
   return zipFiles(files);
+}
+
+// Baixa o .xlsx gerado por buildXlsxBlob() — a função em si já existia
+// (montava o arquivo certinho), só faltava um botão chamando ela e
+// disparando o download de verdade no navegador.
+function downloadXlsxReport(monthKey) {
+  const blob = buildXlsxBlob(monthKey);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `relatorio-${monthKey}.xlsx`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+  showToast("📊 Excel baixado!");
 }
 
 // ── Gerador de ZIP puro em JS (sem pako/JSZip) ───────────────
@@ -4736,6 +4946,10 @@ function bindFinanceMonthControls() {
 
   document.getElementById("finExportReport")?.addEventListener("click", () => {
     exportMonthReport(finActiveMonth);
+  });
+
+  document.getElementById("finExportXlsx")?.addEventListener("click", () => {
+    downloadXlsxReport(finActiveMonth);
   });
 }
 
@@ -6659,6 +6873,7 @@ window.reopenMonth = reopenMonth;
 // gerado dinamicamente, ela tem que ser exposta aqui também.
 window.openPlannerQuickAdd = openPlannerQuickAdd;
 window.jumpPlannerToDay = jumpPlannerToDay;
+window.selectPlannerDay = selectPlannerDay;
 window.togglePlannerGoalExpand = togglePlannerGoalExpand;
 window.openPlannerTaskActions = openPlannerTaskActions;
 window.submitGoalMilestoneForm = submitGoalMilestoneForm;
