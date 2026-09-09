@@ -82,11 +82,11 @@ body.auth-page {
   width: 52px;
   height: 52px;
   border-radius: 16px;
-  background: linear-gradient(145deg, #7c6cff, #c07dff);
+  background: linear-gradient(145deg, #ff9f0a, #ff375f);
   color: #fff;
   display: grid;
   place-items: center;
-  box-shadow: 0 8px 24px rgba(124, 108, 255, 0.35);
+  box-shadow: 0 8px 24px rgba(255, 55, 95, 0.35);
 }
 
 .auth-brand strong {
@@ -292,13 +292,13 @@ body.auth-page {
   width: 100%;
   height: 52px;
   border-radius: 16px;
-  background: linear-gradient(135deg, #7c6cff, #c07dff);
+  background: linear-gradient(135deg, #ff9f0a, #ff375f);
   color: #fff;
   font-size: 1rem;
   font-weight: 700;
   border: none;
   cursor: pointer;
-  box-shadow: 0 8px 24px rgba(124, 108, 255, 0.35);
+  box-shadow: 0 8px 24px rgba(255, 55, 95, 0.35);
   transition: transform 180ms, box-shadow 180ms;
   font-family: inherit;
   margin-top: 4px;
@@ -306,7 +306,7 @@ body.auth-page {
 
 .auth-btn:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 12px 30px rgba(124, 108, 255, 0.42);
+  box-shadow: 0 12px 30px rgba(255, 55, 95, 0.42);
 }
 
 .auth-btn:active:not(:disabled) {

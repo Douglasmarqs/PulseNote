@@ -3021,7 +3021,7 @@ function renderNoteCard(note, searchQuery) {
           )
           .join("")}${
           note.checklist.length > 3
-            ? `<button type="button" class="cl-toggle-btn" onclick="toggleNoteChecklistPreview(this)">+${note.checklist.length - 3} mais itens</button>`
+            ? `<button type="button" class="cl-toggle-btn" onclick="event.stopPropagation(); toggleNoteChecklistPreview(this)">+${note.checklist.length - 3} mais itens</button>`
             : ""
         }</div>`
       : "";
@@ -3273,6 +3273,36 @@ function unlockBackgroundScroll() {
   window.scrollTo(0, ndScrollY);
 }
 
+// Salva o estado atual do título/corpo — devolve true se algo
+// realmente mudou desde o último save (evita escrever/re-renderizar à
+// toa quando não há nada novo). Extraída como sua própria função
+// porque agora é chamada de VÁRIOS lugares: autosave enquanto a
+// pessoa digita, e antes de fechar por QUALQUER caminho (botão
+// Salvar, X, toque fora do cartão, gesto de voltar do celular) — a
+// tela de nota não tem mais nenhum jeito de fechar que jogue fora o
+// que foi escrito, do mesmo jeito que o Notes do iPhone nunca pede
+// pra você "salvar" antes de sair.
+function flushNoteDetailSave() {
+  if (!ndCurrentNoteId) return false;
+  const title = document.querySelector("#ndTitle").value.trim() || "Sem título";
+  const cleanHtml = sanitizeNoteHtml(document.querySelector("#ndBody").innerHTML);
+  const plainText = noteHtmlToPlainText(cleanHtml);
+
+  const existing = state.notes.find((n) => n.id === ndCurrentNoteId);
+  if (!existing) return false;
+  if (existing.title === title && existing.description === plainText && (existing.descriptionHtml || "") === cleanHtml) {
+    return false;
+  }
+
+  state.notes = state.notes.map((note) =>
+    note.id === ndCurrentNoteId
+      ? { ...note, title, description: plainText, descriptionHtml: cleanHtml }
+      : note
+  );
+  saveState();
+  return true;
+}
+
 function openNoteDetail(id) {
   const note = state.notes.find((item) => item.id === id);
   if (!note) return;
@@ -3299,36 +3329,34 @@ function openNoteDetail(id) {
 }
 
 // Só cuida da parte visual (esconder modal, destravar scroll) — não
-// mexe no histórico. Separado de closeNoteDetail() de propósito: essa
-// função também é chamada pelo listener de "popstate" (botão/gesto de
-// voltar do celular), e SE ela também chamasse history.back(), voltar
-// pelo celular disparava um novo popstate, que chamava ela nesse de
-// novo, que chamava history.back() de novo — um loop.
+// mexe no histórico nem salva nada (isso é feito por quem chama esta
+// função, ver comentário no listener de "popstate" mais abaixo sobre
+// por que precisa ficar separado). Separado de closeNoteDetail() de
+// propósito: essa função também é chamada pelo listener de
+// "popstate" (botão/gesto de voltar do celular), e SE closeNoteDetail
+// também chamasse history.back(), voltar pelo celular disparava um
+// novo popstate, que chamava ela de novo, que chamava history.back()
+// de novo — um loop.
 function closeNoteDetailUI() {
   document.querySelector("#noteDetailModal").hidden = true;
   unlockBackgroundScroll();
   ndCurrentNoteId = null;
 }
 
+// Fecha a nota — SEMPRE salva antes, não importa por onde a pessoa
+// saiu (botão Salvar, X, toque fora do cartão). Sem isso, fechar sem
+// ter apertado "Salvar" explicitamente jogava fora tudo que tinha
+// sido digitado — o oposto de "prático e fácil".
 function closeNoteDetail() {
   if (!ndCurrentNoteId) return;
+  flushNoteDetailSave();
   closeNoteDetailUI();
+  renderAll();
   if (history.state && history.state.noteDetail) history.back();
 }
 
 function saveNoteDetail() {
   if (!ndCurrentNoteId) return;
-  const title = document.querySelector("#ndTitle").value.trim() || "Sem título";
-  const cleanHtml = sanitizeNoteHtml(document.querySelector("#ndBody").innerHTML);
-  const plainText = noteHtmlToPlainText(cleanHtml);
-
-  state.notes = state.notes.map((note) =>
-    note.id === ndCurrentNoteId
-      ? { ...note, title, description: plainText, descriptionHtml: cleanHtml }
-      : note
-  );
-  saveState();
-  renderAll();
   closeNoteDetail();
   showToast("Anotacao salva.");
 }
@@ -3343,6 +3371,16 @@ function bindNoteDetail() {
   modal.addEventListener("click", (e) => { if (e.target === modal) closeNoteDetail(); });
 
   document.querySelector("#ndSaveBtn").addEventListener("click", saveNoteDetail);
+
+  // Autosave enquanto digita (debounced) — camada extra de segurança
+  // além do "salva sempre ao fechar": se o navegador travar, a aba
+  // fechar sozinha ou o celular desligar no meio da digitação, o que
+  // já foi escrito até ali não se perde. Não precisa redesenhar a
+  // lista de notas a cada save (ela fica escondida atrás do modal
+  // mesmo); só grava o estado — a lista atualiza quando a nota fecha.
+  const autosaveNoteDetail = debounce(() => flushNoteDetailSave(), 800);
+  document.querySelector("#ndTitle").addEventListener("input", autosaveNoteDetail);
+  body.addEventListener("input", autosaveNoteDetail);
 
   document.querySelector("#ndDeleteBtn").addEventListener("click", () => {
     if (!ndCurrentNoteId) return;
@@ -3437,9 +3475,15 @@ function bindNoteDetail() {
 
   // Gesto/botão físico de "voltar" do celular fecha a nota em vez de
   // sair do app — ver comentário em closeNoteDetailUI() sobre por que
-  // isso chama a versão SEM history.back() (evita loop).
+  // isso chama a versão SEM history.back() (evita loop). Salva antes
+  // de fechar pelo mesmo motivo de todo outro caminho de saída: voltar
+  // pelo celular não pode jogar fora o que foi escrito.
   window.addEventListener("popstate", () => {
-    if (!modal.hidden) closeNoteDetailUI();
+    if (!modal.hidden) {
+      flushNoteDetailSave();
+      closeNoteDetailUI();
+      renderAll();
+    }
   });
 }
 

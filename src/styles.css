@@ -1522,12 +1522,12 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   flex-shrink: 0;
 }
 .note-priority-dot[data-priority="Baixa"]   { color: var(--green); }
-.note-priority-dot[data-priority="Media"]   { color: var(--accent); }
+.note-priority-dot[data-priority="Media"]   { color: var(--teal); }
 .note-priority-dot[data-priority="Alta"]    { color: var(--orange); }
 .note-priority-dot[data-priority="Urgente"] { color: var(--red); }
 
 .note-priority-dot.active[data-priority="Baixa"]   { background: var(--green-soft);  border-color: var(--green); }
-.note-priority-dot.active[data-priority="Media"]   { background: var(--blue-soft, var(--accent-soft)); border-color: var(--accent); }
+.note-priority-dot.active[data-priority="Media"]   { background: var(--teal-soft);   border-color: var(--teal); }
 .note-priority-dot.active[data-priority="Alta"]    { background: var(--orange-soft); border-color: var(--orange); }
 .note-priority-dot.active[data-priority="Urgente"] { background: var(--red-soft);    border-color: var(--red); }
 .note-priority-dot.active { transform: scale(1.04); font-weight: 800; }
@@ -4307,7 +4307,10 @@ align-items:stretch;
   width: 100%;
   height: 100%;
   border-radius: 50%;
-  background: linear-gradient(135deg, #6c5ce7, #af52de);
+  background:
+    radial-gradient(circle at 20% 20%, rgba(255,159,10,0.55), transparent 55%),
+    radial-gradient(circle at 85% 85%, rgba(191,90,242,0.5), transparent 60%),
+    linear-gradient(135deg, #6c5ce7, #af52de);
   color: #fff;
   font-size: 2rem;
   font-weight: 800;
@@ -4926,7 +4929,10 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
   width: 92px;
   height: 92px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--accent), var(--purple));
+  background:
+    radial-gradient(circle at 20% 20%, rgba(255,159,10,0.55), transparent 55%),
+    radial-gradient(circle at 85% 85%, rgba(191,90,242,0.5), transparent 60%),
+    linear-gradient(135deg, var(--accent), var(--purple));
   color: #fff;
   font-size: 2.1rem;
   font-weight: 800;
@@ -4961,15 +4967,15 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
   width: 44px;
   height: 44px;
   border-radius: 14px;
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: linear-gradient(135deg, #ff9f0a, #ff375f);
+  color: #fff;
   font-weight: 800;
   font-size: 1.1rem;
   display: grid;
   place-items: center;
   flex-shrink: 0;
 }
-.profile-level-card .progress-track > div { background: linear-gradient(90deg, var(--accent), var(--purple)); }
+.profile-level-card .progress-track > div { background: linear-gradient(90deg, #ff9f0a, #ff375f, var(--purple)); }
 
 .profile-stats-grid {
   display: grid;
@@ -5597,3 +5603,40 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
   min-width: 0;
 }
 .pqa-row-control:focus { outline: none; }
+
+/* ─── Finanças: paleta vibrante (referência TaskifyAI) ────────────
+   Mesmo princípio de sempre: só cor/gradiente em cima do que já
+   funciona, escopado em #financesView, sem tocar em layout. Os
+   cartões de Receita/Despesa/Saldo já tinham lógica de cor própria
+   (inclusive dinâmica via --saldo-color, setada no JS) — não mexi
+   nisso, só acrescentei uma barra colorida no topo do cartão. */
+#financesView .fin-month-nav {
+  background:
+    radial-gradient(circle at 10% 20%, rgba(255,159,10,0.35), transparent 55%),
+    radial-gradient(circle at 90% 15%, rgba(191,90,242,0.3), transparent 55%),
+    var(--surface2);
+  border-color: transparent;
+}
+
+#financesView .fin-tab-btn.active {
+  background: linear-gradient(135deg, #ff9f0a, #ff375f);
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(255,55,95,0.3);
+}
+#financesView .fin-tab-btn.active::after { display: none; }
+
+#financesView .fin-action-btn.export {
+  background: linear-gradient(135deg, #30d158, #5ac8fa);
+  color: #fff;
+  border-color: transparent;
+}
+#financesView .fin-action-btn.export:hover {
+  background: linear-gradient(135deg, #3ee06a, #74d4ff);
+  color: #fff;
+  box-shadow: 0 6px 16px rgba(48,209,88,0.35);
+}
+
+#financesView .fin-summary-card { border-top: 3px solid transparent; }
+#financesView .fin-summary-card.receita { border-top-color: #30d158; }
+#financesView .fin-summary-card.despesa { border-top-color: #ff375f; }
+#financesView .fin-summary-card.saldo   { border-top-color: var(--saldo-color, #30d158); }
