@@ -195,6 +195,27 @@ function resolveReportPeriod(command, todayIso) {
   return { month: currentMonth, year: currentYear };
 }
 
+function compactTitle(text, maxLength = 120) {
+  return String(text || "")
+    .replace(/(?:\b(?:as)\b|às)\s*\d{1,2}(?::\d{2}|h(?:\d{2})?)?\b/gi, " ")
+    .replace(/\b\d{1,2}\s*h(?:oras)?\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .replace(/^[\s:;,.\-–—]+|[\s:;,.\-–—]+$/g, "")
+    .slice(0, maxLength);
+}
+
+function titleFromNote(text) {
+  return compactTitle(text, 160).split(/\s+/).filter(Boolean).slice(0, 6).join(" ");
+}
+
+function goalTitleFromCommand(text) {
+  return compactTitle(text, 120)
+    .replace(/\b(?:r\$\s*)?[\d.,]+(?:\s*(?:reais|real))?\b/gi, " ")
+    .replace(/\b(?:por|em|até|ate)\s+(?:ano|mes|m[eê]s)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 // Comandos que precisam funcionar mesmo quando a IA estiver sem chave,
 // temporariamente indisponível ou responder fora do schema. São consultas
 // sem ambiguidade e não devem cair no "não consegui entender".
@@ -225,6 +246,86 @@ function parseDeterministicIntent(text, todayIso) {
       intent: "report",
       report: { month: current.month, year: current.year, format: /\b(pdf|arquivo)\b/.test(command) ? "arquivo" : "texto" },
     };
+  }
+
+  // Consultas da agenda não precisam da IA. Deixamos a criação de evento
+  // abaixo, pois "agenda reunião amanhã" é uma ação e não uma consulta.
+  if (/\b(tarefas?|compromissos?|agenda)\b/.test(command)
+    || /\b(o que|quais?) (tenho|faco|fazer)\b/.test(command)) {
+    if (/\b(atrasad[ao]s?|vencid[ao]s?)\b/.test(command)) return { ok: true, intent: "agenda", agenda: { filter: "atrasadas" } };
+    if (/\b(hoje)\b/.test(command)) return { ok: true, intent: "agenda", agenda: { filter: "hoje" } };
+    if (/\b(semana|proximos dias|pr[oó]ximos dias)\b/.test(command)) return { ok: true, intent: "agenda", agenda: { filter: "semana" } };
+    if (!/\b(?:marca\w*|agend\w*|cria\w*|conclu\w*|terminei|finalizei|apaga\w*|exclui\w*|deleta\w*|remove\w*)\b/.test(command)) return { ok: true, intent: "agenda", agenda: { filter: "todas" } };
+  }
+
+  const rawTaskTitle = stripKnownTriggers(text, TASK_CREATE_TRIGGERS);
+  if (TASK_CREATE_TRIGGERS.some((pattern) => pattern.test(text))) {
+    const title = compactTitle(stripDateWordsFromDescription(rawTaskTitle));
+    if (title) {
+      return {
+        ok: true,
+        intent: "task_action",
+        task: {
+          action: "create",
+          title,
+          dueDate: detectDate(text, todayIso, "future") || "",
+          priority: /\b(urgente|importante|prioridade alta)\b/.test(command) ? "Alta" : "Media",
+        },
+      };
+    }
+  }
+
+  if (/^\s*(conclu[íi]|terminei|finalizei|marca(?:r)? .*?(?:como )?(?:feita|conclu[íi]da))/i.test(text)) {
+    const query = compactTitle(stripKnownTriggers(text, TASK_COMPLETE_DELETE_TRIGGERS), 80);
+    if (query) return { ok: true, intent: "task_action", task: { action: "complete", query } };
+  }
+  if (/^\s*(apaga|exclui|deleta|remove)\s+(?:a\s+)?tarefa\b/i.test(text)) {
+    const query = compactTitle(stripKnownTriggers(text, TASK_COMPLETE_DELETE_TRIGGERS), 80);
+    if (query) return { ok: true, intent: "task_action", task: { action: "delete", query } };
+  }
+
+  const noteCreate = text.match(/^\s*(?:anotar?|nota)\s*[:\-–—]?\s*/i);
+  if (noteCreate && noteCreate[0].length < text.trim().length) {
+    const content = text.slice(noteCreate[0].length).trim();
+    return { ok: true, intent: "note_action", note: { action: "create", title: titleFromNote(content) } };
+  }
+  if (/^\s*(busca|procura)\b.*\bnotas?\b/i.test(text)) {
+    const query = compactTitle(stripKnownTriggers(text, NOTE_SEARCH_TRIGGERS), 80);
+    if (query) return { ok: true, intent: "note_action", note: { action: "search", query } };
+  }
+  if (/^\s*(apaga|exclui|deleta|remove)\s+(?:a\s+)?nota\b/i.test(text)) {
+    const query = compactTitle(text.replace(/^\s*(?:apaga|exclui|deleta|remove)\s+(?:a\s+)?nota\s*(?:de|do|da|sobre)?\s*/i, ""), 80);
+    if (query) return { ok: true, intent: "note_action", note: { action: "delete", query } };
+  }
+
+  if (GOAL_CREATE_TRIGGERS.some((pattern) => pattern.test(text))) {
+    const target = extractAmountFromText(text);
+    const title = goalTitleFromCommand(stripKnownTriggers(text, GOAL_CREATE_TRIGGERS));
+    if (title && Number.isFinite(target) && target > 0) {
+      return { ok: true, intent: "goal_action", goal: { action: "create", title, target } };
+    }
+  }
+  if (/\b(avancei|consegui|atualiza|atualizei|bati|cheguei)\b/.test(command) && /\bmeta\b/.test(command)) {
+    const value = extractAmountFromText(text);
+    const query = goalTitleFromCommand(stripKnownTriggers(text, GOAL_UPDATE_TRIGGERS));
+    if (query && Number.isFinite(value)) {
+      return { ok: true, intent: "goal_action", goal: { action: "update", query, mode: /\b(bati|cheguei|total)\b/.test(command) ? "absolute" : "delta", value } };
+    }
+  }
+
+  if (EVENT_CREATE_TRIGGERS.some((pattern) => pattern.test(text))) {
+    const date = detectDate(text, todayIso, "future");
+    const title = compactTitle(stripDateWordsFromDescription(stripKnownTriggers(text, EVENT_CREATE_TRIGGERS)));
+    if (title && date) {
+      return { ok: true, intent: "event_create", event: { title, date, time: extractTimeFromText(text) || "", location: "" } };
+    }
+  }
+
+  if (FINANCE_SEARCH_TRIGGERS.some((pattern) => pattern.test(text))) {
+    const query = compactTitle(stripKnownTriggers(text, FINANCE_SEARCH_TRIGGERS), 60)
+      .replace(/\b(?:esse|este|do|no|na)\s+m[eê]s\b/gi, "")
+      .replace(/\s+/g, " ").trim();
+    if (query) return { ok: true, intent: "finance_search", search: { query, month: null, year: null } };
   }
   return null;
 }

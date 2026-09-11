@@ -856,6 +856,42 @@ p, h1, h2, h3 { margin: 0; }
 
 .overview-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-card-hover); }
 
+/* Os indicadores do topo também são atalhos. O rótulo deixa explícito para
+   onde cada cartão leva, evitando a sensação de que são números estáticos. */
+button.overview-card-action {
+  width: 100%;
+  appearance: none;
+  -webkit-appearance: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.overview-card-action:hover {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--line));
+  background: color-mix(in srgb, var(--surface) 92%, var(--accent-soft));
+}
+.overview-card-action:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  outline-offset: 3px;
+}
+.overview-card-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-top: 6px;
+  color: var(--accent);
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+.overview-card-link b {
+  font-size: 1rem;
+  line-height: 1;
+  transition: transform 160ms ease;
+}
+.overview-card-action:hover .overview-card-link b { transform: translateX(3px); }
+
 .overview-icon {
   width: 34px;
   height: 34px;

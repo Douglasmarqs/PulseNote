@@ -53,4 +53,29 @@ test("comandos essenciais do WhatsApp não dependem da IA", async () => {
   assert.deepEqual(await parseTextIntent({ ...options, text: "comparado ao mês passado, quanto gastei mais?" }), {
     ok: true, intent: "stats", stats: { month: 9, year: 2026, compare: { month: 8, year: 2026 } },
   });
+
+  assert.deepEqual(await parseTextIntent({ ...options, text: "minhas tarefas" }), {
+    ok: true, intent: "agenda", agenda: { filter: "todas" },
+  });
+  assert.deepEqual(await parseTextIntent({ ...options, text: "me lembra de pagar o boleto amanhã" }), {
+    ok: true, intent: "task_action", task: { action: "create", title: "pagar o boleto", dueDate: "2026-09-12", priority: "Media" },
+  });
+  assert.deepEqual(await parseTextIntent({ ...options, text: "concluí a tarefa do dentista" }), {
+    ok: true, intent: "task_action", task: { action: "complete", query: "dentista" },
+  });
+  assert.deepEqual(await parseTextIntent({ ...options, text: "anota: ideia pro projeto novo" }), {
+    ok: true, intent: "note_action", note: { action: "create", title: "ideia pro projeto novo" },
+  });
+  assert.deepEqual(await parseTextIntent({ ...options, text: "criar meta economizar 5000 esse ano" }), {
+    ok: true, intent: "goal_action", goal: { action: "create", title: "economizar esse ano", target: 5000 },
+  });
+  assert.deepEqual(await parseTextIntent({ ...options, text: "avancei 200 na minha meta de economia" }), {
+    ok: true, intent: "goal_action", goal: { action: "update", query: "economia", mode: "delta", value: 200 },
+  });
+  assert.deepEqual(await parseTextIntent({ ...options, text: "marca reunião com cliente amanhã às 15h" }), {
+    ok: true, intent: "event_create", event: { title: "reunião com cliente", date: "2026-09-12", time: "15:00", location: "" },
+  });
+  assert.deepEqual(await parseTextIntent({ ...options, text: "quanto gastei com uber esse mês" }), {
+    ok: true, intent: "finance_search", search: { query: "uber", month: null, year: null },
+  });
 });

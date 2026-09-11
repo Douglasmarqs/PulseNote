@@ -5,6 +5,7 @@ node_modules/
 
 # Artefatos de validação local
 dist/
+dist-audit/
 dist-*-check/
 tmp/
 test/

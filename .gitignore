@@ -5,6 +5,7 @@ frontend/
 node_modules/
 .npm-cache/
 dist/
+dist-audit/
 dist-*-check/
 tmp/
 .vercel-global/

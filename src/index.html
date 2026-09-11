@@ -175,7 +175,7 @@
                 <strong id="heroProgressLabel">0%</strong>
               </div>
               <div class="hero-actions">
-                <button class="primary-button" data-view-shortcut="planner"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.8"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/></svg><span>Começar foco</span></button>
+                <button class="primary-button" data-view-shortcut="planner" data-planner-focus="tasks"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.8"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/></svg><span>Começar foco</span></button>
                 <span class="pill" id="heroLevelLabel">Nível 1</span>
               </div>
             </div>
@@ -196,59 +196,65 @@
                sensação de bagunça. Agora cada card mostra um dado real e
                distinto, com o mesmo estilo visual (ícone + valor + nota). -->
           <div class="overview-grid">
-            <article class="overview-card">
+            <button type="button" class="overview-card overview-card-action" data-view-shortcut="planner" data-planner-focus="tasks" aria-label="Abrir tarefas pendentes no planner">
               <span class="overview-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
               </span>
               <span class="overview-label">Tarefas pendentes</span>
               <strong class="overview-value" id="summaryTasksPending">0</strong>
               <small id="doneMetricDetail">0 concluídas hoje</small>
-            </article>
+              <span class="overview-card-link">Abrir tarefas <b aria-hidden="true">→</b></span>
+            </button>
 
-            <article class="overview-card">
+            <button type="button" class="overview-card overview-card-action" data-view-shortcut="finances" aria-label="Abrir finanças">
               <span class="overview-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8a2 2 0 012-2h11a2 2 0 012 2"/><rect x="3" y="8" width="18" height="11" rx="2"/><path d="M16.3 13.2h1.7"/></svg>
               </span>
               <span class="overview-label">Saldo do mês</span>
               <strong class="overview-value" id="summaryFinSaldo">R$ 0,00</strong>
               <small>Receitas − despesas</small>
-            </article>
+              <span class="overview-card-link">Abrir finanças <b aria-hidden="true">→</b></span>
+            </button>
 
-            <article class="overview-card">
+            <button type="button" class="overview-card overview-card-action" data-view-shortcut="planner" data-planner-focus="goals" aria-label="Abrir progresso e metas no planner">
               <span class="overview-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="12.5" width="3.4" height="7.5" rx="1"/><rect x="10.3" y="7.5" width="3.4" height="12.5" rx="1"/><rect x="16.6" y="3.5" width="3.4" height="16.5" rx="1"/></svg>
               </span>
               <span class="overview-label">Progresso geral</span>
               <strong class="overview-value" id="progressMetric">0%</strong>
               <small>Notas, tarefas e metas</small>
-            </article>
+              <span class="overview-card-link">Ver progresso <b aria-hidden="true">→</b></span>
+            </button>
 
-            <article class="overview-card">
+            <button type="button" class="overview-card overview-card-action" data-view-shortcut="planner" data-planner-focus="agenda" aria-label="Abrir agenda no planner">
               <span class="overview-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17"/><path d="M8 3v4"/><path d="M16 3v4"/></svg>
               </span>
               <span class="overview-label">Próximo compromisso</span>
               <strong class="overview-value overview-value-small" id="summaryNextEvent">Nenhum</strong>
               <small id="eventMetric">0 nos próximos 7 dias</small>
-            </article>
+              <span class="overview-card-link">Abrir agenda <b aria-hidden="true">→</b></span>
+            </button>
 
-            <article class="overview-card">
+            <button type="button" class="overview-card overview-card-action" data-view-shortcut="planner" data-planner-focus="goals" aria-label="Abrir metas no planner">
               <span class="overview-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.8"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/></svg>
               </span>
               <span class="overview-label">Meta em destaque</span>
               <strong class="overview-value overview-value-small" id="summaryTopGoal">Nenhuma</strong>
               <small>Foco da semana</small>
-            </article>
+              <span class="overview-card-link">Abrir metas <b aria-hidden="true">→</b></span>
+            </button>
 
-            <article class="overview-card">
+            <button type="button" class="overview-card overview-card-action" data-view-shortcut="planner" data-planner-focus="tasks" aria-label="Abrir foco do planner">
               <span class="overview-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linejoin="round"><path d="M12 2.7l2.7 5.6 6.1.6-4.5 4.3 1.2 6.1-5.5-3-5.5 3 1.2-6.1-4.5-4.3 6.1-.6L12 2.7z"/></svg>
               </span>
               <span class="overview-label">Pontos XP</span>
               <strong class="overview-value" id="scoreMetric">0</strong>
               <small id="levelMetric">Nível 1</small>
-            </article>
+              <span class="overview-card-link">Abrir foco <b aria-hidden="true">→</b></span>
+            </button>
           </div>
 
           <!-- Dashboard panels — cada um pode ser minimizado (estado fica
