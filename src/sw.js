@@ -22,7 +22,9 @@
 // v13: invalida o CSS de autenticação após alinhar login/cadastro aos temas
 // do painel. Sem trocar o nome, o stale-while-revalidate podia exibir a
 // paleta anterior na primeira abertura de um PWA já instalado.
-const CACHE_NAME = "pulsenote-v13";
+// v14: entrega a nova paleta, os cartões de notas formatados e a análise
+// financeira também para quem já instalou o PWA.
+const CACHE_NAME = "pulsenote-v14";
 
 // ── Firebase Cloud Messaging (push em segundo plano) ──────────────
 // Isso é o que permite uma notificação aparecer mesmo com o PulseNote

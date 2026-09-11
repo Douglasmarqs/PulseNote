@@ -25,8 +25,8 @@
   --accent-soft: #ece9fc;
   --green: #34c759;
   --green-soft: #e5f9ec;
-  --orange: #ff9500;
-  --orange-soft: #fff3e0;
+  --orange: #0ea5e9;
+  --orange-soft: #e0f2fe;
   --red: #ff3b30;
   --red-soft: #ffeeed;
   --purple: #af52de;
@@ -44,7 +44,7 @@
   --note-green: #e8fdf0;
   --note-pink: #fde8f0;
   --note-purple: #f0e8fd;
-  --note-orange: #fdf0e8;
+  --note-orange: #f3edff;
   --note-teal: #e8f9fd;
   --note-red: #fde8e8;
 
@@ -53,7 +53,7 @@
   --note-green-border: #a5d6a7;
   --note-pink-border: #f48fb1;
   --note-purple-border: #ce93d8;
-  --note-orange-border: #ffcc80;
+  --note-orange-border: #bca7f5;
   --note-teal-border: #80deea;
   --note-red-border: #ef9a9a;
 
@@ -132,8 +132,8 @@
   --accent-soft: #241f4e;
   --green: #2fe0b0;
   --green-soft: #0e2f38;
-  --orange: #ffb454;
-  --orange-soft: #3a2812;
+  --orange: #38bdf8;
+  --orange-soft: #0c2a3a;
   --red: #ff6b8b;
   --red-soft: #3a1830;
   --purple: #c07dff;
@@ -149,7 +149,7 @@
   --note-green: #0d2c2a;
   --note-pink: #301230;
   --note-purple: #221238;
-  --note-orange: #2e1c0e;
+  --note-orange: #24183c;
   --note-teal: #0c2838;
   --note-red: #301220;
   --note-yellow-border: #6b5a18;
@@ -157,7 +157,7 @@
   --note-green-border: #1f8f76;
   --note-pink-border: #9a3286;
   --note-purple-border: #6c3ca0;
-  --note-orange-border: #a05a20;
+  --note-orange-border: #7655b5;
   --note-teal-border: #1d8fa8;
   --note-red-border: #a02a5a;
   --shadow-card: 0 1px 0 rgba(255,255,255,0.06) inset, 0 8px 24px rgba(2,4,16,0.65);
@@ -207,8 +207,8 @@
   --accent-soft: #2c2210;
   --green: #35d488;
   --green-soft: #0d2a1c;
-  --orange: #ffab4d;
-  --orange-soft: #332309;
+  --orange: #71d4ff;
+  --orange-soft: #103342;
   --red: #ff6b6b;
   --red-soft: #331313;
   --purple: #b98af0;
@@ -224,7 +224,7 @@
   --note-green: #0d2c2a;
   --note-pink: #301230;
   --note-purple: #221238;
-  --note-orange: #2e1c0e;
+  --note-orange: #24183c;
   --note-teal: #0c2838;
   --note-red: #301220;
   --note-yellow-border: #6b5a18;
@@ -232,7 +232,7 @@
   --note-green-border: #1f8f76;
   --note-pink-border: #9a3286;
   --note-purple-border: #6c3ca0;
-  --note-orange-border: #a05a20;
+  --note-orange-border: #7655b5;
   --note-teal-border: #1d8fa8;
   --note-red-border: #a02a5a;
   --shadow-card: 0 1px 0 rgba(255,255,255,0.05) inset, 0 8px 24px rgba(0,0,0,0.85);
@@ -300,8 +300,8 @@
     --accent-soft: #241f4e;
     --green: #2fe0b0;
     --green-soft: #0e2f38;
-    --orange: #ffb454;
-    --orange-soft: #3a2812;
+  --orange: #38bdf8;
+  --orange-soft: #0c2a3a;
     --red: #ff6b8b;
     --red-soft: #3a1830;
     --purple: #c07dff;
@@ -317,7 +317,7 @@
     --note-green: #0d2c2a;
     --note-pink: #301230;
     --note-purple: #221238;
-    --note-orange: #2e1c0e;
+    --note-orange: #24183c;
     --note-teal: #0c2838;
     --note-red: #301220;
     --note-yellow-border: #6b5a18;
@@ -325,7 +325,7 @@
     --note-green-border: #1f8f76;
     --note-pink-border: #9a3286;
     --note-purple-border: #6c3ca0;
-    --note-orange-border: #a05a20;
+    --note-orange-border: #7655b5;
     --note-teal-border: #1d8fa8;
     --note-red-border: #a02a5a;
     --shadow-card: 0 1px 0 rgba(255,255,255,0.06) inset, 0 8px 24px rgba(2,4,16,0.65);
@@ -366,8 +366,8 @@
   --accent-soft: #ece9fc;
   --green: #34c759;
   --green-soft: #e5f9ec;
-  --orange: #ff9500;
-  --orange-soft: #fff3e0;
+  --orange: #0ea5e9;
+  --orange-soft: #e0f2fe;
   --red: #ff3b30;
   --red-soft: #ffeeed;
   --shadow-card: 0 2px 12px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.04);
@@ -916,8 +916,8 @@ button.overview-card-action {
 #dashboardView .overview-card:nth-child(2) .overview-icon { background: color-mix(in srgb, #30d158 18%, transparent); color: #30d158; }
 #dashboardView .overview-card:nth-child(3) { border-top-color: #bf5af2; }
 #dashboardView .overview-card:nth-child(3) .overview-icon { background: color-mix(in srgb, #bf5af2 18%, transparent); color: #bf5af2; }
-#dashboardView .overview-card:nth-child(4) { border-top-color: #ff9f0a; }
-#dashboardView .overview-card:nth-child(4) .overview-icon { background: color-mix(in srgb, #ff9f0a 18%, transparent); color: #ff9f0a; }
+#dashboardView .overview-card:nth-child(4) { border-top-color: var(--teal); }
+#dashboardView .overview-card:nth-child(4) .overview-icon { background: color-mix(in srgb, var(--teal) 18%, transparent); color: var(--teal); }
 #dashboardView .overview-card:nth-child(5) { border-top-color: #ff375f; }
 #dashboardView .overview-card:nth-child(5) .overview-icon { background: color-mix(in srgb, #ff375f 18%, transparent); color: #ff375f; }
 #dashboardView .overview-card:nth-child(6) { border-top-color: #ffd60a; }
@@ -1544,7 +1544,7 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 .note-color-dot[data-note-color="green"]  { background:#30d158; }
 .note-color-dot[data-note-color="pink"]   { background:#ff375f; }
 .note-color-dot[data-note-color="purple"] { background:#bf5af2; }
-.note-color-dot[data-note-color="orange"] { background:#ff9f0a; }
+.note-color-dot[data-note-color="orange"] { background:#8b5cf6; }
 .note-color-dot[data-note-color="teal"]   { background:#40c8e0; }
 
 .note-priority-dot {
@@ -1750,16 +1750,13 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 .folder-chip .pill { background: rgba(255,255,255,0.25); color: inherit; border: none; }
 .folder-chip:not(.active) .pill { background: var(--surface); color: var(--muted); }
 
-/* Card: modelo novo — superfície neutra + listra colorida à esquerda
-   (a mesma paleta de sempre, agora como identidade da nota e não como
-   fundo inteiro, pra ficar mais parecido com apps como Bear/Notas do
-   que com post-its). */
+/* A cor escolhida acompanha a nota no cartão, não só no editor. */
 .note-card {
   border-radius: var(--radius-card);
   padding: 15px 15px 15px 16px;
   border: 1.5px solid var(--line);
   border-left-width: 4px;
-  background: var(--surface2);
+  background: color-mix(in srgb, var(--note-card-bg, var(--surface2)) 76%, var(--surface));
   transition: transform 200ms ease, box-shadow 200ms ease;
   cursor: pointer;
   display: block;
@@ -1785,7 +1782,7 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 .note-card h3 {
   font-size: 0.96rem;
   font-weight: 700;
-  color: var(--text);
+  color: color-mix(in srgb, var(--note-card-ink, var(--text)) 62%, var(--text));
   line-height: 1.3;
 }
 
@@ -1811,16 +1808,18 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   font-weight: 700;
 }
 
-.note-card p {
+.note-card-preview {
   font-size: 0.86rem;
   color: var(--text2);
   line-height: 1.5;
   margin-bottom: 10px;
   display: -webkit-box;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 4;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+.note-card-preview [style*="background-color"] { padding: 1px 3px; border-radius: 4px; }
+.note-card-preview mark { background: var(--yellow-soft); color: inherit; border-radius: 3px; }
 
 .note-wordcount { display: block; margin-top: 2px; margin-bottom: 8px; }
 
@@ -2492,9 +2491,9 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
     border-radius: 50%;
     display: grid;
     place-items: center;
-    background: linear-gradient(135deg, #ff9f0a, #ff375f);
+    background: linear-gradient(135deg, var(--accent), var(--teal));
     color: #fff;
-    box-shadow: 0 8px 20px rgba(255,55,95,0.4);
+    box-shadow: 0 8px 20px color-mix(in srgb, var(--accent) 36%, transparent);
     margin-top: -26px;
     border: 4px solid var(--surface);
     flex-shrink: 0;
@@ -2851,6 +2850,29 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   align-items: stretch;
   min-width: 0;
 }
+.fin-analise-grid > .panel.wide { grid-column: 1 / -1; }
+
+.fin-analysis-intro {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 18px;
+  margin: 2px 2px 14px;
+}
+.fin-analysis-intro h2 { margin: 2px 0 0; font-size: 1.2rem; }
+.fin-analysis-intro > p { max-width: 470px; margin: 0; color: var(--text2); font-size: 0.88rem; line-height: 1.5; }
+.fin-insights-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 20px; }
+.fin-insight-card { min-width: 0; padding: 16px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: var(--shadow-card); }
+.fin-insight-card.primary { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); background: color-mix(in srgb, var(--accent-soft) 58%, var(--surface)); }
+.fin-insight-card.warning { border-color: color-mix(in srgb, var(--red) 38%, var(--line)); }
+.fin-insight-card.positive { border-color: color-mix(in srgb, var(--green) 42%, var(--line)); }
+.fin-insight-label { display: block; color: var(--muted); font-size: 0.74rem; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
+.fin-insight-card strong { display: block; overflow-wrap: anywhere; margin: 7px 0 5px; color: var(--text); font-size: 1.05rem; }
+.fin-insight-card small { display: block; color: var(--text2); line-height: 1.4; }
+.fin-chart-metrics { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: baseline; width: 100%; margin: 0 0 10px; color: var(--muted); font-size: .77rem; }
+.fin-chart-metrics span { color: var(--text2); }
+.fin-chart-metrics b { color: var(--text); font-size: .84rem; }
+.fin-chart-metrics small { margin-left: auto; color: var(--muted); }
 
 /* Os dois gráficos ficam lado a lado, com a mesma altura (align-items:
    stretch acima), e o conteúdo do gráfico ocupa o espaço disponível em
@@ -2874,6 +2896,8 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 
 @media (max-width: 900px) {
   .fin-analise-grid { grid-template-columns: 1fr; }
+  .fin-analysis-intro { align-items: start; flex-direction: column; }
+  .fin-insights-grid { grid-template-columns: 1fr; }
 }
 
 /* Layout: 2 colunas em desktop, 1 coluna em mobile/tablet */
@@ -4787,6 +4811,22 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
 
   .planner-timeline-hour { grid-template-columns: 42px 1fr; height: 50px; }
   .planner-timeline-events { left: 50px; }
+
+  /* Áreas de toque reais de 44px sem sacrificar os controles do desktop. */
+  #plannerView .planner-header-actions > button,
+  #plannerView .planner-day-nav > button,
+  .note-card .card-actions button,
+  .fin-action-btn { min-height: 44px; }
+  .planner-inline-add-form input,
+  .planner-inline-add-form button { min-height: 40px; height: 40px; }
+  .reminder-custom-field { align-items: stretch; }
+  .reminder-custom-field input { flex: 1 1 76px; }
+}
+
+@media (max-width: 460px) {
+  .fin-month-actions .fin-action-btn { flex: 1 1 100%; }
+  .fin-chart-metrics small { width: 100%; margin-left: 0; }
+  .note-card { padding: 14px; }
 }
 
 @media (max-width: 360px) {
@@ -5016,7 +5056,7 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
   width: 44px;
   height: 44px;
   border-radius: 14px;
-  background: linear-gradient(135deg, #ff9f0a, #ff375f);
+  background: linear-gradient(135deg, var(--accent), var(--teal));
   color: #fff;
   font-weight: 800;
   font-size: 1.1rem;
@@ -5024,7 +5064,7 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
   place-items: center;
   flex-shrink: 0;
 }
-.profile-level-card .progress-track > div { background: linear-gradient(90deg, #ff9f0a, #ff375f, var(--purple)); }
+.profile-level-card .progress-track > div { background: linear-gradient(90deg, var(--accent), var(--teal), var(--purple)); }
 
 .profile-stats-grid {
   display: grid;
@@ -5520,7 +5560,7 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
   padding: 18px 20px;
   border-radius: 20px;
   background:
-    radial-gradient(circle at 15% 20%, rgba(255,159,10,0.35), transparent 55%),
+    radial-gradient(circle at 15% 20%, color-mix(in srgb, var(--teal) 42%, transparent), transparent 55%),
     radial-gradient(circle at 85% 15%, rgba(191,90,242,0.32), transparent 55%),
     radial-gradient(circle at 60% 90%, rgba(10,132,255,0.3), transparent 60%),
     var(--surface2);
@@ -5535,20 +5575,20 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
 }
 #plannerView .planner-tabs.segmented button { color: rgba(255,255,255,0.75); }
 #plannerView .planner-tabs.segmented button.active {
-  background: linear-gradient(135deg, #ff9f0a, #ff375f);
+  background: linear-gradient(135deg, var(--accent), var(--teal));
   color: #fff;
-  box-shadow: 0 4px 14px rgba(255,55,95,0.35);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 36%, transparent);
 }
 
 #plannerView #plannerNewTaskBtn,
 #plannerView #plannerNewGoalBtn {
-  background: linear-gradient(135deg, #ff9f0a, #ff375f);
+  background: linear-gradient(135deg, var(--accent), var(--teal));
   color: #fff;
   border-color: transparent;
 }
 #plannerView #plannerNewTaskBtn:hover,
 #plannerView #plannerNewGoalBtn:hover {
-  background: linear-gradient(135deg, #ffb238, #ff5473);
+  background: linear-gradient(135deg, var(--accent2), var(--teal));
   color: #fff;
   border-color: transparent;
 }
@@ -5564,7 +5604,7 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
   border-radius: 18px;
 }
 #plannerView .planner-row--task[data-priority="Urgente"] { border-left-color: #ff375f; }
-#plannerView .planner-row--task[data-priority="Alta"] { border-left-color: #ff9f0a; }
+#plannerView .planner-row--task[data-priority="Alta"] { border-left-color: var(--purple); }
 #plannerView .planner-row--task[data-priority="Media"] { border-left-color: #5ac8fa; }
 #plannerView .planner-row--task[data-priority="Baixa"] { border-left-color: #30d158; }
 
@@ -5576,7 +5616,7 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
    4 cores realmente distintas entre si (a versão anterior daqui tinha
    Alta e Urgente com a MESMA cor sólida, outra colisão real). */
 #plannerView .priority-Urgente { background: #ff375f; color: #fff; }
-#plannerView .priority-Alta    { background: #ff9f0a; color: #fff; }
+#plannerView .priority-Alta    { background: var(--purple); color: #fff; }
 #plannerView .priority-Media   { background: #5ac8fa; color: #fff; }
 #plannerView .priority-Baixa   { background: #30d158; color: #fff; }
 #plannerView .status-Concluida    { background: #30d158; color: #fff; }
@@ -5613,9 +5653,9 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
 }
 #plannerView .planner-day-chip .pdc-weekday { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; }
 #plannerView .planner-day-chip .pdc-num { font-size: 0.95rem; font-weight: 800; color: var(--text); }
-#plannerView .planner-day-chip.is-today .pdc-num { color: #ff9f0a; }
+#plannerView .planner-day-chip.is-today .pdc-num { color: var(--accent); }
 #plannerView .planner-day-chip.is-selected {
-  background: linear-gradient(135deg, #ff9f0a, #ff375f);
+  background: linear-gradient(135deg, var(--accent), var(--teal));
 }
 #plannerView .planner-day-chip.is-selected .pdc-weekday,
 #plannerView .planner-day-chip.is-selected .pdc-num { color: #fff; }
@@ -5653,6 +5693,22 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
 }
 .pqa-row-control:focus { outline: none; }
 
+.reminder-custom-field {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 10px;
+  padding: 9px 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
+  border-radius: 12px;
+  background: var(--accent-soft);
+  color: var(--text2);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+.reminder-custom-field input { width: 86px; min-height: 36px; padding: 6px 8px; text-align: center; background: var(--surface); }
+
 /* ─── Finanças: paleta vibrante (referência TaskifyAI) ────────────
    Mesmo princípio de sempre: só cor/gradiente em cima do que já
    funciona, escopado em #financesView, sem tocar em layout. Os
@@ -5668,7 +5724,7 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
 }
 
 #financesView .fin-tab-btn.active {
-  background: linear-gradient(135deg, #ff9f0a, #ff375f);
+  background: linear-gradient(135deg, var(--accent), var(--teal));
   color: #fff;
   box-shadow: 0 4px 14px rgba(255,55,95,0.3);
 }

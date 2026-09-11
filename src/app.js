@@ -438,8 +438,8 @@ const expenseCategories = [
   { id: "contas",      label: "💡 Contas e Utilidades", color: "#ffd60a", group: "Casa & contas" },
   { id: "manutencao",  label: "🔧 Manutenção e Reparos", color: "#8a9bb0", group: "Casa & contas" },
   // Alimentação
-  { id: "alimentacao", label: "🍔 Restaurante/Delivery", color: "#ff9500", group: "Alimentação" },
-  { id: "mercado",     label: "🛒 Mercado",              color: "#ff9f0a", group: "Alimentação" },
+  { id: "alimentacao", label: "🍔 Restaurante/Delivery", color: "#ec4899", group: "Alimentação" },
+  { id: "mercado",     label: "🛒 Mercado",              color: "#8b5cf6", group: "Alimentação" },
   // Transporte
   { id: "transporte",  label: "🚗 Transporte",   color: "#5ac8fa", group: "Transporte" },
   { id: "combustivel", label: "⛽ Combustível",  color: "#0a84ff", group: "Transporte" },
@@ -479,7 +479,7 @@ const incomeCategories = [
   { id: "salario",      label: "💼 Salário",         color: "#34c759", group: "Trabalho" },
   { id: "freelance",    label: "💻 Freelance/Bico",  color: "#5ac8fa", group: "Trabalho" },
   { id: "investimentos",label: "📈 Investimentos",   color: "#af52de", group: "Investimentos" },
-  { id: "vendas",       label: "🏷️ Vendas",          color: "#ff9500", group: "Vendas" },
+  { id: "vendas",       label: "🏷️ Vendas",          color: "#14b8a6", group: "Vendas" },
   { id: "aluguel_receb",label: "🏠 Aluguel recebido", color: "#ff6b6b", group: "Recebimentos" },
   { id: "reembolso",    label: "↩️ Reembolso",        color: "#00c7be", group: "Recebimentos" },
   { id: "emprestimo_receb", label: "🤝 Empréstimo recebido", color: "#a2845e", group: "Recebimentos" },
@@ -2357,8 +2357,8 @@ function renderPlannerProgressRing() {
         transform="rotate(-90 ${size / 2} ${size / 2})"></circle>
       <defs>
         <linearGradient id="plannerRingGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stop-color="#ff9f0a"></stop>
-          <stop offset="50%" stop-color="#ff375f"></stop>
+          <stop offset="0%" stop-color="#6c5ce7"></stop>
+          <stop offset="50%" stop-color="#5ac8fa"></stop>
           <stop offset="100%" stop-color="#bf5af2"></stop>
         </linearGradient>
       </defs>
@@ -2953,6 +2953,15 @@ function bindPlannerQuickAdd() {
   document.querySelectorAll("#plannerQuickAddType button").forEach((btn) => {
     btn.addEventListener("click", () => setPlannerQuickAddType(btn.dataset.quickType));
   });
+  const reminderSelect = document.querySelector("#pqaEventReminder");
+  const reminderCustom = document.querySelector("#pqaEventReminderCustom");
+  const syncReminderField = () => {
+    if (!reminderSelect || !reminderCustom) return;
+    reminderCustom.hidden = reminderSelect.value !== "custom";
+    if (!reminderCustom.hidden) document.querySelector("#pqaEventReminderMinutes")?.focus();
+  };
+  reminderSelect?.addEventListener("change", syncReminderField);
+  syncReminderField();
   document.querySelector("#plannerQuickAddForm")?.addEventListener("submit", submitPlannerQuickAdd);
 }
 
@@ -2971,7 +2980,11 @@ function submitPlannerQuickAdd(event) {
     const date = document.querySelector("#pqaEventDate").value || todayIso;
     const time = document.querySelector("#pqaEventTime").value || "09:00";
     const location = valueOf("#pqaEventLocation") || "Sem local";
-    const reminder = Number(document.querySelector("#pqaEventReminder").value || 15);
+    const selectedReminder = document.querySelector("#pqaEventReminder").value;
+    const customReminder = Number(document.querySelector("#pqaEventReminderMinutes").value);
+    const reminder = selectedReminder === "custom"
+      ? Math.min(10080, Math.max(5, Number.isFinite(customReminder) ? customReminder : 15))
+      : Number(selectedReminder || 15);
     const notes = valueOf("#pqaEventNotes") || "";
     state.events.push({ id: crypto.randomUUID(), title, date, time, location, reminder, notes });
     showToast("Compromisso salvo.");
@@ -3078,12 +3091,15 @@ function renderNoteCard(note, searchQuery) {
   const wordCountHtml = words > 0 ? `<small class="task-meta note-wordcount">${words} palavras · ${readingMin} min de leitura</small>` : "";
 
   const titleHtml = highlightMatch(escapeHtml(note.title), searchQuery);
-  const descHtml = note.description ? `<p>${highlightMatch(escapeHtml(note.description), searchQuery)}</p>` : "";
+  const formattedDescription = note.descriptionHtml
+    ? sanitizeNoteHtml(note.descriptionHtml)
+    : highlightMatch(escapeHtml(note.description || ""), searchQuery).replace(/\n/g, "<br>");
+  const descHtml = formattedDescription ? `<div class="note-card-preview">${formattedDescription}</div>` : "";
   const folderName = (note.folder || "").trim();
   const folderHtml = folderName ? `<span class="note-folder-badge">${icon("folder", 11)}${escapeHtml(folderName)}</span>` : "";
 
   return `
-    <article class="note-card" style="border-left-color:${tone.border}" onclick="openNoteDetail('${note.id}')">
+    <article class="note-card" style="--note-card-bg:${tone.bg};--note-card-ink:${tone.border};border-left-color:${tone.border}" onclick="openNoteDetail('${note.id}')">
       <header>
         <div>
           <h3>${titleHtml}</h3>
@@ -4914,7 +4930,7 @@ function exportMonthReport(monthKey) {
     <div class="section-title">Metas de gasto por categoria</div>
     <div style="border:1.5px solid #e8ecf2;border-radius:16px;padding:20px">
       ${goals.map((g) => {
-        const barColor = g.pct > 100 ? "#ff3b30" : g.pct > 80 ? "#ff9500" : "#34c759";
+        const barColor = g.pct > 100 ? "#ff3b30" : g.pct > 80 ? "#8b5cf6" : "#34c759";
         return `<div class="goal-row">
           <div class="goal-header">
             <span class="goal-name">${escapeHtml(g.cat.label)}</span>
@@ -5040,9 +5056,6 @@ function bindFinanceMonthControls() {
     exportMonthReport(finActiveMonth);
   });
 
-  document.getElementById("finExportXlsx")?.addEventListener("click", () => {
-    downloadXlsxReport(finActiveMonth);
-  });
 }
 
 // ── Lançamento por texto (heurística local — sem IA externa) ───
@@ -5681,6 +5694,7 @@ function renderFinances() {
     }).join("") || `<div class="empty-state" style="padding:12px">Sem despesas no período</div>`;
 
   document.querySelector("#finCategories").innerHTML = catHtml;
+  renderFinInsights(monthKey, entries, receitas, despesas, byCat);
 
   const listHtml = entries.length
     ? entries.slice(0, 50).map((f) => renderFinTransaction(f)).join("")
@@ -5694,6 +5708,45 @@ function renderFinances() {
   renderFinGoals();
   renderFinClosures();
   renderFinRecurrents();
+}
+
+function renderFinInsights(monthKey, entries, receitas, despesas, byCat) {
+  const root = document.querySelector("#finInsights");
+  if (!root) return;
+
+  const [year, month] = monthKey.split("-").map(Number);
+  const previousKey = toLocalIso(new Date(year, month - 2, 1)).slice(0, 7);
+  const previousExpenses = (state.finances || [])
+    .filter((item) => item.date.startsWith(previousKey) && item.type === "despesa")
+    .reduce((sum, item) => sum + item.amount, 0);
+  const top = Object.entries(byCat).sort(([, a], [, b]) => b - a)[0];
+  const topCategory = top ? findCategory(top[0]) : null;
+  const change = despesas - previousExpenses;
+  const changePercent = previousExpenses > 0 ? Math.round((change / previousExpenses) * 100) : null;
+  const balance = receitas - despesas;
+  const movementCount = entries.length;
+
+  const variationText = previousExpenses === 0
+    ? (despesas > 0 ? "Primeiro mês com despesas" : "Sem gastos comparáveis")
+    : `${Math.abs(changePercent)}% ${change > 0 ? "a mais" : change < 0 ? "a menos" : "igual"} que o mês anterior`;
+  const variationTone = change > 0 ? "warning" : change < 0 ? "positive" : "neutral";
+
+  root.innerHTML = `
+    <article class="fin-insight-card primary">
+      <span class="fin-insight-label">Resultado do mês</span>
+      <strong>${formatCurrency(balance)}</strong>
+      <small>${receitas > 0 ? `${Math.round((despesas / receitas) * 100)}% da receita foi usada` : "Adicione receitas para acompanhar o equilíbrio"}</small>
+    </article>
+    <article class="fin-insight-card ${variationTone}">
+      <span class="fin-insight-label">Comparação de gastos</span>
+      <strong>${formatCurrency(despesas)}</strong>
+      <small>${variationText}</small>
+    </article>
+    <article class="fin-insight-card neutral">
+      <span class="fin-insight-label">Maior categoria</span>
+      <strong>${topCategory ? escapeHtml(topCategory.label) : "Ainda sem despesas"}</strong>
+      <small>${top ? `${formatCurrency(top[1])} em ${movementCount} lançamento${movementCount === 1 ? "" : "s"}` : "Os insights aparecem ao registrar despesas"}</small>
+    </article>`;
 }
 
 // Reação de humor do Pulsinho ao saldo do mês — mesmos números que já
@@ -6138,7 +6191,7 @@ const NEW_CATEGORY_ICON_FLAT = NEW_CATEGORY_ICON_GROUPS.flatMap((g) =>
 );
 
 const NEW_CATEGORY_COLOR_OPTIONS = [
-  "#ff9500","#ff9f0a","#ffd60a","#ff6b6b","#ff3b30","#ff375f","#ff2d55","#ff6482",
+  "#8b5cf6","#5ac8fa","#ffd60a","#ff6b6b","#ff3b30","#ff375f","#ff2d55","#ff6482",
   "#bf5af2","#af52de","#5e5ce6","#5856d6","#0a84ff","#5ac8fa","#64d2ff","#30b0c7",
   "#00c7be","#30d158","#34c759","#a2845e","#8e8e93","#8a9bb0",
 ];
@@ -6489,6 +6542,15 @@ function renderFinChart6m() {
   const W = 100, H = 80, pad = 4, barW = 6, gap = 2;
   const groupW = barW * 2 + gap + 4;
   const totalW = groupW * data.length;
+  const activeData = data.find((item) => item.mk === finActiveMonth) || data[data.length - 1];
+  const previousData = data[data.length - 2];
+  const expenseChange = activeData.d - previousData.d;
+  const expenseTrend = expenseChange === 0
+    ? "igual ao mês anterior"
+    : `${formatCurrency(Math.abs(expenseChange))} ${expenseChange > 0 ? "a mais" : "a menos"} em despesas`;
+  const gridLines = [0.25, 0.5, 0.75].map((ratio) =>
+    `<line x1="${pad}" y1="${(H - H * ratio + pad).toFixed(2)}" x2="${totalW + pad}" y2="${(H - H * ratio + pad).toFixed(2)}" stroke="var(--line)" stroke-width="0.45" stroke-dasharray="1.5 2"/>`
+  ).join("");
 
   const bars = data.map((item, i) => {
     const x = i * groupW + pad;
@@ -6496,8 +6558,8 @@ function renderFinChart6m() {
     const dH = Math.max(2, (item.d / maxVal) * H);
     const isActive = item.mk === finActiveMonth;
     return `
-      <rect x="${x}" y="${H - rH + pad}" width="${barW}" height="${rH}" rx="2" fill="${isActive ? "var(--green)" : "var(--green-soft)"}" stroke="${isActive ? "var(--green)" : "none"}" stroke-width="1"/>
-      <rect x="${x + barW + gap}" y="${H - dH + pad}" width="${barW}" height="${dH}" rx="2" fill="${isActive ? "var(--red)" : "var(--red-soft)"}" stroke="${isActive ? "var(--red)" : "none"}" stroke-width="1"/>
+      <rect x="${x}" y="${H - rH + pad}" width="${barW}" height="${rH}" rx="2" fill="${isActive ? "var(--green)" : "var(--green-soft)"}" stroke="${isActive ? "var(--green)" : "none"}" stroke-width="1"><title>${item.lbl}: receitas ${formatCurrency(item.r)}</title></rect>
+      <rect x="${x + barW + gap}" y="${H - dH + pad}" width="${barW}" height="${dH}" rx="2" fill="${isActive ? "var(--red)" : "var(--red-soft)"}" stroke="${isActive ? "var(--red)" : "none"}" stroke-width="1"><title>${item.lbl}: despesas ${formatCurrency(item.d)}</title></rect>
       <text x="${x + barW}" y="${H + pad + 10}" text-anchor="middle" font-size="5" fill="var(--muted)" font-family="inherit">${item.lbl}</text>`;
   }).join("");
 
@@ -6507,7 +6569,7 @@ function renderFinChart6m() {
     <rect x="${pad + 36}" y="${H + pad + 14}" width="6" height="4" rx="1" fill="var(--red)"/>
     <text x="${pad + 44}" y="${H + pad + 18}" font-size="4.5" fill="var(--muted)" font-family="inherit">Despesas</text>`;
 
-  el.innerHTML = `<svg viewBox="0 0 ${totalW + pad * 2} ${H + pad * 2 + 22}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto">${bars}${legendLine}</svg>`;
+  el.innerHTML = `<div class="fin-chart-metrics"><span><b>${formatCurrency(activeData.r)}</b> receitas</span><span><b>${formatCurrency(activeData.d)}</b> despesas</span><small>${expenseTrend}</small></div><svg role="img" aria-label="Comparação de receitas e despesas dos últimos seis meses" viewBox="0 0 ${totalW + pad * 2} ${H + pad * 2 + 22}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto"><title>Receitas e despesas dos últimos seis meses</title>${gridLines}${bars}${legendLine}</svg>`;
 }
 
 // Gráfico de linha com o saldo acumulado (receitas - despesas de TODO o
@@ -6564,19 +6626,21 @@ function renderFinSaldoEvolution() {
 
   const pathD = points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(" ");
   const last = points[points.length - 1];
+  const previous = points[points.length - 2];
+  const balanceChange = last.saldo - previous.saldo;
   const areaD = `${pathD} L ${last.x.toFixed(2)} ${(pad + H).toFixed(2)} L ${points[0].x.toFixed(2)} ${(pad + H).toFixed(2)} Z`;
 
   const dots = points.map((p) => {
     const isActive = p.mk === finActiveMonth;
     const color = p.saldo >= 0 ? "var(--green)" : "var(--red)";
-    return `<circle cx="${p.x.toFixed(2)}" cy="${p.y.toFixed(2)}" r="${isActive ? 2.1 : 1.4}" fill="${color}" stroke="var(--surface)" stroke-width="0.6"/>`;
+    return `<circle cx="${p.x.toFixed(2)}" cy="${p.y.toFixed(2)}" r="${isActive ? 2.1 : 1.4}" fill="${color}" stroke="var(--surface)" stroke-width="0.6"><title>${p.lbl}: saldo ${formatCurrency(p.saldo)}</title></circle>`;
   }).join("");
 
   const labels = points.map((p) =>
     `<text x="${p.x.toFixed(2)}" y="${(pad + H + 8).toFixed(2)}" text-anchor="middle" font-size="4.5" fill="var(--muted)" font-family="inherit">${p.lbl}</text>`
   ).join("");
 
-  el.innerHTML = `<svg viewBox="0 0 ${W} ${H + pad * 2 + 10}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto">
+  el.innerHTML = `<div class="fin-chart-metrics"><span><b>${formatCurrency(last.saldo)}</b> saldo acumulado</span><small>${balanceChange === 0 ? "Sem variação desde o mês anterior" : `${formatCurrency(Math.abs(balanceChange))} ${balanceChange > 0 ? "de alta" : "de queda"} desde o mês anterior`}</small></div><svg role="img" aria-label="Evolução do saldo acumulado nos últimos seis meses" viewBox="0 0 ${W} ${H + pad * 2 + 10}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto"><title>Saldo acumulado nos últimos seis meses</title>
     <line x1="${pad}" y1="${zeroY.toFixed(2)}" x2="${W - pad}" y2="${zeroY.toFixed(2)}" stroke="var(--line)" stroke-width="0.5" stroke-dasharray="2,2"/>
     <path d="${areaD}" fill="var(--accent-soft)" opacity="0.5"/>
     <path d="${pathD}" fill="none" stroke="var(--accent)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>

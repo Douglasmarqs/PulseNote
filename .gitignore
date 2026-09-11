@@ -6,6 +6,7 @@ node_modules/
 .npm-cache/
 dist/
 dist-audit/
+dist-audit-current/
 dist-*-check/
 tmp/
 .vercel-global/

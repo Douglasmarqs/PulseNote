@@ -82,11 +82,11 @@ body.auth-page {
   width: 52px;
   height: 52px;
   border-radius: 16px;
-  background: linear-gradient(145deg, #ff9f0a, #ff375f);
+  background: linear-gradient(145deg, var(--auth-accent), var(--auth-accent-strong));
   color: #fff;
   display: grid;
   place-items: center;
-  box-shadow: 0 8px 24px rgba(255, 55, 95, 0.35);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--auth-accent) 36%, transparent);
 }
 
 .auth-brand strong {
@@ -292,13 +292,13 @@ body.auth-page {
   width: 100%;
   height: 52px;
   border-radius: 16px;
-  background: linear-gradient(135deg, #ff9f0a, #ff375f);
+  background: linear-gradient(135deg, var(--auth-accent), var(--auth-accent-strong));
   color: #fff;
   font-size: 1rem;
   font-weight: 700;
   border: none;
   cursor: pointer;
-  box-shadow: 0 8px 24px rgba(255, 55, 95, 0.35);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--auth-accent) 36%, transparent);
   transition: transform 180ms, box-shadow 180ms;
   font-family: inherit;
   margin-top: 4px;
@@ -764,7 +764,7 @@ body.auth-page {
 }
 .brand-mark,
 .auth-btn { background: linear-gradient(135deg, var(--auth-accent), var(--auth-accent-strong)); }
-.brand-mark { box-shadow: 0 8px 24px color-mix(in srgb, var(--auth-accent) 36%, transparent); }
+.brand-mark { background: linear-gradient(145deg, var(--auth-accent), var(--auth-accent-strong)); box-shadow: 0 8px 24px color-mix(in srgb, var(--auth-accent) 36%, transparent); }
 .auth-brand strong, .auth-title { color: var(--auth-text); }
 .auth-brand span, .auth-subtitle, .auth-switch, .auth-security-note { color: var(--auth-muted); }
 .auth-card {

@@ -373,7 +373,7 @@
 
                 <div id="pqaTaskFields" class="pqa-icon-rows">
                   <label class="pqa-icon-row">
-                    <span class="pqa-row-icon" style="color:#ff9f0a"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/></svg></span>
+                    <span class="pqa-row-icon" style="color:var(--purple)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/></svg></span>
                     <span class="pqa-row-label">Prioridade</span>
                     <select id="pqaTaskPriority" class="pqa-row-control">
                       <option>Baixa</option>
@@ -399,9 +399,15 @@
                     <option value="5">Lembrar 5 min antes</option>
                     <option value="15" selected>Lembrar 15 min antes</option>
                     <option value="30">Lembrar 30 min antes</option>
-                    <option value="60">Lembrar 1 hora antes</option>
-                    <option value="1440">Lembrar 1 dia antes</option>
-                  </select>
+                      <option value="60">Lembrar 1 hora antes</option>
+                      <option value="1440">Lembrar 1 dia antes</option>
+                      <option value="custom">Definir antecedência</option>
+                    </select>
+                    <label id="pqaEventReminderCustom" class="reminder-custom-field" hidden>
+                      <span>Lembrar com</span>
+                      <input id="pqaEventReminderMinutes" type="number" min="5" max="10080" step="5" inputmode="numeric" placeholder="ex.: 90" />
+                      <span>minutos de antecedência</span>
+                    </label>
                   <textarea id="pqaEventNotes" rows="2" placeholder="Notas do compromisso (opcional)" style="margin-top:10px"></textarea>
                 </div>
 
@@ -564,7 +570,7 @@
                   <button type="button" class="note-color-dot" data-note-color="green" title="Verde" aria-label="Verde"></button>
                   <button type="button" class="note-color-dot" data-note-color="pink" title="Rosa" aria-label="Rosa"></button>
                   <button type="button" class="note-color-dot" data-note-color="purple" title="Roxo" aria-label="Roxo"></button>
-                  <button type="button" class="note-color-dot" data-note-color="orange" title="Laranja" aria-label="Laranja"></button>
+                  <button type="button" class="note-color-dot" data-note-color="orange" title="Lilás" aria-label="Lilás"></button>
                   <button type="button" class="note-color-dot" data-note-color="teal" title="Turquesa" aria-label="Turquesa"></button>
                 </div>
                 <input id="noteColor" type="hidden" value="blue" />
@@ -701,7 +707,7 @@
               <button type="button" class="nd-tool-btn" data-nd-cmd="bold" title="Negrito"><b>N</b></button>
               <button type="button" class="nd-tool-btn" data-nd-cmd="italic" title="Itálico"><i>I</i></button>
               <span class="nd-toolbar-sep"></span>
-              <button type="button" class="nd-swatch" data-nd-color="#ff9f0a" style="background:#ff9f0a" title="Destaque laranja"></button>
+              <button type="button" class="nd-swatch" data-nd-color="#8b5cf6" style="background:#8b5cf6" title="Destaque lilás"></button>
               <button type="button" class="nd-swatch" data-nd-color="#ff375f" style="background:#ff375f" title="Destaque vermelho"></button>
               <button type="button" class="nd-swatch" data-nd-color="#30d158" style="background:#30d158" title="Destaque verde"></button>
               <button type="button" class="nd-swatch" data-nd-color="#0a84ff" style="background:#0a84ff" title="Destaque azul"></button>
@@ -744,7 +750,6 @@
               <button id="finCloseMonth" class="fin-action-btn close"><span class="fin-action-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg></span>Fechar mês</button>
               <button id="finReopenMonth" class="fin-action-btn reopen" hidden><span class="fin-action-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 017.5-1.7"/></svg></span>Reabrir</button>
               <button id="finExportReport" class="fin-action-btn export"><span class="fin-action-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v11"/><path d="M7.5 10.5L12 15l4.5-4.5"/><path d="M5 21h14"/></svg></span>Exportar PDF</button>
-              <button id="finExportXlsx" class="fin-action-btn export"><span class="fin-action-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 13l2.5 5L13 13"/><path d="M15.5 13v5"/><path d="M15.5 15.5H18"/></svg></span>Exportar Excel</button>
             </div>
 
             <div class="fin-summary-grid">
@@ -875,6 +880,14 @@
 
           <!-- ABA: ANÁLISE — para onde o dinheiro está indo -->
           <div class="fin-tab-panel" data-fin-panel="analise" role="tabpanel" hidden>
+            <div class="fin-analysis-intro">
+              <div>
+                <p class="eyebrow">Leitura do mês</p>
+                <h2>Decisões mais claras, sem planilhas</h2>
+              </div>
+              <p>Compare seu ritmo de gastos, identifique a principal categoria e acompanhe a evolução do saldo.</p>
+            </div>
+            <div id="finInsights" class="fin-insights-grid" aria-live="polite"></div>
             <div class="fin-analise-grid">
               <div class="panel wide">
                 <div class="panel-header">
