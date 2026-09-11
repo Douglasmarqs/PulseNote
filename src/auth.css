@@ -669,3 +669,143 @@ body.auth-page {
 }
 .auth-error-mascot .pulsinho__eyes { margin-bottom: 8%; }
 .auth-error-text { flex: 1; }
+
+/* ============================================================
+   Ponte visual com o app
+   ------------------------------------------------------------
+   Login, cadastro e recuperação respeitam a mesma escolha de tema que
+   o painel principal. As variáveis ficam isoladas no prefixo auth para
+   não alterar o dropdown de perfil que também usa este arquivo.
+   ============================================================ */
+:root {
+  color-scheme: light;
+  --auth-bg: #f6f5fb;
+  --auth-surface: rgba(255, 255, 255, 0.88);
+  --auth-surface-solid: #ffffff;
+  --auth-surface-muted: #faf9fd;
+  --auth-text: #1a1b2e;
+  --auth-text-soft: #4a4a68;
+  --auth-muted: #8b8aa8;
+  --auth-line: #e7e5f4;
+  --auth-accent: #6c5ce7;
+  --auth-accent-strong: #5b4bd6;
+  --auth-accent-soft: #ece9fc;
+  --auth-glow-one: rgba(108, 92, 231, 0.18);
+  --auth-glow-two: rgba(90, 200, 250, 0.13);
+  --auth-card-shadow: 0 20px 60px rgba(34, 30, 84, 0.12), 0 2px 12px rgba(34, 30, 84, 0.06);
+}
+
+:root[data-theme="aurora"] {
+  color-scheme: dark;
+  --auth-bg: #060a18;
+  --auth-surface: rgba(16, 20, 44, 0.88);
+  --auth-surface-solid: #10142c;
+  --auth-surface-muted: #0a1024;
+  --auth-text: #f1f3ff;
+  --auth-text-soft: #b8c0e8;
+  --auth-muted: #7c84b8;
+  --auth-line: #262c52;
+  --auth-accent: #a496ff;
+  --auth-accent-strong: #7c6cff;
+  --auth-accent-soft: rgba(124, 108, 255, 0.18);
+  --auth-glow-one: rgba(124, 108, 255, 0.27);
+  --auth-glow-two: rgba(90, 200, 250, 0.18);
+  --auth-card-shadow: 0 24px 70px rgba(2, 4, 16, 0.68), inset 0 1px 0 rgba(255,255,255,0.05);
+}
+
+:root[data-theme="eclipse"] {
+  color-scheme: dark;
+  --auth-bg: #000000;
+  --auth-surface: rgba(18, 18, 18, 0.9);
+  --auth-surface-solid: #121212;
+  --auth-surface-muted: #0a0a0a;
+  --auth-text: #faf7ed;
+  --auth-text-soft: #d7ccb6;
+  --auth-muted: #9f9688;
+  --auth-line: #302a20;
+  --auth-accent: #f0b43c;
+  --auth-accent-strong: #d69220;
+  --auth-accent-soft: rgba(240, 180, 60, 0.14);
+  --auth-glow-one: rgba(232, 172, 61, 0.18);
+  --auth-glow-two: rgba(240, 180, 60, 0.08);
+  --auth-card-shadow: 0 24px 70px rgba(0, 0, 0, 0.88), inset 0 1px 0 rgba(255,255,255,0.04);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):not([data-theme="aurora"]):not([data-theme="eclipse"]) {
+    color-scheme: dark;
+    --auth-bg: #060a18;
+    --auth-surface: rgba(16, 20, 44, 0.88);
+    --auth-surface-solid: #10142c;
+    --auth-surface-muted: #0a1024;
+    --auth-text: #f1f3ff;
+    --auth-text-soft: #b8c0e8;
+    --auth-muted: #7c84b8;
+    --auth-line: #262c52;
+    --auth-accent: #a496ff;
+    --auth-accent-strong: #7c6cff;
+    --auth-accent-soft: rgba(124, 108, 255, 0.18);
+    --auth-glow-one: rgba(124, 108, 255, 0.27);
+    --auth-glow-two: rgba(90, 200, 250, 0.18);
+    --auth-card-shadow: 0 24px 70px rgba(2, 4, 16, 0.68), inset 0 1px 0 rgba(255,255,255,0.05);
+  }
+}
+
+body.auth-page {
+  color: var(--auth-text);
+  background: var(--auth-bg);
+}
+.auth-bg {
+  background:
+    radial-gradient(680px 460px at 8% -6%, var(--auth-glow-one), transparent 60%),
+    radial-gradient(620px 420px at 108% 6%, var(--auth-glow-two), transparent 60%),
+    radial-gradient(760px 520px at 50% 118%, var(--auth-accent-soft), transparent 62%),
+    var(--auth-bg);
+}
+.brand-mark,
+.auth-btn { background: linear-gradient(135deg, var(--auth-accent), var(--auth-accent-strong)); }
+.brand-mark { box-shadow: 0 8px 24px color-mix(in srgb, var(--auth-accent) 36%, transparent); }
+.auth-brand strong, .auth-title { color: var(--auth-text); }
+.auth-brand span, .auth-subtitle, .auth-switch, .auth-security-note { color: var(--auth-muted); }
+.auth-card {
+  background: var(--auth-surface);
+  border-color: color-mix(in srgb, var(--auth-line) 78%, transparent);
+  box-shadow: var(--auth-card-shadow);
+  position: relative;
+}
+.auth-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 28px;
+  right: 28px;
+  height: 3px;
+  border-radius: 0 0 999px 999px;
+  background: linear-gradient(90deg, transparent, var(--auth-accent), transparent);
+  opacity: .82;
+}
+.auth-tabs { background: var(--auth-surface-muted); border: 1px solid var(--auth-line); }
+.auth-tab { color: var(--auth-muted); }
+.auth-tab.active { background: var(--auth-accent-soft); color: var(--auth-accent-strong); box-shadow: none; }
+.field-label { color: var(--auth-text-soft); }
+.field-input { background: var(--auth-surface-muted); border-color: var(--auth-line); color: var(--auth-text); }
+.field-input:focus { border-color: var(--auth-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--auth-accent) 23%, transparent); background: var(--auth-surface-solid); }
+.field-input::placeholder { color: color-mix(in srgb, var(--auth-muted) 72%, transparent); }
+.field-icon, .toggle-pw, .pw-strength-label { color: var(--auth-muted); }
+.toggle-pw:hover { color: var(--auth-accent); }
+.pw-strength-bar, .auth-divider::before, .auth-divider::after { background: var(--auth-line); }
+.google-btn { background: var(--auth-surface-solid); color: var(--auth-text); border-color: var(--auth-line); }
+.google-btn:hover { border-color: var(--auth-accent); box-shadow: 0 4px 16px color-mix(in srgb, var(--auth-accent) 14%, transparent); }
+.auth-divider { color: var(--auth-muted); }
+.auth-link { color: var(--auth-accent-strong); }
+.auth-link:hover { color: var(--auth-accent); }
+.auth-link--muted { color: var(--auth-muted); }
+.feature-pill { background: color-mix(in srgb, var(--auth-surface) 82%, transparent); border-color: color-mix(in srgb, var(--auth-line) 80%, transparent); color: var(--auth-text-soft); }
+.feature-pill svg, .auth-security-note svg { color: var(--auth-accent); }
+.pulsinho { background: linear-gradient(155deg, var(--auth-accent), color-mix(in srgb, var(--auth-accent) 55%, #af52de)); box-shadow: 0 12px 30px color-mix(in srgb, var(--auth-accent) 30%, transparent); }
+
+@media (max-width: 480px) {
+  body.auth-page { padding-inline: 12px; }
+  .auth-shell { gap: 18px; }
+  .auth-card::before { left: 20px; right: 20px; }
+}
