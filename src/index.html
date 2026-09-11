@@ -268,7 +268,7 @@
                     <h2>Prioridades do dia</h2>
                   </div>
                   <div class="dash-panel-actions">
-                    <button class="icon-button" data-view-shortcut="planner" title="Ver tarefas">→</button>
+                    <button class="icon-button" data-view-shortcut="planner" data-planner-focus="tasks" title="Ver tarefas">→</button>
                     <button class="icon-button dash-panel-collapse-btn" type="button" data-collapse-toggle aria-expanded="true" title="Minimizar">⌄</button>
                   </div>
                 </div>
@@ -302,7 +302,7 @@
                     <h2>Próximos compromissos</h2>
                   </div>
                   <div class="dash-panel-actions">
-                    <button class="icon-button" data-view-shortcut="planner" title="Ver agenda">→</button>
+                    <button class="icon-button" data-view-shortcut="planner" data-planner-focus="agenda" title="Ver agenda">→</button>
                     <button class="icon-button dash-panel-collapse-btn" type="button" data-collapse-toggle aria-expanded="true" title="Minimizar">⌄</button>
                   </div>
                 </div>
@@ -318,7 +318,7 @@
                     <h2>Foco da semana</h2>
                   </div>
                   <div class="dash-panel-actions">
-                    <button class="icon-button" data-view-shortcut="planner" title="Ver metas">→</button>
+                    <button class="icon-button" data-view-shortcut="planner" data-planner-focus="goals" title="Ver metas">→</button>
                     <button class="icon-button dash-panel-collapse-btn" type="button" data-collapse-toggle aria-expanded="true" title="Minimizar">⌄</button>
                   </div>
                 </div>
@@ -553,6 +553,15 @@
 
               <!-- Atalhos rápidos: cor, prioridade e checklist ficam à mão sem poluir a tela -->
               <div class="note-quick-row">
+                <div class="note-color-picker" id="noteColorPicker" role="group" aria-label="Cor da nota">
+                  <button type="button" class="note-color-dot active" data-note-color="blue" title="Azul" aria-label="Azul"></button>
+                  <button type="button" class="note-color-dot" data-note-color="green" title="Verde" aria-label="Verde"></button>
+                  <button type="button" class="note-color-dot" data-note-color="pink" title="Rosa" aria-label="Rosa"></button>
+                  <button type="button" class="note-color-dot" data-note-color="purple" title="Roxo" aria-label="Roxo"></button>
+                  <button type="button" class="note-color-dot" data-note-color="orange" title="Laranja" aria-label="Laranja"></button>
+                  <button type="button" class="note-color-dot" data-note-color="teal" title="Turquesa" aria-label="Turquesa"></button>
+                </div>
+                <input id="noteColor" type="hidden" value="blue" />
                 <div class="note-priority-picker" id="notePriorityPicker">
                   <button type="button" class="note-priority-dot" data-priority="Baixa"><span class="dot"></span>Baixa</button>
                   <button type="button" class="note-priority-dot active" data-priority="Media"><span class="dot"></span>Média</button>

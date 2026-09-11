@@ -12,7 +12,7 @@
 // da hora marcada") — não serve pra lembrete de compromisso, que precisa
 // disparar minutos antes do horário certo. Por isso o "relógio" é
 // externo: o GitHub Actions do próprio repositório bate nesta rota a
-// cada 15 minutos, de graça (ver o workflow).
+// a cada 5 minutos, de graça (ver o workflow).
 //
 // Idempotência: cada tipo de aviso tem um "cooldown" próprio — em vez de
 // só 1x por dia, uma tarefa atrasada pode lembrar de novo a cada 4h, um
@@ -20,7 +20,7 @@
 // Compromissos (eventos) são a exceção: por serem pontuais, avisam só 1
 // vez (não faz sentido repetir depois que já avisou que está perto).
 // Tudo isso fica guardado em userData/{uid}.data.serverNotifications —
-// sem isso, rodar a cada 15 min mandaria a mesma notificação repetida
+// sem isso, rodar a cada 5 min mandaria a mesma notificação repetida
 // sem parar.
 //
 // Variáveis de ambiente necessárias (Vercel > Settings > Environment
@@ -47,6 +47,7 @@
 
 const admin = require("firebase-admin");
 const crypto = require("node:crypto");
+const DEFAULT_TIME_ZONE = "America/Sao_Paulo";
 
 // Cooldown (em horas) até poder notificar de novo o MESMO tipo de aviso
 // pro MESMO usuário. 0 = avisa só uma vez e nunca mais repete (é o caso
@@ -77,6 +78,48 @@ function getFirebaseAdmin() {
     }),
   });
   return admin;
+}
+
+// Datas de tarefas e compromissos são criadas no fuso local da pessoa.
+// A function da Vercel, porém, roda em UTC. Não podemos passar uma string
+// "2026-09-10T09:00" para new Date() e tratá-la como Brasil, porque no
+// servidor ela vira 09:00 UTC (três horas antes em São Paulo).
+function partsInTimeZone(date, timeZone) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const value = (type) => Number(parts.find((part) => part.type === type)?.value || 0);
+  return { year: value("year"), month: value("month"), day: value("day"), hour: value("hour"), minute: value("minute"), second: value("second") };
+}
+
+function todayInTimeZone(date, timeZone = DEFAULT_TIME_ZONE) {
+  const { year, month, day } = partsInTimeZone(date, timeZone);
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function timeZoneOffsetMs(date, timeZone) {
+  const parts = partsInTimeZone(date, timeZone);
+  const representedAsUtc = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second);
+  return representedAsUtc - date.getTime();
+}
+
+function zonedDateTimeToUtc(dateIso, time, timeZone = DEFAULT_TIME_ZONE) {
+  const match = String(dateIso || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const timeMatch = String(time || "").match(/^(\d{2}):(\d{2})$/);
+  if (!match || !timeMatch) return null;
+  const wallClockAsUtc = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), Number(timeMatch[1]), Number(timeMatch[2]));
+  let result = new Date(wallClockAsUtc - timeZoneOffsetMs(new Date(wallClockAsUtc), timeZone));
+  // Recalcula o offset com o instante candidato. Isso também cobre regiões
+  // que têm mudança de horário de verão.
+  result = new Date(wallClockAsUtc - timeZoneOffsetMs(result, timeZone));
+  return result;
 }
 
 // Mesmo bug de sempre com números BR (ver fixBrazilianMobileNumber em
@@ -160,7 +203,7 @@ async function sendPush(fb, tokens, notification) {
 //    state direto do Firestore (Admin SDK) em vez de window.PulseNoteState.
 //    "plain" é a versão sem formatação/emoji, usada como {{1}} do
 //    template do WhatsApp.
-function buildNotifications(state, todayIso, now) {
+function buildNotifications(state, todayIso, now, timeZone = DEFAULT_TIME_ZONE) {
   const results = [];
   const isOpen = (item) => item.status !== "Concluida" && item.status !== "Cancelada";
 
@@ -191,18 +234,18 @@ function buildNotifications(state, todayIso, now) {
 
   (state.events || []).forEach((event) => {
     if (!event.date || !event.time) return;
-    const eventDateTime = new Date(`${event.date}T${event.time}`);
+    const eventDateTime = zonedDateTimeToUtc(event.date, event.time, timeZone);
+    if (!eventDateTime || Number.isNaN(eventDateTime.getTime())) return;
     const minutesUntil = (eventDateTime - now) / 60000;
     const reminderMinutes = Number(event.reminder) || 15;
-    // A checagem roda a cada 15 min (ver .github/workflows/send-reminders.yml).
-    // Se alguém configurar um lembrete de menos de 15 min de antecedência,
-    // a janela poderia "passar batido" entre uma rodada e outra — por
-    // isso o mínimo aqui é sempre 15, não o valor exato escolhido. O
-    // "-15" no início também cobre o caso do cron atrasar/falhar uma
+    // A checagem roda a cada 5 min (ver .github/workflows/send-reminders.yml).
+    // O mínimo acompanha a menor antecedência oferecida pela interface,
+    // então “5 min antes” deixa de ser transformado silenciosamente em 15.
+    // O "-5" também cobre o caso do cron atrasar/falhar uma
     // rodada: se o evento começou há pouco e ainda não foi avisado,
     // ainda avisamos (tarde, mas avisamos) em vez de ficar em silêncio.
-    const windowMinutes = Math.max(reminderMinutes, 15);
-    if (minutesUntil > -15 && minutesUntil <= windowMinutes) {
+    const windowMinutes = Math.max(reminderMinutes, 5);
+    if (minutesUntil > -5 && minutesUntil <= windowMinutes) {
       results.push({
         key: `event_${event.id}`,
         title: "📅 Compromisso em breve",
@@ -284,7 +327,6 @@ module.exports = async (req, res) => {
   const fb = getFirebaseAdmin();
   const db = fb.firestore();
   const now = new Date();
-  const todayIso = now.toISOString().slice(0, 10);
 
   let checked = 0;
   let notified = 0;
@@ -297,8 +339,10 @@ module.exports = async (req, res) => {
       checked++;
       const uid = docSnap.id;
       const state = docSnap.data()?.data || {};
+      const timeZone = state.timeZone || DEFAULT_TIME_ZONE;
+      const todayIso = todayInTimeZone(now, timeZone);
 
-      const notifications = buildNotifications(state, todayIso, now);
+      const notifications = buildNotifications(state, todayIso, now, timeZone);
       if (notifications.length === 0) continue;
 
       const serverNotifications = state.serverNotifications || {};
@@ -349,3 +393,7 @@ module.exports = async (req, res) => {
     return res.status(500).json({ error: "internal_error" });
   }
 };
+
+// Exportados como propriedades da function para testes determinísticos,
+// sem expor nenhuma rota adicional em produção.
+module.exports._test = { buildNotifications, todayInTimeZone, zonedDateTimeToUtc };

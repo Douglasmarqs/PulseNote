@@ -554,6 +554,7 @@ function toLocalIso(date) {
 const todayIso = toLocalIso(new Date());
 const tomorrowIso = offsetDate(1);
 const weekIso = offsetDate(5);
+const appTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Sao_Paulo";
 
 // O state começa com os valores padrão "de fábrica". Ele só é substituído
 // pelos dados reais do usuário DEPOIS que o Firebase confirma o login
@@ -1376,6 +1377,10 @@ function normalizeState(parsed) {
   if (!parsed.monthClosures) parsed.monthClosures = [];
   if (!parsed.finGoals) parsed.finGoals = [];
   if (!parsed.finRecurrents) parsed.finRecurrents = [];
+  // O servidor de lembretes usa este fuso para converter um compromisso
+  // salvo como data/hora local em um instante real. Sem persistir o fuso,
+  // um usuário no Brasil recebia alerta com o horário UTC da Vercel.
+  if (!parsed.timeZone) parsed.timeZone = appTimeZone;
   if (parsed.profilePhoto === undefined) parsed.profilePhoto = null;
   // Vínculo com WhatsApp (ver bindSettingsView > "Integrações" e
   // api/whatsapp-webhook.js): código de 6 dígitos gerado no app e
@@ -1409,6 +1414,7 @@ function loadDefaultState() {
     monthClosures: [],
     finGoals: [],
     finRecurrents: [],
+    timeZone: appTimeZone,
     whatsappLinkCode: null,
     whatsappLinkCodeExpiresAt: null,
     whatsappLinkedPhone: null,
@@ -1458,7 +1464,22 @@ function bindNavigation() {
     button.addEventListener("click", () => setView(button.dataset.view));
   });
   document.querySelectorAll("[data-view-shortcut]").forEach((button) => {
-    button.addEventListener("click", () => setView(button.dataset.viewShortcut));
+    button.addEventListener("click", () => {
+      const view = button.dataset.viewShortcut;
+      setView(view);
+      const plannerFocus = button.dataset.plannerFocus;
+      if (view !== "planner" || !plannerFocus) return;
+
+      // Os cards do Dashboard não devem levar todos para a mesma posição
+      // genérica do Planner. Cada atalho abre a lente que corresponde ao
+      // conteúdo resumido no card e só então rola até a área em questão.
+      if (plannerFocus === "tasks") setPlannerTab("list");
+      if (plannerFocus === "agenda") setPlannerTab("week");
+      const target = plannerFocus === "goals"
+        ? document.querySelector(".planner-goals-panel")
+        : document.querySelector("#plannerView");
+      requestAnimationFrame(() => target?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    });
   });
   initDashPanelCollapse();
 }
@@ -1785,6 +1806,7 @@ function saveNote(event) {
     attachments: splitValues(valueOf("#noteAttachments")),
     goal: valueOf("#noteGoal"),
     observations: valueOf("#noteObservations"),
+    color: valueOf("#noteColor") || existing?.color || "blue",
     favorite: existing?.favorite || false,
     createdAt: existing?.createdAt || todayIso,
     convertedToTaskId: existing?.convertedToTaskId || "",
@@ -1926,6 +1948,8 @@ function resetNoteForm() {
   form.reset();
   document.querySelector("#noteId").value = "";
   document.querySelector("#notePriority").value = "Media";
+  document.querySelector("#noteColor").value = "blue";
+  document.querySelectorAll("#noteColorPicker .note-color-dot").forEach((dot) => dot.classList.toggle("active", dot.dataset.noteColor === "blue"));
   document.querySelectorAll("#notePriorityPicker .note-priority-dot").forEach((d) => d.classList.toggle("active", d.dataset.priority === "Media"));
   document.querySelector("#noteChecklistField").hidden = true;
   document.querySelector("#noteChecklistToggle").classList.remove("active");
@@ -1937,6 +1961,14 @@ function resetNoteForm() {
 }
 
 function bindNoteQuickControls() {
+  document.querySelectorAll("#noteColorPicker .note-color-dot").forEach((dot) => {
+    dot.addEventListener("click", () => {
+      document.querySelectorAll("#noteColorPicker .note-color-dot").forEach((item) => item.classList.remove("active"));
+      dot.classList.add("active");
+      document.querySelector("#noteColor").value = dot.dataset.noteColor;
+    });
+  });
+
   // Seletor de prioridade por bolinhas coloridas (substitui o <select> visível)
   document.querySelectorAll("#notePriorityPicker .note-priority-dot").forEach((dot) => {
     dot.addEventListener("click", () => {
@@ -2383,6 +2415,18 @@ function plannerColorTone(id) {
   let hash = 0;
   for (const ch of String(id)) hash = (hash * 31 + ch.charCodeAt(0)) % 997;
   return tones[Math.abs(hash) % tones.length];
+}
+
+function noteColorTone(note) {
+  const tones = {
+    blue:   { bg: "var(--note-blue)", border: "var(--note-blue-border)" },
+    green:  { bg: "var(--note-green)", border: "var(--note-green-border)" },
+    pink:   { bg: "var(--note-pink)", border: "var(--note-pink-border)" },
+    purple: { bg: "var(--note-purple)", border: "var(--note-purple-border)" },
+    orange: { bg: "var(--note-orange)", border: "var(--note-orange-border)" },
+    teal:   { bg: "var(--note-teal)", border: "var(--note-teal-border)" },
+  };
+  return tones[note?.color] || plannerColorTone(note?.id);
 }
 
 // ── Metas: fita horizontal compacta, sempre visível no topo do
@@ -3011,7 +3055,7 @@ function setNotesFolderFilter(folder) {
 }
 
 function renderNoteCard(note, searchQuery) {
-  const tone = plannerColorTone(note.id); // mesma paleta pastel do Planner, agora como identidade da nota (listra lateral), não fundo inteiro
+  const tone = noteColorTone(note); // cor escolhida pela pessoa; notas antigas mantêm a cor determinística anterior
   const checklistHtml =
     note.checklist && note.checklist.length
       ? `<div class="checklist-preview">${note.checklist
@@ -3105,6 +3149,10 @@ function editNote(id) {
   document.querySelector("#noteFolder").value = note.folder;
   document.querySelector("#noteTags").value = note.tags.join(", ");
   document.querySelector("#notePriority").value = note.priority;
+  document.querySelector("#noteColor").value = note.color || "blue";
+  document.querySelectorAll("#noteColorPicker .note-color-dot").forEach((dot) =>
+    dot.classList.toggle("active", dot.dataset.noteColor === (note.color || "blue"))
+  );
   document.querySelectorAll("#notePriorityPicker .note-priority-dot").forEach((d) =>
     d.classList.toggle("active", d.dataset.priority === note.priority)
   );

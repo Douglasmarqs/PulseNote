@@ -1498,6 +1498,19 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 
 .note-priority-picker { display: flex; gap: 6px; flex-wrap: wrap; }
 
+.note-color-picker { display:flex; gap:7px; align-items:center; }
+.note-color-dot {
+  width:20px; height:20px; min-height:20px; padding:0; border-radius:50%;
+  border:2px solid transparent; cursor:pointer; transition:transform 160ms ease, box-shadow 160ms ease;
+}
+.note-color-dot:hover, .note-color-dot.active { transform:scale(1.12); box-shadow:0 0 0 2px var(--surface), 0 0 0 4px var(--accent); }
+.note-color-dot[data-note-color="blue"]   { background:#5ac8fa; }
+.note-color-dot[data-note-color="green"]  { background:#30d158; }
+.note-color-dot[data-note-color="pink"]   { background:#ff375f; }
+.note-color-dot[data-note-color="purple"] { background:#bf5af2; }
+.note-color-dot[data-note-color="orange"] { background:#ff9f0a; }
+.note-color-dot[data-note-color="teal"]   { background:#40c8e0; }
+
 .note-priority-dot {
   display: inline-flex;
   align-items: center;

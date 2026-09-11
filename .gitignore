@@ -3,6 +3,10 @@ backend/
 frontend/
 {backend,frontend}/
 node_modules/
+.npm-cache/
+dist/
+dist-*-check/
+tmp/
 
 # Sistema
 .DS_Store

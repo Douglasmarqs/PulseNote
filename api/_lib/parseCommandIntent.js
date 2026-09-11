@@ -91,7 +91,7 @@ function buildIntentPrompt({ todayIso, categoryList, recentEntryNote }) {
 ${recentEntryNote}
 Data de hoje: ${todayIso}.
 
-Se "report": calcule "reportMonth" (1-12) e "reportYear" a partir de expressões relativas ("mês passado", "esse mês", nomes de mês, "agosto de 2025" etc.), relativo à data de hoje. Se a pessoa pedir explicitamente um ARQUIVO/PLANILHA/EXCEL pra baixar (ex.: "manda a planilha do mês passado", "quero o excel de agosto", "exporta isso em excel"), preencha "reportFormat":"arquivo"; se for só um resumo em texto (ex.: "relatório do mês passado", "quanto gastei em julho"), preencha "reportFormat":"texto" (esse é o padrão).
+Se "report": calcule "reportMonth" (1-12) e "reportYear" a partir de expressões relativas ("mês passado", "esse mês", nomes de mês, "agosto de 2025" etc.), relativo à data de hoje. Se a pessoa pedir explicitamente um ARQUIVO ou PDF (ex.: "manda o PDF do mês passado", "gera um arquivo de agosto"), preencha "reportFormat":"arquivo"; se pedir Excel ou planilha, use "texto" porque o PulseNote envia relatórios em PDF, não em planilha. Se for só um resumo em texto (ex.: "relatório do mês passado", "quanto gastei em julho"), preencha "reportFormat":"texto" (esse é o padrão).
 
 Se "stats": preencha "reportMonth"/"reportYear" (o período principal perguntado; sem período claro, use o mês atual) e, se a pessoa pediu COMPARAÇÃO explícita com outro período (ex.: "comparado ao mês passado"), preencha também "statsCompareMonth"/"statsCompareYear"; senão deixe os dois de fora.
 
@@ -132,7 +132,7 @@ Exemplo 2b — "exclua o último gasto" → {"intent":"finance_delete_last"}
 Exemplo 2c — "dia 1 desse mês" (mandada logo após um lançamento, corrigindo a data) → {"intent":"finance_edit_last"}
 Exemplo 3 — "quanto gastei com uber esse mês" → {"intent":"finance_search","searchQuery":"uber"}
 Exemplo 4 — "relatório do mês passado" (hoje=${todayIso}) → {"intent":"report","reportMonth":<mês anterior>,"reportYear":<ano correspondente>}
-Exemplo 4b — "manda a planilha do mês passado em excel" (hoje=${todayIso}) → {"intent":"report","reportMonth":<mês anterior>,"reportYear":<ano correspondente>,"reportFormat":"arquivo"}
+Exemplo 4b — "manda o PDF do mês passado" (hoje=${todayIso}) → {"intent":"report","reportMonth":<mês anterior>,"reportYear":<ano correspondente>,"reportFormat":"arquivo"}
 Exemplo 5 — "comparado ao mês passado, gastei mais?" → {"intent":"stats","reportMonth":<mês atual>,"reportYear":<ano atual>,"statsCompareMonth":<mês anterior>,"statsCompareYear":<ano correspondente>}
 Exemplo 6 — "o que tenho pra fazer hoje" → {"intent":"agenda","agendaFilter":"hoje"}
 Exemplo 7 — "me lembra de pagar o boleto sexta" → {"intent":"task_action","taskAction":"create","taskTitle":"Pagar o boleto","taskDueDate":"<sexta que vem>","taskPriority":"Media"}
@@ -165,10 +165,79 @@ function buildRecentEntryNote(lastFinanceEntry) {
   return `\nCONTEXTO: a pessoa acabou de lançar isto por aqui, há poucos minutos — ${verb} de R$ ${Number(lastFinanceEntry.amount || 0).toFixed(2)}, categoria "${lastFinanceEntry.category}", descrição "${lastFinanceEntry.description}", data ${lastFinanceEntry.date}. Se a PRÓXIMA mensagem for curta, sem verbo claro de outra ação (não menciona tarefa/nota/meta/compromisso novos), e só citar um valor, uma data ou uma categoria (ex.: "dia 1 desse mês", "foi 60", "era transporte"), classifique como "finance_edit_last" corrigindo ESSE lançamento — mesmo sem palavras como "corrigir"/"errei". Se a mensagem claramente descrever um lançamento NOVO e diferente (menciona outro valor E outra descrição), ignore este contexto e trate como "expense" normalmente.\n`;
 }
 
+const MONTH_NAMES = [
+  "janeiro", "fevereiro", "marco", "abril", "maio", "junho",
+  "julho", "agosto", "setembro", "outubro", "novembro", "dezembro",
+];
+
+function normalizeQuickCommand(text) {
+  return String(text || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ");
+}
+
+function previousMonth(month, year) {
+  return month === 1 ? { month: 12, year: year - 1 } : { month: month - 1, year };
+}
+
+function resolveReportPeriod(command, todayIso) {
+  const [currentYear, currentMonth] = todayIso.split("-").map(Number);
+  if (/\bmes passado\b/.test(command)) return previousMonth(currentMonth, currentYear);
+
+  const namedMonth = MONTH_NAMES.findIndex((name) => new RegExp(`\\b${name}\\b`).test(command));
+  if (namedMonth >= 0) {
+    const explicitYear = command.match(/\b(20\d{2})\b/);
+    return { month: namedMonth + 1, year: explicitYear ? Number(explicitYear[1]) : currentYear };
+  }
+  return { month: currentMonth, year: currentYear };
+}
+
+// Comandos que precisam funcionar mesmo quando a IA estiver sem chave,
+// temporariamente indisponível ou responder fora do schema. São consultas
+// sem ambiguidade e não devem cair no "não consegui entender".
+function parseDeterministicIntent(text, todayIso) {
+  const command = normalizeQuickCommand(text);
+  const clean = command.replace(/[!?.,;:]+$/g, "").trim();
+  if (/^(ajuda|help|comandos?|o que (voce|vc) (faz|entende))$/.test(clean)) {
+    return { ok: true, intent: "help" };
+  }
+
+  const current = resolveReportPeriod(command, todayIso);
+  const comparisonRequested = /\bcompar(?:a|ado|acao)\b/.test(command)
+    || (/\b(gastei|gasto) (mais|menos)\b/.test(command) && /\bmes passado\b/.test(command));
+  if (comparisonRequested) {
+    const [year, month] = todayIso.split("-").map(Number);
+    return {
+      ok: true,
+      intent: "stats",
+      stats: { month, year, compare: previousMonth(month, year) },
+    };
+  }
+
+  const asksForReport = /\b(relatorio|pdf|arquivo)\b/.test(command)
+    || (/^quanto (gastei|recebi)\b/.test(command) && (command.includes(" em ") || /\bmes passado\b/.test(command)));
+  if (asksForReport) {
+    return {
+      ok: true,
+      intent: "report",
+      report: { month: current.month, year: current.year, format: /\b(pdf|arquivo)\b/.test(command) ? "arquivo" : "texto" },
+    };
+  }
+  return null;
+}
+
 async function parseTextIntent({ text, categories, today, lastFinanceEntry }) {
   if (!text || typeof text !== "string" || !text.trim() || text.length > 400) {
     return { ok: false, status: 400, error: "invalid_text" };
   }
+  const todayIso = /^\d{4}-\d{2}-\d{2}$/.test(today) ? today : new Date().toISOString().slice(0, 10);
+  const rawMessage = text.trim().slice(0, 400);
+  const deterministic = parseDeterministicIntent(rawMessage, todayIso);
+  if (deterministic) return deterministic;
+
   if (!Array.isArray(categories) || categories.length === 0) {
     return { ok: false, status: 400, error: "invalid_categories" };
   }
@@ -177,12 +246,10 @@ async function parseTextIntent({ text, categories, today, lastFinanceEntry }) {
     return { ok: false, status: 500, error: "ai_not_configured" };
   }
 
-  const todayIso = /^\d{4}-\d{2}-\d{2}$/.test(today) ? today : new Date().toISOString().slice(0, 10);
   const categoryIds = categories.map((c) => c.id);
   const categoryList = categories.map((c) => `- ${c.id} (${c.type}): ${c.label}`).join("\n");
   const recentEntryNote = buildRecentEntryNote(lastFinanceEntry);
   const systemPrompt = buildIntentPrompt({ todayIso, categoryList, recentEntryNote });
-  const rawMessage = text.trim().slice(0, 400);
 
   const aiResult = await fetchGeminiJson({
     model: GEMINI_MODEL,

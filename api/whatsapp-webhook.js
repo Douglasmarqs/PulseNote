@@ -59,7 +59,7 @@ const crypto = require("node:crypto");
 const admin = require("firebase-admin");
 const { parseTransactionImage } = require("./_lib/parseTransactionAI");
 const { parseTextIntent, findBestMatch } = require("./_lib/parseCommandIntent");
-const { buildXlsxReportBuffer } = require("./_lib/buildXlsxReport");
+const { buildPdfReportBuffer } = require("./_lib/buildPdfReport");
 
 // Espelha as categorias padrão de src/app.js (expenseCategories /
 // incomeCategories) — precisam bater com as do app para os ids que a IA
@@ -576,9 +576,11 @@ function isDeleteCommand(norm) {
 }
 
 function isBalanceCommand(norm) {
-  return norm === "saldo" || norm === "meu saldo" || norm === "resumo"
-    || norm === "resumo do mes" || norm.startsWith("quanto gastei")
-    || norm.startsWith("quanto recebi");
+  if (norm === "saldo" || norm === "meu saldo" || norm === "resumo" || norm === "resumo do mes") return true;
+  // "quanto gastei em julho" é relatório de julho, não o saldo do mês
+  // atual. Só atalhamos as perguntas sem período (ou explicitamente
+  // sobre este mês); as demais seguem ao parser determinístico/IA.
+  return /^quanto (gastei|recebi)( (nesse|neste|esse|este) mes)?[?!. ]*$/.test(norm);
 }
 
 // Apaga o lançamento mais recente ENTRE OS FEITOS PELO WHATSAPP (nunca
@@ -871,6 +873,7 @@ async function createNoteFromWhatsApp(fb, uid, { title, description }, todayIso,
       attachments: [],
       goal: "",
       observations: "",
+      color: "blue",
       favorite: false,
       createdAt: todayIso,
       source: "whatsapp",
@@ -964,6 +967,7 @@ const HELP_MESSAGE = `🤖 O que eu entendo por aqui (tudo em linguagem natural,
 "quanto gastei com uber esse mês" — busca lançamentos
 "saldo" / "resumo" — resumo do mês atual
 "relatório do mês passado" / "quanto gastei em julho"
+"manda o PDF do mês passado" — envia o relatório em PDF
 "comparado ao mês passado, gastei mais?" — estatísticas
 "apagar último" — desfaz o último lançamento feito por aqui
 
@@ -988,7 +992,7 @@ const HELP_MESSAGE = `🤖 O que eu entendo por aqui (tudo em linguagem natural,
 
 Tudo sincronizado direto com o seu painel do PulseNote, e cada ação eu confirmo por aqui mesmo.`;
 
-const WELCOME_MESSAGE = `✅ Vinculado! Eu sou o Pulsinho — a partir de agora é só me mandar mensagem por aqui que eu cuido do resto. 🎉
+const WELCOME_MESSAGE = `✅ WhatsApp vinculado ao PulseNote! Eu sou o Pulsinho. Tudo que você criar ou atualizar por aqui aparece no app, e o que estiver no app entra nas minhas consultas. 🎉
 
 ${HELP_MESSAGE}`;
 
@@ -1135,23 +1139,22 @@ module.exports = async (req, res) => {
             return res.status(200).end();
           }
           const monthKey = `${result.report.year}-${String(result.report.month).padStart(2, "0")}`;
-          const xlsxEntries = summary.entries.map((f) => ({
+          const pdfEntries = summary.entries.map((f) => ({
             date: f.date,
             description: f.description || "",
             categoryLabel: (categories.find((c) => c.id === f.category)?.label || f.category || "Outros").replace(/^\S+\s*/, ""),
             type: f.type === "receita" ? "receita" : "despesa",
             amount: Number(f.amount) || 0,
           }));
-          const buffer = buildXlsxReportBuffer({ monthLabel: summary.monthName, isClosed: false, entries: xlsxEntries });
+          const buffer = buildPdfReportBuffer({ monthLabel: summary.monthName, isClosed: false, entries: pdfEntries });
           const mediaId = await uploadWhatsAppMedia(
-            buffer, `relatorio-${monthKey}.xlsx`,
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            buffer, `relatorio-${monthKey}.pdf`, "application/pdf"
           );
           if (!mediaId) {
             await sendWhatsAppMessage(fromPhone, "Não consegui gerar o arquivo agora 😕 Tenta de novo em instantes.");
             return res.status(200).end();
           }
-          await sendWhatsAppDocument(fromPhone, mediaId, `relatorio-${monthKey}.xlsx`, `📊 Relatório de ${summary.monthName}`);
+          await sendWhatsAppDocument(fromPhone, mediaId, `relatorio-${monthKey}.pdf`, `📄 Relatório de ${summary.monthName}`);
           return res.status(200).end();
         }
 

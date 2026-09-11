@@ -22,7 +22,7 @@ name: PulseNote — lembretes periódicos
 # projeto com atividade normal.
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    - cron: "*/5 * * * *"
   workflow_dispatch: {} # permite rodar manualmente pela aba "Actions", pra testar
 
 jobs:

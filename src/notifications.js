@@ -72,7 +72,10 @@ async function requestNotificationPermission() {
     // um servidor externo (api/send-reminders.js). Não bloqueia o fluxo
     // se falhar (ex.: navegador sem suporte): as notificações locais
     // (enquanto o app está aberto) continuam funcionando normalmente.
-    window.PulseNotePush?.enablePushNotifications?.().catch(() => {});
+    const backgroundPushReady = await window.PulseNotePush?.enablePushNotifications?.().catch(() => false);
+    if (!backgroundPushReady) {
+      (window.PulseNoteShowToast || console.log)("Notificações locais ativadas. O push com o app fechado ainda precisa da configuração Web Push deste projeto.");
+    }
     runAllNotificationChecks(); // checa imediatamente após ativar
     return true;
   }
@@ -210,13 +213,14 @@ function runAllNotificationChecks() {
   checkFinanceNotifications();
 }
 
-// Verifica a cada 5 minutos enquanto o app estiver aberto (cobre principalmente
-// lembretes de compromissos, que dependem do horário exato)
+// Verifica a cada minuto enquanto o app estiver aberto. Assim a menor
+// antecedência configurável (5 min) é respeitada também localmente; com o
+// app fechado, a contraparte server-side roda a cada 5 min.
 let notificationInterval = null;
 function startNotificationScheduler() {
   if (notificationInterval) return;
   runAllNotificationChecks(); // primeira checagem imediata
-  notificationInterval = setInterval(runAllNotificationChecks, 5 * 60 * 1000);
+  notificationInterval = setInterval(runAllNotificationChecks, 60 * 1000);
 }
 
 window.requestNotificationPermission = requestNotificationPermission;

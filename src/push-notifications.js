@@ -22,12 +22,9 @@ import { getMessaging, getToken, onMessage, isSupported }
 import { doc, updateDoc, arrayUnion, arrayRemove }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { app, db, auth } from "./firebase-init.js";
+import { firebaseConfig } from "./firebase-config.js";
 
-// ⚠️ TROQUE pela sua VAPID key antes de publicar: Console do Firebase >
-// Configurações do projeto (⚙️) > aba "Cloud Messaging" > seção
-// "Web Push certificates" > gerar par de chaves. Sem isso, getToken()
-// abaixo sempre falha (silenciosamente, sem quebrar o resto do app).
-const VAPID_KEY = "COLOQUE_SUA_VAPID_KEY_AQUI";
+const VAPID_KEY = String(firebaseConfig.messagingVapidKey || "").trim();
 
 let messagingInstance = null;
 let foregroundListenerAttached = false;
@@ -81,6 +78,10 @@ async function saveTokenToFirestore(token) {
 // permissão de notificação do navegador. Retorna true/false (sucesso).
 async function enablePushNotifications() {
   try {
+    if (!VAPID_KEY) {
+      console.warn("Push em segundo plano indisponível: configure firebaseConfig.messagingVapidKey.");
+      return false;
+    }
     const messaging = await ensureMessaging();
     if (!messaging) return false;
     const registration = await navigator.serviceWorker.ready;
