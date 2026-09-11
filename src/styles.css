@@ -202,9 +202,9 @@
   --text2: #cec5b0;
   --muted: #8f8873;
   --line: #2c2818;
-  --accent: #e8ac3d;
-  --accent2: #c98f22;
-  --accent-soft: #2c2210;
+  --accent: #9a7dff;
+  --accent2: #7158dd;
+  --accent-soft: #211a3f;
   --green: #35d488;
   --green-soft: #0d2a1c;
   --orange: #71d4ff;
@@ -241,15 +241,14 @@
   --shadow-edge-color: rgba(0, 0, 0, 0.75);
 }
 
-/* Eclipse: hero escuro com um brilho dourado tipo "corona" no canto,
-   em vez do degradê roxo/ciano do Aurora — mantém o preto como
-   protagonista e usa o dourado como destaque, não como cor de fundo. */
+/* Eclipse: preto profundo com brilho violeta/azul, mantendo o fundo
+   protagonista sem reintroduzir o antigo laranja em outro tema. */
 :root[data-theme="eclipse"] .daily-hero {
-  background: linear-gradient(135deg, #141008 0%, #241a08 55%, #4a3410 100%);
-  box-shadow: 0 16px 46px rgba(232, 172, 61, 0.22), 0 4px 16px rgba(0, 0, 0, 0.6);
+  background: linear-gradient(135deg, #100d22 0%, #1c1640 55%, #173650 100%);
+  box-shadow: 0 16px 46px rgba(154, 125, 255, 0.22), 0 4px 16px rgba(0, 0, 0, 0.6);
 }
 :root[data-theme="eclipse"] .daily-hero::before {
-  background: radial-gradient(circle, rgba(240, 180, 60, 0.3), transparent 70%);
+  background: radial-gradient(circle, rgba(113, 212, 255, 0.28), transparent 70%);
   width: 260px;
   height: 260px;
 }

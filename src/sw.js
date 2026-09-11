@@ -24,7 +24,8 @@
 // paleta anterior na primeira abertura de um PWA já instalado.
 // v14: entrega a nova paleta, os cartões de notas formatados e a análise
 // financeira também para quem já instalou o PWA.
-const CACHE_NAME = "pulsenote-v14";
+// v15: alinha o tema Eclipse à paleta violeta/ciano da atualização.
+const CACHE_NAME = "pulsenote-v15";
 
 // ── Firebase Cloud Messaging (push em segundo plano) ──────────────
 // Isso é o que permite uma notificação aparecer mesmo com o PulseNote

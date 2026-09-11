@@ -723,11 +723,11 @@ body.auth-page {
   --auth-text-soft: #d7ccb6;
   --auth-muted: #9f9688;
   --auth-line: #302a20;
-  --auth-accent: #f0b43c;
-  --auth-accent-strong: #d69220;
-  --auth-accent-soft: rgba(240, 180, 60, 0.14);
-  --auth-glow-one: rgba(232, 172, 61, 0.18);
-  --auth-glow-two: rgba(240, 180, 60, 0.08);
+  --auth-accent: #b19bff;
+  --auth-accent-strong: #8068ec;
+  --auth-accent-soft: rgba(154, 125, 255, 0.16);
+  --auth-glow-one: rgba(154, 125, 255, 0.2);
+  --auth-glow-two: rgba(113, 212, 255, 0.1);
   --auth-card-shadow: 0 24px 70px rgba(0, 0, 0, 0.88), inset 0 1px 0 rgba(255,255,255,0.04);
 }
 
