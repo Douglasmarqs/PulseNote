@@ -1,0 +1,11 @@
+# Dependências e caches locais
+node_modules/
+.npm-cache/
+.vercel-global/
+
+# Artefatos de validação local
+dist/
+dist-*-check/
+tmp/
+test/
+gcm-diagnose.log
