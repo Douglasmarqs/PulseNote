@@ -19,7 +19,10 @@
 // v12: adiciona o bloco de Firebase Cloud Messaging abaixo (push em
 // segundo plano) — bump só pra garantir que quem já tinha o SW instalado
 // receba essa versão nova o quanto antes.
-const CACHE_NAME = "pulsenote-v12";
+// v13: invalida o CSS de autenticação após alinhar login/cadastro aos temas
+// do painel. Sem trocar o nome, o stale-while-revalidate podia exibir a
+// paleta anterior na primeira abertura de um PWA já instalado.
+const CACHE_NAME = "pulsenote-v13";
 
 // ── Firebase Cloud Messaging (push em segundo plano) ──────────────
 // Isso é o que permite uma notificação aparecer mesmo com o PulseNote
