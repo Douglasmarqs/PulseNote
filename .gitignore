@@ -7,6 +7,9 @@ node_modules/
 dist/
 dist-*-check/
 tmp/
+.vercel-global/
+.agent-browser/
+gcm-diagnose.log
 
 # Sistema
 .DS_Store
