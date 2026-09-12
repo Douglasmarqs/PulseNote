@@ -636,17 +636,16 @@ document.addEventListener("DOMContentLoaded", async () => {
   const now = new Date();
   const hour = now.getHours();
   const greeting = hour < 12 ? "Bom dia" : hour < 18 ? "Boa tarde" : "Boa noite";
-  const icon = hour < 12 ? "☀️" : hour < 18 ? "🌤️" : "🌙";
   const greetingMood = hour < 12 ? "morning" : hour < 18 ? "afternoon" : "night";
   const dateStr = new Intl.DateTimeFormat("pt-BR", {
-    weekday: "long",
     day: "2-digit",
     month: "long",
+    year: "numeric",
   }).format(now);
 
   const user = getUser();
   const firstName = user?.name?.split(" ")[0] || "Usuário";
-  elements.todayLabel.textContent = `${greeting}, ${firstName} ${icon}  ·  ${dateStr.charAt(0).toUpperCase() + dateStr.slice(1)}`;
+  elements.todayLabel.textContent = `${greeting}, ${firstName} · ${dateStr}`;
 
   const greetingMascot = document.querySelector("#greetingMascot");
   if (greetingMascot) {
@@ -2859,7 +2858,7 @@ function renderPlannerWeek() {
     .join("");
 }
 
-// ── Mês: grade clássica com pontinhos indicando dias com itens ──
+// ── Mês: compromissos e tarefas visíveis, com excesso resumido ──
 function changePlannerMonth(delta) {
   const d = new Date(`${plannerMonthAnchor}T12:00:00`);
   d.setDate(1);
@@ -2896,14 +2895,23 @@ function renderPlannerMonth() {
     const dayEvents = state.events.filter((e) => e.date === date);
     const total = dayTasks.length + dayEvents.length;
     const isToday = date === todayIso;
-    const dotCount = Math.min(4, total);
-    const dots = dotCount
-      ? `<span class="planner-month-dots">${[...Array(dotCount)].map((_, i) => `<span style="background:${plannerColorTone(date + i).border}"></span>`).join("")}</span>`
-      : "";
+    const items = [
+      ...dayEvents.map((event) => ({ label: event.title, kind: "event" })),
+      ...dayTasks.map((task) => ({ label: task.title, kind: "task" })),
+    ];
+    const visibleItems = items.slice(0, 2)
+      .map((item) => `<span class="planner-month-item is-${item.kind}" title="${escapeHtml(item.label)}">${escapeHtml(item.label)}</span>`)
+      .join("");
+    const remaining = items.length - 2;
+    const dateLabel = safeFormatDate(new Date(`${date}T12:00:00`), { day: "numeric", month: "long" }, date);
+    const ariaLabel = total ? `${dateLabel}: ${total} ${total === 1 ? "item" : "itens"}` : dateLabel;
     cells.push(`
-      <button class="planner-month-cell ${isToday ? "is-today" : ""} ${total ? "has-items" : ""}" type="button" onclick="jumpPlannerToDay('${date}')">
-        <span class="planner-month-daynum">${new Date(`${date}T12:00:00`).getDate()}</span>
-        ${dots}
+      <button class="planner-month-cell ${isToday ? "is-today" : ""} ${total ? "has-items" : ""}" type="button" aria-label="${escapeHtml(ariaLabel)}" onclick="jumpPlannerToDay('${date}')">
+        <span class="planner-month-cell-head">
+          <span class="planner-month-daynum">${new Date(`${date}T12:00:00`).getDate()}</span>
+          ${total ? `<span class="planner-month-count">${total}</span>` : ""}
+        </span>
+        ${total ? `<span class="planner-month-items">${visibleItems}${remaining > 0 ? `<span class="planner-month-more">+${remaining} ${remaining === 1 ? "item" : "itens"}</span>` : ""}</span>` : ""}
       </button>
     `);
   });
@@ -3422,7 +3430,6 @@ function closeNoteDetail() {
 function saveNoteDetail() {
   if (!ndCurrentNoteId) return;
   closeNoteDetail();
-  showToast("Anotacao salva.");
 }
 
 function bindNoteDetail() {

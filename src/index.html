@@ -135,15 +135,15 @@
               </div>
             </div>
             <div class="topbar-actions">
+              <label class="search-box" title="Filtra esta tela — aperte Enter para buscar em tudo (ou Ctrl/Cmd+K)">
+                <span class="icon">🔍</span>
+                <input id="globalSearch" type="text" inputmode="search" autocomplete="off" autocorrect="off" placeholder="Pesquisar" />
+              </label>
               <!-- O botão "Instalar app" é inserido aqui pelo pwa-install.js,
                    apenas se o navegador permitir instalação como PWA -->
               <div data-pwa-install-slot></div>
             </div>
           </div>
-          <label class="search-box" title="Filtra esta tela — aperte Enter para buscar em tudo (ou Ctrl/Cmd+K)">
-            <span class="icon">🔍</span>
-            <input id="globalSearch" type="text" inputmode="search" autocomplete="off" autocorrect="off" placeholder="Pesquisar... (Enter busca tudo)" />
-          </label>
         </header>
 
         <!-- Busca global (Ctrl/Cmd+K) — procura em notas, tarefas, agenda e
@@ -291,7 +291,6 @@
                   </div>
                   <div class="dash-panel-actions">
                     <span class="pill" id="weeklySummary">0 concluídas</span>
-                    <button class="icon-button dash-panel-collapse-btn" type="button" data-collapse-toggle aria-expanded="true" title="Minimizar">⌄</button>
                   </div>
                 </div>
                 <div class="dash-panel-body">
@@ -524,10 +523,12 @@
                 <button class="icon-button" id="plannerMonthNext" title="Próximo mês"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></button>
               </div>
               <div class="panel">
-                <div class="planner-month-weekdays">
-                  <span>Dom</span><span>Seg</span><span>Ter</span><span>Qua</span><span>Qui</span><span>Sex</span><span>Sáb</span>
+                <div class="planner-month-scroll" tabindex="0" aria-label="Calendário mensal. Deslize horizontalmente em telas pequenas.">
+                  <div class="planner-month-weekdays">
+                    <span>Dom</span><span>Seg</span><span>Ter</span><span>Qua</span><span>Qui</span><span>Sex</span><span>Sáb</span>
+                  </div>
+                  <div id="plannerMonthGrid" class="planner-month-grid"></div>
                 </div>
-                <div id="plannerMonthGrid" class="planner-month-grid"></div>
               </div>
             </div>
 

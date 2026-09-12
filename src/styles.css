@@ -616,9 +616,7 @@ p, h1, h2, h3 { margin: 0; }
   position: sticky;
   top: 0;
   z-index: 20;
-  display: flex;
-  align-items: center;
-  gap: 14px;
+  display: block;
   /* env(safe-area-inset-top) reserva o espaço da barra de status do
      aparelho (relógio, sinal, bateria) — sem isso, o cabeçalho
      renderiza por baixo dela em qualquer tela com notch/status bar
@@ -633,12 +631,9 @@ p, h1, h2, h3 { margin: 0; }
   min-height: var(--header-height);
 }
 
-/* .topbar-row existe só pra poder virar uma linha própria no mobile (ver
-   media query) sem afetar o desktop: aqui em cima ela "desaparece" do
-   layout (display:contents), então .topbar-greeting e .topbar-actions
-   se comportam exatamente como se fossem filhos diretos do .topbar —
-   don't mind essa div, ela é só um "gancho" pro mobile. */
-.topbar-row { display: contents; }
+/* Cabeçalho em uma linha no desktop; a busca fica integrada às ações em
+   vez de competir com a saudação como um bloco separado. */
+.topbar-row { display: flex; align-items: center; gap: 14px; min-width: 0; }
 
 .topbar-greeting { flex: 1; }
 
@@ -661,6 +656,8 @@ p, h1, h2, h3 { margin: 0; }
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-left: auto;
+  min-width: 0;
 }
 
 .search-box {
@@ -672,7 +669,7 @@ p, h1, h2, h3 { margin: 0; }
   background: var(--surface);
   border: 1.5px solid var(--line);
   border-radius: 13px;
-  width: 220px;
+  width: clamp(170px, 20vw, 240px);
   transition: border-color 200ms, box-shadow 200ms, width 200ms ease;
 }
 .search-box:focus-within {
@@ -684,6 +681,7 @@ p, h1, h2, h3 { margin: 0; }
   background: transparent;
   height: 100%;
   width: 100%;
+  min-width: 0;
   color: var(--text);
   font-size: 0.9rem;
   -webkit-appearance: none;
@@ -2504,14 +2502,6 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 
   .topbar {
     padding: calc(10px + env(safe-area-inset-top)) 16px 12px;
-    gap: 10px;
-    /* .topbar-row (mascote+saudação+avatar) e a busca agora são duas
-       linhas de verdade — mas diferente da tentativa anterior de
-       "tudo numa linha só" (que cortava o texto e a busca virava só
-       "P..."), aqui só a BUSCA desce pra sua própria linha, com a
-       largura inteira da tela. A linha de cima (mascote/saudação/
-       avatar) fica com espaço de sobra, então nada precisa truncar. */
-    flex-wrap: wrap;
     min-height: var(--header-height, 60px);
   }
 
@@ -2520,7 +2510,8 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
      com a saudação flexível de um lado e o avatar fixo do outro. */
   .topbar-row {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
+    flex-wrap: wrap;
     width: 100%;
     gap: 10px;
   }
@@ -2555,17 +2546,18 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   }
 
   .topbar-actions {
-    flex: 0 0 auto;
+    flex: 1 1 100%;
+    width: 100%;
     gap: 6px;
+    margin-left: 0;
+    order: 3;
   }
 
-  /* Busca em linha própria, largura total — sem precisar encolher texto
-     nem virar "P..." feito antes. */
+  /* Busca integrada às ações, ocupando só a linha complementar no mobile. */
   .search-box {
-    width: 100%;
-    flex: 1 1 100%;
+    width: auto;
+    flex: 1 1 auto;
   }
-  .search-box:focus-within { width: 100%; }
   .search-box input {
     min-width: 0;
   }
@@ -4577,11 +4569,11 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
 }
 .planner-progress-ring svg { flex-shrink: 0; }
 .planner-ring-label { display: flex; flex-direction: column; line-height: 1.15; }
-.planner-ring-label strong { font-size: 1rem; font-weight: 800; color: #fff; }
-.planner-ring-label span { font-size: 0.68rem; color: rgba(255,255,255,0.7); }
+.planner-ring-label strong { font-size: 1rem; font-weight: 800; color: var(--text); }
+.planner-ring-label span { font-size: 0.68rem; color: var(--text2); }
 .planner-ring-empty {
   font-size: 0.7rem;
-  color: rgba(255,255,255,0.7);
+  color: var(--text2);
   line-height: 1.3;
 }
 
@@ -4970,33 +4962,42 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
 .planner-month-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 6px;
+  gap: 8px;
 }
 .planner-month-cell {
-  aspect-ratio: 1;
+  min-height: 112px;
   border-radius: 14px;
   background: var(--surface2);
   border: 1.5px solid transparent;
   display: grid;
-  align-content: center;
-  justify-items: center;
-  gap: 4px;
+  align-content: start;
+  justify-items: stretch;
+  gap: 7px;
+  padding: 9px;
+  text-align: left;
   cursor: pointer;
   color: var(--text);
   transition: transform 140ms ease, border-color 140ms ease, background 140ms ease;
 }
 .planner-month-cell:hover { background: var(--line); }
-.planner-month-cell:active { transform: scale(0.92); }
+.planner-month-cell:active { transform: scale(0.98); }
 .planner-month-cell.is-blank { background: none; cursor: default; pointer-events: none; }
 .planner-month-cell.is-today { border-color: var(--accent); background: var(--accent-soft); }
 .planner-month-cell.is-today .planner-month-daynum { color: var(--accent); }
 .planner-month-cell.has-items { font-weight: 800; }
-.planner-month-daynum { font-size: 0.86rem; }
-.planner-month-dots { display: flex; gap: 3px; }
-.planner-month-dots span { width: 5px; height: 5px; border-radius: 50%; }
+.planner-month-cell-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-width: 0; }
+.planner-month-daynum { font-size: 0.86rem; line-height: 1; }
+.planner-month-count { display: grid; place-items: center; min-width: 19px; height: 19px; padding: 0 5px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 0.66rem; font-weight: 800; }
+.planner-month-items { display: grid; gap: 4px; min-width: 0; }
+.planner-month-item, .planner-month-more { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-radius: 7px; padding: 4px 6px; font-size: 0.69rem; line-height: 1.15; font-weight: 700; }
+.planner-month-item.is-event { background: color-mix(in srgb, var(--accent) 15%, var(--surface)); color: var(--accent); }
+.planner-month-item.is-task { background: color-mix(in srgb, var(--teal) 14%, var(--surface)); color: color-mix(in srgb, var(--teal) 78%, var(--text)); }
+.planner-month-more { color: var(--muted); padding-left: 2px; }
 
 @media (max-width: 720px) {
-  .planner-month-cell { border-radius: 10px; }
+  .planner-month-scroll { overflow-x: auto; overscroll-behavior-x: contain; padding-bottom: 5px; }
+  .planner-month-weekdays, .planner-month-grid { min-width: 650px; }
+  .planner-month-cell { min-height: 104px; border-radius: 10px; }
 }
 
 /* ============================================================
@@ -5421,15 +5422,17 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
   max-height: none;
   border-radius: 0;
   padding: 0;
+  min-height: 0;
 }
 @media (min-width: 720px) {
+  .note-detail-backdrop { padding: 20px; }
   .note-detail-card {
     position: static;
     inset: auto;
-    max-width: 640px;
-    width: 100%;
+    max-width: 720px;
+    width: min(720px, calc(100vw - 40px));
     height: min(88dvh, 760px);
-    max-height: 88dvh;
+    max-height: calc(100dvh - 40px);
     border-radius: 20px;
   }
 }
@@ -5545,8 +5548,10 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
   padding-bottom: max(12px, env(safe-area-inset-bottom));
   border-top: 1px solid var(--line);
   flex-shrink: 0;
+  flex-wrap: wrap;
 }
 .note-detail-footer .ghost-button { flex-shrink: 0; }
+.note-detail-footer .primary-button { margin-left: auto; flex-shrink: 0; }
 
 /* ─── Planner: paleta vibrante (referência TaskifyAI) ────────────
    Só aqui, escopado com o prefixo #plannerView — não muda a cara do
@@ -5565,14 +5570,14 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
     var(--surface2);
   border: 1.5px solid var(--line);
 }
-#plannerView .planner-header-title .eyebrow { color: rgba(255,255,255,0.75); }
-#plannerView .planner-header-title h2 { color: #fff; }
+#plannerView .planner-header-title .eyebrow { color: var(--text2); }
+#plannerView .planner-header-title h2 { color: var(--text); }
 
 #plannerView .planner-tabs.segmented {
-  background: rgba(0,0,0,0.18);
-  border-color: transparent;
+  background: color-mix(in srgb, var(--surface) 78%, transparent);
+  border-color: var(--line);
 }
-#plannerView .planner-tabs.segmented button { color: rgba(255,255,255,0.75); }
+#plannerView .planner-tabs.segmented button { color: var(--text2); }
 #plannerView .planner-tabs.segmented button.active {
   background: linear-gradient(135deg, var(--accent), var(--teal));
   color: #fff;
