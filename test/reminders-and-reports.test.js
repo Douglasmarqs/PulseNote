@@ -4,6 +4,7 @@ const assert = require("node:assert/strict");
 const reminderHandler = require("../api/send-reminders");
 const { buildPdfReportBuffer } = require("../api/_lib/buildPdfReport");
 const { parseTextIntent } = require("../api/_lib/parseCommandIntent");
+const { guessSpecificCategoryId } = require("../api/_lib/localTextFallback");
 const { buildNotifications, todayInTimeZone, zonedDateTimeToUtc } = reminderHandler._test;
 
 test("converte a data local de São Paulo para UTC sem antecipar o compromisso", () => {
@@ -78,4 +79,15 @@ test("comandos essenciais do WhatsApp não dependem da IA", async () => {
   assert.deepEqual(await parseTextIntent({ ...options, text: "quanto gastei com uber esse mês" }), {
     ok: true, intent: "finance_search", search: { query: "uber", month: null, year: null },
   });
+});
+
+test("classifica pão e bolo como Alimentação, nunca como Contas", () => {
+  const categories = [
+    { id: "contas", type: "despesa", label: "💡 Contas e Utilidades" },
+    { id: "alimentacao", type: "despesa", label: "🍔 Restaurante/Delivery" },
+    { id: "mercado", type: "despesa", label: "🛒 Mercado" },
+  ];
+
+  assert.equal(guessSpecificCategoryId("gastei 18 com pão e bolo", "despesa", categories), "alimentacao");
+  assert.equal(guessSpecificCategoryId("paguei 90 de luz", "despesa", categories), "contas");
 });
