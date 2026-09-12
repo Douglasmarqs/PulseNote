@@ -4995,9 +4995,22 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
 .planner-month-more { color: var(--muted); padding-left: 2px; }
 
 @media (max-width: 720px) {
-  .planner-month-scroll { overflow-x: auto; overscroll-behavior-x: contain; padding-bottom: 5px; }
-  .planner-month-weekdays, .planner-month-grid { min-width: 650px; }
-  .planner-month-cell { min-height: 104px; border-radius: 10px; }
+  .planner-month-scroll { overflow: visible; }
+  .planner-month-weekdays, .planner-month-grid { min-width: 0; }
+  .planner-month-weekdays { gap: 4px; padding-bottom: 5px; font-size: 0.62rem; }
+  .planner-month-grid { gap: 4px; }
+  .planner-month-cell { min-height: 66px; border-radius: 9px; gap: 4px; padding: 5px; }
+  .planner-month-daynum { font-size: 0.76rem; }
+  .planner-month-count { min-width: 16px; height: 16px; padding: 0 4px; font-size: 0.58rem; }
+  .planner-month-items { display: flex; align-items: center; gap: 3px; min-height: 6px; }
+  .planner-month-item { width: 6px; height: 6px; flex: 0 0 6px; overflow: visible; padding: 0; font-size: 0; border-radius: 50%; }
+  .planner-month-more { display: none; }
+}
+
+@media (max-width: 380px) {
+  .planner-month-weekdays { gap: 2px; font-size: 0.56rem; }
+  .planner-month-grid { gap: 3px; }
+  .planner-month-cell { min-height: 58px; padding: 4px; }
 }
 
 /* ============================================================
