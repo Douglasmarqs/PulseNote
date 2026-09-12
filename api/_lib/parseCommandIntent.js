@@ -56,6 +56,7 @@ const {
   extractTimeFromText,
   stripDateWordsFromDescription,
   guessType,
+  guessSpecificCategoryId,
   guessCategoryId,
   stripKnownTriggers,
   TASK_CREATE_TRIGGERS,
@@ -640,7 +641,12 @@ async function parseTextIntent({ text, categories, today, lastFinanceEntry }) {
   }
 
   const finalType = type || guessType(rawMessage);
-  if (!categoryId) categoryId = guessCategoryId(rawMessage, finalType, categories);
+  // Uma referência explícita no texto é mais confiável que uma escolha
+  // semântica errada da IA. Ex.: "pão e bolo" sempre é Alimentação, nunca
+  // "Contas e Utilidades" (💡), mesmo que aquele id tenha vindo válido.
+  const explicitCategoryId = guessSpecificCategoryId(rawMessage, finalType, categories);
+  if (explicitCategoryId) categoryId = explicitCategoryId;
+  else if (!categoryId) categoryId = guessCategoryId(rawMessage, finalType, categories);
   if (!description) {
     const local = localExpenseFallback({ text: rawMessage, categories, todayIso });
     description = local?.description || (finalType === "receita" ? "Recebimento" : "Gasto");

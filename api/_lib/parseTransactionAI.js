@@ -16,6 +16,7 @@
 // para o sucessor indicado pela própria Google, mesmo nível
 // rápido/barato/gratuito. O mesmo modelo lê imagem também (multimodal).
 const { fetchGeminiJson, GEMINI_MODEL } = require("./geminiFetch");
+const { guessSpecificCategoryId } = require("./localTextFallback");
 
 function buildSystemPrompt({ todayIso, categoryList }) {
   return `Você extrai dados de um lançamento financeiro a partir do que o usuário mandou (uma frase em português, OU a foto de um cupom fiscal/comprovante).
@@ -90,9 +91,12 @@ async function callGeminiForEntry({ contents, categories, today }) {
   const validIds = new Set(categoryIds);
   const type = parsed.type === "receita" ? "receita" : "despesa";
   const amount = Math.round(Number(parsed.amount) * 100) / 100;
-  const categoryId = validIds.has(parsed.categoryId)
+  let categoryId = validIds.has(parsed.categoryId)
     ? parsed.categoryId
     : type === "receita" ? "outros_receita" : "outros";
+  const sourceText = contents.map((part) => part.text || "").join(" ");
+  const explicitCategoryId = guessSpecificCategoryId(sourceText, type, categories);
+  if (explicitCategoryId) categoryId = explicitCategoryId;
   const description = String(parsed.description || "").slice(0, 60).trim();
   const date = /^\d{4}-\d{2}-\d{2}$/.test(parsed.date) ? parsed.date : todayIso;
 

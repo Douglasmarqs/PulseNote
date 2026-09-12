@@ -21,7 +21,7 @@
 // ============================================================
 
 const FIN_CATEGORY_KEYWORDS = {
-  alimentacao: ["almoço", "almoco", "jantar", "lanche", "restaurante", "comida", "ifood", "padaria", "café", "cafe", "pizza", "hambúrguer", "hamburguer", "churrasco", "marmita", "delivery", "açaí", "acai", "sorvete", "doces", "rappi", "padoca", "brunch", "sushi"],
+  alimentacao: ["almoço", "almoco", "jantar", "lanche", "restaurante", "comida", "ifood", "padaria", "pão", "pao", "bolo", "confeitaria", "salgado", "café", "cafe", "pizza", "hambúrguer", "hamburguer", "churrasco", "marmita", "delivery", "açaí", "acai", "sorvete", "doces", "rappi", "padoca", "brunch", "sushi"],
   mercado: ["mercado", "supermercado", "feira", "hortifruti", "atacadão", "atacadao"],
   transporte: ["uber", "99", "ônibus", "onibus", "metro", "metrô", "táxi", "taxi", "passagem", "estacionamento", "pedágio", "pedagio"],
   combustivel: ["gasolina", "combustível", "combustivel", "posto", "álcool", "alcool", "etanol", "diesel"],
@@ -293,9 +293,14 @@ function guessType(text) {
 // categories: [{id, type, label}] — respeita categorias custom do
 // usuário (casadas por palavra do próprio label), sempre priorizando a
 // palavra-chave MAIS ESPECÍFICA (mais longa) encontrada no texto.
-function guessCategoryId(text, type, categories) {
+//
+// Diferente de guessCategoryId, esta função devolve null quando não há
+// evidência no texto. Ela é usada para impedir que uma categoria válida,
+// porém claramente incompatível que veio da IA, vença algo explícito como
+// "pão"/"bolo" (Alimentação) ou "Uber" (Transporte).
+function guessSpecificCategoryId(text, type, categories) {
   const working = String(text || "").toLowerCase();
-  let categoryId = type === "receita" ? "outros_receita" : "outros";
+  let categoryId = null;
   let bestLen = 0;
 
   const validIds = new Set((categories || []).filter((c) => c.type === type).map((c) => c.id));
@@ -320,6 +325,11 @@ function guessCategoryId(text, type, categories) {
     }
   }
   return categoryId;
+}
+
+function guessCategoryId(text, type, categories) {
+  return guessSpecificCategoryId(text, type, categories)
+    || (type === "receita" ? "outros_receita" : "outros");
 }
 
 // Remove palavras de data (ontem, hoje, amanhã, dia da semana...) de uma
@@ -459,6 +469,7 @@ module.exports = {
   extractTimeFromText,
   stripDateWordsFromDescription,
   guessType,
+  guessSpecificCategoryId,
   guessCategoryId,
   stripKnownTriggers,
   TASK_CREATE_TRIGGERS,
