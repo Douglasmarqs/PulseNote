@@ -738,7 +738,14 @@
 
             <div id="ndBody" class="note-detail-body" contenteditable="true" data-placeholder="Escreva livremente aqui..."></div>
             <section id="ndChecklistSection" class="note-detail-checklist" hidden aria-label="Checklist da nota">
-              <div class="note-detail-checklist-title">Checklist</div>
+              <div class="note-detail-checklist-heading">
+                <div>
+                  <div class="note-detail-checklist-title">Checklist</div>
+                  <p id="ndChecklistSummary" class="note-detail-checklist-summary"></p>
+                </div>
+                <span id="ndChecklistProgress" class="note-detail-checklist-progress"></span>
+              </div>
+              <div class="note-detail-checklist-track" aria-hidden="true"><span id="ndChecklistProgressBar"></span></div>
               <div id="ndChecklistItems"></div>
             </section>
 

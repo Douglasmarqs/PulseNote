@@ -676,6 +676,14 @@ document.addEventListener("DOMContentLoaded", async () => {
   bindFinRecurModal();
   bindGlobalPalette();
   autoApplyRecurrents();
+  // Registra a tela atual no primeiro carregamento. Isso faz o botão/gesto
+  // de voltar percorrer as telas do app antes de deixar a aplicação.
+  const viewFromHistory = history.state?.pnView;
+  if (viewFromHistory && document.querySelector(`#${viewFromHistory}View`)) {
+    setView(viewFromHistory, { fromHistory: true });
+  } else {
+    history.replaceState({ ...(history.state || {}), pnView: activeView, noteDetail: false }, "");
+  }
   renderAll();
   handlePwaShortcutAction();
 });
@@ -1782,7 +1790,7 @@ function bindGlobalPalette() {
 }
 window.openPaletteResult = openPaletteResult;
 
-function setView(view) {
+function setView(view, { fromHistory = false } = {}) {
   const target = document.querySelector(`#${view}View`);
   if (!target) {
     // Segurança: se algum botão apontar pra uma view que não existe (foi
@@ -1793,6 +1801,14 @@ function setView(view) {
     console.warn(`setView: view "${view}" não existe.`);
     return;
   }
+  // Um detalhe de nota aberto é um modal de tela inteira. Sem fechá-lo
+  // antes de trocar a view, o backdrop continuava por cima da navegação e
+  // dava a impressão de que o app havia travado. Salva e fecha sem criar
+  // uma etapa extra no histórico quando a troca veio da navegação.
+  const noteModal = document.querySelector("#noteDetailModal");
+  if (!fromHistory && noteModal && !noteModal.hidden) closeNoteDetail({ updateHistory: false });
+
+  const previousView = activeView;
   activeView = view;
   // Sync sidebar nav
   document.querySelectorAll(".nav-item").forEach((item) => {
@@ -1816,6 +1832,12 @@ function setView(view) {
   // gente reexecuta o autofit pra medir e ajustar certo.
   if (view === "finances") fitCurrencyValues("finReceitas", "finDespesas", "finSaldo");
   if (view === "dashboard") fitCurrencyValues("summaryFinSaldo", "dashFinReceitas", "dashFinDespesas", "dashFinSaldo");
+
+  // A navegação entre áreas ganha uma entrada real no histórico: voltar no
+  // navegador/celular retorna à tela anterior em vez de sair do app.
+  if (!fromHistory && previousView !== view) {
+    history.pushState({ ...(history.state || {}), pnView: view, noteDetail: false }, "");
+  }
 }
 
 function saveNote(event) {
@@ -3453,15 +3475,25 @@ function openNoteDetail(id) {
   // "voltar" do celular (ou o botão físico/gesto de voltar do
   // Android) também fecha a nota, em vez de sair do app inteiro ou
   // deixar a pessoa sem uma saída óbvia se algum toque não registrar.
-  history.pushState({ noteDetail: true }, "");
+  history.pushState({ ...(history.state || {}), pnView: activeView, noteDetail: true }, "");
 }
 
 function renderNoteDetailChecklist(note) {
   const section = document.querySelector("#ndChecklistSection");
   const list = document.querySelector("#ndChecklistItems");
-  if (!section || !list) return;
+  const summary = document.querySelector("#ndChecklistSummary");
+  const progress = document.querySelector("#ndChecklistProgress");
+  const progressBar = document.querySelector("#ndChecklistProgressBar");
+  if (!section || !list || !summary || !progress || !progressBar) return;
   const items = note?.checklist || [];
+  const completed = items.filter(noteChecklistItemDone).length;
   section.hidden = items.length === 0;
+  section.classList.toggle("is-complete", items.length > 0 && completed === items.length);
+  summary.textContent = completed === items.length
+    ? "Tudo concluído"
+    : `${items.length - completed} ${items.length - completed === 1 ? "item pendente" : "itens pendentes"}`;
+  progress.textContent = `${completed}/${items.length}`;
+  progressBar.style.width = `${items.length ? Math.round((completed / items.length) * 100) : 0}%`;
   list.innerHTML = items.map((item, index) => {
     const done = noteChecklistItemDone(item);
     return `<button type="button" class="note-detail-check-item${done ? " is-done" : ""}" onclick="toggleNoteChecklistItem('${note.id}', ${index})" aria-pressed="${done}">
@@ -3504,12 +3536,13 @@ function closeNoteDetailUI() {
 // saiu (botão Salvar, X, toque fora do cartão). Sem isso, fechar sem
 // ter apertado "Salvar" explicitamente jogava fora tudo que tinha
 // sido digitado — o oposto de "prático e fácil".
-function closeNoteDetail() {
+function closeNoteDetail({ updateHistory = true } = {}) {
   if (!ndCurrentNoteId) return;
   flushNoteDetailSave();
   closeNoteDetailUI();
   renderAll();
-  if (history.state && history.state.noteDetail) history.back();
+  if (updateHistory && history.state && history.state.noteDetail) history.back();
+  else if (!updateHistory) history.replaceState({ ...(history.state || {}), pnView: activeView, noteDetail: false }, "");
 }
 
 function saveNoteDetail() {
@@ -3634,12 +3667,14 @@ function bindNoteDetail() {
   // isso chama a versão SEM history.back() (evita loop). Salva antes
   // de fechar pelo mesmo motivo de todo outro caminho de saída: voltar
   // pelo celular não pode jogar fora o que foi escrito.
-  window.addEventListener("popstate", () => {
+  window.addEventListener("popstate", (event) => {
     if (!modal.hidden) {
       flushNoteDetailSave();
       closeNoteDetailUI();
       renderAll();
     }
+    const view = event.state?.pnView;
+    if (view && view !== activeView) setView(view, { fromHistory: true });
   });
 }
 
@@ -5155,7 +5190,8 @@ function bindFinanceMonthControls() {
 // expressões regulares e listas de palavras-chave, tudo dentro do
 // navegador — nenhum texto sai do dispositivo do usuário.
 const FIN_CATEGORY_KEYWORDS = {
-  alimentacao:  ["almoço","almoco","jantar","lanche","mercado","supermercado","restaurante","comida","ifood","padaria","café","cafe","pizza","hambúrguer","hamburguer","feira","churrasco","marmita","delivery","açaí","acai","sorvete","doces","rappi","padoca","brunch","sushi"],
+  alimentacao:  ["almoço","almoco","jantar","lanche","restaurante","comida","ifood","padaria","café","cafe","pizza","hambúrguer","hamburguer","churrasco","marmita","delivery","açaí","acai","sorvete","doces","rappi","padoca","brunch","sushi","mcdonalds","mcdonald's","mc donalds","mac donalds","burger king","bk","coxinha","pastel","esfiha","sanduíche","sanduiche","bolo","pão","pao"],
+  mercado:      ["mercado","supermercado","mercadinho","hipermercado","atacadão","atacadao","assaí","assai","carrefour","pão de açúcar","pao de acucar","hortifruti","sacolão","sacolao","feira","açougue","acougue"],
   transporte:   ["uber","99","gasolina","combustível","combustivel","ônibus","onibus","metro","metrô","táxi","taxi","passagem","estacionamento","pedágio","pedagio","posto","oficina","seguro do carro","ipva","licenciamento","manutenção do carro","manutencao do carro","mecânico","mecanico"],
   saude:        ["farmácia","farmacia","remédio","remedio","médico","medico","consulta","dentista","plano de saúde","plano de saude","exame","hospital","academia","psicólogo","psicologo","terapia","fisioterapia","óculos","oculos","vacina","laboratório","laboratorio"],
   lazer:        ["cinema","show","viagem","bar","balada","streaming","jogo","passeio","ingresso","netflix","festa","parque","hospedagem","hotel","pousada","passeio turístico"],
@@ -6553,7 +6589,7 @@ function handlePwaShortcutAction() {
       }
     }
     // Limpa o parâmetro da URL para não reabrir a mesma ação ao recarregar
-    history.replaceState(null, "", window.location.pathname);
+    history.replaceState({ ...(history.state || {}), pnView: activeView, noteDetail: false }, "", window.location.pathname);
   }
 
   // Se o usuário tocar numa notificação enquanto o app já está aberto em

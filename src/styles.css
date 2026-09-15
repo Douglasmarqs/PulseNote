@@ -2843,8 +2843,15 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 }
 
 .note-detail-checklist { margin: 16px 0 4px; padding: 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface2); }
-.note-detail-checklist-title { margin-bottom: 8px; font-size: 0.78rem; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
-.note-detail-check-item { width: 100%; display: flex; align-items: center; gap: 10px; padding: 9px 4px; color: var(--text); text-align: left; border: 0; border-bottom: 1px solid var(--line); background: transparent; }
+.note-detail-checklist-heading { display: flex; justify-content: space-between; align-items: start; gap: 12px; }
+.note-detail-checklist-title { font-size: 0.78rem; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.note-detail-checklist-summary { margin: 3px 0 0; color: var(--text2); font-size: .78rem; }
+.note-detail-checklist-progress { flex: 0 0 auto; padding: 4px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: .75rem; font-weight: 800; }
+.note-detail-checklist-track { height: 5px; margin: 11px 0 5px; overflow: hidden; border-radius: 999px; background: var(--line); }
+.note-detail-checklist-track span { display: block; width: 0; height: 100%; border-radius: inherit; background: var(--purple); transition: width 220ms ease; }
+.note-detail-checklist.is-complete .note-detail-checklist-track span { background: var(--green); }
+.note-detail-check-item { width: 100%; display: flex; align-items: center; gap: 10px; padding: 10px 4px; color: var(--text); text-align: left; border: 0; border-bottom: 1px solid var(--line); background: transparent; border-radius: 8px; transition: background 160ms ease, color 160ms ease; }
+.note-detail-check-item:hover { background: color-mix(in srgb, var(--accent-soft) 45%, transparent); }
 .note-detail-check-item:last-child { border-bottom: 0; }
 .note-detail-check-box { display: inline-grid; place-items: center; flex: 0 0 20px; width: 20px; height: 20px; border: 1.5px solid var(--line-strong); border-radius: 6px; color: white; }
 .note-detail-check-item.is-done .note-detail-check-box { border-color: var(--purple); background: var(--purple); }
