@@ -104,3 +104,26 @@ test("classifica pão e bolo como Alimentação, nunca como Contas", () => {
   assert.equal(guessSpecificCategoryId("gastei 18 com pão e bolo", "despesa", categories), "alimentacao");
   assert.equal(guessSpecificCategoryId("paguei 90 de luz", "despesa", categories), "contas");
 });
+
+test("reconhece marcas e itens cotidianos na categoria correta", () => {
+  const categories = [
+    { id: "alimentacao", type: "despesa", label: "🍔 Restaurante/Delivery" },
+    { id: "mercado", type: "despesa", label: "🛒 Mercado" },
+    { id: "combustivel", type: "despesa", label: "⛽ Combustível" },
+    { id: "saude", type: "despesa", label: "💊 Saúde" },
+    { id: "pet", type: "despesa", label: "🐾 Pet" },
+    { id: "contas", type: "despesa", label: "💡 Contas e Utilidades" },
+  ];
+
+  for (const [message, expected] of [
+    ["Mac Donalds 40", "alimentacao"],
+    ["gasto coxinha 5", "alimentacao"],
+    ["Assaí 120", "mercado"],
+    ["Drogasil 35", "saude"],
+    ["ração do cachorro 90", "pet"],
+    ["posto 180", "combustivel"],
+    ["Cemig 96", "contas"],
+  ]) {
+    assert.equal(guessSpecificCategoryId(message, "despesa", categories), expected, message);
+  }
+});
