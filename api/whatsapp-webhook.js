@@ -502,10 +502,9 @@ async function downloadWhatsAppMedia(mediaId) {
   }
 }
 
-// O app pode usar o emoji no picker e nos gráficos, mas a conversa do
-// WhatsApp precisa falar a categoria por extenso. Assim a confirmação fica
-// limpa e escaneável, no estilo de assistente financeiro: item (categoria),
-// valor, data e uma referência curta.
+// A confirmação do WhatsApp mantém o nome da categoria por extenso, mas usa
+// o mesmo emoji dela como uma pista visual rápida. Assim a pessoa reconhece
+// o tipo do gasto antes mesmo de ler a linha inteira.
 function categoryNameForWhatsApp(label, fallback = "Outros") {
   const clean = String(label || "")
     .replace(/^\p{Extended_Pictographic}\uFE0F?\s*/u, "")
@@ -513,16 +512,21 @@ function categoryNameForWhatsApp(label, fallback = "Outros") {
   return clean || fallback;
 }
 
+function categoryEmojiForWhatsApp(label) {
+  return String(label || "").trim().match(/^\p{Extended_Pictographic}\uFE0F?/u)?.[0] || "📦";
+}
+
 function formatWhatsAppFinanceConfirmation(record, entry, categories) {
   const categoryLabel = categories.find((c) => c.id === entry.categoryId)?.label || "";
   const categoryName = categoryNameForWhatsApp(categoryLabel, entry.categoryId || "Outros");
+  const categoryEmoji = categoryEmojiForWhatsApp(categoryLabel);
   const reference = String(record?.id || "").replace(/^wa_/, "").slice(-6) || "novo";
-  const heading = entry.type === "receita" ? "Receita registrada!" : "Gasto registrado!";
+  const heading = entry.type === "receita" ? "Receita Registrada!" : "Gasto Registrado!";
   return [
     `✅ ${heading}`,
-    `${entry.description} (${categoryName})`,
-    `R$ ${Number(entry.amount || 0).toFixed(2).replace(".", ",")}`,
-    `${formatDateBr(entry.date, { includeYear: true })} • #${reference}`,
+    `${categoryEmoji} ${entry.description} (${categoryName})`,
+    `💰 R$${Number(entry.amount || 0).toFixed(2).replace(".", ",")}`,
+    `⚙️ ${formatDateBr(entry.date, { includeYear: true })} • #${reference}`,
   ].join("\n");
 }
 
@@ -1326,7 +1330,7 @@ module.exports = async (req, res) => {
         const listMsg = options
           .map((id, i) => {
             const label = categories.find((c) => c.id === id)?.label || id;
-            return `${i + 1}) ${categoryNameForWhatsApp(label, id)}`;
+            return `${i + 1}) ${label || categoryNameForWhatsApp(label, id)}`;
           })
           .join("\n");
         const verb = entry.type === "receita" ? "essa receita" : "esse gasto";
