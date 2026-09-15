@@ -984,6 +984,9 @@ function renderWhatsAppSettings() {
   const codeBlock     = document.getElementById("whatsappCodeBlock");
   if (!linkedBlock || !unlinkedBlock || !state) return;
 
+  const appReminderCheckbox = document.getElementById("appReminderOptIn");
+  if (appReminderCheckbox) appReminderCheckbox.checked = state.appReminderOptIn !== false;
+
   if (state.whatsappLinkedPhone) {
     linkedBlock.hidden   = false;
     unlinkedBlock.hidden = true;
@@ -1393,9 +1396,33 @@ function normalizeState(parsed) {
   // perguntar isso quando já está vinculado — ver renderWhatsAppSettings).
   if (!Array.isArray(parsed.fcmTokens)) parsed.fcmTokens = [];
   if (parsed.whatsappReminderOptIn === undefined) parsed.whatsappReminderOptIn = false;
+  // A pessoa pode desligar notificações no aplicativo sem precisar
+  // desligar os lembretes do WhatsApp (e vice-versa).
+  if (parsed.appReminderOptIn === undefined) parsed.appReminderOptIn = true;
   // Retrocompatibilidade: lançamentos, tarefas e metas antigos não tinham
   // esses campos — garantimos que existam pra não quebrar o restante do app.
-  parsed.tasks.forEach((t) => { if (!t.subtasks) t.subtasks = []; if (t.recurrence === undefined) t.recurrence = null; });
+  parsed.tasks.forEach((t) => {
+    if (!t.subtasks) t.subtasks = [];
+    if (t.recurrence === undefined) t.recurrence = null;
+    if (t.dueTime === undefined) t.dueTime = "";
+    if (!Number.isFinite(Number(t.reminder))) t.reminder = 15;
+  });
+
+  // ── Notificações no aplicativo (push/local) ─────────────────────
+  document.getElementById("appReminderOptIn")?.addEventListener("change", async (e) => {
+    if (e.target.checked) {
+      const allowed = await window.requestNotificationPermission?.();
+      if (!allowed) {
+        state.appReminderOptIn = false;
+        e.target.checked = false;
+        saveState();
+        return;
+      }
+    }
+    state.appReminderOptIn = e.target.checked;
+    saveState();
+    showToast(e.target.checked ? "Lembretes no aplicativo ativados." : "Lembretes no aplicativo desativados.");
+  });
   parsed.notes.forEach((n) => { if (!n.tags) n.tags = []; });
   parsed.goals.forEach((g) => { if (!g.milestones) g.milestones = []; });
   return parsed;
@@ -1419,6 +1446,7 @@ function loadDefaultState() {
     whatsappLinkedPhone: null,
     fcmTokens: [],
     whatsappReminderOptIn: false,
+    appReminderOptIn: true,
   };
 }
 
@@ -1437,7 +1465,7 @@ function saveState() {
 }
 
 
-function createTask(title, status = "Pendente", priority = "Media", dueDate = todayIso, completedAt = "") {
+function createTask(title, status = "Pendente", priority = "Media", dueDate = todayIso, completedAt = "", dueTime = "", reminder = 15) {
   return {
     id: crypto.randomUUID(),
     title,
@@ -1446,6 +1474,8 @@ function createTask(title, status = "Pendente", priority = "Media", dueDate = to
     dueDate,
     createdAt: todayIso,
     completedAt,
+    dueTime,
+    reminder,
     sourceNoteId: "",
     subtasks: [],
     recurrence: null,
@@ -1801,7 +1831,7 @@ function saveNote(event) {
     folder: valueOf("#noteFolder") || "Entrada",
     tags: splitValues(valueOf("#noteTags")),
     priority: valueOf("#notePriority"),
-    checklist: splitLines(valueOf("#noteChecklist")),
+    checklist: splitLines(valueOf("#noteChecklist")).map((text) => ({ id: crypto.randomUUID(), text, done: false })),
     attachments: splitValues(valueOf("#noteAttachments")),
     goal: valueOf("#noteGoal"),
     observations: valueOf("#noteObservations"),
@@ -2943,7 +2973,10 @@ function setPlannerQuickAddType(type) {
   const form = document.querySelector("#plannerQuickAddForm");
   form.dataset.type = type;
   const referenceDate = plannerActiveTab === "day" ? plannerDayDate : todayIso;
-  if (type === "task") document.querySelector("#pqaTaskDue").value ||= referenceDate;
+  if (type === "task") {
+    document.querySelector("#pqaTaskDue").value ||= referenceDate;
+    document.querySelector("#pqaTaskTime").value ||= "09:00";
+  }
   if (type === "event") {
     document.querySelector("#pqaEventDate").value ||= referenceDate;
     document.querySelector("#pqaEventTime").value ||= "09:00";
@@ -2961,15 +2994,19 @@ function bindPlannerQuickAdd() {
   document.querySelectorAll("#plannerQuickAddType button").forEach((btn) => {
     btn.addEventListener("click", () => setPlannerQuickAddType(btn.dataset.quickType));
   });
-  const reminderSelect = document.querySelector("#pqaEventReminder");
-  const reminderCustom = document.querySelector("#pqaEventReminderCustom");
-  const syncReminderField = () => {
-    if (!reminderSelect || !reminderCustom) return;
-    reminderCustom.hidden = reminderSelect.value !== "custom";
-    if (!reminderCustom.hidden) document.querySelector("#pqaEventReminderMinutes")?.focus();
+  const bindReminderField = (selectSelector, customSelector, inputSelector) => {
+    const reminderSelect = document.querySelector(selectSelector);
+    const reminderCustom = document.querySelector(customSelector);
+    const syncReminderField = () => {
+      if (!reminderSelect || !reminderCustom) return;
+      reminderCustom.hidden = reminderSelect.value !== "custom";
+      if (!reminderCustom.hidden) document.querySelector(inputSelector)?.focus();
+    };
+    reminderSelect?.addEventListener("change", syncReminderField);
+    syncReminderField();
   };
-  reminderSelect?.addEventListener("change", syncReminderField);
-  syncReminderField();
+  bindReminderField("#pqaTaskReminder", "#pqaTaskReminderCustom", "#pqaTaskReminderMinutes");
+  bindReminderField("#pqaEventReminder", "#pqaEventReminderCustom", "#pqaEventReminderMinutes");
   document.querySelector("#plannerQuickAddForm")?.addEventListener("submit", submitPlannerQuickAdd);
 }
 
@@ -2982,7 +3019,13 @@ function submitPlannerQuickAdd(event) {
   if (type === "task") {
     const priority = document.querySelector("#pqaTaskPriority").value;
     const due = document.querySelector("#pqaTaskDue").value || todayIso;
-    state.tasks.unshift(createTask(title, "Pendente", priority, due));
+    const dueTime = document.querySelector("#pqaTaskTime").value || "";
+    const selectedReminder = document.querySelector("#pqaTaskReminder").value;
+    const customReminder = Number(document.querySelector("#pqaTaskReminderMinutes").value);
+    const reminder = selectedReminder === "custom"
+      ? Math.min(10080, Math.max(5, Number.isFinite(customReminder) ? customReminder : 15))
+      : Number(selectedReminder || 15);
+    state.tasks.unshift(createTask(title, "Pendente", priority, due, "", dueTime, reminder));
     showToast("Tarefa adicionada.");
   } else if (type === "event") {
     const date = document.querySelector("#pqaEventDate").value || todayIso;
@@ -3075,15 +3118,26 @@ function setNotesFolderFilter(folder) {
   renderNotes();
 }
 
+// Checklists criados nas versões antigas eram arrays de texto. As funções
+// abaixo leem os dois formatos para que nenhuma nota existente desapareça
+// quando o item passa a poder ser marcado dentro do detalhe.
+function noteChecklistItemText(item) {
+  return typeof item === "string" ? item : String(item?.text || "");
+}
+
+function noteChecklistItemDone(item) {
+  return typeof item === "object" && !!item?.done;
+}
+
 function renderNoteCard(note, searchQuery) {
   const tone = noteColorTone(note); // cor escolhida pela pessoa; notas antigas mantêm a cor determinística anterior
   const checklistHtml =
     note.checklist && note.checklist.length
       ? `<div class="checklist-preview">${note.checklist
-          .map(
-            (item, i) =>
-              `<div class="cl-item${i >= 3 ? " cl-item-extra" : ""}"><span class="cl-check">${icon("check", 11)}</span><span class="cl-text">${escapeHtml(item)}</span></div>`
-          )
+          .map((item, i) => {
+            const done = noteChecklistItemDone(item);
+            return `<div class="cl-item${done ? " is-done" : ""}${i >= 3 ? " cl-item-extra" : ""}"><span class="cl-check">${icon("check", 11)}</span><span class="cl-text">${escapeHtml(noteChecklistItemText(item))}</span></div>`;
+          })
           .join("")}${
           note.checklist.length > 3
             ? `<button type="button" class="cl-toggle-btn" onclick="event.stopPropagation(); toggleNoteChecklistPreview(this)">+${note.checklist.length - 3} mais itens</button>`
@@ -3151,7 +3205,7 @@ function exportNoteMarkdown(id) {
   let md = `# ${note.title}\n\n`;
   if (note.tags?.length) md += note.tags.map((t) => `#${t}`).join(" ") + "\n\n";
   if (note.description) md += `${note.description}\n\n`;
-  if (note.checklist?.length) md += note.checklist.map((item) => `- [ ] ${item}`).join("\n") + "\n\n";
+  if (note.checklist?.length) md += note.checklist.map((item) => `- [${noteChecklistItemDone(item) ? "x" : " "}] ${noteChecklistItemText(item)}`).join("\n") + "\n\n";
   if (note.observations) md += `> ${note.observations}\n`;
 
   const blob = new Blob([md], { type: "text/markdown" });
@@ -3180,7 +3234,7 @@ function editNote(id) {
   document.querySelectorAll("#notePriorityPicker .note-priority-dot").forEach((d) =>
     d.classList.toggle("active", d.dataset.priority === note.priority)
   );
-  document.querySelector("#noteChecklist").value = note.checklist.join("\n");
+  document.querySelector("#noteChecklist").value = (note.checklist || []).map(noteChecklistItemText).join("\n");
   document.querySelector("#noteAttachments").value = note.attachments.join(", ");
   document.querySelector("#noteGoal").value = note.goal;
   document.querySelector("#noteObservations").value = note.observations;
@@ -3386,6 +3440,8 @@ function openNoteDetail(id) {
     ? sanitizeNoteHtml(note.descriptionHtml)
     : escapeHtml(note.description || "").replace(/\n/g, "<br>");
 
+  renderNoteDetailChecklist(note);
+
   document.querySelector("#ndMeta").textContent =
     `${note.category || "Geral"} · criada em ${formatDate(note.createdAt)}`;
   document.querySelector("#ndFavBtn").classList.toggle("is-fav", !!note.favorite);
@@ -3398,6 +3454,35 @@ function openNoteDetail(id) {
   // Android) também fecha a nota, em vez de sair do app inteiro ou
   // deixar a pessoa sem uma saída óbvia se algum toque não registrar.
   history.pushState({ noteDetail: true }, "");
+}
+
+function renderNoteDetailChecklist(note) {
+  const section = document.querySelector("#ndChecklistSection");
+  const list = document.querySelector("#ndChecklistItems");
+  if (!section || !list) return;
+  const items = note?.checklist || [];
+  section.hidden = items.length === 0;
+  list.innerHTML = items.map((item, index) => {
+    const done = noteChecklistItemDone(item);
+    return `<button type="button" class="note-detail-check-item${done ? " is-done" : ""}" onclick="toggleNoteChecklistItem('${note.id}', ${index})" aria-pressed="${done}">
+      <span class="note-detail-check-box">${done ? icon("check", 13) : ""}</span>
+      <span>${escapeHtml(noteChecklistItemText(item))}</span>
+    </button>`;
+  }).join("");
+}
+
+function toggleNoteChecklistItem(noteId, index) {
+  const note = state.notes.find((item) => item.id === noteId);
+  if (!note || !note.checklist?.[index]) return;
+  const current = note.checklist[index];
+  note.checklist[index] = {
+    id: typeof current === "object" && current.id ? current.id : crypto.randomUUID(),
+    text: noteChecklistItemText(current),
+    done: !noteChecklistItemDone(current),
+  };
+  saveState();
+  renderNoteDetailChecklist(note);
+  renderNotes();
 }
 
 // Só cuida da parte visual (esconder modal, destravar scroll) — não
@@ -6996,6 +7081,7 @@ function autoApplyRecurrents() {
 window.editNote = editNote;
 window.toggleFavorite = toggleFavorite;
 window.toggleNoteChecklistPreview = toggleNoteChecklistPreview;
+window.toggleNoteChecklistItem = toggleNoteChecklistItem;
 window.convertNoteToTask = convertNoteToTask;
 window.deleteNote = deleteNote;
 window.openNoteDetail = openNoteDetail;

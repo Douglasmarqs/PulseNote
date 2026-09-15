@@ -95,12 +95,32 @@ function notificationsAreEnabled() {
 function checkTaskNotifications() {
   if (!window.PulseNoteState.tasks) return;
   const today = new Date().toISOString().slice(0, 10);
+  const now = new Date();
+
+  // Tarefas com horário recebem alerta no minuto definido pela pessoa. As
+  // tarefas antigas, sem horário, continuam no resumo diário logo abaixo.
+  window.PulseNoteState.tasks.forEach((task) => {
+    if (task.status === "Concluida" || task.status === "Cancelada" || !task.dueDate || !task.dueTime) return;
+    const dueAt = new Date(`${task.dueDate}T${task.dueTime}`);
+    const minutesUntil = (dueAt - now) / 60000;
+    const reminderMinutes = Number(task.reminder) || 15;
+    const notifyKey = `task_${task.id}`;
+    if (minutesUntil > 0 && minutesUntil <= reminderMinutes && !alreadyNotifiedToday(notifyKey)) {
+      fireNotification(
+        "Tarefa em breve",
+        `“${task.title}” vence às ${task.dueTime}.`,
+        notifyKey,
+        "planner",
+        task.id
+      );
+    }
+  });
 
   const overdue = window.PulseNoteState.tasks.filter(
     (t) => t.status !== "Concluida" && t.status !== "Cancelada" && t.dueDate && t.dueDate < today
   );
   const dueToday = window.PulseNoteState.tasks.filter(
-    (t) => t.status !== "Concluida" && t.status !== "Cancelada" && t.dueDate === today
+    (t) => t.status !== "Concluida" && t.status !== "Cancelada" && t.dueDate === today && !t.dueTime
   );
 
   if (overdue.length > 0 && !alreadyNotifiedToday("tasks_overdue")) {

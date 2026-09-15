@@ -2841,6 +2841,14 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   align-items: stretch;
   min-width: 0;
 }
+
+.note-detail-checklist { margin: 16px 0 4px; padding: 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface2); }
+.note-detail-checklist-title { margin-bottom: 8px; font-size: 0.78rem; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.note-detail-check-item { width: 100%; display: flex; align-items: center; gap: 10px; padding: 9px 4px; color: var(--text); text-align: left; border: 0; border-bottom: 1px solid var(--line); background: transparent; }
+.note-detail-check-item:last-child { border-bottom: 0; }
+.note-detail-check-box { display: inline-grid; place-items: center; flex: 0 0 20px; width: 20px; height: 20px; border: 1.5px solid var(--line-strong); border-radius: 6px; color: white; }
+.note-detail-check-item.is-done .note-detail-check-box { border-color: var(--purple); background: var(--purple); }
+.note-detail-check-item.is-done { color: var(--muted); text-decoration: line-through; }
 .fin-analise-grid > .panel.wide { grid-column: 1 / -1; }
 
 .fin-analysis-intro {
