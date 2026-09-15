@@ -26,6 +26,19 @@ test("respeita lembrete configurado de 15 minutos no fuso da pessoa", () => {
   assert.equal(notifications[0].key, "event_consulta");
 });
 
+test("envia a tarefa com horário na antecedência escolhida", () => {
+  const now = new Date("2026-09-10T11:45:00.000Z"); // 08:45 em São Paulo
+  const notifications = buildNotifications({
+    tasks: [{ id: "boleto", title: "Pagar boleto", status: "Pendente", dueDate: "2026-09-10", dueTime: "09:00", reminder: 15 }],
+    goals: [],
+    finances: [],
+    events: [],
+  }, "2026-09-10", now, "America/Sao_Paulo");
+
+  assert.deepEqual(notifications.map((item) => item.key), ["task_boleto"]);
+  assert.match(notifications[0].plain, /Pagar boleto/);
+});
+
 test("gera um PDF válido para o relatório do WhatsApp", () => {
   const pdf = buildPdfReportBuffer({
     monthLabel: "setembro de 2026",
