@@ -209,7 +209,10 @@ function buildNotifications(state, todayIso, now, timeZone = DEFAULT_TIME_ZONE) 
 
   const tasks = state.tasks || [];
   const overdue = tasks.filter((t) => isOpen(t) && t.dueDate && t.dueDate < todayIso);
-  const dueToday = tasks.filter((t) => isOpen(t) && t.dueDate === todayIso);
+  // Tarefas com hora própria recebem um único aviso na antecedência que a
+  // pessoa escolheu. As sem hora continuam no resumo diário, para manter
+  // compatibilidade com tarefas antigas e com quem só define o dia.
+  const dueToday = tasks.filter((t) => isOpen(t) && t.dueDate === todayIso && !t.dueTime);
   if (overdue.length > 0) {
     results.push({
       key: "tasksOverdue",
@@ -231,6 +234,26 @@ function buildNotifications(state, todayIso, now, timeZone = DEFAULT_TIME_ZONE) 
       itemId: dueToday.length === 1 ? dueToday[0].id : null,
     });
   }
+
+  tasks.forEach((task) => {
+    if (!isOpen(task) || !task.dueDate || !task.dueTime) return;
+    const taskDateTime = zonedDateTimeToUtc(task.dueDate, task.dueTime, timeZone);
+    if (!taskDateTime || Number.isNaN(taskDateTime.getTime())) return;
+    const minutesUntil = (taskDateTime - now) / 60000;
+    const reminderMinutes = Number(task.reminder) || 15;
+    const windowMinutes = Math.max(reminderMinutes, 5);
+    if (minutesUntil > -5 && minutesUntil <= windowMinutes) {
+      results.push({
+        key: `task_${task.id}`,
+        title: "Tarefa em breve",
+        body: `"${task.title}" vence às ${task.dueTime}.`,
+        plain: `sua tarefa "${task.title}" vence às ${task.dueTime}.`,
+        tag: `task-${task.id}`,
+        view: "planner",
+        itemId: task.id,
+      });
+    }
+  });
 
   (state.events || []).forEach((event) => {
     if (!event.date || !event.time) return;
@@ -361,7 +384,7 @@ module.exports = async (req, res) => {
 
       for (const n of pending) {
         try {
-          if (tokens.length > 0) {
+          if (state.appReminderOptIn !== false && tokens.length > 0) {
             const result = await sendPush(fb, tokens, n);
             invalidTokens = invalidTokens.concat(result.invalidTokens);
           }

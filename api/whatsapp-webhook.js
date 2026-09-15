@@ -502,29 +502,41 @@ async function downloadWhatsAppMedia(mediaId) {
   }
 }
 
+// O app pode usar o emoji no picker e nos gráficos, mas a conversa do
+// WhatsApp precisa falar a categoria por extenso. Assim a confirmação fica
+// limpa e escaneável, no estilo de assistente financeiro: item (categoria),
+// valor, data e uma referência curta.
+function categoryNameForWhatsApp(label, fallback = "Outros") {
+  const clean = String(label || "")
+    .replace(/^\p{Extended_Pictographic}\uFE0F?\s*/u, "")
+    .trim();
+  return clean || fallback;
+}
+
+function formatWhatsAppFinanceConfirmation(record, entry, categories) {
+  const categoryLabel = categories.find((c) => c.id === entry.categoryId)?.label || "";
+  const categoryName = categoryNameForWhatsApp(categoryLabel, entry.categoryId || "Outros");
+  const reference = String(record?.id || "").replace(/^wa_/, "").slice(-6) || "novo";
+  const heading = entry.type === "receita" ? "Receita registrada!" : "Gasto registrado!";
+  return [
+    `✅ ${heading}`,
+    `${entry.description} (${categoryName})`,
+    `R$ ${Number(entry.amount || 0).toFixed(2).replace(".", ",")}`,
+    `${formatDateBr(entry.date, { includeYear: true })} • #${reference}`,
+  ].join("\n");
+}
+
 // Compartilhado entre texto e foto: salva o lançamento e manda a
-// confirmação com o emoji da categoria, ou a mensagem de "não entendi"
-// se o Gemini não conseguiu extrair nada válido.
+// confirmação organizada, ou a mensagem de "não entendi" se o Gemini não
+// conseguiu extrair nada válido.
 async function finishParsedResult({ fb, uid, fromPhone, categories, result, failureMsg, rawMessage }) {
   if (!result.ok) {
     await sendWhatsAppMessage(fromPhone, failureMsg);
     return;
   }
 
-  await appendFinanceEntry(fb, uid, result.entry, rawMessage);
-  const { type, amount, description, date, categoryId } = result.entry;
-
-  // Categorias já guardam o emoji como primeiro "token" do label (ex.:
-  // "🍔 Restaurante/Delivery") — mesma convenção usada em outros lugares
-  // do app (ver renderização de resumo por categoria em src/app.js).
-  const categoryLabel = categories.find((c) => c.id === categoryId)?.label || "";
-  const categoryEmoji = categoryLabel.trim().split(/\s+/)[0] || (type === "receita" ? "💰" : "💸");
-
-  const dateBr = formatDateBr(date, { includeYear: true });
-  const confirmMsg = type === "receita"
-    ? `✅ ${categoryEmoji} Receita de ${description} adicionada! R$ ${amount.toFixed(2)} (${dateBr}).`
-    : `✅ ${categoryEmoji} Gasto com ${description} adicionado! R$ ${amount.toFixed(2)} (${dateBr}).`;
-  await sendWhatsAppMessage(fromPhone, confirmMsg);
+  const record = await appendFinanceEntry(fb, uid, result.entry, rawMessage);
+  await sendWhatsAppMessage(fromPhone, formatWhatsAppFinanceConfirmation(record, result.entry, categories));
 }
 
 // Data de "hoje" no fuso de Brasília, não em UTC (o servidor da Vercel
@@ -705,7 +717,7 @@ function formatMonthlyReport(summary, categories) {
   if (topCategories.length > 0) {
     msg += `\n\nMaiores gastos:`;
     for (const [categoryId, total] of topCategories) {
-      const label = categories.find((c) => c.id === categoryId)?.label || categoryId || "Outros";
+      const label = categoryNameForWhatsApp(categories.find((c) => c.id === categoryId)?.label, categoryId || "Outros");
       msg += `\n${label}: R$ ${total.toFixed(2)}`;
     }
   }
@@ -1142,7 +1154,7 @@ module.exports = async (req, res) => {
           const pdfEntries = summary.entries.map((f) => ({
             date: f.date,
             description: f.description || "",
-            categoryLabel: (categories.find((c) => c.id === f.category)?.label || f.category || "Outros").replace(/^\S+\s*/, ""),
+            categoryLabel: categoryNameForWhatsApp(categories.find((c) => c.id === f.category)?.label, f.category || "Outros"),
             type: f.type === "receita" ? "receita" : "despesa",
             amount: Number(f.amount) || 0,
           }));
@@ -1314,7 +1326,7 @@ module.exports = async (req, res) => {
         const listMsg = options
           .map((id, i) => {
             const label = categories.find((c) => c.id === id)?.label || id;
-            return `${i + 1}) ${label}`;
+            return `${i + 1}) ${categoryNameForWhatsApp(label, id)}`;
           })
           .join("\n");
         const verb = entry.type === "receita" ? "essa receita" : "esse gasto";
