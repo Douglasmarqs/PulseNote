@@ -21,23 +21,27 @@
 // ============================================================
 
 const FIN_CATEGORY_KEYWORDS = {
-  alimentacao: ["almoço", "almoco", "jantar", "lanche", "restaurante", "comida", "ifood", "padaria", "pão", "pao", "bolo", "confeitaria", "salgado", "café", "cafe", "pizza", "hambúrguer", "hamburguer", "churrasco", "marmita", "delivery", "açaí", "acai", "sorvete", "doces", "rappi", "padoca", "brunch", "sushi"],
-  mercado: ["mercado", "supermercado", "feira", "hortifruti", "atacadão", "atacadao"],
-  transporte: ["uber", "99", "ônibus", "onibus", "metro", "metrô", "táxi", "taxi", "passagem", "estacionamento", "pedágio", "pedagio"],
-  combustivel: ["gasolina", "combustível", "combustivel", "posto", "álcool", "alcool", "etanol", "diesel"],
-  manutencao: ["oficina", "mecânico", "mecanico", "manutenção do carro", "manutencao do carro", "reforma", "conserto", "encanador", "eletricista"],
-  saude: ["farmácia", "farmacia", "remédio", "remedio", "médico", "medico", "consulta", "dentista", "plano de saúde", "plano de saude", "exame", "hospital", "psicólogo", "psicologo", "terapia", "fisioterapia", "óculos", "oculos", "vacina", "laboratório", "laboratorio"],
-  academia: ["academia", "personal trainer", "crossfit", "pilates", "yoga", "musculação", "musculacao"],
-  beleza: ["cabelo", "corte de cabelo", "cabeleireiro", "cabeleireira", "salão", "salao", "manicure", "pedicure", "barbearia", "barbeiro", "depilação", "depilacao", "estética", "estetica", "maquiagem", "sobrancelha", "unha", "skincare"],
-  educacao: ["curso", "faculdade", "livro", "mensalidade escolar", "escola", "material escolar", "apostila", "aula", "udemy", "mensalidade da faculdade", "pós-graduação", "pos-graduacao"],
-  lazer: ["cinema", "show", "bar", "balada", "streaming", "jogo", "passeio", "ingresso", "netflix", "parque"],
-  eventos: ["festa", "aniversário", "aniversario", "casamento", "confraternização", "confraternizacao"],
-  presentes: ["presente", "lembrancinha"],
-  roupas: ["roupa", "calça", "calca", "camisa", "tênis", "tenis", "sapato", "blusa", "jaqueta", "acessório", "acessorio", "bolsa", "perfume"],
-  tecnologia: ["celular", "notebook", "computador", "fone de ouvido", "carregador", "eletrônico", "eletronico"],
-  moradia: ["aluguel", "condomínio", "condominio", "iptu"],
-  contas: ["luz", "água", "agua", "internet", "gás", "gas", "conta de", "telefone", "tv a cabo", "wifi"],
-  assinaturas: ["assinatura", "spotify", "amazon prime", "youtube premium", "mensalidade do", "disney+", "disney plus", "hbo max", "globoplay", "apple music", "icloud", "google one", "google fotos", "google photos", "chatgpt", "chat gpt", "openai", "uber one"],
+  // Alimentação pronta/delivery. Marcas, grafias populares e itens são
+  // deliberadamente tratados aqui: "mac donalds", "coxinha" e "pão"
+  // devem vencer qualquer palpite genérico que a IA possa devolver.
+  alimentacao: ["mcdonalds", "mcdonald's", "mc donalds", "mac donalds", "mcdonald", "burger king", "bk", "habibs", "subway", "kfc", "bobs", "bob's", "outback", "coco bambu", "china in box", "giraffas", "dominos", "domino's", "pizza hut", "ifood", "rappi", "ubereats", "uber eats", "aiqfome", "delivery", "restaurante", "lanchonete", "padaria", "pão", "pao", "bolo", "coxinha", "salgado", "salgadinhos", "pastel", "esfiha", "hot dog", "cachorro quente", "hambúrguer", "hamburguer", "x bacon", "x salada", "sanduíche", "sanduiche", "pizza", "marmita", "quentinha", "prato feito", "pf ", "self service", "por quilo", "almoço", "almoco", "jantar", "lanche", "comida", "café", "cafe", "açaí", "acai", "sorvete", "doces", "doce", "churrasco", "sushi", "temaki", "yakisoba", "poke", "tapioca", "brunch", "refeição", "refeicao"],
+  // Compras para preparar em casa têm categoria separada de delivery.
+  mercado: ["supermercado", "mercadinho", "mercado", "hipermercado", "atacadão", "atacadao", "assai", "assaí", "carrefour", "pao de acucar", "pão de açúcar", "extra", "dia supermercado", "bh supermercado", "supernosso", "verdemar", "sacolão", "sacolao", "hortifruti", "ceasa", "feira", "quitanda", "açougue", "acougue"],
+  transporte: ["uber", "99 taxi", "99taxi", "cabify", "indrive", "blablacar", "buser", "mototáxi", "mototaxi", "ônibus", "onibus", "metrô", "metro", "táxi", "taxi", "corrida", "passagem", "bilhete único", "bilhete unico", "estacionamento", "pedágio", "pedagio", "zona azul"],
+  combustivel: ["gasolina", "combustível", "combustivel", "etanol", "diesel", "gnv", "posto", "abastecimento"],
+  manutencao: ["oficina", "mecânico", "mecanico", "auto elétrica", "auto eletrica", "pneu", "revisão", "revisao", "manutenção do carro", "manutencao do carro", "reforma", "conserto", "encanador", "eletricista", "chaveiro", "marceneiro", "pintor"],
+  saude: ["farmácia", "farmacia", "drogaria", "droga raia", "drogasil", "pague menos", "remédio", "remedio", "médico", "medico", "consulta", "dentista", "plano de saúde", "plano de saude", "exame", "hospital", "psicólogo", "psicologo", "terapia", "fisioterapia", "óculos", "oculos", "vacina", "laboratório", "laboratorio", "nutricionista"],
+  academia: ["academia", "smart fit", "bluefit", "personal trainer", "crossfit", "pilates", "yoga", "musculação", "musculacao", "corrida", "natação", "natacao", "esporte"],
+  beleza: ["cabelo", "corte de cabelo", "cabeleireiro", "cabeleireira", "salão", "salao", "manicure", "pedicure", "barbearia", "barbeiro", "depilação", "depilacao", "estética", "estetica", "maquiagem", "sobrancelha", "unha", "skincare", "cosmético", "cosmetico"],
+  educacao: ["curso", "faculdade", "universidade", "livro", "mensalidade escolar", "escola", "material escolar", "apostila", "aula", "udemy", "alura", "duolingo", "mensalidade da faculdade", "pós-graduação", "pos-graduacao", "idioma"],
+  lazer: ["cinema", "show", "bar", "balada", "streaming", "jogo", "passeio", "ingresso", "netflix", "prime video", "parque", "teatro", "spotify"],
+  eventos: ["festa", "aniversário", "aniversario", "casamento", "confraternização", "confraternizacao", "formatura", "chá de bebê", "cha de bebe"],
+  presentes: ["presente", "lembrancinha", "flores", "buquê", "buque"],
+  roupas: ["roupa", "calça", "calca", "camisa", "tênis", "tenis", "sapato", "blusa", "jaqueta", "acessório", "acessorio", "bolsa", "perfume", "renner", "riachuelo", "c&a", "shein"],
+  tecnologia: ["celular", "notebook", "computador", "fone de ouvido", "carregador", "eletrônico", "eletronico", "teclado", "mouse", "apple", "samsung", "amazon"],
+  moradia: ["aluguel", "condomínio", "condominio", "iptu", "imobiliária", "imobiliaria"],
+  contas: ["conta de luz", "cemig", "energisa", "enel", "luz", "conta de água", "conta de agua", "água", "agua", "copasa", "sabesp", "internet", "vivo fibra", "claro net", "tim", "oi fibra", "gás", "gas", "botijão", "botijao", "telefone", "tv a cabo", "wifi"],
+  assinaturas: ["assinatura", "amazon prime", "youtube premium", "disney+", "disney plus", "hbo max", "max", "globoplay", "apple music", "icloud", "google one", "google fotos", "google photos", "chatgpt", "chat gpt", "openai", "uber one", "crunchyroll", "kindle unlimited", "canva", "adobe"],
   viagem: ["viagem", "hospedagem", "hotel", "pousada", "passagem aérea", "passagem aerea"],
   pet: ["ração", "racao", "veterinário", "veterinario", "petshop"],
   seguros: ["seguro do carro", "seguro residencial", "seguro de vida", "seguro"],
@@ -290,6 +294,21 @@ function guessType(text) {
   return FIN_INCOME_HINTS.some((kw) => norm.includes(kw)) ? "receita" : "despesa";
 }
 
+function normalizeCategoryText(value) {
+  return ` ${String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim()} `;
+}
+
+function includesCategoryKeyword(text, keyword) {
+  const normalizedKeyword = normalizeCategoryText(keyword).trim();
+  return !!normalizedKeyword && text.includes(` ${normalizedKeyword} `);
+}
+
 // categories: [{id, type, label}] — respeita categorias custom do
 // usuário (casadas por palavra do próprio label), sempre priorizando a
 // palavra-chave MAIS ESPECÍFICA (mais longa) encontrada no texto.
@@ -299,7 +318,7 @@ function guessType(text) {
 // porém claramente incompatível que veio da IA, vença algo explícito como
 // "pão"/"bolo" (Alimentação) ou "Uber" (Transporte).
 function guessSpecificCategoryId(text, type, categories) {
-  const working = String(text || "").toLowerCase();
+  const working = normalizeCategoryText(text);
   let categoryId = null;
   let bestLen = 0;
 
@@ -307,9 +326,10 @@ function guessSpecificCategoryId(text, type, categories) {
   for (const [id, keywords] of Object.entries(FIN_CATEGORY_KEYWORDS)) {
     if (!validIds.has(id)) continue; // só considera ids que o usuário realmente tem
     for (const kw of keywords) {
-      if (kw.length > bestLen && working.includes(kw)) {
+      const normalizedKeyword = normalizeCategoryText(kw).trim();
+      if (normalizedKeyword.length > bestLen && includesCategoryKeyword(working, kw)) {
         categoryId = id;
-        bestLen = kw.length;
+        bestLen = normalizedKeyword.length;
       }
     }
   }
@@ -318,9 +338,10 @@ function guessSpecificCategoryId(text, type, categories) {
     if (cat.type !== type) continue;
     const words = String(cat.label || "").replace(/^\S+\s*/, "").toLowerCase().split(/\s+/).filter((w) => w.length > 3);
     for (const w of words) {
-      if (w.length > bestLen && working.includes(w)) {
+      const normalizedWord = normalizeCategoryText(w).trim();
+      if (normalizedWord.length > bestLen && includesCategoryKeyword(working, w)) {
         categoryId = cat.id;
-        bestLen = w.length;
+        bestLen = normalizedWord.length;
       }
     }
   }
