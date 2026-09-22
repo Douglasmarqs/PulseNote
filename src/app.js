@@ -2830,36 +2830,63 @@ function renderPlannerDay() {
   if (timeline) {
     const startHour = 6;
     const endHour = 23;
-    const hourRows = [...Array(endHour - startHour + 1)]
-      .map((_, i) => `<div class="planner-timeline-hour"><span>${String(startHour + i).padStart(2, "0")}:00</span><div class="planner-timeline-line"></div></div>`)
-      .join("");
-    const totalMinutes = (endHour - startHour + 1) * 60;
-    const blocksHtml = dayEvents
-      .map((ev) => {
-        if (!ev.time) return "";
-        const [h, m] = ev.time.split(":").map(Number);
-        const minutesFromStart = (h - startHour) * 60 + m;
-        if (minutesFromStart < 0 || minutesFromStart > totalMinutes) return "";
-        const top = (minutesFromStart / totalMinutes) * 100;
-        const tone = plannerColorTone(ev.id);
-        return `
-          <article class="planner-event-block planner-event-block--interactive" data-event-id="${ev.id}" onclick="openPlannerEventEditor('${ev.id}')" style="top:${top}%;background:${tone.bg};border-color:${tone.border}">
+    // Cartões faziam parte de uma camada absoluta. Como os compromissos não
+    // têm duração obrigatória, um título grande ou os botões podiam invadir
+    // as linhas seguintes da agenda. A agenda agora agrupa os cartões dentro
+    // do horário deles: cresce para baixo quando necessário, sem esconder
+    // nenhum horário nem cobrir outro compromisso.
+    const eventsByHour = new Map();
+    const earlyEvents = [];
+    const lateEvents = [];
+    dayEvents.forEach((event) => {
+      if (!event.time) return;
+      const hour = Number(event.time.split(":")[0]);
+      if (!Number.isFinite(hour) || hour < startHour) earlyEvents.push(event);
+      else if (hour > endHour) lateEvents.push(event);
+      else {
+        const entries = eventsByHour.get(hour) || [];
+        entries.push(event);
+        eventsByHour.set(hour, entries);
+      }
+    });
+    const renderTimelineEvent = (ev) => {
+      const tone = plannerColorTone(ev.id);
+      return `
+        <article class="planner-event-block planner-event-block--interactive" data-event-id="${ev.id}" onclick="openPlannerEventEditor('${ev.id}')" style="--planner-event-bg:${tone.bg};--planner-event-border:${tone.border}">
+          <div class="planner-event-block-main">
             <strong>${ev.time} · ${escapeHtml(ev.title)}</strong>
             ${ev.location && ev.location !== "Sem local" ? `<span>${icon("mapPin", 11)}${escapeHtml(ev.location)}</span>` : ""}
-            <button class="mini-button" onclick="event.stopPropagation();openPlannerEventEditor('${ev.id}')" title="Editar">${icon("pencil", 12)}</button>
-            <button class="mini-button" onclick="event.stopPropagation();deleteEvent('${ev.id}')" title="Excluir">${icon("trash", 12)}</button>
-          </article>
-        `;
+            ${ev.notes ? `<small>${escapeHtml(ev.notes)}</small>` : ""}
+          </div>
+          <div class="planner-event-actions" aria-label="Ações do compromisso">
+            <button class="mini-button" type="button" onclick="event.stopPropagation();openPlannerEventEditor('${ev.id}')" title="Editar compromisso" aria-label="Editar compromisso">${icon("pencil", 12)}</button>
+            <button class="mini-button danger-action" type="button" onclick="event.stopPropagation();deleteEvent('${ev.id}')" title="Excluir compromisso" aria-label="Excluir compromisso">${icon("trash", 12)}</button>
+          </div>
+        </article>
+      `;
+    };
+    const hourRows = [...Array(endHour - startHour + 1)]
+      .map((_, i) => {
+        const hour = startHour + i;
+        const events = eventsByHour.get(hour) || [];
+        return `<div class="planner-timeline-hour ${events.length ? "has-events" : ""}">
+          <span>${String(hour).padStart(2, "0")}:00</span>
+          <div class="planner-timeline-slot">
+            <div class="planner-timeline-line"></div>
+            ${events.length ? `<div class="planner-timeline-events">${events.map(renderTimelineEvent).join("")}</div>` : ""}
+          </div>
+        </div>`;
       })
       .join("");
     const noTimeEvents = dayEvents.filter((ev) => !ev.time);
-    const noTimeHtml = noTimeEvents.length ? `<div class="planner-day-notime">${noTimeEvents.map(renderPlannerEventRow).join("")}</div>` : "";
+    const noTimeHtml = noTimeEvents.length ? `<div class="planner-day-notime"><p class="planner-timeline-section-label">Sem horário</p>${noTimeEvents.map(renderPlannerEventRow).join("")}</div>` : "";
+    const earlyHtml = earlyEvents.length ? `<div class="planner-day-notime"><p class="planner-timeline-section-label">Antes das ${String(startHour).padStart(2, "0")}:00</p>${earlyEvents.map(renderTimelineEvent).join("")}</div>` : "";
+    const lateHtml = lateEvents.length ? `<div class="planner-day-notime"><p class="planner-timeline-section-label">Após ${String(endHour).padStart(2, "0")}:00</p>${lateEvents.map(renderTimelineEvent).join("")}</div>` : "";
     timeline.innerHTML = `
       ${noTimeHtml}
-      <div class="planner-timeline-wrap">
-        <div class="planner-timeline-hours">${hourRows}</div>
-        <div class="planner-timeline-events">${blocksHtml}</div>
-      </div>
+      ${earlyHtml}
+      <div class="planner-timeline-wrap"><div class="planner-timeline-hours">${hourRows}</div></div>
+      ${lateHtml}
       ${!dayEvents.length ? emptyStateCompactHtml({ iconName: "compass", text: "Nenhum compromisso neste dia." }) : ""}
     `;
   }

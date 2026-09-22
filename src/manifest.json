@@ -2,6 +2,7 @@
   "name": "PulseNote — Produtividade Pessoal",
   "short_name": "PulseNote",
   "description": "Notas, tarefas, finanças e metas em um só app, com sincronização na nuvem.",
+  "version": "2026.09.22",
   "start_url": "/",
   "id": "/",
   "scope": "/",
@@ -15,25 +16,25 @@
   "categories": ["productivity", "finance", "lifestyle"],
   "icons": [
     {
-      "src": "icons/icon-192.png",
+      "src": "icons/icon-192.png?v=20260922",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "icons/icon-512.png",
+      "src": "icons/icon-512.png?v=20260922",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "icons/icon-maskable-192.png",
+      "src": "icons/icon-maskable-192.png?v=20260922",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "maskable"
     },
     {
-      "src": "icons/icon-maskable-512.png",
+      "src": "icons/icon-maskable-512.png?v=20260922",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
