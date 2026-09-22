@@ -19,7 +19,7 @@ const { fetchGeminiJson, GEMINI_MODEL } = require("./geminiFetch");
 const { guessSpecificCategoryId } = require("./localTextFallback");
 
 function buildSystemPrompt({ todayIso, categoryList }) {
-  return `Você extrai dados de um lançamento financeiro a partir do que o usuário mandou (uma frase em português, OU a foto de um cupom fiscal/comprovante).
+  return `Você extrai dados de um lançamento financeiro a partir do que o usuário mandou (uma frase em português, OU a foto/PDF de um cupom fiscal, boleto ou comprovante).
 Data de hoje: ${todayIso}.
 
 Categorias disponíveis (escolha exatamente um destes ids, sempre do tipo compatível):
@@ -122,7 +122,7 @@ async function parseTransactionText({ text, categories, today }) {
 
 // imageBase64: string base64 SEM o prefixo "data:...;base64,", mimeType:
 // ex. "image/jpeg". Usado pelo webhook do WhatsApp quando a pessoa manda
-// foto de um cupom fiscal em vez de texto.
+// foto ou PDF de cupom/boleto/comprovante em vez de texto.
 async function parseTransactionImage({ imageBase64, mimeType, categories, today }) {
   if (!imageBase64 || typeof imageBase64 !== "string") {
     return { ok: false, status: 400, error: "invalid_image" };
@@ -130,11 +130,48 @@ async function parseTransactionImage({ imageBase64, mimeType, categories, today 
   return callGeminiForEntry({
     contents: [
       { inlineData: { mimeType: mimeType || "image/jpeg", data: imageBase64 } },
-      { text: "Extraia o lançamento financeiro desta foto de cupom fiscal/comprovante, seguindo as regras do systemInstruction." },
+      { text: "Extraia o lançamento financeiro desta foto ou PDF de cupom, boleto ou comprovante, seguindo as regras do systemInstruction." },
     ],
     categories,
     today,
   });
 }
 
-module.exports = { parseTransactionText, parseTransactionImage };
+// Áudios do WhatsApp chegam como OGG/Opus na maior parte dos aparelhos.
+// Em vez de criar outro classificador para eles, primeiro obtemos uma
+// transcrição curta e depois reaproveitamos exatamente o mesmo parser de
+// comandos usado para mensagens de texto. Isso mantém "criar tarefa",
+// "anotar", "marcar compromisso" e lançamentos financeiros coerentes.
+async function transcribeAudio({ audioBase64, mimeType }) {
+  if (!audioBase64 || typeof audioBase64 !== "string") {
+    return { ok: false, status: 400, error: "invalid_audio" };
+  }
+  if (!process.env.GEMINI_API_KEY) {
+    return { ok: false, status: 500, error: "ai_not_configured" };
+  }
+
+  const result = await fetchGeminiJson({
+    model: GEMINI_MODEL,
+    apiKey: process.env.GEMINI_API_KEY,
+    label: "audio_transcription",
+    systemPrompt: "Transcreva o áudio em português brasileiro. Retorne somente JSON. Não invente palavras; se não houver fala compreensível, use uma transcrição vazia.",
+    contents: [
+      { inlineData: { mimeType: mimeType || "audio/ogg", data: audioBase64 } },
+      { text: "Transcreva a fala deste áudio." },
+    ],
+    generationConfig: {
+      maxOutputTokens: 300,
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: "object",
+        properties: { transcript: { type: "string" } },
+        required: ["transcript"],
+      },
+    },
+  });
+
+  const transcript = String(result.parsed?.transcript || "").trim().slice(0, 500);
+  return result.ok && transcript ? { ok: true, transcript } : { ok: false, status: result.status || 422, error: "audio_not_understood" };
+}
+
+module.exports = { parseTransactionText, parseTransactionImage, transcribeAudio };
