@@ -347,6 +347,20 @@
                   <div id="dashFinancePanel"></div>
                 </div>
               </section>
+
+              <section class="panel dash-panel whatsapp-quick-card" data-panel-id="whatsapp">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Integração</p>
+                    <h2>PulseNote no WhatsApp</h2>
+                  </div>
+                  <button class="icon-button" data-view-shortcut="settings" data-settings-focus="whatsapp" title="Configurar WhatsApp">→</button>
+                </div>
+                <div class="dash-panel-body">
+                  <p class="task-meta">Registre gastos por texto, áudio, foto ou PDF de boleto e receba lembretes no mesmo lugar.</p>
+                  <button class="ghost-button" data-view-shortcut="settings" data-settings-focus="whatsapp">Configurar integração</button>
+                </div>
+              </section>
             </div>
           </div>
         </section>
@@ -1163,7 +1177,7 @@
               </div>
             </section>
 
-            <section class="panel">
+            <section class="panel" id="whatsappIntegrationCard">
               <div class="panel-header"><div><p class="eyebrow">Notificações</p><h2>Lembretes do aplicativo</h2></div></div>
               <p class="task-meta" style="margin-bottom:12px">Defina o horário e a antecedência em cada tarefa ou compromisso. Os avisos chegam no navegador/PWA e, se você habilitar acima, também no WhatsApp.</p>
               <label style="display:flex;align-items:center;gap:8px;cursor:pointer">

@@ -5589,14 +5589,14 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
    overflow nenhum aqui, só cor/sombra/gradiente, exatamente pra não
    correr o risco de um bug estrutural como o da nota em tela cheia. */
 #plannerView .planner-header {
-  padding: 18px 20px;
+  padding: 20px 22px;
   border-radius: 20px;
   background:
-    radial-gradient(circle at 15% 20%, color-mix(in srgb, var(--teal) 42%, transparent), transparent 55%),
-    radial-gradient(circle at 85% 15%, rgba(191,90,242,0.32), transparent 55%),
-    radial-gradient(circle at 60% 90%, rgba(10,132,255,0.3), transparent 60%),
-    var(--surface2);
-  border: 1.5px solid var(--line);
+    radial-gradient(circle at 12% 0%, rgba(112, 212, 246, .48), transparent 39%),
+    radial-gradient(circle at 90% 12%, rgba(202, 159, 255, .5), transparent 42%),
+    linear-gradient(105deg, rgba(196, 238, 252, .78), rgba(222, 203, 255, .72));
+  border: 1px solid rgba(134, 112, 219, .18);
+  box-shadow: 0 12px 28px rgba(81, 97, 178, .10);
 }
 #plannerView .planner-header-title .eyebrow { color: var(--text2); }
 #plannerView .planner-header-title h2 { color: var(--text); }
@@ -5660,6 +5660,36 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
   border-color: transparent;
   border-top: 4px solid #bf5af2;
   border-radius: 18px;
+}
+
+#plannerView .planner-goal-progress-control {
+  display: grid;
+  grid-template-columns: auto minmax(72px, 1fr) 58px auto;
+  align-items: center;
+  gap: 8px;
+  color: var(--text2);
+  font-size: .76rem;
+  font-weight: 700;
+}
+#plannerView .planner-goal-progress-control input[type="range"] { accent-color: var(--purple); min-width: 0; }
+#plannerView .planner-goal-number { min-width: 0; width: 58px; padding: 6px 5px; text-align: center; }
+#plannerView .planner-row--interactive,
+#plannerView .planner-event-block--interactive { cursor: pointer; }
+#plannerView .planner-row--interactive:hover { box-shadow: 0 9px 20px rgba(36, 35, 70, .09); }
+#plannerView .planner-event-block--interactive:hover { filter: saturate(1.15); transform: translateX(2px); }
+.whatsapp-quick-card .dash-panel-body { display: grid; gap: 12px; }
+.whatsapp-quick-card .ghost-button { justify-self: start; }
+
+@media (max-width: 620px) {
+  #plannerView .planner-header { padding: 16px; border-radius: 16px; gap: 12px; }
+  #plannerView .planner-header-actions { display: grid; grid-template-columns: 1fr; width: 100%; }
+  #plannerView #plannerNewTaskBtn { justify-content: center; min-height: 42px; }
+  #plannerView .planner-tabs.segmented { width: 100%; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); overflow: visible; }
+  #plannerView .planner-tabs.segmented button { min-width: 0; padding-inline: 4px; justify-content: center; font-size: .72rem; }
+  #plannerView .planner-goal-progress-control { grid-template-columns: auto minmax(0, 1fr) 52px auto; gap: 6px; }
+  #plannerView .planner-goal-number { width: 52px; }
+  #plannerView .planner-event-block { max-width: calc(100% - 6px); }
+  .whatsapp-quick-card .ghost-button { width: 100%; justify-content: center; }
 }
 
 /* Faixa horizontal de dias na visão "Dia" do Planner (referência

@@ -579,6 +579,7 @@ let plannerWeekAnchor = todayIso; // qualquer data dentro da semana ativa
 let plannerMonthAnchor = todayIso; // qualquer data dentro do mês ativo
 let plannerExpandedGoals = new Set();
 let plannerExpandedTaskDetails = new Set(); // ids de tarefas com a checklist aberta — sem isso, qualquer alteração num item (concluir/excluir/adicionar) recriava a linha do zero e fechava a checklist na cara do usuário
+let plannerEditingEventId = null;
 let notesFolderFilter = "all"; // filtro de pasta ativo na biblioteca de Notas
 // Mês ativo na view de Finanças. Formato "YYYY-MM". Começa no mês atual.
 let finActiveMonth = todayIso.slice(0, 7);
@@ -1505,6 +1506,11 @@ function bindNavigation() {
       const view = button.dataset.viewShortcut;
       setView(view);
       const plannerFocus = button.dataset.plannerFocus;
+      const settingsFocus = button.dataset.settingsFocus;
+      if (view === "settings" && settingsFocus === "whatsapp") {
+        requestAnimationFrame(() => document.querySelector("#whatsappIntegrationCard")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+        return;
+      }
       if (view !== "planner" || !plannerFocus) return;
 
       // Os cards do Dashboard não devem levar todos para a mesma posição
@@ -2548,6 +2554,12 @@ function renderPlannerGoalsStrip() {
           <span class="pill" style="${isComplete ? "background:var(--green);color:#fff;border-color:var(--green);" : ""}">${percent}%</span>
         </div>
         <div class="progress-track"><div style="width:${percent}%;background:${isComplete ? "var(--green)" : "linear-gradient(90deg,var(--accent),var(--purple))"}"></div></div>
+        <label class="planner-goal-progress-control" onclick="event.stopPropagation()">
+          <span>Progresso</span>
+          <input type="range" min="0" max="${Math.max(1, Number(goal.target) || 1)}" value="${Math.max(0, Number(goal.current) || 0)}" aria-label="Progresso de ${escapeHtml(goal.title)}" oninput="updateGoalProgress('${goal.id}', this.value, event)" />
+          <input class="planner-goal-number" type="number" min="0" max="${Math.max(1, Number(goal.target) || 1)}" value="${Math.max(0, Number(goal.current) || 0)}" inputmode="numeric" aria-label="Valor atual de ${escapeHtml(goal.title)}" oninput="updateGoalProgress('${goal.id}', this.value, event)" />
+          <span class="task-meta">de ${goal.target}</span>
+        </label>
         <div class="planner-goal-chip-controls">
           <div class="planner-goal-stepper">
             <button class="mini-button" onclick="changeGoal('${goal.id}', -1)" title="Diminuir">−</button>
@@ -2730,7 +2742,7 @@ function renderPlannerTaskRow(task) {
 function renderPlannerEventRow(ev) {
   const tone = plannerColorTone(ev.id);
   return `
-    <article class="planner-row planner-row--event" data-event-id="${ev.id}" style="border-left:4px solid ${tone.border}">
+    <article class="planner-row planner-row--event planner-row--interactive" data-event-id="${ev.id}" style="border-left:4px solid ${tone.border}" onclick="openPlannerEventEditor('${ev.id}')">
       <div class="planner-row-head">
         <div class="planner-row-time" style="background:${tone.bg};color:${tone.border}">${ev.time || "—"}</div>
         <div class="planner-row-main">
@@ -2740,7 +2752,8 @@ function renderPlannerEventRow(ev) {
             ${ev.location && ev.location !== "Sem local" ? `<span class="task-meta">${icon("mapPin", 12)}${escapeHtml(ev.location)}</span>` : ""}
           </div>
         </div>
-        <button class="mini-button planner-row-delete" onclick="deleteEvent('${ev.id}')" title="Excluir">${icon("trash", 14)}</button>
+        <button class="mini-button" onclick="event.stopPropagation();openPlannerEventEditor('${ev.id}')" title="Editar compromisso">${icon("pencil", 14)}</button>
+        <button class="mini-button planner-row-delete" onclick="event.stopPropagation();deleteEvent('${ev.id}')" title="Excluir">${icon("trash", 14)}</button>
       </div>
     </article>
   `;
@@ -2830,10 +2843,11 @@ function renderPlannerDay() {
         const top = (minutesFromStart / totalMinutes) * 100;
         const tone = plannerColorTone(ev.id);
         return `
-          <article class="planner-event-block" data-event-id="${ev.id}" style="top:${top}%;background:${tone.bg};border-color:${tone.border}">
+          <article class="planner-event-block planner-event-block--interactive" data-event-id="${ev.id}" onclick="openPlannerEventEditor('${ev.id}')" style="top:${top}%;background:${tone.bg};border-color:${tone.border}">
             <strong>${ev.time} · ${escapeHtml(ev.title)}</strong>
             ${ev.location && ev.location !== "Sem local" ? `<span>${icon("mapPin", 11)}${escapeHtml(ev.location)}</span>` : ""}
-            <button class="mini-button" onclick="deleteEvent('${ev.id}')" title="Excluir">${icon("trash", 12)}</button>
+            <button class="mini-button" onclick="event.stopPropagation();openPlannerEventEditor('${ev.id}')" title="Editar">${icon("pencil", 12)}</button>
+            <button class="mini-button" onclick="event.stopPropagation();deleteEvent('${ev.id}')" title="Excluir">${icon("trash", 12)}</button>
           </article>
         `;
       })
@@ -2975,6 +2989,9 @@ function renderPlannerMonth() {
 function openPlannerQuickAdd(type) {
   const modal = document.querySelector("#plannerQuickAddModal");
   if (!modal) return;
+  plannerEditingEventId = null;
+  document.querySelector("#plannerQuickAddModal h2").textContent = "Adicionar ao planner";
+  document.querySelector("#plannerQuickAddForm [type='submit'] span").textContent = "Salvar";
   modal.hidden = false;
   setPlannerQuickAddType(type || (plannerActiveTab === "day" ? "event" : "task"));
   setTimeout(() => document.querySelector("#pqaTitle")?.focus(), 50);
@@ -2985,6 +3002,31 @@ function closePlannerQuickAdd() {
   if (!modal) return;
   modal.hidden = true;
   document.querySelector("#plannerQuickAddForm")?.reset();
+  plannerEditingEventId = null;
+}
+
+function openPlannerEventEditor(id) {
+  const ev = state.events.find((event) => event.id === id);
+  if (!ev) return;
+  const modal = document.querySelector("#plannerQuickAddModal");
+  if (!modal) return;
+  plannerEditingEventId = id;
+  modal.hidden = false;
+  document.querySelector("#plannerQuickAddModal h2").textContent = "Editar compromisso";
+  document.querySelector("#plannerQuickAddForm [type='submit'] span").textContent = "Salvar alterações";
+  document.querySelector("#pqaTitle").value = ev.title || "";
+  document.querySelector("#pqaEventDate").value = ev.date || todayIso;
+  document.querySelector("#pqaEventTime").value = ev.time || "";
+  document.querySelector("#pqaEventLocation").value = ev.location === "Sem local" ? "" : (ev.location || "");
+  document.querySelector("#pqaEventNotes").value = ev.notes || "";
+  const reminder = Number(ev.reminder || 15);
+  const select = document.querySelector("#pqaEventReminder");
+  const preset = [5, 15, 30, 60, 1440].includes(reminder);
+  select.value = preset ? String(reminder) : "custom";
+  document.querySelector("#pqaEventReminderMinutes").value = preset ? "" : reminder;
+  document.querySelector("#pqaEventReminderCustom").hidden = preset;
+  setPlannerQuickAddType("event");
+  setTimeout(() => document.querySelector("#pqaTitle")?.focus(), 50);
 }
 
 function setPlannerQuickAddType(type) {
@@ -3059,8 +3101,14 @@ function submitPlannerQuickAdd(event) {
       ? Math.min(10080, Math.max(5, Number.isFinite(customReminder) ? customReminder : 15))
       : Number(selectedReminder || 15);
     const notes = valueOf("#pqaEventNotes") || "";
-    state.events.push({ id: crypto.randomUUID(), title, date, time, location, reminder, notes });
-    showToast("Compromisso salvo.");
+    const eventRecord = { id: plannerEditingEventId || crypto.randomUUID(), title, date, time, location, reminder, notes };
+    if (plannerEditingEventId) {
+      state.events = state.events.map((item) => item.id === plannerEditingEventId ? eventRecord : item);
+      showToast("Compromisso atualizado.");
+    } else {
+      state.events.push(eventRecord);
+      showToast("Compromisso salvo.");
+    }
   } else if (type === "goal") {
     const target = Number(document.querySelector("#pqaGoalTarget").value || 1);
     state.goals.unshift({ id: crypto.randomUUID(), title, target, current: 0, milestones: [] });
@@ -5185,6 +5233,29 @@ function bindFinanceMonthControls() {
 
 }
 
+function updateGoalProgress(id, value, event) {
+  event?.stopPropagation();
+  const goal = state.goals.find((item) => item.id === id);
+  if (!goal) return;
+  const next = Math.max(0, Math.min(Number(goal.target) || 1, Number(value) || 0));
+  const wasComplete = goal.current >= goal.target;
+  goal.current = next;
+  saveState();
+  const percent = Math.min(100, Math.round((next / Math.max(1, Number(goal.target) || 1)) * 100));
+  document.querySelectorAll(`[data-goal-id="${id}"]`).forEach((card) => {
+    card.querySelectorAll("input").forEach((input) => {
+      if (document.activeElement !== input) input.value = next;
+    });
+    const pill = card.querySelector(".planner-goal-chip-top .pill");
+    if (pill) pill.textContent = `${percent}%`;
+    const fill = card.querySelector(".progress-track > div");
+    if (fill) fill.style.width = `${percent}%`;
+    card.classList.toggle("is-complete", next >= goal.target);
+  });
+  renderGoals();
+  if (!wasComplete && next >= goal.target) celebrate("Meta concluída. Medalha desbloqueada.");
+}
+
 // ── Lançamento por texto (heurística local — sem IA externa) ───
 // Interpreta uma frase livre (ex.: "almoço 32 reais ontem") só com
 // expressões regulares e listas de palavras-chave, tudo dentro do
@@ -7157,12 +7228,14 @@ window.reopenMonth = reopenMonth;
 // ao adicionar uma função nova chamada via onclick/onsubmit em HTML
 // gerado dinamicamente, ela tem que ser exposta aqui também.
 window.openPlannerQuickAdd = openPlannerQuickAdd;
+window.openPlannerEventEditor = openPlannerEventEditor;
 window.jumpPlannerToDay = jumpPlannerToDay;
 window.selectPlannerDay = selectPlannerDay;
 window.togglePlannerGoalExpand = togglePlannerGoalExpand;
 window.openPlannerTaskActions = openPlannerTaskActions;
 window.submitGoalMilestoneForm = submitGoalMilestoneForm;
 window.submitSubtaskForm = submitSubtaskForm;
+window.updateGoalProgress = updateGoalProgress;
 
 // Mesma causa raiz, encontrada durante a auditoria fora do Planner —
 // corrigidas de brinde por serem idênticas e triviais (uma linha cada):
