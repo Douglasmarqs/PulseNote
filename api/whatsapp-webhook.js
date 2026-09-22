@@ -57,7 +57,7 @@
 
 const crypto = require("node:crypto");
 const admin = require("firebase-admin");
-const { parseTransactionImage } = require("./_lib/parseTransactionAI");
+const { parseTransactionImage, transcribeAudio } = require("./_lib/parseTransactionAI");
 const { parseTextIntent, findBestMatch } = require("./_lib/parseCommandIntent");
 const { buildPdfReportBuffer } = require("./_lib/buildPdfReport");
 
@@ -458,6 +458,14 @@ async function appendFinanceEntry(fb, uid, entry, rawMessage) {
       whatsappRawMessage: rawMessage || "",
     };
     finances.unshift(record);
+    const categoryGoal = (state.finGoals || []).find((goal) => goal.categoryId === entry.categoryId && Number(goal.limit) > 0);
+    if (entry.type === "despesa" && categoryGoal) {
+      const month = String(entry.date || "").slice(0, 7);
+      const spent = finances
+        .filter((item) => item.type === "despesa" && item.category === entry.categoryId && String(item.date || "").startsWith(month))
+        .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+      record.budgetUsagePercent = Math.round((spent / Number(categoryGoal.limit)) * 10000) / 100;
+    }
     return record;
   });
 }
@@ -512,22 +520,41 @@ function categoryNameForWhatsApp(label, fallback = "Outros") {
   return clean || fallback;
 }
 
-function categoryEmojiForWhatsApp(label) {
-  return String(label || "").trim().match(/^\p{Extended_Pictographic}\uFE0F?/u)?.[0] || "📦";
+function formatWhatsAppAmount(value) {
+  const amount = Number(value || 0);
+  if (!Number.isFinite(amount)) return "0";
+  return Number.isInteger(amount)
+    ? String(amount)
+    : amount.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+
+function inferPaymentMethod(rawMessage) {
+  const text = String(rawMessage || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  if (/\bpix\b/.test(text)) return "Pix";
+  if (/\bboleto\b/.test(text)) return "Boleto";
+  if (/\b(debito|cartao de debito)\b/.test(text)) return "Cartão de débito";
+  if (/\b(credito|cartao|visa|mastercard)\b/.test(text)) return "Cartão de crédito";
+  if (/\b(dinheiro|especie)\b/.test(text)) return "Dinheiro";
+  if (/\b(transferencia|ted|doc)\b/.test(text)) return "Transferência";
+  return "";
 }
 
 function formatWhatsAppFinanceConfirmation(record, entry, categories) {
   const categoryLabel = categories.find((c) => c.id === entry.categoryId)?.label || "";
   const categoryName = categoryNameForWhatsApp(categoryLabel, entry.categoryId || "Outros");
-  const categoryEmoji = categoryEmojiForWhatsApp(categoryLabel);
   const reference = String(record?.id || "").replace(/^wa_/, "").slice(-6) || "novo";
   const heading = entry.type === "receita" ? "Receita Registrada!" : "Gasto Registrado!";
+  const paymentMethod = inferPaymentMethod(record?.whatsappRawMessage);
+  const budgetLine = Number.isFinite(Number(record?.budgetUsagePercent))
+    ? `\n📣 Você já utilizou ${Number(record.budgetUsagePercent).toFixed(2)}% do seu limite mensal.`
+    : "";
   return [
     `✅ ${heading}`,
-    `${categoryEmoji} ${entry.description} (${categoryName})`,
-    `💰 R$${Number(entry.amount || 0).toFixed(2).replace(".", ",")}`,
-    `⚙️ ${formatDateBr(entry.date, { includeYear: true })} • #${reference}`,
-  ].join("\n");
+    `📝 ${entry.description} (${categoryName})`,
+    `💸 R$${formatWhatsAppAmount(entry.amount)}`,
+    `⚙️ ${formatDateBr(entry.date, { includeYear: true })} - #${reference}`,
+    paymentMethod ? `💳 ${paymentMethod}` : "",
+  ].filter(Boolean).join("\n") + budgetLine;
 }
 
 // Compartilhado entre texto e foto: salva o lançamento e manda a
@@ -1349,10 +1376,15 @@ module.exports = async (req, res) => {
       return res.status(200).end();
     }
 
-    if (message.type === "image") {
-      const media = await downloadWhatsAppMedia(message.image.id);
+    if (message.type === "image" || message.type === "document") {
+      const mediaId = message.image?.id || message.document?.id;
+      const media = await downloadWhatsAppMedia(mediaId);
       if (!media) {
-        await sendWhatsAppMessage(fromPhone, "Não consegui baixar essa foto 😕 Tenta mandar de novo.");
+        await sendWhatsAppMessage(fromPhone, "Não consegui baixar esse arquivo 😕 Tenta mandar a foto ou o PDF do boleto novamente.");
+        return res.status(200).end();
+      }
+      if (!/^image\//.test(media.mimeType) && media.mimeType !== "application/pdf") {
+        await sendWhatsAppMessage(fromPhone, "Consigo ler foto ou PDF de boleto/comprovante. Envie o arquivo nesses formatos.");
         return res.status(200).end();
       }
 
@@ -1363,16 +1395,40 @@ module.exports = async (req, res) => {
         today,
       });
       await finishParsedResult({
-        fb, uid, fromPhone, categories, result, rawMessage: "[foto de cupom fiscal]",
-        failureMsg: "Não consegui ler esse cupom 🤔 Tenta uma foto mais nítida, com o valor total visível, ou descreve o gasto em texto mesmo.",
+        fb, uid, fromPhone, categories, result, rawMessage: message.type === "document" ? "[PDF de boleto/comprovante]" : "[foto de boleto/comprovante]",
+        failureMsg: "Não consegui ler esse boleto ou comprovante 🤔 Tenta uma foto mais nítida, com o valor total visível, ou descreve o gasto em texto mesmo.",
       });
       return res.status(200).end();
     }
 
-    // TODO — áudio: mesma ideia de download usando message.audio.id; o
-    // Gemini aceita áudio direto e já entende o que foi dito.
+    if (message.type === "audio") {
+      const media = await downloadWhatsAppMedia(message.audio?.id);
+      if (!media) {
+        await sendWhatsAppMessage(fromPhone, "Não consegui baixar esse áudio 😕 Tenta enviar novamente.");
+        return res.status(200).end();
+      }
+      const transcription = await transcribeAudio({ audioBase64: media.base64, mimeType: media.mimeType });
+      if (!transcription.ok) {
+        await sendWhatsAppMessage(fromPhone, "Não consegui entender esse áudio 😕 Tente falar um pouco mais perto do microfone ou envie a mensagem em texto.");
+        return res.status(200).end();
+      }
 
-    await sendWhatsAppMessage(fromPhone, "Por enquanto eu só entendo texto e foto de cupom — áudio chega em breve 🙂");
+      // O áudio é pensado para o lançamento financeiro por voz: o modelo
+      // primeiro transcreve e o parser normal resolve valor/data/categoria
+      // da mesma forma que em uma mensagem digitada.
+      const audioResult = await parseTextIntent({ text: transcription.transcript, categories, today });
+      if (!audioResult.ok || audioResult.intent !== "expense") {
+        await sendWhatsAppMessage(fromPhone, "Entendi o áudio, mas para lançar preciso de um valor, por exemplo: “gastei 45 no mercado”. Para outros comandos, use texto por enquanto.");
+        return res.status(200).end();
+      }
+      await finishParsedResult({
+        fb, uid, fromPhone, categories, result: audioResult, rawMessage: `[áudio] ${transcription.transcript}`,
+        failureMsg: "Não consegui entender esse áudio 🤔 Diga algo como “gastei 45 no mercado” ou envie em texto.",
+      });
+      return res.status(200).end();
+    }
+
+    await sendWhatsAppMessage(fromPhone, "Consigo entender texto, áudio, foto e PDF de boleto/comprovante. Mande “ajuda” para ver exemplos.");
     return res.status(200).end();
   } catch (err) {
     console.error("Erro no webhook do WhatsApp:", err);
@@ -1384,3 +1440,6 @@ module.exports = async (req, res) => {
 // BRUTOS da requisição pra verificar a assinatura HMAC da Meta antes de
 // qualquer parse (ver readRawBody()/verifyMetaSignature() acima).
 module.exports.config = { api: { bodyParser: false } };
+// Superfície pequena e sem I/O para os testes de regressão do formato de
+// resposta. A função HTTP continua sendo o export principal da Vercel.
+module.exports._test = { formatWhatsAppFinanceConfirmation, inferPaymentMethod, formatWhatsAppAmount };
