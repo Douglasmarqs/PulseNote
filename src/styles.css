@@ -1244,9 +1244,9 @@ button.overview-card-action {
    comentário junto de PRIORITY_RING no app.js sobre por que Média não
    usa mais var(--accent) (colidia visualmente com --orange no tema
    escuro "eclipse"). */
-.priority-Alta    { background: var(--orange-soft); color: var(--orange); }
+.priority-Alta    { background: #ede9fe; color: #6d28d9; }
 .priority-Urgente { background: var(--red-soft);    color: var(--red); }
-.priority-Media   { background: var(--teal-soft);   color: var(--teal); }
+.priority-Media   { background: #cffafe; color: #155e75; }
 .priority-Baixa   { background: var(--green-soft);  color: var(--green); }
 
 .status-Concluida   { background: var(--green-soft);  color: var(--green); }
@@ -1568,13 +1568,13 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   flex-shrink: 0;
 }
 .note-priority-dot[data-priority="Baixa"]   { color: var(--green); }
-.note-priority-dot[data-priority="Media"]   { color: var(--teal); }
-.note-priority-dot[data-priority="Alta"]    { color: var(--orange); }
+.note-priority-dot[data-priority="Media"]   { color: #0891b2; }
+.note-priority-dot[data-priority="Alta"]    { color: #8b5cf6; }
 .note-priority-dot[data-priority="Urgente"] { color: var(--red); }
 
 .note-priority-dot.active[data-priority="Baixa"]   { background: var(--green-soft);  border-color: var(--green); }
-.note-priority-dot.active[data-priority="Media"]   { background: var(--teal-soft);   border-color: var(--teal); }
-.note-priority-dot.active[data-priority="Alta"]    { background: var(--orange-soft); border-color: var(--orange); }
+.note-priority-dot.active[data-priority="Media"]   { background: #cffafe; color: #155e75; border-color: #0891b2; }
+.note-priority-dot.active[data-priority="Alta"]    { background: #ede9fe; color: #6d28d9; border-color: #8b5cf6; }
 .note-priority-dot.active[data-priority="Urgente"] { background: var(--red-soft);    border-color: var(--red); }
 .note-priority-dot.active { transform: scale(1.04); font-weight: 800; }
 
@@ -1666,9 +1666,9 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
    tinha muito texto — a causa do layout "quebrando" ao escrever mais). */
 .note-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
   gap: 14px;
-  align-items: start;
+  align-items: stretch;
 }
 
 /* Pastas: chips derivados dos valores de "folder" das notas — quebra
@@ -1756,7 +1756,9 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   background: color-mix(in srgb, var(--note-card-bg, var(--surface2)) 76%, var(--surface));
   transition: transform 200ms ease, box-shadow 200ms ease;
   cursor: pointer;
-  display: block;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
   position: relative;
   overflow-wrap: anywhere;
   animation: fadeUp 200ms ease both;
@@ -1821,14 +1823,15 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 .note-wordcount { display: block; margin-top: 2px; margin-bottom: 8px; }
 
 .note-card .tag-list { flex-wrap: wrap; }
-.note-priority-row { margin-top: 4px; }
+.note-priority-row { margin-top: auto; padding-top: 8px; }
 
 /* 3 ações por nota: "Editar" e "Tarefa" dividem o espaço em partes
    iguais, e "Excluir" vira um botão circular só com ícone à direita —
    em vez dos 4 botões de texto que quebravam linha de formas diferentes
    dependendo do tamanho da nota. */
 .note-card .card-actions {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr) 36px;
   align-items: center;
   gap: 6px;
   margin-top: 10px;
@@ -1839,7 +1842,17 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   align-items: center;
   justify-content: center;
   gap: 5px;
+  min-width: 0;
+  min-height: 36px;
+  padding: 7px 4px;
+  white-space: normal;
+  line-height: 1.2;
+  text-align: center;
 }
+.note-card-actions button span { min-width: 0; overflow-wrap: anywhere; }
+.note-card-actions button svg { flex-shrink: 0; }
+.note-card header > div { min-width: 0; }
+.note-card .card-actions .is-done-action { justify-content: center; }
 .note-card .card-actions .danger-action {
   flex: 0 0 auto;
   width: 30px;

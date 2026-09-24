@@ -267,6 +267,8 @@ async function syncToServer() {
   // 1 MiB por documento). Detectamos isso ANTES de tentar gravar, para
   // mostrar um aviso útil em vez de ficar tentando de novo sem sucesso.
   const clean = stripUndefinedDeep(state);
+  delete clean.fcmTokens;
+  delete clean.serverNotifications;
   const approxBytes = new Blob([JSON.stringify(clean)]).size;
   if (approxBytes > 900_000) {
     showSyncStatus("error", "Dados grandes demais para salvar (reduza a foto de perfil ou registros antigos)");
@@ -280,7 +282,7 @@ async function syncToServer() {
     await setDoc(doc(db, "userData", currentUser.uid), {
       data: clean,
       updatedAt: new Date().toISOString(),
-    });
+    }, { mergeFields: ["updatedAt", ...Object.keys(clean).map((key) => ["data", key])] });
     const key = getStorageKey();
     if (key) localStorage.setItem(key, JSON.stringify(state));
     showSyncStatus("saved");
@@ -3414,7 +3416,7 @@ let ndCurrentNoteId = null;
 // fora sem querer.
 function sanitizeNoteHtml(html) {
   const allowedTags = new Set(["B", "STRONG", "I", "EM", "BR", "DIV", "SPAN", "MARK", "P", "FONT"]);
-  const allowedStyles = ["backgroundColor", "fontWeight", "fontStyle"];
+  const allowedStyles = ["color", "backgroundColor", "fontWeight", "fontStyle"];
   const template = document.createElement("template");
   template.innerHTML = String(html || "");
 
@@ -3429,6 +3431,7 @@ function sanitizeNoteHtml(html) {
         node.replaceWith(document.createTextNode(node.textContent));
         return;
       }
+      if (node.tagName === "FONT" && node.getAttribute("color")) node.style.color = node.getAttribute("color");
       const keptStyles = node.style
         ? allowedStyles.map((prop) => [prop, node.style[prop]]).filter(([, value]) => value)
         : [];
@@ -3696,13 +3699,17 @@ function bindNoteDetail() {
   let ndSavedRange = null;
   const saveNdSelection = () => {
     const sel = window.getSelection();
-    if (sel && sel.rangeCount > 0 && body.contains(sel.anchorNode) && !sel.isCollapsed) {
+    if (sel && sel.rangeCount > 0 && body.contains(sel.anchorNode) && body.contains(sel.focusNode)) {
       ndSavedRange = sel.getRangeAt(0).cloneRange();
     }
   };
   body.addEventListener("mouseup", saveNdSelection);
   body.addEventListener("keyup", saveNdSelection);
   body.addEventListener("touchend", saveNdSelection);
+  document.addEventListener("selectionchange", saveNdSelection);
+  body.addEventListener("focus", () => {
+    if (ndSavedRange && !body.contains(ndSavedRange.commonAncestorContainer)) ndSavedRange = null;
+  });
 
   const toolbar = document.querySelector("#noteDetailToolbar");
   toolbar.addEventListener("mousedown", (e) => {
@@ -3713,12 +3720,12 @@ function bindNoteDetail() {
     const toolBtn = e.target.closest("[data-nd-cmd]");
     if (!swatch && !toolBtn) return;
 
+    const savedRange = ndSavedRange;
     body.focus();
     const sel = window.getSelection();
-    const stillHasSelectionInBody = sel && sel.rangeCount > 0 && body.contains(sel.anchorNode) && !sel.isCollapsed;
-    if (!stillHasSelectionInBody && ndSavedRange) {
+    if (sel && savedRange && body.contains(savedRange.commonAncestorContainer)) {
       sel.removeAllRanges();
-      sel.addRange(ndSavedRange);
+      sel.addRange(savedRange);
     }
 
     // styleWithCSS garante que backColor produza mesmo um
@@ -3726,15 +3733,18 @@ function bindNoteDetail() {
     // ficam inconsistentes sobre como aplicam a cor de destaque).
     document.execCommand("styleWithCSS", false, true);
     if (swatch) {
-      document.execCommand("backColor", false, hexToRgba(swatch.dataset.ndColor, 0.35));
+      document.execCommand("foreColor", false, swatch.dataset.ndColor);
+      toolbar.querySelectorAll("[data-nd-color]").forEach((button) => button.setAttribute("aria-pressed", String(button === swatch)));
     } else if (toolBtn.dataset.ndCmd === "bold") {
       document.execCommand("bold");
     } else if (toolBtn.dataset.ndCmd === "italic") {
       document.execCommand("italic");
     } else if (toolBtn.dataset.ndCmd === "clear") {
       document.execCommand("backColor", false, "transparent");
+      document.execCommand("foreColor", false, getComputedStyle(body).color);
     }
     saveNdSelection();
+    flushNoteDetailSave();
   });
 
   // Gesto/botão físico de "voltar" do celular fecha a nota em vez de

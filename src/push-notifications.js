@@ -19,7 +19,7 @@
 
 import { getMessaging, getToken, onMessage, isSupported }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
-import { doc, updateDoc, arrayUnion, arrayRemove }
+import { doc, setDoc, updateDoc, arrayUnion, arrayRemove }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { app, db, auth } from "./firebase-init.js";
 import { firebaseConfig } from "./firebase-config.js";
@@ -63,15 +63,15 @@ function attachForegroundListener() {
 
 async function saveTokenToFirestore(token) {
   const uid = auth.currentUser?.uid;
-  if (!uid || !token) return;
+  if (!uid || !token) throw new Error("Faça login para registrar este aparelho.");
   // updateDoc com caminho "data.fcmTokens" mexe SÓ nesse campo aninhado —
   // não sobrescreve o resto de userData/{uid}.data (tarefas, eventos etc.),
   // e continua batendo com a regra do firestore.rules (que só olha as
   // chaves de nível raiz do documento: 'data' e 'updatedAt').
-  await updateDoc(doc(db, "userData", uid), {
-    "data.fcmTokens": arrayUnion(token),
+  await setDoc(doc(db, "userData", uid), {
+    data: { fcmTokens: arrayUnion(token) },
     updatedAt: new Date().toISOString(),
-  });
+  }, { merge: true });
 }
 
 // Chamado pelo notifications.js logo depois que a pessoa concede a

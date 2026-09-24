@@ -26,7 +26,7 @@
 // financeira também para quem já instalou o PWA.
 // v15: alinha o tema Eclipse à paleta violeta/ciano da atualização.
 // v16: entrega a saudação, o Planner mensal e o editor de notas revisados.
-const CACHE_NAME = "pulsenote-v19";
+const CACHE_NAME = "pulsenote-v20";
 
 // ── Firebase Cloud Messaging (push em segundo plano) ──────────────
 // Isso é o que permite uma notificação aparecer mesmo com o PulseNote
@@ -68,7 +68,7 @@ try {
   // logo abaixo pra abrir a tela certa).
   messaging.onBackgroundMessage((payload) => {
     const data = payload.data || {};
-    self.registration.showNotification(data.title || "PulseNote", {
+    return self.registration.showNotification(data.title || "PulseNote", {
       body: data.body || "",
       icon: "icons/pulsinho-notification-icon.png",
       badge: "icons/pulsinho-notification-icon.png",

@@ -63,6 +63,7 @@ const COOLDOWN_HOURS = {
 };
 
 function cooldownHoursFor(key) {
+  if (key.startsWith("task_") || key.startsWith("goalDue_")) return 0;
   if (key.startsWith("event_")) return COOLDOWN_HOURS.event;
   if (key.startsWith("goal_")) return COOLDOWN_HOURS.goalAlmost;
   return COOLDOWN_HOURS[key] ?? 24;
@@ -140,7 +141,9 @@ function fixBrazilianMobileNumber(phone) {
 // pra isso, texto livre é bloqueado. Ver comentário no topo do arquivo.
 async function sendWhatsAppReminder(phone, bodyText) {
   const templateName = process.env.WHATSAPP_REMINDER_TEMPLATE_NAME;
-  if (!templateName) return; // template ainda não configurado — pula, sem quebrar o resto
+  if (!templateName || !process.env.WHATSAPP_ACCESS_TOKEN || !process.env.WHATSAPP_PHONE_NUMBER_ID) {
+    throw new Error("whatsapp_configuration_missing");
+  }
   const url = `https://graph.facebook.com/v20.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
   try {
     const res = await fetch(url, {
@@ -161,10 +164,14 @@ async function sendWhatsAppReminder(phone, bodyText) {
       }),
     });
     if (!res.ok) {
-      console.error("WhatsApp recusou o lembrete:", res.status, await res.text());
+      const error = await res.json().catch(() => ({}));
+      throw new Error(`whatsapp_${res.status}_${error.error?.code || "rejected"}`);
     }
+    const result = await res.json();
+    if (!result.messages?.[0]?.id) throw new Error("whatsapp_missing_message_id");
+    return result.messages[0].id;
   } catch (err) {
-    console.error("Falha de rede ao mandar lembrete por WhatsApp:", err);
+    throw err;
   }
 }
 
@@ -175,6 +182,7 @@ async function sendPush(fb, tokens, notification) {
   if (!tokens || tokens.length === 0) return { invalidTokens: [] };
   const response = await fb.messaging().sendEachForMulticast({
     tokens,
+    webpush: { headers: { Urgency: "high", TTL: "3600" } },
     // Sempre "data" (nunca "notification") — assim o FCM nunca mostra
     // nada sozinho, e quem decide a aparência é sempre o
     // onBackgroundMessage do sw.js (ou o onMessage do
@@ -196,7 +204,7 @@ async function sendPush(fb, tokens, notification) {
       }
     }
   });
-  return { invalidTokens };
+  return { invalidTokens, accepted: response.successCount, failed: response.failureCount };
 }
 
 // ── Checagens — mesma lógica de src/notifications.js, só que lendo o
@@ -223,7 +231,8 @@ function buildNotifications(state, todayIso, now, timeZone = DEFAULT_TIME_ZONE) 
       view: "planner",
       itemId: overdue.length === 1 ? overdue[0].id : null,
     });
-  } else if (dueToday.length > 0) {
+  }
+  if (dueToday.length > 0) {
     results.push({
       key: "tasksToday",
       title: "📋 Tarefas para hoje",
@@ -240,11 +249,12 @@ function buildNotifications(state, todayIso, now, timeZone = DEFAULT_TIME_ZONE) 
     const taskDateTime = zonedDateTimeToUtc(task.dueDate, task.dueTime, timeZone);
     if (!taskDateTime || Number.isNaN(taskDateTime.getTime())) return;
     const minutesUntil = (taskDateTime - now) / 60000;
-    const reminderMinutes = Number(task.reminder) || 15;
-    const windowMinutes = Math.max(reminderMinutes, 5);
-    if (minutesUntil > -5 && minutesUntil <= windowMinutes) {
+    if (task.reminder === false || task.reminder === "none") return;
+    const reminderMinutes = Number(task.reminder ?? 15);
+    if (minutesUntil > -60 && minutesUntil <= reminderMinutes) {
       results.push({
         key: `task_${task.id}`,
+        occurrence: `${task.dueDate}T${task.dueTime}_${reminderMinutes}`,
         title: "Tarefa em breve",
         body: `"${task.title}" vence às ${task.dueTime}.`,
         plain: `sua tarefa "${task.title}" vence às ${task.dueTime}.`,
@@ -256,21 +266,21 @@ function buildNotifications(state, todayIso, now, timeZone = DEFAULT_TIME_ZONE) 
   });
 
   (state.events || []).forEach((event) => {
-    if (!event.date || !event.time) return;
+    if (!event.date || !event.time || !isOpen(event) || event.reminder === false || event.reminder === "none") return;
     const eventDateTime = zonedDateTimeToUtc(event.date, event.time, timeZone);
     if (!eventDateTime || Number.isNaN(eventDateTime.getTime())) return;
     const minutesUntil = (eventDateTime - now) / 60000;
-    const reminderMinutes = Number(event.reminder) || 15;
+    const reminderMinutes = Number(event.reminder ?? 15);
     // A checagem roda a cada 5 min (ver .github/workflows/send-reminders.yml).
     // O mínimo acompanha a menor antecedência oferecida pela interface,
     // então “5 min antes” deixa de ser transformado silenciosamente em 15.
     // O "-5" também cobre o caso do cron atrasar/falhar uma
     // rodada: se o evento começou há pouco e ainda não foi avisado,
     // ainda avisamos (tarde, mas avisamos) em vez de ficar em silêncio.
-    const windowMinutes = Math.max(reminderMinutes, 5);
-    if (minutesUntil > -5 && minutesUntil <= windowMinutes) {
+    if (minutesUntil > -60 && minutesUntil <= reminderMinutes) {
       results.push({
         key: `event_${event.id}`,
+        occurrence: `${event.date}T${event.time}_${reminderMinutes}`,
         title: "📅 Compromisso em breve",
         body: `"${event.title}" às ${event.time}${event.location ? " · " + event.location : ""}`,
         plain: `seu compromisso "${event.title}" é às ${event.time}${event.location ? " (" + event.location + ")" : ""}.`,
@@ -326,6 +336,33 @@ function buildNotifications(state, todayIso, now, timeZone = DEFAULT_TIME_ZONE) 
   return results;
 }
 
+// Receipts live outside the app snapshot, so a stale browser cannot erase them.
+// Claim each channel transactionally; simultaneous cron invocations share a lease.
+async function deliverChannel(db, uid, notification, channel, now, send) {
+  const id = crypto.createHash("sha256").update(JSON.stringify([
+    uid, notification.key, notification.occurrence || "", channel,
+  ])).digest("hex");
+  const ref = db.collection("reminderDeliveries").doc(id);
+  const leaseId = crypto.randomUUID();
+  const claimed = await db.runTransaction(async (tx) => {
+    const previous = (await tx.get(ref)).data() || {};
+    const cooldown = cooldownHoursFor(notification.key);
+    if (previous.acceptedAt && (cooldown === 0 || now - new Date(previous.acceptedAt) < cooldown * 3600000)) return false;
+    if (previous.leaseUntil > now.getTime()) return false;
+    tx.set(ref, { leaseId, leaseUntil: now.getTime() + 300000, updatedAt: now.toISOString() }, { merge: true });
+    return true;
+  });
+  if (!claimed) return false;
+  try {
+    await send();
+    await ref.set({ acceptedAt: now.toISOString(), leaseUntil: 0, lastError: null }, { merge: true });
+    return true;
+  } catch (error) {
+    await ref.set({ leaseUntil: 0, lastError: error.message, updatedAt: now.toISOString() }, { merge: true });
+    throw error;
+  }
+}
+
 module.exports = async (req, res) => {
   res.setHeader("Content-Type", "application/json");
 
@@ -353,6 +390,8 @@ module.exports = async (req, res) => {
 
   let checked = 0;
   let notified = 0;
+  const accepted = { push: 0, whatsapp: 0 };
+  let skippedNoChannel = 0;
   const errors = [];
 
   try {
@@ -368,49 +407,40 @@ module.exports = async (req, res) => {
       const notifications = buildNotifications(state, todayIso, now, timeZone);
       if (notifications.length === 0) continue;
 
-      const serverNotifications = state.serverNotifications || {};
-      const pending = notifications.filter((n) => {
-        const lastSentIso = serverNotifications[n.key];
-        if (!lastSentIso) return true; // nunca avisou esse tipo pra esse usuário
-        const cooldownHours = cooldownHoursFor(n.key);
-        if (cooldownHours === 0) return false; // já avisou 1x, não repete (ex.: evento)
-        const hoursSinceLastSent = (now - new Date(lastSentIso)) / 3600000;
-        return hoursSinceLastSent >= cooldownHours;
-      });
-      if (pending.length === 0) continue;
-
       const tokens = Array.isArray(state.fcmTokens) ? state.fcmTokens : [];
       let invalidTokens = [];
-
-      for (const n of pending) {
-        try {
-          if (state.appReminderOptIn !== false && tokens.length > 0) {
-            const result = await sendPush(fb, tokens, n);
-            invalidTokens = invalidTokens.concat(result.invalidTokens);
+      for (const n of notifications) {
+        let anyAccepted = false;
+        const channels = [];
+        if (state.appReminderOptIn !== false && tokens.length) channels.push(["push", async () => {
+          let successes = 0;
+          for (let i = 0; i < tokens.length; i += 500) {
+            const result = await sendPush(fb, tokens.slice(i, i + 500), n);
+            invalidTokens.push(...result.invalidTokens);
+            successes += result.accepted;
           }
-          if (state.whatsappReminderOptIn && state.whatsappLinkedPhone) {
-            await sendWhatsAppReminder(state.whatsappLinkedPhone, n.plain);
+          if (!successes) throw new Error("push_no_tokens_accepted");
+        }]);
+        if (state.whatsappReminderOptIn && state.whatsappLinkedPhone) channels.push(["whatsapp", () => sendWhatsAppReminder(state.whatsappLinkedPhone, n.plain)]);
+        if (!channels.length) skippedNoChannel++;
+        for (const [channel, send] of channels) {
+          try {
+            if (await deliverChannel(db, uid, n, channel, now, send)) {
+              accepted[channel]++;
+              anyAccepted = true;
+            }
+          } catch (err) {
+            errors.push({ uid, key: n.key, channel, error: err.message });
           }
-          notified++;
-        } catch (err) {
-          errors.push({ uid, key: n.key, error: err.message });
         }
+        if (anyAccepted) notified++;
       }
-
-      // Marca o horário exato deste aviso (usado pelo cooldown na próxima
-      // rodada) + remove tokens mortos, tudo numa escrita só. O Admin SDK
-      // ignora o firestore.rules (é só pro cliente), então isso funciona
-      // mesmo sem mexer nas regras.
-      const nowIso = now.toISOString();
-      const updates = { updatedAt: nowIso };
-      pending.forEach((n) => { updates[`data.serverNotifications.${n.key}`] = nowIso; });
       if (invalidTokens.length > 0) {
-        updates["data.fcmTokens"] = admin.firestore.FieldValue.arrayRemove(...invalidTokens);
+        await docSnap.ref.update({ "data.fcmTokens": admin.firestore.FieldValue.arrayRemove(...invalidTokens) });
       }
-      await docSnap.ref.update(updates);
     }
 
-    return res.status(200).json({ ok: true, checked, notified, errors });
+    return res.status(errors.length ? 502 : 200).json({ ok: errors.length === 0, checked, notified, accepted, skippedNoChannel, errors });
   } catch (err) {
     console.error("Erro ao rodar send-reminders:", err);
     return res.status(500).json({ error: "internal_error" });
@@ -419,4 +449,4 @@ module.exports = async (req, res) => {
 
 // Exportados como propriedades da function para testes determinísticos,
 // sem expor nenhuma rota adicional em produção.
-module.exports._test = { buildNotifications, todayInTimeZone, zonedDateTimeToUtc };
+module.exports._test = { buildNotifications, todayInTimeZone, zonedDateTimeToUtc, deliverChannel, sendWhatsAppReminder, sendPush };
