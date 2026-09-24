@@ -31,5 +31,6 @@ jobs:
     steps:
       - name: Chamar /api/send-reminders
         run: |
-          curl -sS -f -X GET "https://pulse-note-5erj.vercel.app/api/send-reminders" \
+          curl -sS --fail-with-body --max-time 90 -X GET "https://pulse-note-5erj.vercel.app/api/send-reminders" \
             -H "Authorization: Bearer ${{ secrets.REMINDERS_CRON_SECRET }}"
+
