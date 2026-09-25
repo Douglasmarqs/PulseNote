@@ -2289,40 +2289,6 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   .toast-mascot, .toast-mascot .pulsinho__eye { animation: none !important; }
 }
 
-/* ---------- SYNC STATUS PILL ---------- */
-/* Antes era criado só com estilo inline (JS), então não dava pra reposicionar
-   no mobile — ficava fixo a 24px do fundo e acabava sobrepondo a barra de
-   navegação inferior, cobrindo o rótulo da aba ativa (parecia que a barra
-   "quebrou"/mudou de nome). Agora é uma classe de verdade, então o media
-   query abaixo consegue subir o indicador para cima da barra. */
-.sync-status {
-  position: fixed;
-  bottom: 24px;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 7px 16px;
-  border-radius: 999px;
-  font-size: 0.78rem;
-  font-weight: 700;
-  z-index: 998;
-  transition: opacity 300ms;
-  pointer-events: auto;
-  background: var(--surface);
-  border: 1.5px solid var(--line);
-  box-shadow: 0 4px 16px rgba(0,0,0,0.1);
-  color: var(--text2);
-  cursor: default;
-  max-width: 88vw;
-  text-align: center;
-  opacity: 0;
-}
-.sync-status.is-visible { opacity: 1; }
-.sync-status.is-actionable { cursor: pointer; }
-.sync-status[data-status="saving"]  { color: var(--accent); }
-.sync-status[data-status="saved"]   { color: var(--green); }
-.sync-status[data-status="offline"] { color: var(--orange); }
-.sync-status[data-status="error"]   { color: var(--red); }
-
 /* ---------- CELEBRATION ---------- */
 .celebration-burst { position: fixed; inset: 0; z-index: 100; pointer-events: none; }
 .celebration-burst span {
@@ -2700,11 +2666,6 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 
   /* Toast above nav */
   .toast { bottom: calc(var(--nav-height) + 12px); right: 16px; left: 16px; justify-content: center; }
-
-  /* Indicador de sincronização também acima da barra — e mais alto ainda
-     que o toast, para nunca sobrepor um ao outro quando os dois aparecem
-     ao mesmo tempo (ex.: "Tarefa adicionada" + "Salvando..."). */
-  .sync-status { bottom: calc(var(--nav-height) + 62px); z-index: 90; }
 
   /* Form grid 1 col on mobile */
   .form-grid { grid-template-columns: 1fr; }
@@ -4066,13 +4027,6 @@ align-items:stretch;
 }
 .new-category-save:active { transform: translateY(1px) scale(0.99); }
 .new-category-save-icon { font-size: 1.05rem; line-height: 1; }
-.new-category-save.is-loading { opacity: 0.75; cursor: default; }
-.new-category-save.is-loading .new-category-save-icon {
-  display: inline-block;
-  animation: newCategorySpin 700ms linear infinite;
-}
-.new-category-save.is-loading .new-category-save-label::after { content: "..."; }
-@keyframes newCategorySpin { to { transform: rotate(360deg); } }
 @media (max-width: 380px) {
   .new-category-emoji-grid { grid-template-columns: repeat(5, 1fr); }
 }
@@ -5555,14 +5509,35 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
   font-size: 0.85rem;
 }
 .nd-tool-btn:active { transform: scale(0.94); }
+.nd-color-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+}
+.nd-color-label {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
 .nd-swatch {
   width: 28px; height: 28px; flex-shrink: 0;
   border-radius: 50%;
   border: 2px solid transparent;
   box-shadow: inset 0 0 0 1.5px rgba(0,0,0,0.15);
+  cursor: pointer;
 }
 .nd-swatch:active { transform: scale(0.9); }
-.nd-swatch.is-selected { border-color: var(--text); }
+.nd-swatch.is-selected,
+.nd-swatch[aria-pressed="true"] {
+  border-color: var(--text);
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent);
+}
 
 .note-detail-body {
   flex: 1;

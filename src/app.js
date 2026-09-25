@@ -180,43 +180,6 @@ function getUser() {
   };
 }
 
-// ── Indicador visual de status de sincronização ───────────────
-// Agora clicável: se a última sincronização falhou, tocar/clicar no
-// indicador tenta salvar de novo na hora (em vez de esperar o próximo
-// debounce, que só dispara com uma nova alteração do usuário).
-let _lastSyncStatus = "saved";
-function showSyncStatus(status, detail) {
-  let el = document.getElementById("syncStatus");
-  if (!el) {
-    el = document.createElement("div");
-    el.id = "syncStatus";
-    el.className = "sync-status";
-    el.addEventListener("click", () => {
-      if (_lastSyncStatus === "error" || _lastSyncStatus === "offline") {
-        _syncRetries = 0;
-        syncToServer();
-      }
-    });
-    document.body.appendChild(el);
-  }
-  _lastSyncStatus = status;
-  const states = {
-    saving:  { text: "⏳ Salvando..." },
-    saved:   { text: "✅ Salvo na nuvem" },
-    offline: { text: "📵 Sem conexão — toque para tentar de novo" },
-    error:   { text: `❌ ${detail || "Erro ao salvar"} — toque para tentar de novo` },
-  };
-  const s = states[status] || states.saved;
-  el.textContent = s.text;
-  el.dataset.status = status;
-  el.classList.add("is-visible");
-  el.classList.toggle("is-actionable", status === "error" || status === "offline");
-  clearTimeout(showSyncStatus._hideTimer);
-  if (status === "saved") {
-    showSyncStatus._hideTimer = setTimeout(() => el.classList.remove("is-visible"), 1800);
-  }
-}
-
 // Remove valores "undefined" em qualquer profundidade (objetos e arrays).
 // O Firestore rejeita "undefined" com um erro (invalid-argument) que,
 // sem essa limpeza, aparecia pro usuário só como "Erro ao salvar" genérico
@@ -235,22 +198,6 @@ function stripUndefinedDeep(value) {
   return value;
 }
 
-// Tradução de erros comuns do Firestore/Auth para algo que a pessoa
-// consiga entender e agir (em vez de "Erro ao salvar" sem contexto).
-function friendlySyncError(err) {
-  const code = err?.code || "";
-  if (code.includes("permission-denied")) return "Sem permissão para salvar. Faça login novamente";
-  if (code.includes("unauthenticated")) return "Sessão expirada. Faça login novamente";
-  if (code.includes("unavailable") || code.includes("network")) return "Sem conexão com o servidor";
-  if (code.includes("resource-exhausted") || err?.message?.includes("exceeds the maximum")) return "Dados grandes demais para salvar";
-  // Antes caía sempre em "Erro ao salvar" genérico, sem pista nenhuma do que
-  // houve — quem visse o aviso não tinha como saber se era regra do
-  // Firestore, dado inválido, etc. Agora mostra o motivo cru (código ou
-  // mensagem original) junto, pra dar algo concreto para investigar.
-  const raw = code || err?.message;
-  return raw ? `Erro ao salvar (${raw})` : "Erro ao salvar";
-}
-
 // ── Salva o state atual no Firestore (documento do usuário) ───
 // Guard triplo antes de qualquer escrita:
 // 1. currentUser existe (usuário logado)
@@ -264,46 +211,39 @@ async function syncToServer() {
 
   // Documento único por usuário: se ele crescer demais (fotos grandes,
   // muitos anos de lançamentos), o Firestore recusa a escrita (limite de
-  // 1 MiB por documento). Detectamos isso ANTES de tentar gravar, para
-  // mostrar um aviso útil em vez de ficar tentando de novo sem sucesso.
+  // 1 MiB por documento). Detectamos isso antes da tentativa; o cache local
+  // continua atualizado e o motivo fica disponível no console de suporte.
   const clean = stripUndefinedDeep(state);
   delete clean.fcmTokens;
   delete clean.serverNotifications;
   const approxBytes = new Blob([JSON.stringify(clean)]).size;
   if (approxBytes > 900_000) {
-    showSyncStatus("error", "Dados grandes demais para salvar (reduza a foto de perfil ou registros antigos)");
+    console.error("Não foi possível sincronizar: os dados excedem o limite seguro do documento do Firestore.");
     const key = getStorageKey();
     if (key) localStorage.setItem(key, JSON.stringify(state));
     return;
   }
 
-  showSyncStatus("saving");
   try {
     await setDoc(doc(db, "userData", currentUser.uid), {
       data: clean,
       updatedAt: new Date().toISOString(),
-    }, { mergeFields: ["updatedAt", ...Object.keys(clean).map((key) => ["data", key])] });
+    }, { mergeFields: ["updatedAt", ...Object.keys(clean).map((key) => `data.${key}`)] });
     const key = getStorageKey();
     if (key) localStorage.setItem(key, JSON.stringify(state));
-    showSyncStatus("saved");
     _syncRetries = 0; // reset ao ter sucesso
   } catch (err) {
     console.error("Erro ao salvar no Firestore:", err);
     const key = getStorageKey();
     if (key) localStorage.setItem(key, JSON.stringify(state)); // nunca perde o dado localmente
-    if (!navigator.onLine) {
-      showSyncStatus("offline");
-      return;
-    }
+    if (!navigator.onLine) return;
     // Retry com backoff exponencial (máx 3 tentativas, 2s/4s/8s)
     if (_syncRetries < 3) {
       _syncRetries++;
       const delay = Math.pow(2, _syncRetries) * 1000;
-      showSyncStatus("saving"); // mantém "Salvando..." durante retry
       setTimeout(syncToServer, delay);
     } else {
       _syncRetries = 0;
-      showSyncStatus("error", friendlySyncError(err));
     }
   }
 }
@@ -313,8 +253,7 @@ function scheduleSyncToServer() {
   syncTimer = setTimeout(syncToServer, 1200);
 }
 
-// Mostra avisos quando a conexão cai ou volta
-window.addEventListener("offline", () => showSyncStatus("offline"));
+// Ao voltar a conexão, sincroniza silenciosamente o estado mais recente.
 window.addEventListener("online", () => {
   if (currentUser) syncToServer();
 });
@@ -402,7 +341,6 @@ const appReady = new Promise((resolve) => {
           setDoc(userDocRef, { data: stripUndefinedDeep(state), updatedAt: new Date().toISOString() })
             .catch((err) => {
               console.error("Erro ao criar documento inicial:", err);
-              showSyncStatus("error", friendlySyncError(err));
             });
         }
 
@@ -412,7 +350,6 @@ const appReady = new Promise((resolve) => {
       },
       (err) => {
         console.error("Erro ao escutar Firestore:", err);
-        showSyncStatus("error", friendlySyncError(err));
         if (!resolved) { resolved = true; resolve(); } // segue com cache local/defaults
       }
     );
@@ -841,7 +778,6 @@ function renderProfileButton(user) {
     closeDropdown();
     if (!confirm("Deseja sair da sua conta?")) return;
     clearTimeout(syncTimer);
-    showSyncStatus("saving");
     try { await syncToServer(); } finally { await logout(); }
   });
 
@@ -3634,8 +3570,21 @@ function bindNoteDetail() {
   if (!modal || !body) return;
 
   document.querySelector("#closeNoteDetail").addEventListener("click", closeNoteDetail);
-  // Toca fora do cartão (no fundo escurecido) fecha, igual aos outros modais do app.
-  modal.addEventListener("click", (e) => { if (e.target === modal) closeNoteDetail(); });
+  // Fecha ao tocar/clicar no fundo, mas não quando uma seleção de texto
+  // começa no editor e termina fora do cartão. O clique sintetizado depois
+  // de um drag também chegava ao backdrop e desmontava o editor.
+  let backdropPointerId = null;
+  modal.addEventListener("pointerdown", (event) => {
+    backdropPointerId = event.target === modal && event.isPrimary && event.button === 0
+      ? event.pointerId
+      : null;
+  });
+  modal.addEventListener("pointerup", (event) => {
+    const closeFromBackdrop = backdropPointerId === event.pointerId && event.target === modal;
+    backdropPointerId = null;
+    if (closeFromBackdrop) closeNoteDetail();
+  });
+  modal.addEventListener("pointercancel", () => { backdropPointerId = null; });
 
   document.querySelector("#ndSaveBtn").addEventListener("click", saveNoteDetail);
 
@@ -3694,14 +3643,28 @@ function bindNoteDetail() {
   //      lugar, então normalmente nem precisa da camada 2.
   //   2) Como reforço pra qualquer navegador/gesto que ainda assim
   //      perca a seleção, guardamos o último Range válido a cada
-  //      mudança de seleção dentro do corpo, e restauramos ele antes
-  //      de rodar o comando.
+  //      mudança de seleção que cruza o corpo do editor, limitando o
+  //      trecho aos limites da nota antes de restaurar e formatar.
   let ndSavedRange = null;
   const saveNdSelection = () => {
     const sel = window.getSelection();
-    if (sel && sel.rangeCount > 0 && body.contains(sel.anchorNode) && body.contains(sel.focusNode)) {
-      ndSavedRange = sel.getRangeAt(0).cloneRange();
+    if (!sel || !sel.rangeCount) return;
+    const range = sel.getRangeAt(0);
+    const anchorInside = sel.anchorNode === body || body.contains(sel.anchorNode);
+    const focusInside = sel.focusNode === body || body.contains(sel.focusNode);
+    if (anchorInside && focusInside) {
+      ndSavedRange = range.cloneRange();
+      return;
     }
+    try {
+      if (!range.intersectsNode(body)) return;
+      const clipped = range.cloneRange();
+      const bodyBounds = document.createRange();
+      bodyBounds.selectNodeContents(body);
+      if (clipped.compareBoundaryPoints(Range.START_TO_START, bodyBounds) < 0) clipped.setStart(body, 0);
+      if (clipped.compareBoundaryPoints(Range.END_TO_END, bodyBounds) > 0) clipped.setEnd(body, body.childNodes.length);
+      ndSavedRange = clipped;
+    } catch { /* conserva a última seleção válida */ }
   };
   body.addEventListener("mouseup", saveNdSelection);
   body.addEventListener("keyup", saveNdSelection);
@@ -3734,7 +3697,11 @@ function bindNoteDetail() {
     document.execCommand("styleWithCSS", false, true);
     if (swatch) {
       document.execCommand("foreColor", false, swatch.dataset.ndColor);
-      toolbar.querySelectorAll("[data-nd-color]").forEach((button) => button.setAttribute("aria-pressed", String(button === swatch)));
+      toolbar.querySelectorAll("[data-nd-color]").forEach((button) => {
+        const selected = button === swatch;
+        button.setAttribute("aria-pressed", String(selected));
+        button.classList.toggle("is-selected", selected);
+      });
     } else if (toolBtn.dataset.ndCmd === "bold") {
       document.execCommand("bold");
     } else if (toolBtn.dataset.ndCmd === "italic") {
@@ -3742,6 +3709,10 @@ function bindNoteDetail() {
     } else if (toolBtn.dataset.ndCmd === "clear") {
       document.execCommand("backColor", false, "transparent");
       document.execCommand("foreColor", false, getComputedStyle(body).color);
+      toolbar.querySelectorAll("[data-nd-color]").forEach((button) => {
+        button.setAttribute("aria-pressed", "false");
+        button.classList.remove("is-selected");
+      });
     }
     saveNdSelection();
     flushNoteDetailSave();
@@ -6660,15 +6631,9 @@ function openNewCategoryPrompt(prefillName) {
     });
     saveState();
 
-    // Pequeno feedback de "salvando → salvo" antes de fechar, pra deixar
-    // claro que a ação foi concluída (em vez do modal simplesmente sumir).
-    saveBtn.classList.add("is-loading");
-    saveBtn.disabled = true;
-    setTimeout(() => {
-      populateCategorySelect(id, activeType);
-      modal.remove();
-      showToast(`✅ Categoria "${name}" criada!`);
-    }, 260);
+    populateCategorySelect(id, activeType);
+    modal.remove();
+    showToast(`✅ Categoria "${name}" criada!`);
   });
 }
 
