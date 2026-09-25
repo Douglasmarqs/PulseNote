@@ -11,8 +11,9 @@
 // 1 execução por dia (e olhe lá, só com precisão de "algum minuto dentro
 // da hora marcada") — não serve pra lembrete de compromisso, que precisa
 // disparar minutos antes do horário certo. Por isso o "relógio" é
-// externo: o GitHub Actions do próprio repositório bate nesta rota a
-// a cada 5 minutos, de graça (ver o workflow).
+// externo: o QStash chama esta rota a cada 5 minutos. O GitHub Actions
+// continua como contingência durante a migração e pode ser desativado
+// depois que a primeira execução assinada do QStash for confirmada.
 //
 // Idempotência: cada tipo de aviso tem um "cooldown" próprio — em vez de
 // só 1x por dia, uma tarefa atrasada pode lembrar de novo a cada 4h, um
@@ -29,10 +30,12 @@
 //     — as mesmas já usadas em api/whatsapp-webhook.js
 //   REMINDERS_CRON_SECRET
 //     — uma string aleatória qualquer (ex.: `openssl rand -hex 32`).
-//       Só você e o GitHub Actions precisam saber. Sem ela configurada,
-//       este endpoint recusa QUALQUER chamada (retorna 401) — é o que
-//       impede um estranho de ficar disparando notificação pros seus
-//       usuários só por saber a URL, que é pública.
+//       Mantida para o fallback atual do GitHub Actions.
+//   QSTASH_CURRENT_SIGNING_KEY / QSTASH_NEXT_SIGNING_KEY
+//     — chaves server-side do QStash usadas para confirmar que o POST
+//       realmente veio do agendador. Nunca devem ir para o navegador.
+//   QSTASH_DESTINATION_URL
+//     — URL exata cadastrada no schedule, incluindo protocolo e caminho.
 //   WHATSAPP_PHONE_NUMBER_ID / WHATSAPP_ACCESS_TOKEN
 //     — as mesmas do webhook. Pra alcançar QUALQUER usuário (não só os 5
 //       números de teste), o número precisa estar em modo produção
@@ -47,6 +50,7 @@
 
 const admin = require("firebase-admin");
 const crypto = require("node:crypto");
+const { Receiver } = require("@upstash/qstash");
 const DEFAULT_TIME_ZONE = "America/Sao_Paulo";
 
 // Cooldown (em horas) até poder notificar de novo o MESMO tipo de aviso
@@ -363,24 +367,55 @@ async function deliverChannel(db, uid, notification, channel, now, send) {
   }
 }
 
+function hasValidLegacySecret(req) {
+  const authHeader = req.headers.authorization || "";
+  const secret = process.env.REMINDERS_CRON_SECRET;
+  if (!secret) return false;
+  const authBuf = Buffer.from(authHeader);
+  const expectedBuf = Buffer.from(`Bearer ${secret}`);
+  return authBuf.length === expectedBuf.length && crypto.timingSafeEqual(authBuf, expectedBuf);
+}
+
+async function hasValidQStashSignature(req) {
+  const signature = req.headers["upstash-signature"];
+  const currentSigningKey = process.env.QSTASH_CURRENT_SIGNING_KEY;
+  const nextSigningKey = process.env.QSTASH_NEXT_SIGNING_KEY;
+  const destinationUrl = process.env.QSTASH_DESTINATION_URL;
+  if (!signature || !currentSigningKey || !nextSigningKey || !destinationUrl) return false;
+
+  const body = typeof req.body === "string"
+    ? req.body
+    : Buffer.isBuffer(req.body)
+      ? req.body.toString("utf8")
+      : req.body == null
+        ? ""
+        : null;
+  if (body === null) return false;
+
+  try {
+    const receiver = new Receiver({ currentSigningKey, nextSigningKey });
+    return await receiver.verify({ signature, body, url: destinationUrl });
+  } catch (error) {
+    console.warn("Assinatura do QStash rejeitada:", error?.message || error);
+    return false;
+  }
+}
+
 module.exports = async (req, res) => {
   res.setHeader("Content-Type", "application/json");
 
-  const authHeader = req.headers.authorization || "";
-  const secret = process.env.REMINDERS_CRON_SECRET;
-  // Comparação em tempo constante — mesmo padrão do HMAC do webhook do
-  // WhatsApp (verifyMetaSignature). Um "!==" comum vaza, por quanto
-  // tempo a comparação levou, quantos caracteres do começo bateram —
-  // dá pra um atacante ir "adivinhando" a secret aos poucos. Baixo
-  // risco na prática aqui (a rota nem processa nada sensível sem
-  // secret certa), mas o custo de corrigir é zero, então corrige.
-  const expected = `Bearer ${secret}`;
-  const authBuf = Buffer.from(authHeader);
-  const expectedBuf = Buffer.from(expected);
-  const isValid = !!secret
-    && authBuf.length === expectedBuf.length
-    && crypto.timingSafeEqual(authBuf, expectedBuf);
-  if (!isValid) {
+  const method = (req.method || "GET").toUpperCase();
+  if (method !== "GET" && method !== "POST") {
+    res.setHeader("Allow", "GET, POST");
+    return res.status(405).json({ error: "method_not_allowed" });
+  }
+
+  // GET é o fallback atual do GitHub; POST é reservado ao QStash e
+  // validado pelo JWT enviado no cabeçalho Upstash-Signature.
+  const isAuthorized = method === "GET"
+    ? hasValidLegacySecret(req)
+    : await hasValidQStashSignature(req);
+  if (!isAuthorized) {
     return res.status(401).json({ error: "unauthorized" });
   }
 
