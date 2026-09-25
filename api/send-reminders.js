@@ -475,6 +475,12 @@ module.exports = async (req, res) => {
       }
     }
 
+    if (errors.length) {
+      // Registra apenas identificadores internos e o código resumido do
+      // provedor. Telefones, tokens e conteúdo dos lembretes não aparecem
+      // nos logs da Vercel.
+      console.error("Falhas ao enviar lembretes:", JSON.stringify(errors));
+    }
     return res.status(errors.length ? 502 : 200).json({ ok: errors.length === 0, checked, notified, accepted, skippedNoChannel, errors });
   } catch (err) {
     console.error("Erro ao rodar send-reminders:", err);
@@ -485,3 +491,4 @@ module.exports = async (req, res) => {
 // Exportados como propriedades da function para testes determinísticos,
 // sem expor nenhuma rota adicional em produção.
 module.exports._test = { buildNotifications, todayInTimeZone, zonedDateTimeToUtc, deliverChannel, sendWhatsAppReminder, sendPush };
+
