@@ -12,8 +12,7 @@
 // da hora marcada") — não serve pra lembrete de compromisso, que precisa
 // disparar minutos antes do horário certo. Por isso o "relógio" é
 // externo: o QStash chama esta rota a cada 5 minutos. O GitHub Actions
-// continua como contingência durante a migração e pode ser desativado
-// depois que a primeira execução assinada do QStash for confirmada.
+// fica disponível apenas como contingência manual.
 //
 // Idempotência: cada tipo de aviso tem um "cooldown" próprio — em vez de
 // só 1x por dia, uma tarefa atrasada pode lembrar de novo a cada 4h, um
@@ -352,6 +351,7 @@ async function deliverChannel(db, uid, notification, channel, now, send) {
     const previous = (await tx.get(ref)).data() || {};
     const cooldown = cooldownHoursFor(notification.key);
     if (previous.acceptedAt && (cooldown === 0 || now - new Date(previous.acceptedAt) < cooldown * 3600000)) return false;
+    if (previous.retryAfter > now.getTime()) return false;
     if (previous.leaseUntil > now.getTime()) return false;
     tx.set(ref, { leaseId, leaseUntil: now.getTime() + 300000, updatedAt: now.toISOString() }, { merge: true });
     return true;
@@ -359,10 +359,20 @@ async function deliverChannel(db, uid, notification, channel, now, send) {
   if (!claimed) return false;
   try {
     await send();
-    await ref.set({ acceptedAt: now.toISOString(), leaseUntil: 0, lastError: null }, { merge: true });
+    await ref.set({ acceptedAt: now.toISOString(), leaseUntil: 0, retryAfter: 0, lastError: null }, { merge: true });
     return true;
   } catch (error) {
-    await ref.set({ leaseUntil: 0, lastError: error.message, updatedAt: now.toISOString() }, { merge: true });
+    const retryDelayMs = error.message === "whatsapp_configuration_missing"
+      || /^whatsapp_(400|404)_132001$/.test(error.message)
+      ? 30 * 60 * 1000
+      : 0;
+    await ref.set({
+      leaseUntil: 0,
+      lastError: error.message,
+      retryAfter: retryDelayMs ? now.getTime() + retryDelayMs : 0,
+      updatedAt: now.toISOString(),
+    }, { merge: true });
+    error.retryDeferred = retryDelayMs > 0;
     throw error;
   }
 }
@@ -428,6 +438,7 @@ module.exports = async (req, res) => {
   const accepted = { push: 0, whatsapp: 0 };
   let skippedNoChannel = 0;
   const errors = [];
+  const deferredErrors = [];
 
   try {
     const snap = await db.collection("userData").get();
@@ -465,7 +476,8 @@ module.exports = async (req, res) => {
               anyAccepted = true;
             }
           } catch (err) {
-            errors.push({ uid, key: n.key, channel, error: err.message });
+            const entry = { uid, key: n.key, channel, error: err.message };
+            (err.retryDeferred ? deferredErrors : errors).push(entry);
           }
         }
         if (anyAccepted) notified++;
@@ -475,13 +487,22 @@ module.exports = async (req, res) => {
       }
     }
 
-    if (errors.length) {
+    if (errors.length || deferredErrors.length) {
       // Registra apenas identificadores internos e o código resumido do
       // provedor. Telefones, tokens e conteúdo dos lembretes não aparecem
       // nos logs da Vercel.
-      console.error("Falhas ao enviar lembretes:", JSON.stringify(errors));
+      console.error("Falhas ao enviar lembretes:", JSON.stringify({ errors, deferredErrors }));
     }
-    return res.status(errors.length ? 502 : 200).json({ ok: errors.length === 0, checked, notified, accepted, skippedNoChannel, errors });
+    return res.status(errors.length ? 502 : 200).json({
+      ok: errors.length === 0 && deferredErrors.length === 0,
+      degraded: deferredErrors.length > 0,
+      checked,
+      notified,
+      accepted,
+      skippedNoChannel,
+      errors,
+      deferredErrors,
+    });
   } catch (err) {
     console.error("Erro ao rodar send-reminders:", err);
     return res.status(500).json({ error: "internal_error" });
