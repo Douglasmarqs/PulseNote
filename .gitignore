@@ -4,6 +4,7 @@ frontend/
 {backend,frontend}/
 node_modules/
 .npm-cache/
+.npm-*/
 dist/
 dist-audit/
 dist-audit-current/

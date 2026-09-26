@@ -69,6 +69,8 @@
   --shadow-edge-color: rgba(20, 22, 45, 0.12);
   --nav-height: 80px;
   --header-height: 70px;
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
 
   /* Escala de espaçamento em grid de 8pt — usada em todo trabalho novo
      daqui pra frente. Não fomos reescrever cada valor de padding/margin
@@ -97,6 +99,14 @@
   --text-xl: 1.3rem;
   --text-2xl: 1.6rem;
   --text-3xl: 2rem;
+}
+
+/* Alguns atalhos/PWAs do iOS restaurados informam inset zero mesmo com a
+   barra do sistema sobreposta. A classe é aplicada no <head> antes da
+   primeira pintura e só reserva esse mínimo no modo instalado. */
+:root.is-standalone {
+  --safe-area-top: max(env(safe-area-inset-top, 0px), 24px);
+  --safe-area-bottom: max(env(safe-area-inset-bottom, 0px), 8px);
 }
 
 /* ---------- Tema: Claro / Aurora / Automático ----------
@@ -380,9 +390,14 @@
 
 html {
   -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
   overflow-x: hidden;
+  overscroll-behavior-x: none;
   width: 100%;
   max-width: 100%;
+  min-width: 0;
+  min-height: 100%;
   /* Antes só o <body> tinha cor de fundo. Em PWA instalado no iOS
      (viewport-fit=cover), a área de safe-area/notch fica fora da caixa
      do <body> — sem isso aqui, aquela faixa podia "vazar" com a cor
@@ -409,6 +424,9 @@ body {
   overflow-x: hidden;
   width: 100%;
   max-width: 100%;
+  min-width: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
   position: relative;
 }
 
@@ -438,20 +456,28 @@ body::before {
 .app-shell {
   position: relative;
   z-index: 1;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: clip;
 }
 
 button, input, textarea, select {
   font: inherit;
   outline: none;
+  min-width: 0;
+  max-width: 100%;
 }
 button { cursor: pointer; border: none; background: none; }
-p, h1, h2, h3 { margin: 0; }
+p, h1, h2, h3 { margin: 0; overflow-wrap: anywhere; }
+img, video { max-width: 100%; height: auto; }
 
 /* ---------- App Shell ---------- */
 .app-shell {
   display: grid;
   grid-template-columns: 260px 1fr;
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 /* ---------- SIDEBAR (desktop) ---------- */
@@ -607,8 +633,11 @@ p, h1, h2, h3 { margin: 0; }
 /* ---------- MAIN AREA ---------- */
 .main-area {
   min-width: 0;
+  width: 100%;
+  max-width: 100%;
   display: flex;
   flex-direction: column;
+  overflow-x: clip;
 }
 
 /* ---------- TOP BAR ---------- */
@@ -621,7 +650,7 @@ p, h1, h2, h3 { margin: 0; }
      aparelho (relógio, sinal, bateria) — sem isso, o cabeçalho
      renderiza por baixo dela em qualquer tela com notch/status bar
      (afeta todas as views, já que o topbar é compartilhado). */
-  padding: calc(13px + env(safe-area-inset-top)) 24px 13px;
+  padding: calc(13px + var(--safe-area-top)) 24px 13px;
   background: color-mix(in srgb, var(--bg) 85%, transparent);
   backdrop-filter: blur(20px);
   /* Mesmo raciocínio da sidebar: fio sutil + sombra suave por baixo,
@@ -711,7 +740,7 @@ p, h1, h2, h3 { margin: 0; }
 .primary-button .icon { font-style: normal; font-size: 1.1rem; }
 
 /* ---------- VIEWS ---------- */
-.view { display: none; padding: 22px 26px; }
+.view { display: none; width: 100%; max-width: 100%; min-width: 0; padding: 22px 26px; }
 .active-view { display: block; animation: fadeUp 240ms ease; }
 
 @keyframes fadeUp {
@@ -1493,7 +1522,21 @@ input[type="time"] {
 .form-actions { display: flex; gap: 8px; }
 
 /* ---------- Note editor (versão simplificada) ---------- */
-.note-editor { gap: 10px; }
+.note-editor {
+  gap: 9px;
+  min-width: 0;
+  max-width: 100%;
+}
+.note-editor .form-heading { margin-bottom: 0; }
+.note-editor .form-heading h2 {
+  max-width: 24ch;
+  font-size: 1.16rem;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+.note-title-field,
+.note-body-field { min-width: 0; }
 
 .note-title-field input {
   font-size: 1.05rem;
@@ -1511,7 +1554,7 @@ input[type="time"] {
   resize: none;
   overflow: hidden;
   padding: 4px 2px;
-  min-height: 64px;
+  min-height: 56px;
   font-size: 0.94rem;
   line-height: 1.5;
 }
@@ -1579,6 +1622,29 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   gap: 10px;
   padding-top: 8px;
   border-top: 1.5px dashed var(--line);
+}
+
+/* Aparência continua disponível, porém recolhida em "Mais detalhes".
+   O editor principal fica focado no conteúdo e não em duas paletas. */
+.note-appearance-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 10px 0 12px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface2);
+}
+.note-appearance-option {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  min-width: 0;
+}
+.note-appearance-options .note-text-color-picker,
+.note-appearance-options .note-color-picker {
+  justify-content: flex-start;
 }
 
 .note-priority-picker { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -1679,7 +1745,7 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 .note-more-details > div.form-grid:not(:first-of-type),
 .note-more-details > label { margin-top: 10px; }
 
-.note-save-btn { flex: 1; justify-content: center; height: 46px; font-size: 0.95rem; }
+.note-save-btn { flex: 1; justify-content: center; height: 44px; font-size: 0.92rem; }
 
 /* Botão "Salvar compromisso" — mesmo tratamento do botão de notas: fica
    no final do formulário (depois de todos os campos), ocupando a largura
@@ -1819,6 +1885,7 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   min-width: 0;
   position: relative;
   overflow-wrap: anywhere;
+  word-break: break-word;
   animation: fadeUp 200ms ease both;
 }
 
@@ -1874,6 +1941,8 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   -webkit-line-clamp: 4;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .note-card-preview [style*="background-color"] { padding: 1px 3px; border-radius: 4px; }
 .note-card-preview mark { background: var(--yellow-soft); color: inherit; border-radius: 3px; }
@@ -5842,15 +5911,303 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
   min-height: 38px;
 }
 
-@media (max-width: 620px) {
-  #plannerView .planner-header { padding: 16px; border-radius: 16px; gap: 12px; }
-  #plannerView .planner-header-actions { display: grid; grid-template-columns: 1fr; width: 100%; }
-  #plannerView #plannerNewTaskBtn { justify-content: center; min-height: 42px; }
-  #plannerView .planner-tabs.segmented { width: 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; }
-  #plannerView .planner-tabs.segmented button { min-width: 0; padding-inline: 8px; justify-content: center; font-size: .78rem; }
-  #plannerView .planner-goal-progress-control { grid-template-columns: auto minmax(0, 1fr) 52px auto; gap: 6px; }
-  #plannerView .planner-goal-number { width: 52px; }
+/* Planner mobile: uma hierarquia curta e previsível. O desktop continua
+   usando a composição horizontal; abaixo de 720px, cada região recebe um
+   lugar fixo para que textos longos, metas e ações nunca disputem largura. */
+@media (max-width: 720px) {
+  #plannerView,
+  #plannerView .planner-shell,
+  #plannerView .planner-header,
+  #plannerView .planner-header-actions,
+  #plannerView .planner-goals-panel,
+  #plannerView .planner-goal-chip,
+  #plannerView .planner-subview,
+  #plannerView .planner-list-body,
+  #plannerView .planner-section,
+  #plannerView .planner-section-body { min-width: 0; }
+
+  #plannerView .planner-shell { gap: 12px; }
+  #plannerView .planner-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "title progress"
+      "actions actions";
+    align-items: center;
+    padding: 13px;
+    border-radius: 17px;
+    gap: 10px 12px;
+  }
+  #plannerView .planner-header-title { grid-area: title; min-width: 0; }
+  #plannerView .planner-header-title .eyebrow { margin-bottom: 2px; font-size: .67rem; }
+  #plannerView .planner-header-title h2 {
+    font-size: 1rem;
+    line-height: 1.24;
+    overflow-wrap: anywhere;
+  }
+  #plannerView .planner-progress-ring {
+    grid-area: progress;
+    justify-self: end;
+    gap: 6px;
+  }
+  #plannerView .planner-progress-ring svg { width: 42px; height: 42px; }
+  #plannerView .planner-ring-label strong { font-size: .86rem; }
+  #plannerView .planner-ring-label span,
+  #plannerView .planner-ring-empty { font-size: .63rem; }
+  #plannerView .planner-ring-empty { text-align: right; }
+
+  #plannerView .planner-header-actions {
+    grid-area: actions;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+    gap: 7px;
+    width: 100%;
+  }
+  #plannerView #plannerNewTaskBtn {
+    width: 100%;
+    min-height: 38px;
+    justify-content: center;
+    flex: none;
+  }
+  #plannerView .planner-tabs.segmented {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    width: 100%;
+    gap: 4px;
+    padding: 4px;
+    overflow: visible;
+  }
+  #plannerView .planner-tabs.segmented button {
+    min-width: 0;
+    min-height: 48px;
+    padding: 5px 2px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    border-radius: 10px;
+    font-size: .68rem;
+    line-height: 1.1;
+    overflow: hidden;
+  }
+  #plannerView .planner-tabs.segmented button svg { width: 14px; height: 14px; }
+  #plannerView .planner-tabs.segmented button span {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  #plannerView .planner-goals-panel {
+    padding: 12px;
+    border-radius: 17px;
+  }
+  #plannerView .planner-goals-panel .panel-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    padding-bottom: 8px;
+  }
+  #plannerView .planner-goals-panel .panel-header h2 { font-size: .92rem; }
+  #plannerView #plannerNewGoalBtn {
+    width: auto;
+    min-width: 0;
+    min-height: 36px;
+    padding-inline: 10px;
+    flex: none;
+    white-space: nowrap;
+  }
+  #plannerView .planner-goals-strip { gap: 8px; }
+  #plannerView .planner-goal-chip {
+    width: 100%;
+    padding: 10px 11px;
+    gap: 8px;
+    border-top-width: 3px;
+    border-radius: 15px;
+  }
+  #plannerView .planner-goal-chip-top { min-width: 0; align-items: flex-start; }
+  #plannerView .planner-goal-chip-top strong {
+    min-width: 0;
+    white-space: normal;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+  }
+  #plannerView .planner-goal-chip-top .pill { flex: 0 0 auto; }
+  #plannerView .planner-goal-chip .progress-track { height: 6px; min-width: 0; }
+  #plannerView .planner-goal-progress-control {
+    grid-template-columns: minmax(72px, 1fr) 52px auto;
+    gap: 6px;
+    min-width: 0;
+  }
+  #plannerView .planner-goal-progress-control > span:first-child { display: none; }
+  #plannerView .planner-goal-progress-control input[type="range"] { width: 100%; }
+  #plannerView .planner-goal-number {
+    width: 52px;
+    min-height: 36px;
+    padding: 5px 4px;
+  }
+  #plannerView .planner-goal-progress-control .task-meta {
+    white-space: nowrap;
+    font-size: .7rem;
+  }
+  #plannerView .planner-goal-chip-controls {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) 38px;
+    align-items: center;
+    gap: 6px;
+  }
+  #plannerView .planner-goal-stepper {
+    display: grid;
+    grid-template-columns: repeat(2, 36px);
+    gap: 5px;
+  }
+  #plannerView .planner-goal-stepper .task-meta { display: none; }
+  #plannerView .planner-goal-stepper .mini-button,
+  #plannerView .planner-goal-chip-controls > .planner-row-delete {
+    width: 36px;
+    min-width: 36px;
+    height: 36px;
+    min-height: 36px;
+    padding: 0;
+    flex: none;
+  }
+  #plannerView .planner-goal-chip-controls > .planner-row-delete {
+    width: 38px;
+    min-width: 38px;
+  }
+  #plannerView .planner-goal-ms-toggle {
+    width: 100%;
+    min-width: 0;
+    min-height: 36px;
+    padding-inline: 8px;
+  }
+  #plannerView .planner-goal-ms-toggle span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  #plannerView .planner-goal-milestones { min-width: 0; }
+  #plannerView .planner-goal-milestones .goal-milestone-row { min-width: 0; }
+  #plannerView .planner-goal-milestones .goal-milestone-row > span {
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  #plannerView .planner-goals-strip > .empty-state-pro { padding: 24px 12px; }
+
+  #plannerView .planner-list-body { gap: 14px; }
+  #plannerView .planner-section { gap: 7px; }
+  #plannerView .planner-section-title { min-width: 0; font-size: .77rem; }
+  #plannerView .planner-section-title-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+  }
+  #plannerView .planner-section-body { gap: 8px; }
+  #plannerView .planner-row {
+    width: 100%;
+    min-width: 0;
+    padding: 10px;
+    border-radius: 14px;
+  }
+  #plannerView .planner-row-head { min-width: 0; gap: 8px; align-items: flex-start; }
+  #plannerView .planner-row-main { min-width: 0; gap: 5px; padding-top: 2px; }
+  #plannerView .planner-row-main strong {
+    min-width: 0;
+    font-size: .88rem;
+    line-height: 1.28;
+    overflow-wrap: anywhere;
+  }
+  #plannerView .planner-row-meta { min-width: 0; gap: 4px 5px; }
+  #plannerView .planner-row-meta > * { max-width: 100%; min-width: 0; }
+  #plannerView .planner-row-meta .priority-pill,
+  #plannerView .planner-row-meta .status-pill {
+    padding: 3px 8px;
+    font-size: .68rem;
+  }
+  #plannerView .planner-row-meta .task-meta {
+    display: inline-flex;
+    align-items: center;
+    font-size: .7rem;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+  }
+  #plannerView .planner-row-kebab {
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    border-radius: 10px;
+  }
+  #plannerView .task-subtasks { min-width: 0; }
+  #plannerView .task-subtask-row { min-width: 0; }
+  #plannerView .task-subtask-row > span {
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  /* Compromissos têm editar e excluir. Empilhar as duas ações preserva
+     alvos de toque de 36px sem reduzir o espaço reservado ao título. */
+  #plannerView .planner-row--event .planner-row-head {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) 36px;
+    grid-template-rows: repeat(2, 36px);
+    align-items: start;
+  }
+  #plannerView .planner-row--event .planner-row-time {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    min-width: 44px;
+    padding-inline: 6px;
+  }
+  #plannerView .planner-row--event .planner-row-main {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+  #plannerView .planner-row--event .planner-row-head > .mini-button {
+    grid-column: 3;
+    grid-row: 1;
+    width: 36px;
+    min-width: 36px;
+    height: 36px;
+    min-height: 36px;
+    padding: 0;
+    flex: none;
+  }
+  #plannerView .planner-row--event .planner-row-head > .planner-row-delete { grid-row: 2; }
+
+  #plannerView .planner-day-nav-label { min-width: 0; }
+  #plannerView .planner-day-nav-label strong {
+    max-width: min(58vw, 280px);
+    font-size: .88rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  #plannerView .planner-day-allday-panel,
+  #plannerView .planner-day-timeline-panel { padding: 12px; }
+  #plannerView .planner-event-block { min-width: 0; }
+  #plannerView .planner-event-actions { flex-direction: column; }
+  #plannerView .planner-week-day { padding: 10px; border-radius: 15px; }
+
   .whatsapp-quick-card .ghost-button { width: 100%; justify-content: center; }
+}
+
+@media (max-width: 360px) {
+  #plannerView .planner-header { padding: 11px; }
+  #plannerView .planner-tabs.segmented button { font-size: .63rem; }
+  #plannerView .planner-tabs.segmented button svg { width: 13px; height: 13px; }
+  #plannerView .planner-goals-panel { padding: 10px; }
+  #plannerView #plannerNewGoalBtn { padding-inline: 8px; font-size: .72rem; }
+  #plannerView .planner-goal-progress-control { grid-template-columns: minmax(56px, 1fr) 48px auto; gap: 5px; }
+  #plannerView .planner-goal-number { width: 48px; }
 }
 
 /* Faixa horizontal de dias na visão "Dia" do Planner (referência

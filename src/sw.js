@@ -26,7 +26,8 @@
 // financeira também para quem já instalou o PWA.
 // v15: alinha o tema Eclipse à paleta violeta/ciano da atualização.
 // v16: entrega a saudação, o Planner mensal e o editor de notas revisados.
-const CACHE_NAME = "pulsenote-v20";
+// v21: entrega a consolidação responsiva de Notas e Planner em mobile.css.
+const CACHE_NAME = "pulsenote-v21";
 
 // ── Firebase Cloud Messaging (push em segundo plano) ──────────────
 // Isso é o que permite uma notificação aparecer mesmo com o PulseNote
@@ -91,6 +92,7 @@ const CORE_ASSETS = [
   "/src/forgot-password.html",
   "/src/styles.css",
   "/src/auth.css",
+  "/src/mobile.css",
   "/src/manifest.json",
   "/src/icons/icon-192.png",
   "/src/icons/icon-512.png",

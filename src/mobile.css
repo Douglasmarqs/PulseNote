@@ -1,0 +1,1048 @@
+/* ============================================================
+   PulseNote — sistema responsivo mobile
+
+   Esta é a camada final e intencional de layout para telas pequenas.
+   A folha base continua responsável por tema e desktop; aqui ficam,
+   agrupadas, apenas as decisões estruturais de mobile.
+   ============================================================ */
+
+@media (max-width: 720px) {
+  :root {
+    --mobile-gutter: 12px;
+    --mobile-control: 40px;
+    --mobile-nav-height: 72px;
+    --mobile-radius: 16px;
+  }
+
+  html,
+  body,
+  .app-shell,
+  .main-area,
+  .view {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: clip;
+  }
+
+  /* ---------- Cabeçalho e navegação compartilhados ---------- */
+  .main-area {
+    padding-bottom: calc(var(--mobile-nav-height) + var(--safe-area-bottom) + 16px);
+  }
+
+  .topbar {
+    padding: calc(8px + var(--safe-area-top)) var(--mobile-gutter) 10px;
+    min-height: 0;
+  }
+
+  .topbar-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .topbar-greeting {
+    width: 100%;
+    min-width: 0;
+    min-height: 42px;
+    gap: 9px;
+    align-items: center;
+  }
+
+  .topbar-greeting > div:last-child {
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .pulsinho--greeting {
+    width: 42px;
+    height: 42px;
+    margin: 0;
+  }
+
+  #todayLabel {
+    margin: 0 0 1px;
+    max-width: 100%;
+    font-size: 0.7rem;
+    line-height: 1.25;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  #viewTitle {
+    max-width: 100%;
+    font-size: 1.16rem;
+    line-height: 1.18;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .topbar-actions {
+    order: initial;
+    display: flex;
+    align-items: center;
+    width: 100%;
+    min-width: 0;
+    gap: 8px;
+    margin: 0;
+  }
+
+  .topbar-actions > div:has(.user-avatar-btn) {
+    flex: 0 0 var(--mobile-control);
+    width: var(--mobile-control);
+    height: var(--mobile-control);
+  }
+
+  .topbar-actions .user-avatar-btn,
+  .pwa-fixed-install-btn {
+    width: var(--mobile-control);
+    height: var(--mobile-control);
+    min-height: var(--mobile-control);
+  }
+
+  .search-box {
+    flex: 1 1 auto;
+    width: auto;
+    min-width: 0;
+    height: var(--mobile-control);
+    padding-inline: 11px;
+    border-radius: 12px;
+  }
+
+  .search-box input {
+    min-width: 0;
+    font-size: 0.86rem;
+  }
+
+  .view {
+    padding: var(--mobile-gutter);
+  }
+
+  .panel,
+  .list-panel,
+  .calendar-panel,
+  .editor-panel {
+    min-width: 0;
+    padding: 12px;
+    border-radius: var(--mobile-radius);
+  }
+
+  .bottom-nav {
+    min-height: calc(var(--mobile-nav-height) + var(--safe-area-bottom));
+    padding: 7px 4px max(8px, var(--safe-area-bottom));
+    align-items: center;
+  }
+
+  .bottom-nav-item {
+    min-width: 0;
+    padding: 4px 2px;
+    gap: 2px;
+    font-size: 0.61rem;
+    line-height: 1.15;
+  }
+
+  .bottom-nav-item .bn-icon {
+    width: 27px;
+    height: 27px;
+  }
+
+  .bottom-nav-fab {
+    width: 48px;
+    height: 48px;
+    margin-top: -20px;
+    border-width: 3px;
+  }
+
+  /* ---------- Notas: criação ---------- */
+  #notesView .workbench {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  #notesView .note-editor,
+  #notesView .list-panel {
+    min-width: 0;
+    padding: 13px;
+  }
+
+  .note-editor {
+    gap: 7px;
+  }
+
+  .note-editor .form-heading {
+    margin-bottom: 2px;
+  }
+
+  .note-editor .form-heading h2 {
+    max-width: none;
+    font-size: 1.04rem;
+    line-height: 1.25;
+  }
+
+  .note-title-field input {
+    min-height: 38px;
+    padding: 4px 1px;
+    font-size: 0.98rem;
+  }
+
+  .note-body-field textarea {
+    min-height: 68px;
+    max-height: 180px;
+    padding: 4px 1px;
+    overflow-y: auto;
+    font-size: 0.88rem;
+    line-height: 1.45;
+  }
+
+  .note-control-label {
+    font-size: 0.67rem;
+    letter-spacing: 0.02em;
+  }
+
+  .note-text-color-picker {
+    display: grid;
+    grid-template-columns: repeat(6, 28px);
+    justify-content: end;
+    gap: 6px;
+    width: auto;
+    min-width: 0;
+  }
+
+  .note-text-color-default,
+  .note-text-color-dot {
+    width: 28px;
+    height: 28px;
+    min-height: 28px;
+    flex-basis: 28px;
+  }
+
+  .note-quick-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+    gap: 8px;
+    padding-top: 8px;
+  }
+
+  .note-appearance-options {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 9px;
+    margin-block: 9px 11px;
+    padding: 9px;
+  }
+
+  .note-appearance-option {
+    gap: 5px;
+  }
+
+  .note-appearance-options .note-text-color-picker,
+  .note-appearance-options .note-color-picker {
+    justify-content: start;
+  }
+
+  .note-card-color-control {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .note-color-picker {
+    display: grid;
+    grid-template-columns: repeat(6, 26px);
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .note-color-dot {
+    width: 26px;
+    height: 26px;
+    min-height: 26px;
+  }
+
+  .note-priority-picker {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 5px;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .note-priority-dot {
+    width: 100%;
+    min-width: 0;
+    min-height: 38px;
+    padding: 0 3px;
+    justify-content: center;
+    gap: 4px;
+    font-size: 0.68rem;
+    overflow: hidden;
+  }
+
+  .note-priority-dot .dot {
+    width: 7px;
+    height: 7px;
+  }
+
+  .note-checklist-toggle {
+    width: 100%;
+    min-height: 40px;
+    justify-content: center;
+    padding: 0 12px;
+    border-radius: 12px;
+  }
+
+  .note-checklist-field textarea {
+    min-height: 76px;
+  }
+
+  .note-more-details {
+    padding-top: 3px;
+    border-top: 0;
+  }
+
+  .note-more-details summary {
+    min-height: 40px;
+    padding: 0 10px;
+    justify-content: space-between;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--surface2);
+    font-size: 0.76rem;
+  }
+
+  .note-editor .form-actions {
+    display: grid;
+    grid-template-columns: 88px minmax(0, 1fr);
+    gap: 8px;
+    width: 100%;
+  }
+
+  .note-editor .form-actions .ghost-button,
+  .note-editor .form-actions .primary-button {
+    width: 100%;
+    min-width: 0;
+    height: 42px;
+    padding-inline: 9px;
+    justify-content: center;
+    white-space: nowrap;
+  }
+
+  .note-filters {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+
+  .filter-chip {
+    min-width: 0;
+    min-height: 38px;
+    padding: 6px 8px;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  .filter-chip span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .note-folders {
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+
+  .folder-chip {
+    max-width: 100%;
+    min-height: 36px;
+    padding: 5px 10px;
+    overflow: hidden;
+  }
+
+  .note-card {
+    min-width: 0;
+    padding: 12px;
+    border-radius: 14px;
+  }
+
+  .note-card h3,
+  .note-card-preview,
+  .note-card-preview * {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .note-card .card-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) 38px;
+    gap: 6px;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .note-card .card-actions button {
+    width: 100%;
+    min-width: 0;
+    min-height: 38px;
+    padding-inline: 6px;
+    justify-content: center;
+  }
+
+  /* ---------- Notas: leitura e edição ---------- */
+  body.note-detail-open .bottom-nav {
+    display: none !important;
+  }
+
+  body.note-detail-open .app-shell {
+    z-index: 200;
+  }
+
+  .note-detail-card {
+    display: flex;
+    flex-direction: column;
+    width: 100vw;
+    max-width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .note-detail-header {
+    min-height: 46px;
+    padding: calc(7px + var(--safe-area-top)) 12px 5px;
+  }
+
+  .note-detail-title-input {
+    min-width: 0;
+    padding: 4px 14px;
+    font-size: 1.18rem;
+    line-height: 1.25;
+    text-overflow: ellipsis;
+  }
+
+  .note-detail-meta-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    padding: 2px 14px 8px;
+  }
+
+  .note-detail-meta-row .note-detail-meta {
+    min-width: 0;
+    padding: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .note-detail-more-link {
+    max-width: 42vw;
+    min-width: 0;
+    font-size: 0.68rem;
+    line-height: 1.2;
+    text-align: right;
+    white-space: normal;
+  }
+
+  .note-detail-toolbar {
+    display: grid;
+    grid-template-columns: 32px 32px 1px minmax(0, 1fr) 32px;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    margin: 0 12px;
+    padding: 6px;
+    overflow: hidden;
+    border-radius: 12px;
+  }
+
+  .nd-tool-btn {
+    width: 32px;
+    height: 32px;
+  }
+
+  .nd-toolbar-sep {
+    width: 1px;
+    height: 20px;
+  }
+
+  .nd-color-group {
+    order: initial;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(22px, 1fr));
+    justify-items: center;
+    gap: 3px;
+    width: 100%;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+
+  .nd-color-label {
+    display: none;
+  }
+
+  .nd-swatch {
+    width: 25px;
+    height: 25px;
+    min-height: 25px;
+  }
+
+  .note-detail-scroll {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .note-detail-body {
+    max-width: 100%;
+    min-height: 104px;
+    padding: 13px 14px 15px;
+    font-size: 0.94rem;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .note-detail-body *,
+  .note-detail-check-item > span:last-child {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .note-detail-scroll .note-detail-checklist {
+    min-width: 0;
+    margin: 0 12px 12px;
+    padding: 11px;
+    border-radius: 13px;
+  }
+
+  .note-detail-checklist-heading {
+    gap: 8px;
+  }
+
+  .note-detail-check-item {
+    min-width: 0;
+    padding: 9px 2px;
+    gap: 9px;
+  }
+
+  .note-detail-footer {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    width: 100%;
+    padding: 8px 12px calc(8px + var(--safe-area-bottom));
+    flex: 0 0 auto;
+  }
+
+  .note-detail-footer .ghost-button,
+  .note-detail-footer .primary-button {
+    width: 100%;
+    min-width: 0;
+    min-height: 40px;
+    padding-inline: 8px;
+    justify-content: center;
+    white-space: nowrap;
+  }
+
+  /* ---------- Planner ---------- */
+  #plannerView,
+  #plannerView .planner-shell,
+  #plannerView .planner-header,
+  #plannerView .planner-header-actions,
+  #plannerView .planner-goals-panel,
+  #plannerView .planner-goal-chip,
+  #plannerView .planner-subview,
+  #plannerView .planner-list-body,
+  #plannerView .planner-section,
+  #plannerView .planner-section-body {
+    min-width: 0;
+  }
+
+  #plannerView .planner-shell {
+    gap: 10px;
+  }
+
+  #plannerView .planner-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "title progress"
+      "actions actions";
+    align-items: center;
+    gap: 9px 10px;
+    padding: 12px;
+    border-radius: var(--mobile-radius);
+  }
+
+  #plannerView .planner-header-title {
+    grid-area: title;
+    min-width: 0;
+  }
+
+  #plannerView .planner-header-title .eyebrow {
+    margin-bottom: 1px;
+    font-size: 0.65rem;
+  }
+
+  #plannerView .planner-header-title h2 {
+    font-size: 0.96rem;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+  }
+
+  #plannerView .planner-progress-ring {
+    grid-area: progress;
+    justify-self: end;
+    gap: 5px;
+  }
+
+  #plannerView .planner-progress-ring svg {
+    width: 38px;
+    height: 38px;
+  }
+
+  #plannerView .planner-ring-label strong {
+    font-size: 0.8rem;
+  }
+
+  #plannerView .planner-ring-label span,
+  #plannerView .planner-ring-empty {
+    font-size: 0.6rem;
+  }
+
+  #plannerView .planner-header-actions {
+    grid-area: actions;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+    width: 100%;
+  }
+
+  #plannerView #plannerNewTaskBtn {
+    width: 100%;
+    min-height: 38px;
+    justify-content: center;
+  }
+
+  #plannerView .planner-tabs.segmented {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 3px;
+    width: 100%;
+    min-width: 0;
+    padding: 3px;
+    overflow: hidden;
+  }
+
+  #plannerView .planner-tabs.segmented button {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    min-width: 0;
+    min-height: 40px;
+    padding: 4px 2px;
+    border-radius: 9px;
+    font-size: 0.66rem;
+    line-height: 1;
+    overflow: hidden;
+  }
+
+  #plannerView .planner-tabs.segmented button svg {
+    width: 13px;
+    height: 13px;
+    flex: 0 0 auto;
+  }
+
+  #plannerView .planner-tabs.segmented button span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  #plannerView .planner-goals-panel {
+    padding: 11px;
+    border-radius: var(--mobile-radius);
+  }
+
+  #plannerView .planner-goals-panel .panel-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 7px;
+    padding-bottom: 7px;
+  }
+
+  #plannerView #plannerNewGoalBtn {
+    width: auto;
+    min-width: 0;
+    min-height: 36px;
+    padding-inline: 9px;
+    white-space: nowrap;
+  }
+
+  #plannerView .planner-goals-strip {
+    gap: 7px;
+  }
+
+  #plannerView .planner-goal-chip {
+    width: 100%;
+    min-width: 0;
+    padding: 10px;
+    gap: 7px;
+    border-top-width: 3px;
+    border-radius: 14px;
+  }
+
+  #plannerView .planner-goal-chip-top {
+    min-width: 0;
+    align-items: flex-start;
+  }
+
+  #plannerView .planner-goal-chip-top strong {
+    min-width: 0;
+    line-height: 1.25;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  #plannerView .planner-goal-progress-control {
+    display: grid;
+    grid-template-columns: minmax(64px, 1fr) 50px auto;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  #plannerView .planner-goal-progress-control > span:first-child,
+  #plannerView .planner-goal-stepper .task-meta {
+    display: none;
+  }
+
+  #plannerView .planner-goal-progress-control input[type="range"] {
+    width: 100%;
+    min-width: 0;
+  }
+
+  #plannerView .planner-goal-number {
+    width: 50px;
+    min-height: 34px;
+    padding: 4px;
+  }
+
+  #plannerView .planner-goal-progress-control .task-meta {
+    margin: 0;
+    font-size: 0.68rem;
+    white-space: nowrap;
+  }
+
+  #plannerView .planner-goal-chip-controls {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) 36px;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  #plannerView .planner-goal-stepper {
+    display: grid;
+    grid-template-columns: repeat(2, 34px);
+    gap: 5px;
+  }
+
+  #plannerView .planner-goal-stepper .mini-button,
+  #plannerView .planner-goal-chip-controls > .planner-row-delete {
+    width: 34px;
+    min-width: 34px;
+    height: 34px;
+    min-height: 34px;
+    padding: 0;
+  }
+
+  #plannerView .planner-goal-ms-toggle {
+    width: 100%;
+    min-width: 0;
+    min-height: 34px;
+    padding-inline: 7px;
+  }
+
+  #plannerView .planner-goal-ms-toggle span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  #plannerView .planner-list-body {
+    gap: 12px;
+  }
+
+  #plannerView .planner-section,
+  #plannerView .planner-section-body {
+    gap: 7px;
+  }
+
+  #plannerView .planner-section-title {
+    min-width: 0;
+    font-size: 0.74rem;
+  }
+
+  #plannerView .planner-row {
+    width: 100%;
+    min-width: 0;
+    padding: 9px;
+    border-radius: 13px;
+  }
+
+  #plannerView .planner-row-head {
+    min-width: 0;
+    gap: 8px;
+    align-items: flex-start;
+  }
+
+  #plannerView .planner-row-main,
+  #plannerView .planner-row-meta,
+  #plannerView .planner-row-meta > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  #plannerView .planner-row-main strong {
+    font-size: 0.86rem;
+    line-height: 1.28;
+    overflow-wrap: anywhere;
+  }
+
+  #plannerView .planner-row-meta {
+    gap: 4px 5px;
+  }
+
+  #plannerView .planner-row-meta .priority-pill,
+  #plannerView .planner-row-meta .status-pill {
+    padding: 3px 7px;
+    font-size: 0.65rem;
+  }
+
+  #plannerView .planner-row-meta .task-meta {
+    font-size: 0.68rem;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+  }
+
+  #plannerView .planner-row-kebab {
+    width: 34px;
+    min-width: 34px;
+    height: 34px;
+    border-radius: 9px;
+  }
+
+  #plannerView .planner-day-strip {
+    gap: 3px;
+    margin-top: 8px;
+  }
+
+  #plannerView .planner-day-chip {
+    min-width: 0;
+    gap: 2px;
+    padding: 6px 0;
+    border-radius: 10px;
+  }
+
+  #plannerView .planner-day-chip .pdc-weekday {
+    font-size: 0.58rem;
+  }
+
+  #plannerView .planner-day-chip .pdc-num {
+    font-size: 0.82rem;
+  }
+
+  #plannerView .planner-day-allday-panel,
+  #plannerView .planner-day-timeline-panel {
+    padding: 11px;
+  }
+
+  #plannerView .planner-event-block {
+    min-width: 0;
+    padding: 8px;
+    gap: 7px;
+  }
+
+  #plannerView .planner-event-block-main,
+  #plannerView .planner-event-block-main * {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  #plannerView .planner-event-actions {
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  #plannerView .planner-month-scroll {
+    width: 100%;
+    min-width: 0;
+    overflow-x: hidden;
+  }
+
+  #plannerView .planner-month-weekdays,
+  #plannerView .planner-month-grid {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 3px;
+    width: 100%;
+    min-width: 0;
+  }
+
+  #plannerView .planner-month-weekdays span {
+    min-width: 0;
+    font-size: 0.58rem;
+    overflow: hidden;
+  }
+
+  #plannerView .planner-month-cell {
+    min-width: 0;
+    min-height: 54px;
+    padding: 5px 3px;
+    border-radius: 9px;
+  }
+
+  #plannerView .planner-month-cell-head {
+    gap: 2px;
+  }
+
+  #plannerView .planner-month-daynum {
+    font-size: 0.72rem;
+  }
+
+  #plannerView .planner-month-count {
+    min-width: 16px;
+    height: 16px;
+    padding-inline: 4px;
+    font-size: 0.58rem;
+  }
+
+  #plannerView .planner-month-item,
+  #plannerView .planner-month-more {
+    padding: 3px;
+    border-radius: 5px;
+    font-size: 0.58rem;
+  }
+
+  #plannerView .planner-month-items > :nth-child(n + 2) {
+    display: none;
+  }
+}
+
+/* Telefones realmente estreitos: remove texto redundante antes de reduzir
+   alvos de toque. As ações continuam com no mínimo 34–40 px. */
+@media (max-width: 360px) {
+  :root {
+    --mobile-gutter: 10px;
+  }
+
+  .pulsinho--greeting {
+    width: 38px;
+    height: 38px;
+  }
+
+  #todayLabel {
+    font-size: 0.66rem;
+  }
+
+  #viewTitle {
+    font-size: 1.06rem;
+  }
+
+  .note-text-color-picker {
+    grid-template-columns: repeat(6, 26px);
+    gap: 5px;
+  }
+
+  .note-text-color-default,
+  .note-text-color-dot {
+    width: 26px;
+    height: 26px;
+    min-height: 26px;
+  }
+
+  .note-color-picker {
+    grid-template-columns: repeat(6, 24px);
+    gap: 5px;
+  }
+
+  .note-color-dot {
+    width: 24px;
+    height: 24px;
+    min-height: 24px;
+  }
+
+  .note-priority-dot {
+    font-size: 0.63rem;
+  }
+
+  .note-priority-dot .dot {
+    display: none;
+  }
+
+  .note-detail-more-link {
+    max-width: 38vw;
+    font-size: 0.64rem;
+  }
+
+  .nd-swatch {
+    width: 22px;
+    height: 22px;
+    min-height: 22px;
+  }
+
+  #plannerView .planner-tabs.segmented button {
+    font-size: 0.61rem;
+  }
+
+  #plannerView .planner-tabs.segmented button svg {
+    display: none;
+  }
+
+  #plannerView #plannerNewGoalBtn span {
+    font-size: 0.68rem;
+  }
+}
+
+/* Tablet estreito: mantém a mesma ordem visual sem transformar tudo em
+   cartões enormes. Desktop (> 900 px) continua 100% regido pela base. */
+@media (min-width: 721px) and (max-width: 900px) {
+  #notesView .workbench {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  #plannerView .planner-header {
+    align-items: center;
+  }
+
+  #plannerView .planner-header-actions {
+    width: 100%;
+  }
+
+  #plannerView .planner-tabs {
+    max-width: 100%;
+  }
+}

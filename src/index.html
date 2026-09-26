@@ -35,6 +35,11 @@
           if (meta) meta.setAttribute("content", t === "eclipse" ? "#000000" : (isDark ? "#060a18" : "#f5f7fa"));
           var csMeta = document.getElementById("colorSchemeMeta");
           if (csMeta) csMeta.setAttribute("content", isDark ? "dark" : "light");
+          // Alguns atalhos/PWAs do iOS restaurados reportam os insets da
+          // área segura como zero. A classe permite um fallback de layout
+          // antes da primeira pintura, sem afetar o site no navegador.
+          var isStandalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+          if (isStandalone) document.documentElement.classList.add("is-standalone");
         } catch (e) {}
       })();
     </script>
@@ -62,6 +67,10 @@
 
     <link rel="stylesheet" href="/src/styles.css" />
     <link rel="stylesheet" href="/src/auth.css" />
+    <!-- Camada responsiva final: concentra os ajustes mobile do app em um
+         único arquivo, carregado depois da base para evitar regras dispersas
+         competindo entre si. -->
+    <link rel="stylesheet" href="/src/mobile.css" />
   </head>
   <body>
     <div class="app-shell">
@@ -596,33 +605,9 @@
                 <textarea id="noteDescription" class="autogrow" rows="3" placeholder="Escreva livremente aqui — ideias, lembretes, recados para você mesmo..."></textarea>
               </label>
 
-              <div class="note-draft-format-row" aria-label="Formatação do texto da nota">
-                <span class="note-control-label">Cor do texto</span>
-                <div class="note-text-color-picker" id="noteTextColorPicker" role="group" aria-label="Cor do texto da nota">
-                  <button type="button" class="note-text-color-default active" data-note-text-color="" title="Cor padrão" aria-label="Cor padrão" aria-pressed="true">A</button>
-                  <button type="button" class="note-text-color-dot" data-note-text-color="#8b5cf6" style="--note-text-color:#8b5cf6" title="Texto lilás" aria-label="Texto lilás" aria-pressed="false"></button>
-                  <button type="button" class="note-text-color-dot" data-note-text-color="#ff375f" style="--note-text-color:#ff375f" title="Texto vermelho" aria-label="Texto vermelho" aria-pressed="false"></button>
-                  <button type="button" class="note-text-color-dot" data-note-text-color="#30d158" style="--note-text-color:#30d158" title="Texto verde" aria-label="Texto verde" aria-pressed="false"></button>
-                  <button type="button" class="note-text-color-dot" data-note-text-color="#0a84ff" style="--note-text-color:#0a84ff" title="Texto azul" aria-label="Texto azul" aria-pressed="false"></button>
-                  <button type="button" class="note-text-color-dot" data-note-text-color="#bf5af2" style="--note-text-color:#bf5af2" title="Texto roxo" aria-label="Texto roxo" aria-pressed="false"></button>
-                </div>
-                <input id="noteTextColor" type="hidden" value="" />
-              </div>
-
-              <!-- Atalhos rápidos: cor, prioridade e checklist ficam à mão sem poluir a tela -->
+              <!-- Só as decisões mais frequentes ficam expostas. Aparência e
+                   organização vivem em "Mais detalhes" para manter o editor leve. -->
               <div class="note-quick-row">
-                <div class="note-card-color-control">
-                  <span class="note-control-label">Cor do cartão</span>
-                  <div class="note-color-picker" id="noteColorPicker" role="group" aria-label="Cor do cartão da nota">
-                    <button type="button" class="note-color-dot active" data-note-color="blue" title="Azul" aria-label="Azul"></button>
-                    <button type="button" class="note-color-dot" data-note-color="green" title="Verde" aria-label="Verde"></button>
-                    <button type="button" class="note-color-dot" data-note-color="pink" title="Rosa" aria-label="Rosa"></button>
-                    <button type="button" class="note-color-dot" data-note-color="purple" title="Roxo" aria-label="Roxo"></button>
-                    <button type="button" class="note-color-dot" data-note-color="orange" title="Lilás" aria-label="Lilás"></button>
-                    <button type="button" class="note-color-dot" data-note-color="teal" title="Turquesa" aria-label="Turquesa"></button>
-                  </div>
-                </div>
-                <input id="noteColor" type="hidden" value="blue" />
                 <div class="note-priority-picker" id="notePriorityPicker">
                   <button type="button" class="note-priority-dot" data-priority="Baixa"><span class="dot"></span>Baixa</button>
                   <button type="button" class="note-priority-dot active" data-priority="Media"><span class="dot"></span>Média</button>
@@ -647,6 +632,32 @@
               <!-- Mais detalhes: tudo que é opcional fica recolhido, mas continua a 1 toque de distância -->
               <details class="note-more-details">
                 <summary>Mais detalhes <span class="chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span></summary>
+                <div class="note-appearance-options" aria-label="Aparência da anotação">
+                  <div class="note-appearance-option">
+                    <span class="note-control-label">Cor do texto</span>
+                    <div class="note-text-color-picker" id="noteTextColorPicker" role="group" aria-label="Cor do texto da nota">
+                      <button type="button" class="note-text-color-default active" data-note-text-color="" title="Cor padrão" aria-label="Cor padrão" aria-pressed="true">A</button>
+                      <button type="button" class="note-text-color-dot" data-note-text-color="#8b5cf6" style="--note-text-color:#8b5cf6" title="Texto lilás" aria-label="Texto lilás" aria-pressed="false"></button>
+                      <button type="button" class="note-text-color-dot" data-note-text-color="#ff375f" style="--note-text-color:#ff375f" title="Texto vermelho" aria-label="Texto vermelho" aria-pressed="false"></button>
+                      <button type="button" class="note-text-color-dot" data-note-text-color="#30d158" style="--note-text-color:#30d158" title="Texto verde" aria-label="Texto verde" aria-pressed="false"></button>
+                      <button type="button" class="note-text-color-dot" data-note-text-color="#0a84ff" style="--note-text-color:#0a84ff" title="Texto azul" aria-label="Texto azul" aria-pressed="false"></button>
+                      <button type="button" class="note-text-color-dot" data-note-text-color="#bf5af2" style="--note-text-color:#bf5af2" title="Texto roxo" aria-label="Texto roxo" aria-pressed="false"></button>
+                    </div>
+                  </div>
+                  <div class="note-appearance-option">
+                    <span class="note-control-label">Cor do cartão</span>
+                    <div class="note-color-picker" id="noteColorPicker" role="group" aria-label="Cor do cartão da nota">
+                      <button type="button" class="note-color-dot active" data-note-color="blue" title="Azul" aria-label="Azul"></button>
+                      <button type="button" class="note-color-dot" data-note-color="green" title="Verde" aria-label="Verde"></button>
+                      <button type="button" class="note-color-dot" data-note-color="pink" title="Rosa" aria-label="Rosa"></button>
+                      <button type="button" class="note-color-dot" data-note-color="purple" title="Roxo" aria-label="Roxo"></button>
+                      <button type="button" class="note-color-dot" data-note-color="orange" title="Lilás" aria-label="Lilás"></button>
+                      <button type="button" class="note-color-dot" data-note-color="teal" title="Turquesa" aria-label="Turquesa"></button>
+                    </div>
+                  </div>
+                </div>
+                <input id="noteTextColor" type="hidden" value="" />
+                <input id="noteColor" type="hidden" value="blue" />
                 <div class="form-grid">
                   <label>
                     Categoria

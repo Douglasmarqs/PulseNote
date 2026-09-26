@@ -3339,7 +3339,14 @@ function editNote(id) {
   document.querySelector("#noteChecklistToggle").classList.toggle("active", hasChecklist);
 
   // Abre "Mais detalhes" automaticamente se algum campo opcional já tiver valor
-  const hasExtra = note.category || note.folder || (note.tags && note.tags.length) || note.goal || (note.attachments && note.attachments.length) || note.observations;
+  const hasExtra = note.category
+    || note.folder
+    || (note.tags && note.tags.length)
+    || note.goal
+    || (note.attachments && note.attachments.length)
+    || note.observations
+    || normalizeNoteTextColor(note.textColor)
+    || (note.color && note.color !== "blue");
   document.querySelector(".note-more-details").open = Boolean(hasExtra);
 
   // Deixa claro que agora é edição, não criação — antes o formulário ficava
