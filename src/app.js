@@ -1404,8 +1404,7 @@ function saveState() {
   if (key) localStorage.setItem(key, JSON.stringify(state));
   // Só agenda sync se já temos usuário autenticado e verificado.
   // Sem esse guard, calls do renderAll() durante inicialização
-  // disparavam syncToServer() sem currentUser, causando erro de
-  // permissão no Firestore e o banner "❌ Erro ao salvar".
+  // disparavam tentativas inválidas de sync antes da sessão estar pronta.
   if (currentUser && currentUser.emailVerified) {
     scheduleSyncToServer();
   }
@@ -1789,6 +1788,34 @@ function saveNote(event) {
   const id = document.querySelector("#noteId").value;
   const existing = state.notes.find((note) => note.id === id);
   const newDescription = valueOf("#noteDescription");
+  const textColor = normalizeNoteTextColor(valueOf("#noteTextColor"));
+  const descriptionChanged = !existing || existing.description !== newDescription;
+  const textColorChanged = Boolean(existing) && normalizeNoteTextColor(existing.textColor) !== textColor;
+  const descriptionHtml = existing && !descriptionChanged && !textColorChanged
+    ? existing.descriptionHtml || notePlainTextToHtml(newDescription, textColor)
+    : notePlainTextToHtml(newDescription, textColor);
+  const existingChecklist = existing?.checklist || [];
+  const reusedChecklistIndexes = new Set();
+  const checklist = splitLines(valueOf("#noteChecklist")).map((text, index) => {
+    // Preserve a conclusao dos itens quando a pessoa edita outro campo da
+    // nota. Primeiro procuramos o mesmo texto (inclusive se ele mudou de
+    // posicao); se o texto foi renomeado, reaproveitamos o item da posicao.
+    let previousIndex = existingChecklist.findIndex((item, itemIndex) =>
+      !reusedChecklistIndexes.has(itemIndex) && noteChecklistItemText(item) === text
+    );
+    if (previousIndex < 0 && existingChecklist[index] && !reusedChecklistIndexes.has(index)) {
+      previousIndex = index;
+    }
+    if (previousIndex < 0) return { id: crypto.randomUUID(), text, done: false };
+
+    reusedChecklistIndexes.add(previousIndex);
+    const previousItem = existingChecklist[previousIndex];
+    return {
+      id: typeof previousItem === "object" && previousItem.id ? previousItem.id : crypto.randomUUID(),
+      text,
+      done: noteChecklistItemDone(previousItem),
+    };
+  });
   const payload = {
     id: id || crypto.randomUUID(),
     title: valueOf("#noteTitle"),
@@ -1797,21 +1824,20 @@ function saveNote(event) {
     folder: valueOf("#noteFolder") || "Entrada",
     tags: splitValues(valueOf("#noteTags")),
     priority: valueOf("#notePriority"),
-    checklist: splitLines(valueOf("#noteChecklist")).map((text) => ({ id: crypto.randomUUID(), text, done: false })),
+    checklist,
     attachments: splitValues(valueOf("#noteAttachments")),
     goal: valueOf("#noteGoal"),
     observations: valueOf("#noteObservations"),
     color: valueOf("#noteColor") || existing?.color || "blue",
+    textColor,
     favorite: existing?.favorite || false,
     createdAt: existing?.createdAt || todayIso,
     convertedToTaskId: existing?.convertedToTaskId || "",
-    // Esse formulário só mexe no texto puro (#noteDescription) — se a nota
-    // já tinha formatação feita no editor em tela cheia (negrito/destaque)
-    // e o texto não mudou aqui, mantém o HTML formatado. Se o texto MUDOU
-    // por aqui, o HTML antigo ficaria desatualizado (mostrando algo
-    // diferente do texto puro atual), então descarta e volta a ser texto
-    // simples — evita a formatação "grudada" sobrepor uma edição nova.
-    descriptionHtml: existing && existing.description === newDescription ? existing.descriptionHtml || "" : "",
+    // A cor escolhida já aparece enquanto a pessoa escreve a primeira
+    // versão da nota. Ao salvar, guardamos também o HTML equivalente para
+    // que a cor apareça no cartão e no editor detalhado. Formatações ricas
+    // existentes continuam intactas enquanto texto/cor não forem alterados.
+    descriptionHtml,
   };
 
   state.notes = id ? state.notes.map((note) => (note.id === id ? payload : note)) : [payload, ...state.notes];
@@ -1937,6 +1963,33 @@ function splitLines(value) {
     .filter(Boolean);
 }
 
+const NOTE_TEXT_COLORS = new Set(["#8b5cf6", "#ff375f", "#30d158", "#0a84ff", "#bf5af2"]);
+
+function normalizeNoteTextColor(color) {
+  const normalized = String(color || "").trim().toLowerCase();
+  return NOTE_TEXT_COLORS.has(normalized) ? normalized : "";
+}
+
+function notePlainTextToHtml(text, color) {
+  const safeColor = normalizeNoteTextColor(color);
+  if (!safeColor || !text) return "";
+  const safeText = escapeHtml(text).replace(/\n/g, "<br>");
+  return `<span style="color:${safeColor}">${safeText}</span>`;
+}
+
+function setNoteDraftTextColor(color) {
+  const safeColor = normalizeNoteTextColor(color);
+  const input = document.querySelector("#noteTextColor");
+  const description = document.querySelector("#noteDescription");
+  if (input) input.value = safeColor;
+  if (description) description.style.color = safeColor || "";
+  document.querySelectorAll("#noteTextColorPicker [data-note-text-color]").forEach((button) => {
+    const selected = normalizeNoteTextColor(button.dataset.noteTextColor) === safeColor;
+    button.classList.toggle("active", selected);
+    button.setAttribute("aria-pressed", String(selected));
+  });
+}
+
 function resetNoteForm() {
   const form = document.querySelector("#noteForm");
   if (!form) return;
@@ -1945,6 +1998,7 @@ function resetNoteForm() {
   document.querySelector("#notePriority").value = "Media";
   document.querySelector("#noteColor").value = "blue";
   document.querySelectorAll("#noteColorPicker .note-color-dot").forEach((dot) => dot.classList.toggle("active", dot.dataset.noteColor === "blue"));
+  setNoteDraftTextColor("");
   document.querySelectorAll("#notePriorityPicker .note-priority-dot").forEach((d) => d.classList.toggle("active", d.dataset.priority === "Media"));
   document.querySelector("#noteChecklistField").hidden = true;
   document.querySelector("#noteChecklistToggle").classList.remove("active");
@@ -1962,6 +2016,10 @@ function bindNoteQuickControls() {
       dot.classList.add("active");
       document.querySelector("#noteColor").value = dot.dataset.noteColor;
     });
+  });
+
+  document.querySelectorAll("#noteTextColorPicker [data-note-text-color]").forEach((button) => {
+    button.addEventListener("click", () => setNoteDraftTextColor(button.dataset.noteTextColor));
   });
 
   // Seletor de prioridade por bolinhas coloridas (substitui o <select> visível)
@@ -3263,6 +3321,7 @@ function editNote(id) {
   document.querySelector("#noteTags").value = note.tags.join(", ");
   document.querySelector("#notePriority").value = note.priority;
   document.querySelector("#noteColor").value = note.color || "blue";
+  setNoteDraftTextColor(note.textColor || "");
   document.querySelectorAll("#noteColorPicker .note-color-dot").forEach((dot) =>
     dot.classList.toggle("active", dot.dataset.noteColor === (note.color || "blue"))
   );
@@ -3422,12 +3481,14 @@ function hexToRgba(hex, alpha) {
 let ndScrollY = 0;
 function lockBackgroundScroll() {
   ndScrollY = window.scrollY || window.pageYOffset || 0;
+  document.body.classList.add("note-detail-open");
   document.body.style.position = "fixed";
   document.body.style.top = `-${ndScrollY}px`;
   document.body.style.left = "0";
   document.body.style.right = "0";
 }
 function unlockBackgroundScroll() {
+  document.body.classList.remove("note-detail-open");
   document.body.style.position = "";
   document.body.style.top = "";
   document.body.style.left = "";
@@ -7181,9 +7242,7 @@ function autoApplyRecurrents() {
   });
   // Só sincroniza com o servidor se algo foi realmente adicionado —
   // a versão anterior sempre chamava saveState() mesmo sem lançar nada,
-  // o que disparava um ciclo de sync desnecessário ao abrir o app e
-  // causava o banner "❌ Erro ao salvar" quando o Firestore estava lento
-  // ou offline.
+  // o que disparava um ciclo de sync desnecessário ao abrir o app.
   if (applied) saveState();
 }
 

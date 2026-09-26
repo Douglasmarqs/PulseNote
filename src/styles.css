@@ -1519,6 +1519,58 @@ input[type="time"] {
 
 textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms ease; }
 
+.note-draft-format-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  padding: 6px 2px 2px;
+}
+.note-control-label {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.note-text-color-picker {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 7px;
+  min-width: 0;
+}
+.note-text-color-default,
+.note-text-color-dot {
+  width: 30px;
+  height: 30px;
+  min-height: 30px;
+  flex: 0 0 30px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+.note-text-color-default {
+  display: grid;
+  place-items: center;
+  background: var(--surface2);
+  color: var(--text);
+  border-color: var(--line);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+.note-text-color-dot { background: var(--note-text-color); }
+.note-text-color-default:hover,
+.note-text-color-dot:hover { transform: scale(1.06); }
+.note-text-color-default.active,
+.note-text-color-dot.active {
+  border-color: var(--text);
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent);
+}
+
 .note-quick-row {
   display: flex;
   flex-wrap: wrap;
@@ -1530,6 +1582,12 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 }
 
 .note-priority-picker { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.note-card-color-control {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
 
 .note-color-picker { display:flex; gap:7px; align-items:center; }
 .note-color-dot {
@@ -2392,6 +2450,11 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 
 /* ---- Mobile ---- */
 @media (max-width: 720px) {
+  /* Os modais vivem dentro de .app-shell, enquanto a navegação mobile é
+     irmã desse wrapper. Eleva somente quando existe um modal aberto para
+     que a barra inferior nunca fique por cima de formulários/ações. */
+  .app-shell:has(.modal-backdrop:not([hidden])) { z-index: 200; }
+
   .app-shell { grid-template-columns: 1fr; }
 
   /* Hide desktop sidebar */
@@ -2477,7 +2540,7 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   .bottom-nav-fab:active { transform: scale(0.93); }
 
   /* Mobile main area adjustments */
-  .main-area { padding-bottom: var(--nav-height); }
+  .main-area { padding-bottom: calc(var(--nav-height) + 20px + env(safe-area-inset-bottom)); }
 
   .topbar {
     padding: calc(10px + env(safe-area-inset-top)) 16px 12px;
@@ -2680,6 +2743,19 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
     flex-direction: column;
     align-items: stretch;
   }
+  .note-draft-format-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .note-text-color-picker { justify-content: flex-start; width: 100%; }
+  .note-text-color-default,
+  .note-text-color-dot {
+    width: 40px;
+    height: 40px;
+    min-height: 40px;
+    flex-basis: 40px;
+  }
+  .note-card-color-control { width: 100%; }
   .note-priority-picker {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
@@ -2702,6 +2778,11 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
      que a linha de ações nunca quebre de forma imprevisível. */
   .note-card .card-actions button {
     padding: 0 6px;
+  }
+  .note-card .card-actions { min-width: 0; max-width: 100%; }
+  .note-card-actions button span {
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 }
 
@@ -5428,8 +5509,9 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
   border-radius: 0;
   padding: 0;
   min-height: 0;
+  min-width: 0;
 }
-@media (min-width: 720px) {
+@media (min-width: 721px) {
   .note-detail-backdrop { padding: 20px; }
   .note-detail-card {
     position: static;
@@ -5539,16 +5621,22 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
   box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent);
 }
 
-.note-detail-body {
+.note-detail-scroll {
   flex: 1;
-  min-height: 0; /* a correção principal — ver comentário no topo do bloco */
+  min-height: 0;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+.note-detail-body {
+  min-height: 132px;
   padding: 16px 20px 20px;
   font-size: 0.95rem;
   line-height: 1.55;
   color: var(--text);
+  overflow-wrap: anywhere;
 }
+.note-detail-scroll .note-detail-checklist { margin: 0 20px 20px; }
 .note-detail-body:focus { outline: none; }
 .note-detail-body:empty::before {
   content: attr(data-placeholder);
@@ -5576,8 +5664,61 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
   flex-shrink: 0;
   flex-wrap: wrap;
 }
-.note-detail-footer .ghost-button { flex-shrink: 0; }
-.note-detail-footer .primary-button { margin-left: auto; flex-shrink: 0; }
+.note-detail-footer .ghost-button,
+.note-detail-footer .primary-button {
+  width: auto;
+  min-width: 0;
+  flex: 1 1 0;
+  justify-content: center;
+}
+.note-detail-footer .primary-button { margin-left: 0; }
+
+@media (max-width: 720px) {
+  body.note-detail-open .bottom-nav { display: none; }
+  body.note-detail-open .app-shell { z-index: 200; }
+
+  .note-detail-card { width: 100vw; max-width: 100vw; }
+  .note-detail-body { font-size: 1rem; }
+  .note-detail-meta-row { align-items: flex-start; flex-wrap: wrap; min-width: 0; }
+  .note-detail-meta-row .note-detail-meta { min-width: 0; overflow-wrap: anywhere; }
+  .note-detail-more-link { white-space: normal; text-align: left; }
+  .note-detail-toolbar {
+    margin: 0 12px;
+    padding: 8px 10px;
+    gap: 8px;
+    flex-wrap: wrap;
+    overflow-x: hidden;
+  }
+  .nd-color-group {
+    order: 2;
+    flex: 1 1 100%;
+    justify-content: center;
+    gap: 10px;
+    padding: 6px 8px;
+  }
+  .nd-color-label { display: none; }
+  .note-detail-check-item { min-width: 0; }
+  .note-detail-check-item > span:last-child { min-width: 0; overflow-wrap: anywhere; }
+
+  .note-detail-footer {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    padding-inline: 12px;
+  }
+  .note-detail-footer .ghost-button,
+  .note-detail-footer .primary-button {
+    width: 100%;
+    max-width: 100%;
+    padding-inline: 8px;
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 380px) {
+  .note-detail-footer .ghost-button,
+  .note-detail-footer .primary-button { font-size: 0.78rem; }
+}
 
 /* ─── Planner: paleta vibrante (referência TaskifyAI) ────────────
    Só aqui, escopado com o prefixo #plannerView — não muda a cara do
@@ -5705,8 +5846,8 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
   #plannerView .planner-header { padding: 16px; border-radius: 16px; gap: 12px; }
   #plannerView .planner-header-actions { display: grid; grid-template-columns: 1fr; width: 100%; }
   #plannerView #plannerNewTaskBtn { justify-content: center; min-height: 42px; }
-  #plannerView .planner-tabs.segmented { width: 100%; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); overflow: visible; }
-  #plannerView .planner-tabs.segmented button { min-width: 0; padding-inline: 4px; justify-content: center; font-size: .72rem; }
+  #plannerView .planner-tabs.segmented { width: 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; }
+  #plannerView .planner-tabs.segmented button { min-width: 0; padding-inline: 8px; justify-content: center; font-size: .78rem; }
   #plannerView .planner-goal-progress-control { grid-template-columns: auto minmax(0, 1fr) 52px auto; gap: 6px; }
   #plannerView .planner-goal-number { width: 52px; }
   .whatsapp-quick-card .ghost-button { width: 100%; justify-content: center; }

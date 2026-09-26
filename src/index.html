@@ -596,15 +596,31 @@
                 <textarea id="noteDescription" class="autogrow" rows="3" placeholder="Escreva livremente aqui — ideias, lembretes, recados para você mesmo..."></textarea>
               </label>
 
+              <div class="note-draft-format-row" aria-label="Formatação do texto da nota">
+                <span class="note-control-label">Cor do texto</span>
+                <div class="note-text-color-picker" id="noteTextColorPicker" role="group" aria-label="Cor do texto da nota">
+                  <button type="button" class="note-text-color-default active" data-note-text-color="" title="Cor padrão" aria-label="Cor padrão" aria-pressed="true">A</button>
+                  <button type="button" class="note-text-color-dot" data-note-text-color="#8b5cf6" style="--note-text-color:#8b5cf6" title="Texto lilás" aria-label="Texto lilás" aria-pressed="false"></button>
+                  <button type="button" class="note-text-color-dot" data-note-text-color="#ff375f" style="--note-text-color:#ff375f" title="Texto vermelho" aria-label="Texto vermelho" aria-pressed="false"></button>
+                  <button type="button" class="note-text-color-dot" data-note-text-color="#30d158" style="--note-text-color:#30d158" title="Texto verde" aria-label="Texto verde" aria-pressed="false"></button>
+                  <button type="button" class="note-text-color-dot" data-note-text-color="#0a84ff" style="--note-text-color:#0a84ff" title="Texto azul" aria-label="Texto azul" aria-pressed="false"></button>
+                  <button type="button" class="note-text-color-dot" data-note-text-color="#bf5af2" style="--note-text-color:#bf5af2" title="Texto roxo" aria-label="Texto roxo" aria-pressed="false"></button>
+                </div>
+                <input id="noteTextColor" type="hidden" value="" />
+              </div>
+
               <!-- Atalhos rápidos: cor, prioridade e checklist ficam à mão sem poluir a tela -->
               <div class="note-quick-row">
-                <div class="note-color-picker" id="noteColorPicker" role="group" aria-label="Cor da nota">
-                  <button type="button" class="note-color-dot active" data-note-color="blue" title="Azul" aria-label="Azul"></button>
-                  <button type="button" class="note-color-dot" data-note-color="green" title="Verde" aria-label="Verde"></button>
-                  <button type="button" class="note-color-dot" data-note-color="pink" title="Rosa" aria-label="Rosa"></button>
-                  <button type="button" class="note-color-dot" data-note-color="purple" title="Roxo" aria-label="Roxo"></button>
-                  <button type="button" class="note-color-dot" data-note-color="orange" title="Lilás" aria-label="Lilás"></button>
-                  <button type="button" class="note-color-dot" data-note-color="teal" title="Turquesa" aria-label="Turquesa"></button>
+                <div class="note-card-color-control">
+                  <span class="note-control-label">Cor do cartão</span>
+                  <div class="note-color-picker" id="noteColorPicker" role="group" aria-label="Cor do cartão da nota">
+                    <button type="button" class="note-color-dot active" data-note-color="blue" title="Azul" aria-label="Azul"></button>
+                    <button type="button" class="note-color-dot" data-note-color="green" title="Verde" aria-label="Verde"></button>
+                    <button type="button" class="note-color-dot" data-note-color="pink" title="Rosa" aria-label="Rosa"></button>
+                    <button type="button" class="note-color-dot" data-note-color="purple" title="Roxo" aria-label="Roxo"></button>
+                    <button type="button" class="note-color-dot" data-note-color="orange" title="Lilás" aria-label="Lilás"></button>
+                    <button type="button" class="note-color-dot" data-note-color="teal" title="Turquesa" aria-label="Turquesa"></button>
+                  </div>
                 </div>
                 <input id="noteColor" type="hidden" value="blue" />
                 <div class="note-priority-picker" id="notePriorityPicker">
@@ -753,18 +769,20 @@
               </button>
             </div>
 
-            <div id="ndBody" class="note-detail-body" contenteditable="true" data-placeholder="Escreva livremente aqui..."></div>
-            <section id="ndChecklistSection" class="note-detail-checklist" hidden aria-label="Checklist da nota">
-              <div class="note-detail-checklist-heading">
-                <div>
-                  <div class="note-detail-checklist-title">Checklist</div>
-                  <p id="ndChecklistSummary" class="note-detail-checklist-summary"></p>
+            <div class="note-detail-scroll">
+              <div id="ndBody" class="note-detail-body" contenteditable="true" data-placeholder="Escreva livremente aqui..."></div>
+              <section id="ndChecklistSection" class="note-detail-checklist" hidden aria-label="Checklist da nota">
+                <div class="note-detail-checklist-heading">
+                  <div>
+                    <div class="note-detail-checklist-title">Checklist</div>
+                    <p id="ndChecklistSummary" class="note-detail-checklist-summary"></p>
+                  </div>
+                  <span id="ndChecklistProgress" class="note-detail-checklist-progress"></span>
                 </div>
-                <span id="ndChecklistProgress" class="note-detail-checklist-progress"></span>
-              </div>
-              <div class="note-detail-checklist-track" aria-hidden="true"><span id="ndChecklistProgressBar"></span></div>
-              <div id="ndChecklistItems"></div>
-            </section>
+                <div class="note-detail-checklist-track" aria-hidden="true"><span id="ndChecklistProgressBar"></span></div>
+                <div id="ndChecklistItems"></div>
+              </section>
+            </div>
 
             <div class="note-detail-footer">
               <button type="button" class="ghost-button" id="ndConvertTaskBtn">
