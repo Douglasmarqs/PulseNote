@@ -224,6 +224,19 @@ async function sendWhatsAppMessage(to, body) {
   return true;
 }
 
+function buttonFallbackText(body, buttons) {
+  const actions = new Set(buttons.map((button) => String(button.id || "").split(":")[1]));
+  const reference = String(buttons[0]?.id || "").match(/:(wa_[a-f0-9-]{6,80})$/i)?.[1]?.slice(-6);
+  if (!reference) return body;
+  if (actions.has("edit") && actions.has("delete")) {
+    return `${body}\n\nPara alterar, responda *editar #${reference}*. Para remover, responda *excluir #${reference}*.`;
+  }
+  if (actions.has("confirm_delete") && actions.has("cancel_delete")) {
+    return `${body}\n\nResponda *confirmar exclusão #${reference}* ou *cancelar exclusão #${reference}*.`;
+  }
+  return body;
+}
+
 // Formato de Reply Buttons documentado pelo SDK oficial da Meta:
 // https://whatsapp.github.io/WhatsApp-Nodejs-SDK/api-reference/messages/interactive/
 async function sendWhatsAppButtons(to, body, buttons, footer = "") {
@@ -234,7 +247,7 @@ async function sendWhatsAppButtons(to, body, buttons, footer = "") {
   };
   if (footer) interactive.footer = { text: footer.slice(0, 60) };
   const sent = await sendWhatsAppPayload(to, { type: "interactive", interactive });
-  if (!sent) return sendWhatsAppMessage(to, body);
+  if (!sent) return sendWhatsAppMessage(to, buttonFallbackText(body, buttons));
   return true;
 }
 
@@ -267,28 +280,12 @@ async function uploadWhatsAppMedia(buffer, filename, mimeType) {
 }
 
 async function sendWhatsAppDocument(to, mediaId, filename, caption) {
-  const url = `https://graph.facebook.com/v20.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
-  const toFixed = fixBrazilianMobileNumber(to);
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
-      },
-      body: JSON.stringify({
-        messaging_product: "whatsapp",
-        to: toFixed,
-        type: "document",
-        document: { id: mediaId, filename, caption },
-      }),
-    });
-    if (!res.ok) {
-      console.error("Meta recusou o envio do documento:", res.status, await res.text());
-    }
-  } catch (err) {
-    console.error("Falha de rede ao mandar documento no WhatsApp:", err);
-  }
+  const sent = await sendWhatsAppPayload(to, {
+    type: "document",
+    document: { id: mediaId, filename, caption },
+  });
+  if (!sent) throw new Error("meta_document_rejected");
+  return true;
 }
 
 // Só retorna algo depois que handleLinkCommand() já criou o vínculo.
@@ -845,6 +842,21 @@ function parseFinanceEditReply(text, categories) {
   return Object.keys(patch).length ? patch : null;
 }
 
+function parseFinanceReferenceCommand(normalizedText) {
+  const match = String(normalizedText || "").match(/^(editar|excluir|confirmar exclusao|cancelar exclusao)\s+#?([a-f0-9]{6})$/);
+  if (!match) return null;
+  const action = { editar: "edit", excluir: "delete", "confirmar exclusao": "confirm_delete", "cancelar exclusao": "cancel_delete" }[match[1]];
+  return { action, reference: match[2] };
+}
+
+async function findWhatsAppEntryIdByReference(fb, uid, reference) {
+  const snap = await fb.firestore().collection("userData").doc(uid).get();
+  const finances = snap.exists && Array.isArray(snap.data()?.data?.finances) ? snap.data().data.finances : [];
+  const matches = finances.filter((item) => item.source === "whatsapp" &&
+    typeof item.id === "string" && item.id.endsWith(reference));
+  return matches.length === 1 ? matches[0].id : null;
+}
+
 // Busca lançamentos por palavra-chave (descrição OU categoria), com
 // filtro opcional de mês/ano — usado pela intenção "finance_search".
 // Só leitura, não passa por withUserData.
@@ -1026,7 +1038,7 @@ async function buildAgendaMessage(fb, uid, filter, todayIso) {
 }
 
 // ── Tarefas ─────────────────────────────────────────────────────
-async function createTaskFromWhatsApp(fb, uid, { title, dueDate, priority }, todayIso, rawMessage) {
+async function createTaskFromWhatsApp(fb, uid, { title, dueDate, dueTime, reminder, priority }, todayIso, rawMessage) {
   return withUserData(fb, uid, (state) => {
     const tasks = Array.isArray(state.tasks) ? state.tasks : (state.tasks = []);
     const task = {
@@ -1035,6 +1047,8 @@ async function createTaskFromWhatsApp(fb, uid, { title, dueDate, priority }, tod
       status: "Pendente",
       priority: priority || "Media",
       dueDate: dueDate || "",
+      dueTime: dueTime || "",
+      reminder: Number.isInteger(reminder) && reminder >= 0 && reminder <= 10080 ? reminder : 15,
       createdAt: todayIso,
       completedAt: "",
       sourceNoteId: "",
@@ -1164,7 +1178,7 @@ async function updateGoalProgress(fb, uid, { query, mode, value }) {
 }
 
 // ── Compromissos ────────────────────────────────────────────────
-async function createEventFromWhatsApp(fb, uid, { title, date, time, location }, rawMessage) {
+async function createEventFromWhatsApp(fb, uid, { title, date, time, reminder, location }, rawMessage) {
   return withUserData(fb, uid, (state) => {
     const events = Array.isArray(state.events) ? state.events : (state.events = []);
     const event = {
@@ -1173,7 +1187,7 @@ async function createEventFromWhatsApp(fb, uid, { title, date, time, location },
       date,
       time,
       location: location || "Sem local",
-      reminder: 15,
+      reminder: Number.isInteger(reminder) && reminder >= 0 && reminder <= 10080 ? reminder : 15,
       notes: "",
       source: "whatsapp",
       whatsappRawMessage: rawMessage || "",
@@ -1516,9 +1530,20 @@ module.exports = async (req, res) => {
     if (message.type === "text") {
       const rawText = message.text.body;
       const norm = normalizeCommand(rawText);
+      const referenceCommand = parseFinanceReferenceCommand(norm);
 
-      if (message.wasAudio && isDeleteCommand(norm)) {
+      if (message.wasAudio && (isDeleteCommand(norm) || ["delete", "confirm_delete"].includes(referenceCommand?.action))) {
         await sendWhatsAppMessage(fromPhone, "Por segurança, digite o comando para excluir um lançamento. Não apaguei nada a partir do áudio.");
+        return respondOk();
+      }
+
+      if (referenceCommand) {
+        const recordId = await findWhatsAppEntryIdByReference(fb, uid, referenceCommand.reference);
+        if (!recordId) {
+          await sendWhatsAppMessage(fromPhone, "Não encontrei uma referência única para esse lançamento. Confira o ID na confirmação ou use os botões da mensagem original.");
+        } else {
+          await handleFinanceButton(fb, uid, fromPhone, `fin:${referenceCommand.action}:${recordId}`, categories);
+        }
         return respondOk();
       }
 
@@ -1624,7 +1649,12 @@ module.exports = async (req, res) => {
             await sendWhatsAppMessage(fromPhone, "Não consegui gerar o arquivo agora 😕 Tenta de novo em instantes.");
             return respondOk();
           }
-          await sendWhatsAppDocument(fromPhone, mediaId, `relatorio-${monthKey}.pdf`, `📄 Relatório de ${summary.monthName}`);
+          try {
+            await sendWhatsAppDocument(fromPhone, mediaId, `relatorio-${monthKey}.pdf`, `📄 Relatório de ${summary.monthName}`);
+          } catch (error) {
+            console.error("whatsapp_pdf_delivery_failed", { code: error?.message || "unknown" });
+            await sendWhatsAppMessage(fromPhone, "Consegui gerar o PDF, mas não consegui enviá-lo pelo WhatsApp agora. Peça o relatório novamente em instantes.");
+          }
           return respondOk();
         }
 
@@ -1702,7 +1732,7 @@ module.exports = async (req, res) => {
           const task = await createTaskFromWhatsApp(fb, uid, result.task, today, rawText);
           await sendWhatsAppMessage(
             fromPhone,
-            `✅ 📋 Tarefa criada: "${task.title}"${task.dueDate ? ` — vence em ${formatDateBr(task.dueDate)}` : ""}${task.priority === "Alta" ? " 🔴 prioridade alta" : ""}.`
+            `✅ 📋 Tarefa criada: "${task.title}"${task.dueDate ? ` — vence em ${formatDateBr(task.dueDate)}` : ""}${task.dueTime ? ` às ${task.dueTime} (lembrete ${task.reminder === 0 ? "na hora" : `${task.reminder} min antes`})` : ""}${task.priority === "Alta" ? " 🔴 prioridade alta" : ""}.${!task.dueDate ? " Defina a data no Planner para receber um lembrete." : !task.dueTime ? " Defina um horário no Planner para receber um aviso com antecedência." : ""}`
           );
         } else if (action === "complete") {
           const task = await completeTaskByQuery(fb, uid, result.task.query, today);
@@ -1773,7 +1803,7 @@ module.exports = async (req, res) => {
         const event = await createEventFromWhatsApp(fb, uid, result.event, rawText);
         await sendWhatsAppMessage(
           fromPhone,
-          `✅ 📅 Compromisso marcado: "${event.title}" em ${formatDateBr(event.date)}${event.time ? ` às ${event.time}` : ""}${event.location && event.location !== "Sem local" ? ` — ${event.location}` : ""}.`
+          `✅ 📅 Compromisso marcado: "${event.title}" em ${formatDateBr(event.date)}${event.time ? ` às ${event.time} (lembrete ${event.reminder === 0 ? "na hora" : `${event.reminder} min antes`})` : ""}${event.location && event.location !== "Sem local" ? ` — ${event.location}` : ""}.${!event.time ? " Defina um horário no Planner para receber um lembrete." : ""}`
         );
         return respondOk();
       }
@@ -1879,4 +1909,8 @@ module.exports = async (req, res) => {
 module.exports.config = { api: { bodyParser: false } };
 // Superfície pequena e sem I/O para os testes de regressão do formato de
 // resposta. A função HTTP continua sendo o export principal da Vercel.
-module.exports._test = { formatWhatsAppFinanceConfirmation, inferPaymentMethod, formatWhatsAppAmount, isPhotoNoteRequest, isDestructiveAudioIntent };
+module.exports._test = {
+  formatWhatsAppFinanceConfirmation, inferPaymentMethod, formatWhatsAppAmount,
+  isPhotoNoteRequest, isDestructiveAudioIntent, buttonFallbackText,
+  parseFinanceReferenceCommand, sendWhatsAppDocument,
+};

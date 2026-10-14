@@ -73,7 +73,7 @@ test("comandos essenciais do WhatsApp não dependem da IA", async () => {
     ok: true, intent: "agenda", agenda: { filter: "todas" },
   });
   assert.deepEqual(await parseTextIntent({ ...options, text: "me lembra de pagar o boleto amanhã" }), {
-    ok: true, intent: "task_action", task: { action: "create", title: "pagar o boleto", dueDate: "2026-09-12", priority: "Media" },
+    ok: true, intent: "task_action", task: { action: "create", title: "pagar o boleto", dueDate: "2026-09-12", dueTime: "", reminder: 15, priority: "Media" },
   });
   assert.deepEqual(await parseTextIntent({ ...options, text: "concluí a tarefa do dentista" }), {
     ok: true, intent: "task_action", task: { action: "complete", query: "dentista" },
@@ -88,7 +88,7 @@ test("comandos essenciais do WhatsApp não dependem da IA", async () => {
     ok: true, intent: "goal_action", goal: { action: "update", query: "economia", mode: "delta", value: 200 },
   });
   assert.deepEqual(await parseTextIntent({ ...options, text: "marca reunião com cliente amanhã às 15h" }), {
-    ok: true, intent: "event_create", event: { title: "reunião com cliente", date: "2026-09-12", time: "15:00", location: "" },
+    ok: true, intent: "event_create", event: { title: "reunião com cliente", date: "2026-09-12", time: "15:00", reminder: 15, location: "" },
   });
   assert.deepEqual(await parseTextIntent({ ...options, text: "quanto gastei com uber esse mês" }), {
     ok: true, intent: "finance_search", search: { query: "uber", month: null, year: null },

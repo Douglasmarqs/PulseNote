@@ -151,9 +151,8 @@ async function updateConfig(db, actor, body) {
   const features = validateFeatureMap(body.features);
   if (typeof body.maintenance?.enabled !== "boolean") fail(400, "invalid_maintenance");
   const message = text(body.maintenance.message, 240);
-  const supportEmail = text(body.supportEmail, 180);
-  if (supportEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(supportEmail)) fail(400, "invalid_support_email");
-  const config = normalizeRuntimeConfig({ features, maintenance: { enabled: body.maintenance.enabled, message }, supportEmail });
+  // Não expor uma configuração de suporte sem consumidor real no produto.
+  const config = normalizeRuntimeConfig({ features, maintenance: { enabled: body.maintenance.enabled, message } });
   const batch = db.batch();
   batch.set(db.collection("systemConfig").doc("global"), { ...config, updatedAt: new Date().toISOString(), updatedBy: actor.uid });
   batch.set(db.collection("adminAudit").doc(), {
@@ -204,25 +203,24 @@ async function savePlan(db, actor, body) {
 
 async function setEntitlement(firebase, db, actor, body) {
   const uid = text(body.uid, 128);
-  const planId = body.planId === null ? null : text(body.planId, 40).toLowerCase();
-  if (!uid || (planId !== null && !/^[a-z0-9_-]{2,40}$/.test(planId))) fail(400, "invalid_entitlement");
+  const planId = text(body.planId, 40).toLowerCase();
+  // Ausência de plano significa acesso legado a todos os recursos. Remover um
+  // plano aqui poderia reabrir o acesso de uma assinatura pausada/cancelada.
+  if (!uid || !/^[a-z0-9_-]{2,40}$/.test(planId)) fail(400, "plan_required");
   const status = body.status === undefined ? "active" : body.status;
   const validUntil = body.validUntil ? text(body.validUntil, 10) : null;
-  if (planId && (!["active", "paused", "cancelled"].includes(status)
-    || (validUntil && !/^\d{4}-\d{2}-\d{2}$/.test(validUntil)))) fail(400, "invalid_entitlement");
+  if (!["active", "paused", "cancelled"].includes(status)
+    || (validUntil && !/^\d{4}-\d{2}-\d{2}$/.test(validUntil))) fail(400, "invalid_entitlement");
   await firebase.auth().getUser(uid);
-  if (planId) {
-    const plan = await db.collection("adminPlans").doc(planId).get();
-    if (!plan.exists || plan.data().active === false) fail(400, "plan_unavailable");
-  }
+  const plan = await db.collection("adminPlans").doc(planId).get();
+  if (!plan.exists || plan.data().active === false) fail(400, "plan_unavailable");
   const batch = db.batch();
   const ref = db.collection("adminEntitlements").doc(uid);
-  if (planId) batch.set(ref, { planId, status, validUntil, source: "manual", updatedAt: new Date().toISOString(), updatedBy: actor.uid });
-  else batch.delete(ref);
+  batch.set(ref, { planId, status, validUntil, source: "manual", updatedAt: new Date().toISOString(), updatedBy: actor.uid });
   batch.set(db.collection("adminAudit").doc(), { at: new Date().toISOString(), actorUid: actor.uid,
-    actorEmail: actor.email, action: "entitlement_set", target: uid, details: { planId, status: planId ? status : "unassigned", validUntil } });
+    actorEmail: actor.email, action: "entitlement_set", target: uid, details: { planId, status, validUntil } });
   await batch.commit();
-  return { uid, planId, status: planId ? status : "unassigned", validUntil };
+  return { uid, planId, status, validUntil };
 }
 
 async function createCharge(firebase, db, actor, body) {
@@ -252,6 +250,7 @@ async function updateCharge(db, actor, body) {
   const ref = db.collection("adminCharges").doc(id);
   const previous = await ref.get();
   if (!previous.exists || previous.data().source !== "manual") fail(404, "charge_not_found");
+  if (previous.data().status !== "manual_pending") fail(409, "charge_already_finalized");
   const batch = db.batch();
   batch.update(ref, { status, updatedAt: new Date().toISOString(), updatedBy: actor.uid });
   batch.set(db.collection("adminAudit").doc(), { at: new Date().toISOString(), actorUid: actor.uid,
@@ -299,4 +298,4 @@ module.exports = async function adminApi(req, res) {
   }
 };
 
-module.exports._test = { validateFeatureMap, integrationStatus, countAuthUsers, dashboard, listUsers, updateConfig };
+module.exports._test = { validateFeatureMap, integrationStatus, countAuthUsers, dashboard, listUsers, updateConfig, setEntitlement };

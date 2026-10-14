@@ -28,6 +28,7 @@
       </nav>
       <a class="ad-back" href="/app">← Voltar ao aplicativo</a>
     </aside>
+    <button class="ad-menu-backdrop" id="adMenuBackdrop" type="button" aria-label="Fechar menu" hidden></button>
 
     <div class="ad-page">
       <header class="ad-topbar">
@@ -40,6 +41,7 @@
         <div id="adGate" class="ad-gate" role="status">Verificando sua permissão de administrador…</div>
         <div id="adContent" hidden>
           <div class="ad-heading"><div><p class="ad-eyebrow">CONTROLE DO PULSENOTE</p><h1>Administração</h1><p>Usuários, recursos e operação em um só lugar.</p></div><span class="ad-session" id="adSession"></span></div>
+          <div id="adLoadError" class="ad-load-error" role="alert" hidden><span id="adLoadErrorText"></span><button class="ad-subtle-button" id="adSectionRetry" type="button">Tentar novamente</button></div>
 
           <div class="ad-stats" id="adStats" aria-label="Métricas dos últimos 30 dias"></div>
 
@@ -112,7 +114,6 @@
             <div class="ad-card ad-narrow-card"><h2 id="ad-settings-title">Configurações gerais</h2><p>Esses valores são lidos pelo servidor e pelas regras do Firestore.</p><form id="adSettingsForm" class="ad-form">
               <label class="ad-switch-row"><span><strong>Modo manutenção</strong><small>Suspende gravações dos usuários durante uma intervenção.</small></span><input id="adMaintenanceInput" type="checkbox" name="maintenance" /></label>
               <label>Mensagem de manutenção <textarea name="maintenanceMessage" maxlength="240" rows="2"></textarea></label>
-              <label>E-mail de suporte <input name="supportEmail" type="email" maxlength="180" placeholder="suporte@exemplo.com" /></label>
               <button class="ad-primary-button" type="submit">Salvar configurações</button>
             </form></div>
           </section>

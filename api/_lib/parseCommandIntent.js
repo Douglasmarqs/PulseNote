@@ -74,6 +74,57 @@ const INTENTS = [
   "finance_edit_last", "finance_delete_last", "finance_search", "stats",
 ];
 
+// Uma antecedência só é reconhecida quando vem acompanhada da unidade e
+// de "antes"/"antecedência". Isso impede que "R$ 30" vire 30 minutos.
+const REMINDER_VALUE = "(\\d{1,4}|meia|meio|um|uma|dois|duas)";
+const REMINDER_UNIT = "(minutos?|mins?|min|horas?|h|dias?)";
+const REMINDER_AFTER = new RegExp(`\\b${REMINDER_VALUE}\\s*${REMINDER_UNIT}\\s*(?:antes|de\\s+antecedencia)\\b`, "i");
+const REMINDER_BEFORE = new RegExp(`\\bantecedencia\\s+de\\s+${REMINDER_VALUE}\\s*${REMINDER_UNIT}\\b`, "i");
+
+function extractReminderMinutes(text) {
+  const normalized = String(text || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  if (/\b(?:na hora|no horario|sem antecedencia)\b/.test(normalized)) return 0;
+  const match = normalized.match(REMINDER_AFTER) || normalized.match(REMINDER_BEFORE);
+  if (!match) return null;
+  const words = { meia: 0.5, meio: 0.5, um: 1, uma: 1, dois: 2, duas: 2 };
+  const value = words[match[1]] ?? Number(match[1]);
+  const multiplier = /^h|^hora/.test(match[2]) ? 60 : /^dia/.test(match[2]) ? 1440 : 1;
+  const minutes = value * multiplier;
+  return Number.isInteger(minutes) && minutes >= 0 && minutes <= 10080 ? minutes : null;
+}
+
+function stripScheduleFromTitle(title) {
+  const value = `${REMINDER_VALUE}\\s*${REMINDER_UNIT}`;
+  return stripDateWordsFromDescription(String(title || "")
+    .replace(new RegExp(`\\b(?:com\\s+)?${value}\\s*(?:antes|de\\s+anteced[eê]ncia)\\b`, "giu"), " ")
+    .replace(new RegExp(`\\banteced[eê]ncia\\s+de\\s+${value}\\b`, "giu"), " ")
+    .replace(/\b(?:na hora|no hor[aá]rio|sem anteced[eê]ncia)\b/giu, " ")
+    .replace(/(?<![\p{L}\p{N}])(?:às\s+|as\s+)?\d{1,2}\s*(?:h(?:oras?)?)?\s+da\s+(?:manh[ãa]|tarde|noite)\b/giu, " ")
+    .replace(/(?<![\p{L}\p{N}])(?:às|as|pelas|para as|para às)\s*\d{1,2}(?::[0-5]\d|h(?:[0-5]\d)?)?\b/giu, " ")
+    .replace(/\b\d{1,2}h(?:[0-5]\d)?\b/giu, " "))
+    .replace(/^[\s,;:–—-]+|[\s,;:–—-]+$/g, "")
+    .replace(/\b(?:às|as|para|de|em|com)\s*$/i, "")
+    .trim();
+}
+
+function validTime(value) {
+  return /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(value || ""));
+}
+
+function extractScheduledTime(text) {
+  const normalized = String(text || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const period = normalized.match(/\b(\d{1,2})\s*(?:h(?:oras?)?)?\s+da\s+(manha|tarde|noite)\b/);
+  if (period) {
+    let hour = Number(period[1]);
+    if (hour >= 1 && hour <= 12) {
+      if (period[2] === "tarde" && hour < 12) hour += 12;
+      if (period[2] === "noite") hour = hour === 12 ? 0 : hour + 12;
+      return `${String(hour).padStart(2, "0")}:00`;
+    }
+  }
+  return extractTimeFromText(text);
+}
+
 function buildIntentPrompt({ todayIso, categoryList, recentEntryNote }) {
   return `Você entende o que uma pessoa quis dizer numa mensagem de WhatsApp pro PulseNote (app pessoal de notas/tarefas/agenda/metas/finanças). Classifique a intenção em UMA destas:
 
@@ -112,7 +163,7 @@ Em "finance_edit_last", só inclua os campos que a pessoa claramente quis corrig
 Se "finance_search": preencha "searchQuery" (palavra-chave central, ex.: "uber", "farmácia", "mercado") e, se houver período claro, "searchMonth"/"searchYear".
 
 Se "task_action": preencha "taskAction" ("create"|"complete"|"delete").
-  - Se "create": "taskTitle" (título curto e claro da tarefa, no que a pessoa disse, sem palavras de comando tipo "cria uma tarefa pra"), "taskDueDate" (YYYY-MM-DD resolvendo data relativa; sem menção nenhuma de prazo, deixe "" — tarefa sem data), "taskPriority" ("Alta" se a pessoa usar palavras como "urgente"/"importante"/"prioridade", senão "Media").
+  - Se "create": "taskTitle" (título curto e claro da tarefa, sem palavras de comando, horário ou antecedência), "taskDueDate" (YYYY-MM-DD resolvendo data relativa; sem menção de prazo, deixe ""), "taskDueTime" (HH:MM quando houver horário, senão ""), "taskPriority" ("Alta" se a pessoa usar "urgente"/"importante"/"prioridade", senão "Media"). Antecedência explicitamente pedida é extraída do texto pelo servidor; não confunda valor em reais com minutos.
   - Se "complete" ou "delete": "taskQuery" (texto curto que identifica a tarefa já existente que a pessoa quer marcar/apagar, ex.: da frase "concluí a tarefa do dentista" → "dentista").
 
 Se "note_action": preencha "noteAction" ("create"|"search"|"delete").
@@ -123,7 +174,7 @@ Se "goal_action": preencha "goalAction" ("create"|"update").
   - Se "create": "goalTitle", "goalTarget" (número alvo da meta).
   - Se "update": "goalQuery" (texto que identifica a meta existente), "goalProgressMode" ("delta" se a pessoa falou um AVANÇO, ex.: "avancei 200" → delta; "absolute" se falou um valor TOTAL atual, ex.: "já bati 3" → absolute), "goalProgressValue" (o número).
 
-Se "event_create": preencha "eventTitle", "eventDate" (YYYY-MM-DD, resolvendo data relativa/dia da semana a partir de hoje), "eventTime" (HH:MM 24h; sem horário mencionado, deixe ""), "eventLocation" (sem menção, deixe "").
+Se "event_create": preencha "eventTitle" (sem horário nem antecedência), "eventDate" (YYYY-MM-DD, resolvendo data relativa/dia da semana a partir de hoje), "eventTime" (HH:MM 24h; sem horário mencionado, deixe ""), "eventLocation" (sem menção, deixe ""). Antecedência explicitamente pedida é extraída do texto pelo servidor.
 
 Se não conseguir classificar com confiança em nenhuma intenção específica, responda "expense" mesmo — se não der pra extrair um valor válido, o app já sabe pedir pra pessoa reformular.
 
@@ -261,7 +312,7 @@ function parseDeterministicIntent(text, todayIso, categories = []) {
 
   const rawTaskTitle = stripKnownTriggers(text, TASK_CREATE_TRIGGERS);
   if (TASK_CREATE_TRIGGERS.some((pattern) => pattern.test(text))) {
-    const title = compactTitle(stripDateWordsFromDescription(rawTaskTitle));
+    const title = compactTitle(stripScheduleFromTitle(rawTaskTitle));
     if (title) {
       return {
         ok: true,
@@ -270,6 +321,8 @@ function parseDeterministicIntent(text, todayIso, categories = []) {
           action: "create",
           title,
           dueDate: detectDate(text, todayIso, "future") || "",
+          dueTime: extractScheduledTime(text) || "",
+          reminder: extractReminderMinutes(text) ?? 15,
           priority: /\b(urgente|importante|prioridade alta)\b/.test(command) ? "Alta" : "Media",
         },
       };
@@ -316,9 +369,9 @@ function parseDeterministicIntent(text, todayIso, categories = []) {
 
   if (EVENT_CREATE_TRIGGERS.some((pattern) => pattern.test(text))) {
     const date = detectDate(text, todayIso, "future");
-    const title = compactTitle(stripDateWordsFromDescription(stripKnownTriggers(text, EVENT_CREATE_TRIGGERS)));
+    const title = compactTitle(stripScheduleFromTitle(stripKnownTriggers(text, EVENT_CREATE_TRIGGERS)));
     if (title && date) {
-      return { ok: true, intent: "event_create", event: { title, date, time: extractTimeFromText(text) || "", location: "" } };
+      return { ok: true, intent: "event_create", event: { title, date, time: extractScheduledTime(text) || "", reminder: extractReminderMinutes(text) ?? 15, location: "" } };
     }
   }
 
@@ -414,6 +467,7 @@ async function parseTextIntent({ text, categories, today, lastFinanceEntry, aiEn
           taskAction: { type: "string", enum: ["create", "complete", "delete"] },
           taskTitle: { type: "string" },
           taskDueDate: { type: "string" },
+          taskDueTime: { type: "string" },
           taskPriority: { type: "string", enum: ["Baixa", "Media", "Alta"] },
           taskQuery: { type: "string" },
           // note_action
@@ -550,15 +604,17 @@ async function parseTextIntent({ text, categories, today, lastFinanceEntry, aiEn
     if (action === "create") {
       let title = String(parsed.taskTitle || "").trim().slice(0, 120);
       if (!title) title = stripKnownTriggers(rawMessage, TASK_CREATE_TRIGGERS).slice(0, 120);
-      title = stripDateWordsFromDescription(title) || title;
+      title = stripScheduleFromTitle(title) || title;
       if (!title) {
         console.error("task_action create sem título recuperável");
         return { ok: false, status: 422, error: "ai_invalid_task_title" };
       }
       const dueDate = detectDate(rawMessage, todayIso, "future") ||
         (/^\d{4}-\d{2}-\d{2}$/.test(parsed.taskDueDate) ? parsed.taskDueDate : "");
+      const dueTime = extractScheduledTime(rawMessage) || (validTime(parsed.taskDueTime) ? parsed.taskDueTime : "");
+      const reminder = extractReminderMinutes(rawMessage) ?? 15;
       const priority = ["Baixa", "Media", "Alta"].includes(parsed.taskPriority) ? parsed.taskPriority : "Media";
-      return { ok: true, intent: "task_action", task: { action, title, dueDate, priority } };
+      return { ok: true, intent: "task_action", task: { action, title, dueDate, dueTime, reminder, priority } };
     }
     const query = String(parsed.taskQuery || "").trim().slice(0, 80)
       || stripKnownTriggers(rawMessage, TASK_COMPLETE_DELETE_TRIGGERS).slice(0, 80);
@@ -615,7 +671,7 @@ async function parseTextIntent({ text, categories, today, lastFinanceEntry, aiEn
   if (intent === "event_create") {
     let title = String(parsed.eventTitle || "").trim().slice(0, 120);
     if (!title) title = stripKnownTriggers(rawMessage, EVENT_CREATE_TRIGGERS).slice(0, 120);
-    title = stripDateWordsFromDescription(title) || title;
+    title = stripScheduleFromTitle(title) || title;
     // Data/hora reconhecida no texto (regex, determinística) sempre vence
     // a que a IA devolveu — é matemática mecânica, e a IA pode "entender"
     // a frase certa mas errar a conta (ex.: ler "amanhã" e devolver a
@@ -626,10 +682,11 @@ async function parseTextIntent({ text, categories, today, lastFinanceEntry, aiEn
       console.error("event_create sem título/data recuperável");
       return { ok: false, status: 422, error: "ai_invalid_event" };
     }
-    const time = extractTimeFromText(rawMessage) ||
-      (/^\d{2}:\d{2}$/.test(parsed.eventTime) ? parsed.eventTime : "");
+    const time = extractScheduledTime(rawMessage) ||
+      (validTime(parsed.eventTime) ? parsed.eventTime : "");
+    const reminder = extractReminderMinutes(rawMessage) ?? 15;
     const location = String(parsed.eventLocation || "").trim().slice(0, 80);
-    return { ok: true, intent: "event_create", event: { title, date, time, location } };
+    return { ok: true, intent: "event_create", event: { title, date, time, reminder, location } };
   }
 
   // ── intent "expense" (ou falha da classificação) ──────────────────

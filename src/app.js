@@ -1874,7 +1874,7 @@ function setView(view, { fromHistory = false } = {}) {
   // gente reexecuta o autofit pra medir e ajustar certo.
   if (view === "finances") fitCurrencyValues("finReceitas", "finDespesas", "finSaldo");
   if (view === "dashboard") fitCurrencyValues("summaryFinSaldo", "dashFinReceitas", "dashFinDespesas", "dashFinSaldo");
-  if (view === "autopilot") autopilotUi.show();
+  if (view === "autopilot" || view === "dashboard") autopilotUi.show();
 
   // A navegação entre áreas ganha uma entrada real no histórico: voltar no
   // navegador/celular retorna à tela anterior em vez de sair do app.

@@ -2,7 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { requireAdmin, checkUserFeature } = require("../api/_lib/admin");
 const { getRuntimeConfig, assertFeatureEnabled } = require("../api/_lib/adminConfig");
-const { validateFeatureMap, integrationStatus } = require("../api/admin")._test;
+const { validateFeatureMap, integrationStatus, setEntitlement } = require("../api/admin")._test;
 
 function fakeFirebase({ email = "dono@example.com", verified = true, disabled = false, role = false, revoked = false } = {}) {
   const docs = {
@@ -99,6 +99,13 @@ test("configuração rejeita atributos desconhecidos e tipos falsos", () => {
   assert.deepEqual(validateFeatureMap(valid), valid);
   assert.throws(() => validateFeatureMap({ ...valid, admin: true }), { code: "invalid_features" });
   assert.throws(() => validateFeatureMap({ ...valid, whatsapp: "false" }), { code: "invalid_features" });
+});
+
+test("administrador não pode remover plano e restaurar acesso legado sem querer", async () => {
+  await assert.rejects(
+    setEntitlement({}, {}, { uid: "admin", email: "admin@example.com" }, { uid: "u1", planId: null }),
+    { status: 400, code: "plan_required" },
+  );
 });
 
 test("monitoramento mostra sinais reais e não confunde credenciais com entrega", async () => {

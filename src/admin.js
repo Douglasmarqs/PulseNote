@@ -11,7 +11,7 @@ const SECTION_LABELS = {
   overview: "Visão geral", users: "Usuários", plans: "Planos", subscriptions: "Assinaturas", charges: "Cobranças",
   features: "Recursos", integrations: "Integrações", settings: "Configurações",
 };
-const state = { user: null, config: null, plans: [], users: [], usersNextPageToken: null, currentSection: "overview" };
+const state = { user: null, config: null, plans: [], users: [], usersNextPageToken: null, currentSection: "overview", loadSequence: 0 };
 const $ = (selector) => document.querySelector(selector);
 
 function escapeHtml(value) {
@@ -27,6 +27,19 @@ function toast(message, isError = false) {
   element.hidden = false;
   clearTimeout(toast.timer);
   toast.timer = setTimeout(() => { element.hidden = true; }, 5500);
+}
+
+function setLoadError(message = "") {
+  const banner = $("#adLoadError");
+  banner.hidden = !message;
+  $("#adLoadErrorText").textContent = message;
+}
+
+function closeMenu() {
+  $("#adSidebar").classList.remove("is-open");
+  $("#adMenuBackdrop").hidden = true;
+  $("#adMenuButton").setAttribute("aria-expanded", "false");
+  $("#adMenuButton").setAttribute("aria-label", "Abrir menu");
 }
 
 async function request(action, body, query = {}) {
@@ -95,9 +108,9 @@ function renderIntegrationRows(data, selector, compact = false) {
 
 function userRow(user) {
   const initial = (user.displayName || user.email || "?").trim()[0]?.toUpperCase() || "?";
-  const plans = [`<option value="">Sem plano</option>`, ...state.plans.filter((plan) => plan.active !== false || plan.id === user.planId).map((plan) =>
+  const plans = [user.planId ? "" : `<option value="" selected disabled>Acesso legado (sem plano)</option>`, ...state.plans.filter((plan) => plan.active !== false || plan.id === user.planId).map((plan) =>
     `<option value="${escapeHtml(plan.id)}" ${plan.id === user.planId ? "selected" : ""}>${escapeHtml(plan.name)}</option>`)].join("");
-  return `<div class="ad-user" data-uid="${escapeHtml(user.uid)}"><div class="ad-user-main"><span class="ad-avatar">${escapeHtml(initial)}</span><div><strong>${escapeHtml(user.displayName || user.email || user.uid)}</strong><small>${escapeHtml(user.email || user.uid)} · Último acesso ${readableDate(user.lastSignInAt)}${user.planId ? ` · Assinatura ${escapeHtml(user.subscriptionStatus || "active")}` : ""}</small></div></div><div class="ad-user-actions"><span class="ad-pill ${user.disabled ? "is-off" : ""}">${user.disabled ? "Desativado" : "Ativo"}</span><select aria-label="Plano de ${escapeHtml(user.email || user.uid)}" data-action="plan">${plans}</select><button class="ad-subtle-button" type="button" data-action="status" data-disabled="${!user.disabled}">${user.disabled ? "Reativar" : "Desativar"}</button></div></div>`;
+  return `<div class="ad-user" data-uid="${escapeHtml(user.uid)}"><div class="ad-user-main"><span class="ad-avatar">${escapeHtml(initial)}</span><div><strong>${escapeHtml(user.displayName || user.email || user.uid)}</strong><small>${escapeHtml(user.email || user.uid)} · Último acesso ${readableDate(user.lastSignInAt)}${user.planId ? ` · Assinatura ${escapeHtml(user.subscriptionStatus || "active")}` : ""}</small></div></div><div class="ad-user-actions"><span class="ad-pill ${user.disabled ? "is-off" : ""}">${user.disabled ? "Desativado" : "Ativo"}</span><select aria-label="Plano de ${escapeHtml(user.email || user.uid)}" data-action="plan" data-current-plan="${escapeHtml(user.planId || "")}">${plans}</select><button class="ad-subtle-button" type="button" data-action="status" data-disabled="${!user.disabled}">${user.disabled ? "Reativar" : "Desativar"}</button></div></div>`;
 }
 
 function renderUsers() {
@@ -137,7 +150,6 @@ function renderConfig() {
   const form = $("#adSettingsForm");
   form.elements.maintenance.checked = config.maintenance.enabled;
   form.elements.maintenanceMessage.value = config.maintenance.message;
-  form.elements.supportEmail.value = config.supportEmail;
   $("#adPlanFeatures").innerHTML = Object.entries(FEATURE_LABELS).map(([key, [label]]) => `<label class="ad-check"><input type="checkbox" name="feature-${key}" checked /> ${label}</label>`).join("");
 }
 
@@ -171,23 +183,29 @@ async function loadDashboard() {
 async function showSection(section) {
   if (!SECTION_LABELS[section]) return;
   state.currentSection = section;
+  const sequence = ++state.loadSequence;
   document.querySelectorAll(".ad-section").forEach((element) => element.classList.toggle("is-active", element.id === `ad-${section}`));
   document.querySelectorAll("[data-section]").forEach((button) => button.classList.toggle("is-active", button.dataset.section === section));
-  $("#adSidebar").classList.remove("is-open");
-  $("#adMenuButton").setAttribute("aria-expanded", "false");
-  try {
-    if (section === "users") await loadUsers();
-    if (section === "plans") await loadPlans();
-    if (section === "subscriptions") await Promise.all([loadPlans(), loadSubscriptions()]);
-    if (section === "charges") await loadCharges();
-    if (section === "integrations") await loadIntegrations();
-    if (section === "features" || section === "settings") await loadConfig();
-    if (section === "overview") await Promise.all([loadDashboard(), loadUsers(), loadIntegrations(), loadConfig()]);
-  } catch (error) { toast(`Não foi possível carregar: ${error.message}`, true); }
+  closeMenu();
+  setLoadError();
+  const loads = {
+    overview: [loadDashboard, loadPlans, loadUsers, loadIntegrations, loadConfig],
+    users: [loadPlans, loadUsers],
+    plans: [loadPlans],
+    subscriptions: [loadPlans, loadSubscriptions],
+    charges: [loadCharges],
+    features: [loadConfig],
+    integrations: [loadIntegrations],
+    settings: [loadConfig],
+  };
+  const results = await Promise.allSettled(loads[section].map((load) => load()));
+  if (sequence !== state.loadSequence) return;
+  const failed = results.find((result) => result.status === "rejected");
+  if (failed) setLoadError(`Não foi possível carregar ${SECTION_LABELS[section].toLowerCase()}: ${failed.reason.message}. Tente novamente.`);
 }
 
 function bindNavigation() {
-  $("#adMobileTabs").innerHTML = Object.entries(SECTION_LABELS).filter(([key]) => key !== "overview").map(([key, label]) => `<button type="button" data-section="${key}">${label}</button>`).join("");
+  $("#adMobileTabs").innerHTML = Object.entries(SECTION_LABELS).map(([key, label]) => `<button type="button" data-section="${key}">${label}</button>`).join("");
   document.addEventListener("click", (event) => {
     const section = event.target.closest("[data-section]")?.dataset.section || event.target.closest("[data-go]")?.dataset.go;
     if (section) showSection(section);
@@ -195,6 +213,16 @@ function bindNavigation() {
   $("#adMenuButton").addEventListener("click", () => {
     const open = $("#adSidebar").classList.toggle("is-open");
     $("#adMenuButton").setAttribute("aria-expanded", String(open));
+    $("#adMenuButton").setAttribute("aria-label", open ? "Fechar menu" : "Abrir menu");
+    $("#adMenuBackdrop").hidden = !open;
+  });
+  $("#adMenuBackdrop").addEventListener("click", closeMenu);
+  $("#adSectionRetry").addEventListener("click", () => showSection(state.currentSection));
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && $("#adSidebar").classList.contains("is-open")) {
+      closeMenu();
+      $("#adMenuButton").focus();
+    }
   });
 }
 
@@ -209,7 +237,9 @@ function bindActions() {
     if (statusButton) {
       const uid = statusButton.closest("[data-uid]")?.dataset.uid;
       const disabled = statusButton.dataset.disabled === "true";
-      if (!uid || (disabled && !window.confirm("Desativar esta conta? O usuário perderá o acesso até a reativação."))) return;
+      if (!uid || !window.confirm(disabled
+        ? "Desativar esta conta? O usuário perderá o acesso até a reativação."
+        : "Reativar esta conta e restaurar seu acesso?")) return;
       try { await request("user-update", { uid, disabled }); toast(disabled ? "Conta desativada." : "Conta reativada."); await loadUsers(); } catch (error) { toast(error.message, true); }
     }
     const edit = event.target.closest("[data-edit-plan]");
@@ -229,6 +259,10 @@ function bindActions() {
     if (chargeButton) {
       const id = chargeButton.closest("[data-charge-id]")?.dataset.chargeId;
       if (!id) return;
+      const received = chargeButton.dataset.chargeStatus === "manual_received";
+      if (!window.confirm(received
+        ? "Marcar esta cobrança manual como recebida? O PulseNote não verifica pagamentos em um provedor externo."
+        : "Cancelar este registro de cobrança manual?")) return;
       try { await request("charge-update", { id, status: chargeButton.dataset.chargeStatus }); toast("Registro manual atualizado."); await loadCharges(); } catch (error) { toast(error.message, true); }
     }
     const subscriptionButton = event.target.closest("[data-edit-subscription]");
@@ -246,13 +280,26 @@ function bindActions() {
     const select = event.target.closest('select[data-action="plan"]');
     if (!select) return;
     const uid = select.closest("[data-uid]")?.dataset.uid;
-    try { await request("entitlement-set", { uid, planId: select.value || null }); toast("Plano de acesso atualizado."); await loadUsers(); } catch (error) { toast(error.message, true); await loadUsers(); }
+    const previous = select.dataset.currentPlan;
+    const plan = state.plans.find((item) => item.id === select.value);
+    if (!uid || !plan) { select.value = previous; return; }
+    const user = state.users.find((item) => item.uid === uid);
+    const label = user?.email || user?.displayName || uid;
+    if (!window.confirm(`Alterar o acesso de ${label} para o plano ${plan.name}? Esta mudança afeta os recursos disponíveis imediatamente.`)) {
+      select.value = previous;
+      return;
+    }
+    try { await request("entitlement-set", { uid, planId: select.value }); toast("Plano de acesso atualizado."); await loadUsers(); } catch (error) { toast(error.message, true); await loadUsers(); }
   });
 
   $("#adPlanForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     const form = event.currentTarget;
     const features = Object.fromEntries(Object.keys(FEATURE_LABELS).map((key) => [key, form.elements[`feature-${key}`].checked]));
+    const existing = state.plans.find((plan) => plan.id === form.elements.id.value.trim().toLowerCase());
+    if (existing && (existing.active !== form.elements.active.checked
+      || Object.keys(FEATURE_LABELS).some((key) => existing.features?.[key] !== features[key]))
+      && !window.confirm(`Alterar os recursos do plano ${existing.name}? Isso pode mudar o acesso de todos os assinantes imediatamente.`)) return;
     try {
       await request("plan-save", { id: form.elements.id.value, name: form.elements.name.value, description: form.elements.description.value, active: form.elements.active.checked, features });
       toast("Plano salvo."); form.reset(); await loadPlans();
@@ -262,6 +309,7 @@ function bindActions() {
   $("#adSubscriptionForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     const form = event.currentTarget;
+    if (!window.confirm(`Salvar o plano e a situação de acesso para ${form.elements.uid.value.trim()}?`)) return;
     try {
       await request("entitlement-set", { uid: form.elements.uid.value.trim(), planId: form.elements.planId.value,
         status: form.elements.status.value, validUntil: form.elements.validUntil.value || null });
@@ -286,15 +334,19 @@ function bindActions() {
     event.preventDefault();
     const form = event.currentTarget;
     const features = Object.fromEntries(Object.keys(FEATURE_LABELS).map((key) => [key, form.elements[key].checked]));
+    if (Object.keys(FEATURE_LABELS).some((key) => state.config.features[key] !== features[key])
+      && !window.confirm("Aplicar a mudança de recursos para todos os usuários? A disponibilidade muda imediatamente.")) return;
     try { const data = await request("config-update", { ...state.config, features }); state.config = data.config; renderConfig(); toast("Recursos atualizados no servidor."); } catch (error) { toast(error.message, true); }
   });
   $("#adSettingsForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     const form = event.currentTarget;
     const enabled = form.elements.maintenance.checked;
-    if (enabled && !state.config.maintenance.enabled && !window.confirm("Ativar manutenção? Isso bloqueará alterações dos usuários no PulseNote.")) return;
+    if (enabled !== state.config.maintenance.enabled && !window.confirm(enabled
+      ? "Ativar manutenção? Isso bloqueará alterações dos usuários no PulseNote."
+      : "Desativar manutenção e restaurar as alterações dos usuários?")) return;
     try {
-      const data = await request("config-update", { ...state.config, maintenance: { enabled, message: form.elements.maintenanceMessage.value }, supportEmail: form.elements.supportEmail.value });
+      const data = await request("config-update", { ...state.config, maintenance: { enabled, message: form.elements.maintenanceMessage.value } });
       state.config = data.config; renderConfig(); toast("Configurações atualizadas no servidor.");
     } catch (error) { toast(error.message, true); }
   });
@@ -305,6 +357,10 @@ bindActions();
 onAuthStateChanged(auth, async (user) => {
   state.user = user;
   if (!user) {
+    $("#adContent").hidden = true;
+    $("#adGate").hidden = false;
+    $("#adAccount").textContent = "Não conectado";
+    closeMenu();
     $("#adGate").innerHTML = `Entre no PulseNote para acessar a administração. <a href="/login">Ir para o login</a>`;
     return;
   }
@@ -318,8 +374,12 @@ onAuthStateChanged(auth, async (user) => {
     renderStats(data.metrics);
     renderAudit(data.recentAudit);
     const results = await Promise.allSettled([loadUsers(), loadPlans(), loadIntegrations(), loadConfig()]);
-    for (const result of results) if (result.status === "rejected") toast(`Parte do painel não carregou: ${result.reason.message}`, true);
+    const failed = results.find((result) => result.status === "rejected");
+    if (failed) setLoadError(`Parte do painel não carregou: ${failed.reason.message}. Tente novamente.`);
   } catch (error) {
+    $("#adContent").hidden = true;
+    $("#adGate").hidden = false;
+    $("#adAccount").textContent = error.status === 403 ? "Acesso não autorizado" : "Falha na verificação";
     $("#adGate").innerHTML = error.status === 403
       ? `Esta conta não tem permissão administrativa. <a href="/app">Voltar ao aplicativo</a>`
       : `Não foi possível validar o acesso agora. <button type="button" id="adRetry">Tentar novamente</button>`;

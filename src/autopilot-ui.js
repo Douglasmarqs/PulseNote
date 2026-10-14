@@ -28,9 +28,18 @@ export function createAutopilotUI({ getToken, openArea, notify }) {
   let suggestions = [];
   let fetchedAt = 0;
   let pendingLoad = null;
+  let queuedReload = null;
   let pendingAction = null;
   let focusBeforeModal = null;
   let requestSerial = 0;
+  let pendingSerial = 0;
+  let refreshTimer = null;
+  let bound = false;
+
+  function isVisible() {
+    return ["autopilotView", "dashboardView"].some((id) =>
+      document.getElementById(id)?.classList.contains("active-view"));
+  }
 
   function setStatus(message) {
     if (status) status.textContent = message;
@@ -116,8 +125,28 @@ export function createAutopilotUI({ getToken, openArea, notify }) {
   async function load({ force = false } = {}) {
     if (!getToken()) return;
     if (!force && fetchedAt && Date.now() - fetchedAt < 60_000) return;
-    if (pendingLoad) return pendingLoad;
+    // A leitura em andamento pode ter começado antes de uma mudança vinda do
+    // WhatsApp. Depois dela terminar, uma atualização forçada precisa fazer
+    // uma nova leitura, nunca reutilizar a resposta antiga.
+    if (pendingLoad) {
+      if (!force) return pendingLoad;
+      if (!queuedReload) {
+        queuedReload = pendingLoad.then(() => {
+          queuedReload = null;
+          return isVisible() ? load({ force: true }) : undefined;
+        }, (error) => {
+          queuedReload = null;
+          throw error;
+        });
+      }
+      return queuedReload;
+    }
+    if (refreshTimer !== null) {
+      clearTimeout(refreshTimer);
+      refreshTimer = null;
+    }
     const serial = ++requestSerial;
+    pendingSerial = serial;
     setStatus("Buscando prioridades reais…");
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 12_000);
@@ -174,6 +203,7 @@ export function createAutopilotUI({ getToken, openArea, notify }) {
   }
 
   function bind() {
+    bound = true;
     document.getElementById("autopilotRefresh")?.addEventListener("click", () => load({ force: true }));
     document.getElementById("autopilotConfirmCancel")?.addEventListener("click", closeConfirm);
     document.getElementById("autopilotConfirmClose")?.addEventListener("click", closeConfirm);
@@ -184,7 +214,21 @@ export function createAutopilotUI({ getToken, openArea, notify }) {
     });
   }
 
-  function invalidate() { fetchedAt = 0; }
-  function show() { load(); }
+  function invalidate() {
+    fetchedAt = 0;
+    // Descarta qualquer GET iniciado antes do snapshot. O próprio GET não
+    // escreve no Firestore, então esta atualização não causa um novo ciclo.
+    requestSerial++;
+    if (refreshTimer !== null) clearTimeout(refreshTimer);
+    refreshTimer = null;
+    if (!bound || !isVisible()) return;
+    // Snapshots consecutivos (cache, servidor e eco de gravação) viram uma
+    // única busca. Se houver GET pendente, load(force) aguarda sua conclusão.
+    refreshTimer = setTimeout(() => {
+      refreshTimer = null;
+      if (isVisible()) void load({ force: true });
+    }, 500);
+  }
+  function show() { return load({ force: Boolean(pendingLoad && pendingSerial !== requestSerial) }); }
   return { bind, load, invalidate, show };
 }
