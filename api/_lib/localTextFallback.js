@@ -290,8 +290,10 @@ function extractAmountFromText(text) {
 }
 
 function guessType(text) {
-  const norm = String(text || "").toLowerCase();
-  return FIN_INCOME_HINTS.some((kw) => norm.includes(kw)) ? "receita" : "despesa";
+  const norm = String(text || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const explicitVerb = norm.match(/\b(gastei|gasto|paguei|comprei|desembolsei|recebi|ganhei|vendi)\b/);
+  if (explicitVerb) return /^(recebi|ganhei|vendi)$/.test(explicitVerb[1]) ? "receita" : "despesa";
+  return FIN_INCOME_HINTS.some((kw) => norm.includes(kw.normalize("NFD").replace(/[\u0300-\u036f]/g, ""))) ? "receita" : "despesa";
 }
 
 function normalizeCategoryText(value) {
@@ -336,7 +338,7 @@ function guessSpecificCategoryId(text, type, categories) {
   // Categorias custom sem lista de sinônimos própria: casa por palavra do label.
   for (const cat of categories || []) {
     if (cat.type !== type) continue;
-    const words = String(cat.label || "").replace(/^\S+\s*/, "").toLowerCase().split(/\s+/).filter((w) => w.length > 3);
+    const words = String(cat.label || "").replace(/^\p{Extended_Pictographic}\uFE0F?\s*/u, "").toLowerCase().split(/\s+/).filter((w) => w.length > 3);
     for (const w of words) {
       const normalizedWord = normalizeCategoryText(w).trim();
       if (normalizedWord.length > bestLen && includesCategoryKeyword(working, w)) {

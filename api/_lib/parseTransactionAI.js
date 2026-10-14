@@ -18,7 +18,7 @@
 const { fetchGeminiJson, GEMINI_MODEL } = require("./geminiFetch");
 const { guessSpecificCategoryId } = require("./localTextFallback");
 
-function buildSystemPrompt({ todayIso, categoryList }) {
+function buildSystemPrompt({ todayIso, categoryList, mediaMode = false }) {
   return `Você extrai dados de um lançamento financeiro a partir do que o usuário mandou (uma frase em português, OU a foto/PDF de um cupom fiscal, boleto ou comprovante).
 Data de hoje: ${todayIso}.
 
@@ -27,10 +27,11 @@ ${categoryList}
 
 Regras OBRIGATÓRIAS:
 - "amount": número positivo em reais (ex.: 32.5). Se for uma foto de cupom, use o VALOR TOTAL da compra (procure por "TOTAL", "VALOR A PAGAR" — não some cada item à mão se já houver um total impresso). Obrigatório.
-- "date": se houver referência de data relativa no texto ("ontem", "anteontem"/"antes de ontem", "semana passada", "segunda-feira", "dia 12", "27/06" etc.), calcule a data real YYYY-MM-DD a partir de hoje. Se for cupom fiscal com data impressa, use essa data. Sem nenhuma referência, use hoje.
+- "date": se houver referência de data relativa no texto ("ontem", "anteontem"/"antes de ontem", "semana passada", "segunda-feira", "dia 12", "27/06" etc.), calcule a data real YYYY-MM-DD a partir de hoje. Se for cupom fiscal com data impressa, use essa data. Para boleto NÃO pago, nunca use o vencimento como data de pagamento. Sem nenhuma referência, use hoje.
 - "type": "despesa" por padrão. Use "receita" APENAS se for entrada de dinheiro (salário, recebimento, venda, reembolso, freelance, rendimento etc.) — cupom fiscal é sempre "despesa".
 - "categoryId": escolha o id que melhor descreve o que foi dito/comprado. Priorize o mais específico (ex.: se a frase cita "mercado" ou o cupom é de supermercado, escolha "mercado" — não "outros"). Deve ser do mesmo tipo de "type". NUNCA escolha uma categoria genérica tipo "outros"/"outros_receita" se qualquer categoria mais específica da lista puder se aplicar pelo SENTIDO do que foi dito, mesmo sem a palavra exata (ex.: "gastei com o veterinário" → categoria de pet; "comprei fralda" → categoria de filhos/família; "paguei o seguro do carro" → categoria de seguros). Só use "outros"/"outros_receita" quando genuinely nenhuma categoria da lista tiver relação com o que foi dito.
 - "description": 2 a 5 palavras que descrevam O QUE foi gasto/recebido — NÃO use o nome da categoria como descrição. Se for cupom, use o nome do estabelecimento (ex.: "Supermercado Extra", "Farmácia Drogasil"). Se for texto, extraia do que foi dito, removendo só conectores ("gastei", "paguei", "recebi", "reais", "de", "com", "no", "na" etc.).
+${mediaMode ? '- Para imagem/PDF, informe também "documentKind" (cupom, nota_fiscal, comprovante, boleto ou outro), "paymentStatus" (pago, pendente ou desconhecido) e "dueDate" somente quando o vencimento estiver legível. Boleto com código de barras e vencimento, sem comprovante de quitação, é pendente. Nota fiscal não comprova sozinha a quitação. Se o valor total não estiver legível, não invente.' : ''}
 
 Exemplo 1 — entrada: "gastei 32 reais no ifood ontem"
 Saída: {"type":"despesa","amount":32,"categoryId":"alimentacao","description":"iFood","date":"${todayIso}"}
@@ -48,7 +49,7 @@ Saída: {"type":"despesa","amount":143.90,"categoryId":"mercado","description":"
 // Faz a chamada ao Gemini com o "contents" já montado (texto OU
 // imagem+texto) e valida/normaliza a resposta. Uso interno — quem chama
 // de fora é parseTransactionText() ou parseTransactionImage().
-async function callGeminiForEntry({ contents, categories, today }) {
+async function callGeminiForEntry({ contents, categories, today, mediaMode = false }) {
   if (!Array.isArray(categories) || categories.length === 0) {
     return { ok: false, status: 400, error: "invalid_categories" };
   }
@@ -60,7 +61,7 @@ async function callGeminiForEntry({ contents, categories, today }) {
   const todayIso = /^\d{4}-\d{2}-\d{2}$/.test(today) ? today : new Date().toISOString().slice(0, 10);
   const categoryIds = categories.map((c) => c.id);
   const categoryList = categories.map((c) => `- ${c.id} (${c.type}): ${c.label}`).join("\n");
-  const systemPrompt = buildSystemPrompt({ todayIso, categoryList });
+  const systemPrompt = buildSystemPrompt({ todayIso, categoryList, mediaMode });
 
   const aiResult = await fetchGeminiJson({
     model: GEMINI_MODEL,
@@ -68,6 +69,7 @@ async function callGeminiForEntry({ contents, categories, today }) {
     systemPrompt,
     contents,
     label: "transaction",
+    timeoutMs: mediaMode ? 14000 : 9000,
     generationConfig: {
       maxOutputTokens: 200,
       responseMimeType: "application/json",
@@ -79,8 +81,13 @@ async function callGeminiForEntry({ contents, categories, today }) {
           categoryId: { type: "string", enum: categoryIds },
           description: { type: "string" },
           date: { type: "string" },
+          ...(mediaMode ? {
+            documentKind: { type: "string", enum: ["cupom", "nota_fiscal", "comprovante", "boleto", "outro"] },
+            paymentStatus: { type: "string", enum: ["pago", "pendente", "desconhecido"] },
+            dueDate: { type: "string" },
+          } : {}),
         },
-        required: ["type", "amount", "categoryId", "description", "date"],
+        required: ["type", "amount", "categoryId", "description", "date", ...(mediaMode ? ["documentKind", "paymentStatus"] : [])],
       },
     },
   });
@@ -88,9 +95,9 @@ async function callGeminiForEntry({ contents, categories, today }) {
   if (!aiResult.ok) return aiResult;
   const parsed = aiResult.parsed;
 
-  const validIds = new Set(categoryIds);
   const type = parsed.type === "receita" ? "receita" : "despesa";
   const amount = Math.round(Number(parsed.amount) * 100) / 100;
+  const validIds = new Set(categories.filter((c) => c.type === type).map((c) => c.id));
   let categoryId = validIds.has(parsed.categoryId)
     ? parsed.categoryId
     : type === "receita" ? "outros_receita" : "outros";
@@ -104,7 +111,17 @@ async function callGeminiForEntry({ contents, categories, today }) {
     return { ok: false, status: 422, error: "ai_invalid_amount" };
   }
 
-  return { ok: true, entry: { type, amount, categoryId, description, date } };
+  const result = { ok: true, entry: { type, amount, categoryId, description, date } };
+  if (mediaMode) {
+    const kinds = ["cupom", "nota_fiscal", "comprovante", "boleto", "outro"];
+    const statuses = ["pago", "pendente", "desconhecido"];
+    result.mediaAssessment = {
+      documentKind: kinds.includes(parsed.documentKind) ? parsed.documentKind : "outro",
+      paymentStatus: statuses.includes(parsed.paymentStatus) ? parsed.paymentStatus : "desconhecido",
+      dueDate: /^\d{4}-\d{2}-\d{2}$/.test(parsed.dueDate) ? parsed.dueDate : "",
+    };
+  }
+  return result;
 }
 
 // categories: [{id, type, label}], today: "YYYY-MM-DD", text: string livre
@@ -123,18 +140,56 @@ async function parseTransactionText({ text, categories, today }) {
 // imageBase64: string base64 SEM o prefixo "data:...;base64,", mimeType:
 // ex. "image/jpeg". Usado pelo webhook do WhatsApp quando a pessoa manda
 // foto ou PDF de cupom/boleto/comprovante em vez de texto.
-async function parseTransactionImage({ imageBase64, mimeType, categories, today }) {
+async function parseTransactionImage({ imageBase64, mimeType, categories, today, caption = "" }) {
   if (!imageBase64 || typeof imageBase64 !== "string") {
     return { ok: false, status: 400, error: "invalid_image" };
   }
   return callGeminiForEntry({
     contents: [
       { inlineData: { mimeType: mimeType || "image/jpeg", data: imageBase64 } },
-      { text: "Extraia o lançamento financeiro desta foto ou PDF de cupom, boleto ou comprovante, seguindo as regras do systemInstruction." },
+      { text: `Extraia os dados desta foto ou PDF de cupom, nota fiscal, boleto ou comprovante. Legenda da pessoa: ${String(caption || "").slice(0, 300)}. Siga as regras do systemInstruction.` },
     ],
     categories,
     today,
+    mediaMode: true,
   });
+}
+
+// A pessoa também pode enviar uma foto de anotação (ou um PDF simples) em
+// vez de digitar. Guardamos somente a transcrição confirmada, nunca a imagem
+// binária no documento Firestore de 1 MiB.
+async function parseNoteImage({ imageBase64, mimeType, caption = "" }) {
+  if (!imageBase64 || typeof imageBase64 !== "string") {
+    return { ok: false, status: 400, error: "invalid_image" };
+  }
+  if (!process.env.GEMINI_API_KEY) {
+    return { ok: false, status: 503, error: "ai_not_configured" };
+  }
+  const result = await fetchGeminiJson({
+    model: GEMINI_MODEL,
+    apiKey: process.env.GEMINI_API_KEY,
+    label: "note_ocr",
+    timeoutMs: 14000,
+    systemPrompt: "Transcreva fielmente a anotação desta imagem/PDF em português. Não invente trechos ilegíveis, dados pessoais ou valores. Retorne título curto e conteúdo em JSON. Se não houver texto legível, use conteúdo vazio.",
+    contents: [
+      { inlineData: { mimeType: mimeType || "image/jpeg", data: imageBase64 } },
+      { text: `Legenda fornecida: ${String(caption).slice(0, 300)}. Transcreva o texto visível.` },
+    ],
+    generationConfig: {
+      maxOutputTokens: 700,
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: "object",
+        properties: { title: { type: "string" }, content: { type: "string" } },
+        required: ["title", "content"],
+      },
+    },
+  });
+  if (!result.ok) return result;
+  const title = String(result.parsed?.title || "").trim().slice(0, 80);
+  const content = String(result.parsed?.content || "").trim().slice(0, 4000);
+  if (!content) return { ok: false, status: 422, error: "unreadable_note" };
+  return { ok: true, note: { title: title || content.slice(0, 40), description: content } };
 }
 
 // Áudios do WhatsApp chegam como OGG/Opus na maior parte dos aparelhos.
@@ -174,4 +229,4 @@ async function transcribeAudio({ audioBase64, mimeType }) {
   return result.ok && transcript ? { ok: true, transcript } : { ok: false, status: result.status || 422, error: "audio_not_understood" };
 }
 
-module.exports = { parseTransactionText, parseTransactionImage, transcribeAudio };
+module.exports = { parseTransactionText, parseTransactionImage, parseNoteImage, transcribeAudio };

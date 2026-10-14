@@ -220,7 +220,7 @@ function goalTitleFromCommand(text) {
 // Comandos que precisam funcionar mesmo quando a IA estiver sem chave,
 // temporariamente indisponível ou responder fora do schema. São consultas
 // sem ambiguidade e não devem cair no "não consegui entender".
-function parseDeterministicIntent(text, todayIso) {
+function parseDeterministicIntent(text, todayIso, categories = []) {
   const command = normalizeQuickCommand(text);
   const clean = command.replace(/[!?.,;:]+$/g, "").trim();
   if (/^(ajuda|help|comandos?|o que (voce|vc) (faz|entende))$/.test(clean)) {
@@ -328,20 +328,36 @@ function parseDeterministicIntent(text, todayIso) {
       .replace(/\s+/g, " ").trim();
     if (query) return { ok: true, intent: "finance_search", search: { query, month: null, year: null } };
   }
+  // Lançamentos inequívocos não precisam esperar pela IA. Exigimos um
+  // verbo de movimento ou a forma curta "35 conta de luz", além de uma
+  // categoria explícita; frases de intenção futura ficam para o modelo.
+  const clearMovement = /^\s*(?:gastei|gasto|paguei|comprei|recebi|ganhei|vendi)\b/i.test(text);
+  const amountFirst = /^\s*(?:r\$\s*)?\d[\d.,]*\s+\S/.test(text);
+  const amountLast = /^\s*[\p{L}\s'’-]{2,80}\s+(?:r\$\s*)?\d[\d.,]*(?:\s*(?:reais|real))?(?:\s+(?:no|na|pelo)\s+(?:pix|dinheiro|cartão|cartao))?\s*$/iu.test(text);
+  const futureOrCorrection = /\b(?:vou|preciso|lembrar|lembrete|amanh[ãa]|pr[oó]xim[ao]|errei|corrig[eiir]|na verdade)\b/i.test(text);
+  if ((clearMovement || amountFirst || amountLast) && !futureOrCorrection && Array.isArray(categories) && categories.length) {
+    const local = localExpenseFallback({ text, categories, todayIso });
+    if (local && guessSpecificCategoryId(text, local.type, categories)) {
+      return { ok: true, intent: "expense", entry: local };
+    }
+  }
   return null;
 }
 
-async function parseTextIntent({ text, categories, today, lastFinanceEntry }) {
+async function parseTextIntent({ text, categories, today, lastFinanceEntry, aiEnabled = true }) {
   if (!text || typeof text !== "string" || !text.trim() || text.length > 400) {
     return { ok: false, status: 400, error: "invalid_text" };
   }
   const todayIso = /^\d{4}-\d{2}-\d{2}$/.test(today) ? today : new Date().toISOString().slice(0, 10);
   const rawMessage = text.trim().slice(0, 400);
-  const deterministic = parseDeterministicIntent(rawMessage, todayIso);
+  const deterministic = parseDeterministicIntent(rawMessage, todayIso, categories);
   if (deterministic) return deterministic;
 
   if (!Array.isArray(categories) || categories.length === 0) {
     return { ok: false, status: 400, error: "invalid_categories" };
+  }
+  if (!aiEnabled) {
+    return { ok: false, status: 503, error: "ai_parsing_disabled" };
   }
   if (!process.env.GEMINI_API_KEY) {
     console.error("GEMINI_API_KEY não configurada.");
@@ -366,7 +382,7 @@ async function parseTextIntent({ text, categories, today, lastFinanceEntry }) {
     // de primeira, e o custo extra de tokens de "pensamento" é
     // insignificante perto de gastar uma segunda mensagem pedindo pra
     // pessoa reformular.
-    thinkingLevel: "high",
+    thinkingLevel: "medium",
     generationConfig: {
       maxOutputTokens: 400,
       responseMimeType: "application/json",
@@ -430,10 +446,10 @@ async function parseTextIntent({ text, categories, today, lastFinanceEntry }) {
     // o caso "escrevi um gasto simples e a IA deu uma engasgada".
     const local = localExpenseFallback({ text: rawMessage, categories, todayIso });
     if (local) {
-      console.warn("Intent do WhatsApp recuperada localmente após falha do Gemini:", rawMessage);
+      console.warn("Intent do WhatsApp recuperada localmente após falha do Gemini.");
       return { ok: true, intent: "expense", entry: local };
     }
-    console.error("Não deu pra recuperar a intenção localmente (sem valor reconhecível):", rawMessage, aiResult.error);
+    console.error("Não deu pra recuperar a intenção localmente:", aiResult.error);
     return aiResult;
   }
 
@@ -486,7 +502,7 @@ async function parseTextIntent({ text, categories, today, lastFinanceEntry }) {
       searchQuery = stripKnownTriggers(rawMessage, FINANCE_SEARCH_TRIGGERS).slice(0, 60);
     }
     if (!searchQuery) {
-      console.error("finance_search sem palavra-chave recuperável:", rawMessage);
+      console.error("finance_search sem palavra-chave recuperável");
       return { ok: false, status: 422, error: "ai_invalid_search" };
     }
     const month = Number.isInteger(Number(parsed.searchMonth)) ? Number(parsed.searchMonth) : null;
@@ -521,7 +537,7 @@ async function parseTextIntent({ text, categories, today, lastFinanceEntry }) {
       if (Number.isFinite(localAmount) && localAmount > 0) {
         patch.amount = localAmount;
       } else {
-        console.error("finance_edit_last sem nenhum campo recuperável:", rawMessage);
+        console.error("finance_edit_last sem nenhum campo recuperável");
         return { ok: false, status: 422, error: "ai_empty_edit" };
       }
     }
@@ -536,7 +552,7 @@ async function parseTextIntent({ text, categories, today, lastFinanceEntry }) {
       if (!title) title = stripKnownTriggers(rawMessage, TASK_CREATE_TRIGGERS).slice(0, 120);
       title = stripDateWordsFromDescription(title) || title;
       if (!title) {
-        console.error("task_action create sem título recuperável:", rawMessage);
+        console.error("task_action create sem título recuperável");
         return { ok: false, status: 422, error: "ai_invalid_task_title" };
       }
       const dueDate = detectDate(rawMessage, todayIso, "future") ||
@@ -547,7 +563,7 @@ async function parseTextIntent({ text, categories, today, lastFinanceEntry }) {
     const query = String(parsed.taskQuery || "").trim().slice(0, 80)
       || stripKnownTriggers(rawMessage, TASK_COMPLETE_DELETE_TRIGGERS).slice(0, 80);
     if (!query) {
-      console.error("task_action complete/delete sem alvo recuperável:", rawMessage);
+      console.error("task_action complete/delete sem alvo recuperável");
       return { ok: false, status: 422, error: "ai_invalid_task_query" };
     }
     return { ok: true, intent: "task_action", task: { action, query } };
@@ -563,7 +579,7 @@ async function parseTextIntent({ text, categories, today, lastFinanceEntry }) {
     const query = String(parsed.noteQuery || "").trim().slice(0, 80)
       || stripKnownTriggers(rawMessage, NOTE_SEARCH_TRIGGERS).slice(0, 80);
     if (!query) {
-      console.error("note_action search/delete sem alvo recuperável:", rawMessage);
+      console.error("note_action search/delete sem alvo recuperável");
       return { ok: false, status: 422, error: "ai_invalid_note_query" };
     }
     return { ok: true, intent: "note_action", note: { action, query } };
@@ -578,7 +594,7 @@ async function parseTextIntent({ text, categories, today, lastFinanceEntry }) {
       if (!Number.isFinite(target) || target <= 0) target = extractAmountFromText(rawMessage);
       if (!title) title = stripKnownTriggers(rawMessage, GOAL_CREATE_TRIGGERS).slice(0, 120);
       if (!title || !Number.isFinite(target) || target <= 0) {
-        console.error("goal_action create sem título/alvo recuperável:", rawMessage);
+        console.error("goal_action create sem título/alvo recuperável");
         return { ok: false, status: 422, error: "ai_invalid_goal_create" };
       }
       return { ok: true, intent: "goal_action", goal: { action, title, target } };
@@ -589,7 +605,7 @@ async function parseTextIntent({ text, categories, today, lastFinanceEntry }) {
     let value = Number(parsed.goalProgressValue);
     if (!Number.isFinite(value)) value = extractAmountFromText(rawMessage);
     if (!query || !Number.isFinite(value)) {
-      console.error("goal_action update sem alvo/valor recuperável:", rawMessage);
+      console.error("goal_action update sem alvo/valor recuperável");
       return { ok: false, status: 422, error: "ai_invalid_goal_update" };
     }
     return { ok: true, intent: "goal_action", goal: { action, query, mode, value } };
@@ -607,7 +623,7 @@ async function parseTextIntent({ text, categories, today, lastFinanceEntry }) {
     const date = detectDate(rawMessage, todayIso, "future") ||
       (/^\d{4}-\d{2}-\d{2}$/.test(parsed.eventDate) ? parsed.eventDate : "");
     if (!title || !date) {
-      console.error("event_create sem título/data recuperável:", rawMessage);
+      console.error("event_create sem título/data recuperável");
       return { ok: false, status: 422, error: "ai_invalid_event" };
     }
     const time = extractTimeFromText(rawMessage) ||
@@ -636,7 +652,7 @@ async function parseTextIntent({ text, categories, today, lastFinanceEntry }) {
     amount = extractAmountFromText(rawMessage);
   }
   if (!Number.isFinite(amount) || amount <= 0) {
-    console.error("expense sem nenhum valor recuperável (IA e regex local falharam):", rawMessage);
+    console.error("expense sem nenhum valor recuperável (IA e regex local falharam)");
     return { ok: false, status: 422, error: "ai_invalid_amount" };
   }
 

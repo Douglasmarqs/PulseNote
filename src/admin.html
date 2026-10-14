@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="robots" content="noindex,nofollow" />
+  <meta name="theme-color" content="#f6f5fc" />
+  <title>Administração · PulseNote</title>
+  <link rel="icon" type="image/png" href="/icons/favicon-32.png" />
+  <link rel="stylesheet" href="/src/admin.css" />
+</head>
+<body>
+  <div class="ad-shell">
+    <aside class="ad-sidebar" id="adSidebar" aria-label="Seções administrativas">
+      <a class="ad-brand" href="/app" aria-label="PulseNote, voltar ao aplicativo">
+        <span class="ad-brand-mark">⌁</span><span>PulseNote</span>
+      </a>
+      <p class="ad-sidebar-label">PAINEL ADMINISTRATIVO</p>
+      <nav class="ad-nav" id="adNav" aria-label="Navegação do painel">
+        <button type="button" class="is-active" data-section="overview"><span>⌂</span> Visão geral</button>
+        <button type="button" data-section="users"><span>♧</span> Usuários</button>
+        <button type="button" data-section="plans"><span>▣</span> Planos</button>
+        <button type="button" data-section="subscriptions"><span>◷</span> Assinaturas</button>
+        <button type="button" data-section="charges"><span>▤</span> Cobranças</button>
+        <button type="button" data-section="features"><span>◇</span> Recursos</button>
+        <button type="button" data-section="integrations"><span>↗</span> Integrações</button>
+        <button type="button" data-section="settings"><span>⚙</span> Configurações</button>
+      </nav>
+      <a class="ad-back" href="/app">← Voltar ao aplicativo</a>
+    </aside>
+
+    <div class="ad-page">
+      <header class="ad-topbar">
+        <button class="ad-menu-button" id="adMenuButton" type="button" aria-expanded="false" aria-controls="adSidebar" aria-label="Abrir menu">☰</button>
+        <span class="ad-topbar-title">PulseNote <span>Admin</span></span>
+        <span class="ad-account" id="adAccount">Verificando acesso…</span>
+      </header>
+
+      <main class="ad-main">
+        <div id="adGate" class="ad-gate" role="status">Verificando sua permissão de administrador…</div>
+        <div id="adContent" hidden>
+          <div class="ad-heading"><div><p class="ad-eyebrow">CONTROLE DO PULSENOTE</p><h1>Administração</h1><p>Usuários, recursos e operação em um só lugar.</p></div><span class="ad-session" id="adSession"></span></div>
+
+          <div class="ad-stats" id="adStats" aria-label="Métricas dos últimos 30 dias"></div>
+
+          <div class="ad-mobile-tabs" id="adMobileTabs" aria-label="Seções administrativas"></div>
+
+          <section class="ad-section is-active" id="ad-overview" aria-labelledby="ad-overview-title">
+            <div class="ad-overview-grid">
+              <div class="ad-card"><div class="ad-card-head"><div><h2 id="ad-overview-title">Usuários</h2><p>Contas cadastradas no Firebase Auth</p></div><button class="ad-link" type="button" data-go="users">Ver todos →</button></div><div id="adUsersPreview"></div></div>
+              <div class="ad-overview-side">
+                <div class="ad-card"><div class="ad-card-head"><div><h2>Integrações</h2><p>Estado da configuração no servidor</p></div><button class="ad-link" type="button" data-go="integrations">Detalhes →</button></div><div id="adIntegrationsPreview"></div></div>
+                <div class="ad-card ad-maintenance-card"><div class="ad-card-head"><div><h2>Modo manutenção</h2><p>Bloqueia gravações no app e nas APIs integradas.</p></div><span class="ad-pill" id="adMaintenanceStatus">Carregando…</span></div><button type="button" class="ad-subtle-button" data-go="settings">Gerenciar manutenção →</button></div>
+              </div>
+            </div>
+            <div class="ad-card ad-audit-card"><div class="ad-card-head"><div><h2>Atividade administrativa</h2><p>Alterações realizadas neste painel</p></div><button class="ad-link" type="button" id="adAuditRefresh">Atualizar ↻</button></div><div id="adAuditPreview" class="ad-empty">Nenhuma ação registrada ainda.</div></div>
+          </section>
+
+          <section class="ad-section" id="ad-users" aria-labelledby="ad-users-title">
+            <div class="ad-card"><div class="ad-card-head"><div><h2 id="ad-users-title">Usuários</h2><p>Consulte contas e gerencie o acesso. Dados pessoais de notas e finanças não aparecem aqui.</p></div></div>
+              <form id="adUserSearch" class="ad-inline-form"><input id="adUserEmail" type="email" autocomplete="off" placeholder="Buscar pelo e-mail exato" aria-label="E-mail do usuário" /><button class="ad-primary-button" type="submit">Buscar</button><button class="ad-subtle-button" id="adUserClear" type="button">Limpar</button></form>
+              <div id="adUsersList" class="ad-list"></div><div class="ad-list-footer"><span id="adUsersPageLabel"></span><button class="ad-subtle-button" id="adUsersNext" type="button">Próxima página →</button></div>
+            </div>
+          </section>
+
+          <section class="ad-section" id="ad-plans" aria-labelledby="ad-plans-title">
+            <div class="ad-two-col"><div class="ad-card"><div class="ad-card-head"><div><h2 id="ad-plans-title">Planos de acesso</h2><p>Definem recursos liberados. Não geram pagamento automático.</p></div></div><div id="adPlansList" class="ad-list"></div></div>
+              <div class="ad-card"><h2>Criar ou editar plano</h2><form id="adPlanForm" class="ad-form">
+                <label>ID do plano <input name="id" required pattern="[a-z0-9_-]{2,40}" maxlength="40" placeholder="ex.: essencial" /></label>
+                <label>Nome <input name="name" required maxlength="80" placeholder="Ex.: Essencial" /></label>
+                <label>Descrição <textarea name="description" maxlength="300" rows="2" placeholder="O que este plano inclui"></textarea></label>
+                <div id="adPlanFeatures" class="ad-check-grid"></div>
+                <label class="ad-check"><input type="checkbox" name="active" checked /> Plano ativo</label>
+                <button class="ad-primary-button" type="submit">Salvar plano</button>
+              </form></div>
+            </div>
+          </section>
+
+          <section class="ad-section" id="ad-charges" aria-labelledby="ad-charges-title">
+            <div class="ad-two-col"><div class="ad-card"><div class="ad-card-head"><div><h2 id="ad-charges-title">Cobranças manuais</h2><p>Controle interno. Nenhum pagamento é enviado ou confirmado por um gateway.</p></div></div><div id="adChargesList" class="ad-list"></div></div>
+              <div class="ad-card"><h2>Novo registro manual</h2><form id="adChargeForm" class="ad-form">
+                <label>UID do usuário <input name="uid" required maxlength="128" placeholder="UID do Firebase Auth" /></label>
+                <label>Valor em reais <input name="amount" required inputmode="decimal" placeholder="0,00" /></label>
+                <label>Vencimento <input name="dueDate" type="date" /></label>
+                <label>Observação <textarea name="note" maxlength="300" rows="2"></textarea></label>
+                <button class="ad-primary-button" type="submit">Registrar cobrança</button>
+              </form></div>
+            </div>
+          </section>
+
+          <section class="ad-section" id="ad-subscriptions" aria-labelledby="ad-subscriptions-title">
+            <div class="ad-two-col"><div class="ad-card"><div class="ad-card-head"><div><h2 id="ad-subscriptions-title">Assinaturas manuais</h2><p>Controle de plano, estado e validade. Não efetua cobrança automática.</p></div></div><div id="adSubscriptionsList" class="ad-list"></div></div>
+              <div class="ad-card"><h2>Gerenciar acesso</h2><form id="adSubscriptionForm" class="ad-form">
+                <label>UID do usuário <input name="uid" required maxlength="128" placeholder="UID do Firebase Auth" /></label>
+                <label>Plano <select name="planId" required id="adSubscriptionPlanSelect"></select></label>
+                <label>Situação <select name="status"><option value="active">Ativa</option><option value="paused">Pausada</option><option value="cancelled">Cancelada</option></select></label>
+                <label>Válida até (opcional) <input name="validUntil" type="date" /></label>
+                <button class="ad-primary-button" type="submit">Salvar assinatura</button>
+              </form></div>
+            </div>
+          </section>
+
+          <section class="ad-section" id="ad-features" aria-labelledby="ad-features-title">
+            <div class="ad-card ad-narrow-card"><h2 id="ad-features-title">Recursos do produto</h2><p>As alterações ficam no servidor. Endpoints integrados devem consultar estas configurações antes de executar ações.</p><form id="adFeaturesForm" class="ad-form"><div id="adFeatureSwitches"></div><button class="ad-primary-button" type="submit">Salvar recursos</button></form></div>
+          </section>
+
+          <section class="ad-section" id="ad-integrations" aria-labelledby="ad-integrations-title">
+            <div class="ad-card ad-narrow-card"><h2 id="ad-integrations-title">Integrações</h2><p>Verificação da presença de credenciais no ambiente de produção. Não executa envios de teste.</p><div id="adIntegrationsList"></div><p class="ad-fineprint" id="adIntegrationNote"></p></div>
+          </section>
+
+          <section class="ad-section" id="ad-settings" aria-labelledby="ad-settings-title">
+            <div class="ad-card ad-narrow-card"><h2 id="ad-settings-title">Configurações gerais</h2><p>Esses valores são lidos pelo servidor e pelas regras do Firestore.</p><form id="adSettingsForm" class="ad-form">
+              <label class="ad-switch-row"><span><strong>Modo manutenção</strong><small>Suspende gravações dos usuários durante uma intervenção.</small></span><input id="adMaintenanceInput" type="checkbox" name="maintenance" /></label>
+              <label>Mensagem de manutenção <textarea name="maintenanceMessage" maxlength="240" rows="2"></textarea></label>
+              <label>E-mail de suporte <input name="supportEmail" type="email" maxlength="180" placeholder="suporte@exemplo.com" /></label>
+              <button class="ad-primary-button" type="submit">Salvar configurações</button>
+            </form></div>
+          </section>
+        </div>
+      </main>
+    </div>
+  </div>
+  <div id="adToast" class="ad-toast" role="status" aria-live="polite" hidden></div>
+  <script type="module" src="/src/admin.js"></script>
+</body>
+</html>

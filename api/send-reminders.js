@@ -50,6 +50,8 @@
 const admin = require("firebase-admin");
 const crypto = require("node:crypto");
 const { Receiver } = require("@upstash/qstash");
+const { getRuntimeConfig } = require("./_lib/adminConfig");
+const { getUserEntitlements } = require("./_lib/admin");
 const DEFAULT_TIME_ZONE = "America/Sao_Paulo";
 
 // Cooldown (em horas) até poder notificar de novo o MESMO tipo de aviso
@@ -432,15 +434,25 @@ module.exports = async (req, res) => {
   const fb = getFirebaseAdmin();
   const db = fb.firestore();
   const now = new Date();
+  const heartbeatRef = db.collection("systemHealth").doc("reminders");
 
   let checked = 0;
   let notified = 0;
   const accepted = { push: 0, whatsapp: 0 };
   let skippedNoChannel = 0;
+  let skippedByPlan = 0;
   const errors = [];
   const deferredErrors = [];
 
   try {
+    const runtime = await getRuntimeConfig(db);
+    // O cron deve continuar respondendo ao QStash durante uma pausa
+    // administrativa; ele simplesmente não envia mensagens nesta rodada.
+    if (runtime.maintenance.enabled || !runtime.features.reminders) {
+      await heartbeatRef.set({ lastRunAt: now.toISOString(), status: "skipped",
+        reason: runtime.maintenance.enabled ? "maintenance" : "reminders_disabled" }, { merge: true });
+      return res.status(200).json({ ok: true, skipped: runtime.maintenance.enabled ? "maintenance" : "reminders_disabled", checked: 0, notified: 0 });
+    }
     const snap = await db.collection("userData").get();
 
     for (const docSnap of snap.docs) {
@@ -452,6 +464,14 @@ module.exports = async (req, res) => {
 
       const notifications = buildNotifications(state, todayIso, now, timeZone);
       if (notifications.length === 0) continue;
+
+      const entitlement = await getUserEntitlements(db, uid);
+      const planAllows = (feature) => entitlement.status === "unassigned"
+        || (entitlement.status === "active" && entitlement.features[feature] === true);
+      if (!planAllows("reminders")) {
+        skippedByPlan++;
+        continue;
+      }
 
       const tokens = Array.isArray(state.fcmTokens) ? state.fcmTokens : [];
       let invalidTokens = [];
@@ -467,7 +487,9 @@ module.exports = async (req, res) => {
           }
           if (!successes) throw new Error("push_no_tokens_accepted");
         }]);
-        if (state.whatsappReminderOptIn && state.whatsappLinkedPhone) channels.push(["whatsapp", () => sendWhatsAppReminder(state.whatsappLinkedPhone, n.plain)]);
+        if (runtime.features.whatsapp && planAllows("whatsapp") && state.whatsappReminderOptIn && state.whatsappLinkedPhone) {
+          channels.push(["whatsapp", () => sendWhatsAppReminder(state.whatsappLinkedPhone, n.plain)]);
+        }
         if (!channels.length) skippedNoChannel++;
         for (const [channel, send] of channels) {
           try {
@@ -493,6 +515,9 @@ module.exports = async (req, res) => {
       // nos logs da Vercel.
       console.error("Falhas ao enviar lembretes:", JSON.stringify({ errors, deferredErrors }));
     }
+    await heartbeatRef.set({ lastRunAt: now.toISOString(),
+      status: errors.length ? "error" : deferredErrors.length ? "degraded" : "ok",
+      checked, notified, accepted, failures: errors.length, deferred: deferredErrors.length }, { merge: true });
     return res.status(errors.length ? 502 : 200).json({
       ok: errors.length === 0 && deferredErrors.length === 0,
       degraded: deferredErrors.length > 0,
@@ -500,11 +525,14 @@ module.exports = async (req, res) => {
       notified,
       accepted,
       skippedNoChannel,
+      skippedByPlan,
       errors,
       deferredErrors,
     });
   } catch (err) {
     console.error("Erro ao rodar send-reminders:", err);
+    try { await heartbeatRef.set({ lastRunAt: now.toISOString(), status: "error", failures: 1 }, { merge: true }); }
+    catch { /* a falha principal permanece visível no log e na resposta */ }
     return res.status(500).json({ error: "internal_error" });
   }
 };

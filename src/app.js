@@ -2,6 +2,8 @@
 // PulseNote — Autenticação e sincronização via Firebase
 // ============================================================
 import { auth, db } from "./firebase-init.js";
+import { createAutopilotUI } from "./autopilot-ui.js";
+import { cloneState, changedStateKeys, mergeDirtyState } from "./state-sync.js";
 import {
   onAuthStateChanged,
   signOut,
@@ -17,6 +19,7 @@ import {
   setDoc,
   deleteDoc,
   onSnapshot,
+  runTransaction,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 // ============================================================
@@ -169,6 +172,23 @@ function getStorageKey() {
 let currentUser   = null;   // objeto do usuário logado (Firebase Auth)
 let unsubscribeDoc = null;  // função para parar de "escutar" o Firestore
 let syncTimer      = null;
+const SERVER_OWNED_FIELDS = ["fcmTokens", "serverNotifications"];
+let observedState = null;
+const dirtyBases = {};
+const dirtyVersions = {};
+
+function pendingSyncKey() {
+  return currentUser ? `${BASE_STORAGE_KEY}:pending:${currentUser.uid}` : null;
+}
+
+function persistPendingSync() {
+  const key = pendingSyncKey();
+  if (!key) return;
+  try {
+    if (Object.keys(dirtyBases).length) localStorage.setItem(key, JSON.stringify(dirtyBases));
+    else localStorage.removeItem(key);
+  } catch { /* armazenamento indisponível; o estado atual segue em memória */ }
+}
 
 // ── Helpers de usuário (substituem getToken/getUser antigos) ──
 function getUser() {
@@ -208,6 +228,8 @@ function stripUndefinedDeep(value) {
 let _syncRetries = 0;
 async function syncToServer() {
   if (!currentUser || !currentUser.emailVerified || !state) return;
+  const fields = Object.keys(dirtyBases);
+  if (!fields.length) return;
 
   // Documento único por usuário: se ele crescer demais (fotos grandes,
   // muitos anos de lançamentos), o Firestore recusa a escrita (limite de
@@ -216,6 +238,8 @@ async function syncToServer() {
   const clean = stripUndefinedDeep(state);
   delete clean.fcmTokens;
   delete clean.serverNotifications;
+  const basesAtStart = cloneState(dirtyBases);
+  const versionsAtStart = { ...dirtyVersions };
   const approxBytes = new Blob([JSON.stringify(clean)]).size;
   if (approxBytes > 900_000) {
     console.error("Não foi possível sincronizar: os dados excedem o limite seguro do documento do Firestore.");
@@ -225,13 +249,35 @@ async function syncToServer() {
   }
 
   try {
-    await setDoc(doc(db, "userData", currentUser.uid), {
-      data: clean,
-      updatedAt: new Date().toISOString(),
-    }, { mergeFields: ["updatedAt", ...Object.keys(clean).map((key) => `data.${key}`)] });
+    const ref = doc(db, "userData", currentUser.uid);
+    const merged = await runTransaction(db, async (transaction) => {
+      const snapshot = await transaction.get(ref);
+      const remote = snapshot.exists() ? snapshot.data().data || {} : {};
+      const next = mergeDirtyState(remote, clean, basesAtStart);
+      const patch = {};
+      for (const field of fields) {
+        if (next[field] !== undefined) patch[field] = next[field];
+      }
+      transaction.set(ref, { data: patch, updatedAt: new Date().toISOString() }, {
+        mergeFields: ["updatedAt", ...Object.keys(patch).map((key) => `data.${key}`)],
+      });
+      return next;
+    });
+    for (const field of fields) {
+      if (dirtyVersions[field] === versionsAtStart[field]) {
+        delete dirtyBases[field];
+        delete dirtyVersions[field];
+      } else {
+        // A pessoa editou novamente durante a transação: o próximo merge
+        // usa esta gravação confirmada como base, sem perder a edição nova.
+        dirtyBases[field] = cloneState(merged[field]);
+      }
+    }
+    persistPendingSync();
     const key = getStorageKey();
     if (key) localStorage.setItem(key, JSON.stringify(state));
     _syncRetries = 0; // reset ao ter sucesso
+    if (Object.keys(dirtyBases).length) scheduleSyncToServer();
   } catch (err) {
     console.error("Erro ao salvar no Firestore:", err);
     const key = getStorageKey();
@@ -317,6 +363,19 @@ const appReady = new Promise((resolve) => {
         if (parsed && typeof parsed === "object") state = normalizeState(parsed);
       } catch { /* cache corrompido — ignora e segue com defaults */ }
     }
+    observedState = cloneState(state);
+    if (cached) {
+      try {
+        const pending = JSON.parse(localStorage.getItem(pendingSyncKey()) || "{}");
+        if (pending && typeof pending === "object" && !Array.isArray(pending)) {
+          for (const [field, base] of Object.entries(pending)) {
+            if (SERVER_OWNED_FIELDS.includes(field) || !(field in state)) continue;
+            dirtyBases[field] = base;
+            dirtyVersions[field] = 1;
+          }
+        }
+      } catch { /* metadados antigos/corrompidos — usa o servidor */ }
+    }
 
     renderAll(); // mostra algo imediatamente (cache ou defaults) enquanto busca o Firestore
 
@@ -325,13 +384,17 @@ const appReady = new Promise((resolve) => {
     // onSnapshot escuta mudanças em tempo real no Firestore.
     // É chamado: (1) imediatamente com os dados atuais, (2) toda vez
     // que outro dispositivo/aba salvar algo novo para ESTE MESMO usuário.
+    let firstSnapshotForUser = true;
     unsubscribeDoc = onSnapshot(
       userDocRef,
       (snapshot) => {
         if (snapshot.exists()) {
           const remote = snapshot.data().data;
           if (remote && typeof remote === "object") {
-            state = normalizeState(remote);
+            state = normalizeState(Object.keys(dirtyBases).length
+              ? mergeDirtyState(remote, state, dirtyBases)
+              : remote);
+            observedState = cloneState(state);
             const k = getStorageKey();
             if (k) localStorage.setItem(k, JSON.stringify(state));
           }
@@ -345,6 +408,9 @@ const appReady = new Promise((resolve) => {
         }
 
         renderAll(); // re-renderiza com os dados confirmados do servidor
+        autopilotUi.invalidate();
+        if (firstSnapshotForUser && Object.keys(dirtyBases).length) scheduleSyncToServer();
+        firstSnapshotForUser = false;
 
         if (!resolved) { resolved = true; resolve(); }
       },
@@ -362,6 +428,7 @@ const viewTitles = {
   planner: "Planner",
   notes: "Anotações",
   finances: "Finanças",
+  autopilot: "Pulse Autopilot",
   profile: "Perfil",
   settings: "Configurações",
 };
@@ -499,6 +566,7 @@ const appTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "America
 // pelos dados reais do usuário DEPOIS que o Firebase confirma o login
 // (dentro do bloco onAuthStateChanged, em appReady) — nunca antes disso.
 let state = loadDefaultState();
+observedState = cloneState(state);
 
 // Ponte para o notifications.js: como ele é um <script> normal (não um
 // módulo ES), não tem acesso direto às variáveis internas deste módulo.
@@ -529,6 +597,11 @@ const elements = {
   globalSearch: document.querySelector("#globalSearch"),
   toast: document.querySelector("#toast"),
 };
+const autopilotUi = createAutopilotUI({
+  getToken: () => currentUser,
+  openArea: (area) => setView(["finances", "planner", "notes"].includes(area) ? area : "dashboard"),
+  notify: (message) => showToast(message),
+});
 
 document.addEventListener("DOMContentLoaded", async () => {
   // Mostra overlay de carregamento enquanto o Firebase autentica.
@@ -603,12 +676,14 @@ document.addEventListener("DOMContentLoaded", async () => {
   setInterval(updateEventCountdowns, 30000);
 
   bindNavigation();
+  autopilotUi.bind();
   bindPlannerNav();
   bindPlannerQuickAdd();
   bindNoteDetail();
   bindForms();
   bindActions();
   bindSettingsView();
+  checkAdminAccess();
   bindThemeToggle();
   bindFinTabs();
   bindFinanceMonthControls();
@@ -625,6 +700,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     history.replaceState({ ...(history.state || {}), pnView: activeView, noteDetail: false }, "");
   }
   renderAll();
+  autopilotUi.load();
   handlePwaShortcutAction();
 });
 
@@ -994,6 +1070,20 @@ async function forceAppUpdate() {
 }
 
 
+async function checkAdminAccess() {
+  const card = document.getElementById("adminAccessCard");
+  if (!card || !currentUser?.emailVerified) return;
+  try {
+    const token = await currentUser.getIdToken();
+    const response = await fetch("/api/admin?action=me", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    card.hidden = response.status !== 200;
+  } catch {
+    card.hidden = true;
+  }
+}
+
 function bindSettingsView() {
   const msgEl = document.getElementById("settingsMessage");
   function showSettingsMsg(text, type) {
@@ -1155,6 +1245,24 @@ function bindSettingsView() {
     state.whatsappReminderOptIn = e.target.checked;
     saveState();
     showToast(e.target.checked ? "🔔 Lembretes por WhatsApp ativados!" : "Lembretes por WhatsApp desativados.");
+  });
+
+  // Este listener pertence à inicialização da tela, não à normalização de
+  // dados. Normalizar ocorre a cada snapshot; colocá-lo lá duplicava o
+  // handler e repetia pedidos de permissão e gravações.
+  document.getElementById("appReminderOptIn")?.addEventListener("change", async (e) => {
+    if (e.target.checked) {
+      const allowed = await window.requestNotificationPermission?.();
+      if (!allowed) {
+        state.appReminderOptIn = false;
+        e.target.checked = false;
+        saveState();
+        return;
+      }
+    }
+    state.appReminderOptIn = e.target.checked;
+    saveState();
+    showToast(e.target.checked ? "Lembretes no aplicativo ativados." : "Lembretes no aplicativo desativados.");
   });
 
   // ── WhatsApp: desvincular ──────────────────────────────────────────
@@ -1355,21 +1463,6 @@ function normalizeState(parsed) {
     if (!Number.isFinite(Number(t.reminder))) t.reminder = 15;
   });
 
-  // ── Notificações no aplicativo (push/local) ─────────────────────
-  document.getElementById("appReminderOptIn")?.addEventListener("change", async (e) => {
-    if (e.target.checked) {
-      const allowed = await window.requestNotificationPermission?.();
-      if (!allowed) {
-        state.appReminderOptIn = false;
-        e.target.checked = false;
-        saveState();
-        return;
-      }
-    }
-    state.appReminderOptIn = e.target.checked;
-    saveState();
-    showToast(e.target.checked ? "Lembretes no aplicativo ativados." : "Lembretes no aplicativo desativados.");
-  });
   parsed.notes.forEach((n) => { if (!n.tags) n.tags = []; });
   parsed.goals.forEach((g) => { if (!g.milestones) g.milestones = []; });
   return parsed;
@@ -1400,6 +1493,12 @@ function loadDefaultState() {
 // Salva mudanças localmente de imediato e agenda o envio para o Firestore
 // (debounce de 1.2s — evita gravar a cada tecla digitada, por exemplo)
 function saveState() {
+  for (const field of changedStateKeys(observedState, state, SERVER_OWNED_FIELDS)) {
+    if (!(field in dirtyBases)) dirtyBases[field] = cloneState(observedState?.[field]);
+    dirtyVersions[field] = (dirtyVersions[field] || 0) + 1;
+  }
+  observedState = cloneState(state);
+  persistPendingSync();
   const key = getStorageKey();
   if (key) localStorage.setItem(key, JSON.stringify(state));
   // Só agenda sync se já temos usuário autenticado e verificado.
@@ -1775,6 +1874,7 @@ function setView(view, { fromHistory = false } = {}) {
   // gente reexecuta o autofit pra medir e ajustar certo.
   if (view === "finances") fitCurrencyValues("finReceitas", "finDespesas", "finSaldo");
   if (view === "dashboard") fitCurrencyValues("summaryFinSaldo", "dashFinReceitas", "dashFinDespesas", "dashFinSaldo");
+  if (view === "autopilot") autopilotUi.show();
 
   // A navegação entre áreas ganha uma entrada real no histórico: voltar no
   // navegador/celular retorna à tela anterior em vez de sair do app.
