@@ -357,6 +357,7 @@ bindActions();
 onAuthStateChanged(auth, async (user) => {
   state.user = user;
   if (!user) {
+    $(".ad-shell").classList.add("is-locked");
     $("#adContent").hidden = true;
     $("#adGate").hidden = false;
     $("#adAccount").textContent = "Não conectado";
@@ -367,6 +368,7 @@ onAuthStateChanged(auth, async (user) => {
   try {
     await user.getIdToken(true);
     const data = await request("dashboard");
+    $(".ad-shell").classList.remove("is-locked");
     $("#adGate").hidden = true;
     $("#adContent").hidden = false;
     $("#adAccount").textContent = user.email || "Administrador";
@@ -377,6 +379,7 @@ onAuthStateChanged(auth, async (user) => {
     const failed = results.find((result) => result.status === "rejected");
     if (failed) setLoadError(`Parte do painel não carregou: ${failed.reason.message}. Tente novamente.`);
   } catch (error) {
+    $(".ad-shell").classList.add("is-locked");
     $("#adContent").hidden = true;
     $("#adGate").hidden = false;
     $("#adAccount").textContent = error.status === 403 ? "Acesso não autorizado" : "Falha na verificação";
