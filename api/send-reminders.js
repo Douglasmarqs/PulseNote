@@ -19,7 +19,7 @@
 // orçamento crítico a cada 4h, uma meta quase batida a cada 12h, etc.
 // Compromissos (eventos) são a exceção: por serem pontuais, avisam só 1
 // vez (não faz sentido repetir depois que já avisou que está perto).
-// Tudo isso fica guardado em userData/{uid}.data.serverNotifications —
+// Tudo isso fica guardado em reminderDeliveries (fora do snapshot do app) —
 // sem isso, rodar a cada 5 min mandaria a mesma notificação repetida
 // sem parar.
 //
@@ -43,8 +43,8 @@
 //     — nome e idioma (ex.: "pt_BR") de um template aprovado no Meta
 //       Business Manager, categoria "Utilidade", com EXATAMENTE UMA
 //       variável no corpo (ex.: "🔔 PulseNote: {{1}}"). Sem essa env var,
-//       o envio por WhatsApp fica pulado silenciosamente — só o push
-//       continua funcionando.
+//       o canal WhatsApp registra falha de configuração, enquanto o push
+//       continua funcionando de forma independente.
 // ============================================================
 
 const admin = require("firebase-admin");
@@ -52,7 +52,21 @@ const crypto = require("node:crypto");
 const { Receiver } = require("@upstash/qstash");
 const { getRuntimeConfig } = require("./_lib/adminConfig");
 const { getUserEntitlements } = require("./_lib/admin");
+const { META_GRAPH_VERSION } = require("./_lib/metaGraph");
 const DEFAULT_TIME_ZONE = "America/Sao_Paulo";
+
+function validTimeZone(value) {
+  if (typeof value !== "string" || !value.trim()) return DEFAULT_TIME_ZONE;
+  const timeZone = value.trim();
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone }).format(new Date(0));
+    return timeZone;
+  } catch {
+    // Um fuso antigo/incorreto salvo por um cliente não deve interromper
+    // os lembretes de todos os outros usuários nesta execução.
+    return DEFAULT_TIME_ZONE;
+  }
+}
 
 // Cooldown (em horas) até poder notificar de novo o MESMO tipo de aviso
 // pro MESMO usuário. 0 = avisa só uma vez e nunca mais repete (é o caso
@@ -149,7 +163,7 @@ async function sendWhatsAppReminder(phone, bodyText) {
   if (!templateName || !process.env.WHATSAPP_ACCESS_TOKEN || !process.env.WHATSAPP_PHONE_NUMBER_ID) {
     throw new Error("whatsapp_configuration_missing");
   }
-  const url = `https://graph.facebook.com/v20.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
+  const url = `https://graph.facebook.com/${META_GRAPH_VERSION}/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
   try {
     const res = await fetch(url, {
       method: "POST",
@@ -220,12 +234,12 @@ function buildNotifications(state, todayIso, now, timeZone = DEFAULT_TIME_ZONE) 
   const results = [];
   const isOpen = (item) => item.status !== "Concluida" && item.status !== "Cancelada";
 
-  const tasks = state.tasks || [];
-  const overdue = tasks.filter((t) => isOpen(t) && t.dueDate && t.dueDate < todayIso);
+  const tasks = Array.isArray(state.tasks) ? state.tasks : [];
+  const overdue = tasks.filter((t) => t && isOpen(t) && t.dueDate && t.dueDate < todayIso);
   // Tarefas com hora própria recebem um único aviso na antecedência que a
   // pessoa escolheu. As sem hora continuam no resumo diário, para manter
   // compatibilidade com tarefas antigas e com quem só define o dia.
-  const dueToday = tasks.filter((t) => isOpen(t) && t.dueDate === todayIso && !t.dueTime);
+  const dueToday = tasks.filter((t) => t && isOpen(t) && t.dueDate === todayIso && !t.dueTime);
   if (overdue.length > 0) {
     results.push({
       key: "tasksOverdue",
@@ -250,7 +264,7 @@ function buildNotifications(state, todayIso, now, timeZone = DEFAULT_TIME_ZONE) 
   }
 
   tasks.forEach((task) => {
-    if (!isOpen(task) || !task.dueDate || !task.dueTime) return;
+    if (!task || !isOpen(task) || !task.dueDate || !task.dueTime) return;
     const taskDateTime = zonedDateTimeToUtc(task.dueDate, task.dueTime, timeZone);
     if (!taskDateTime || Number.isNaN(taskDateTime.getTime())) return;
     const minutesUntil = (taskDateTime - now) / 60000;
@@ -270,8 +284,8 @@ function buildNotifications(state, todayIso, now, timeZone = DEFAULT_TIME_ZONE) 
     }
   });
 
-  (state.events || []).forEach((event) => {
-    if (!event.date || !event.time || !isOpen(event) || event.reminder === false || event.reminder === "none") return;
+  (Array.isArray(state.events) ? state.events : []).forEach((event) => {
+    if (!event || !event.date || !event.time || !isOpen(event) || event.reminder === false || event.reminder === "none") return;
     const eventDateTime = zonedDateTimeToUtc(event.date, event.time, timeZone);
     if (!eventDateTime || Number.isNaN(eventDateTime.getTime())) return;
     const minutesUntil = (eventDateTime - now) / 60000;
@@ -279,9 +293,8 @@ function buildNotifications(state, todayIso, now, timeZone = DEFAULT_TIME_ZONE) 
     // A checagem roda a cada 5 min (ver .github/workflows/send-reminders.yml).
     // O mínimo acompanha a menor antecedência oferecida pela interface,
     // então “5 min antes” deixa de ser transformado silenciosamente em 15.
-    // O "-5" também cobre o caso do cron atrasar/falhar uma
-    // rodada: se o evento começou há pouco e ainda não foi avisado,
-    // ainda avisamos (tarde, mas avisamos) em vez de ficar em silêncio.
+    // A janela de recuperação de até 60 minutos abaixo também cobre
+    // atrasos/falhas pontuais do agendador; nesse caso o aviso chega tarde.
     if (minutesUntil > -60 && minutesUntil <= reminderMinutes) {
       results.push({
         key: `event_${event.id}`,
@@ -296,7 +309,8 @@ function buildNotifications(state, todayIso, now, timeZone = DEFAULT_TIME_ZONE) 
     }
   });
 
-  (state.goals || []).forEach((goal) => {
+  (Array.isArray(state.goals) ? state.goals : []).forEach((goal) => {
+    if (!goal) return;
     const percent = goal.target > 0 ? (goal.current / goal.target) * 100 : 0;
     if (percent >= 80 && percent < 100) {
       results.push({
@@ -312,7 +326,8 @@ function buildNotifications(state, todayIso, now, timeZone = DEFAULT_TIME_ZONE) 
   });
 
   const currentMonthKey = todayIso.slice(0, 7);
-  const entries = (state.finances || []).filter((f) => f.date && f.date.startsWith(currentMonthKey));
+  const entries = (Array.isArray(state.finances) ? state.finances : [])
+    .filter((f) => f && typeof f.date === "string" && f.date.startsWith(currentMonthKey));
   const receitas = entries.filter((f) => f.type === "receita").reduce((s, f) => s + (Number(f.amount) || 0), 0);
   const despesas = entries.filter((f) => f.type === "despesa").reduce((s, f) => s + (Number(f.amount) || 0), 0);
   if (receitas > 0) {
@@ -459,7 +474,7 @@ module.exports = async (req, res) => {
       checked++;
       const uid = docSnap.id;
       const state = docSnap.data()?.data || {};
-      const timeZone = state.timeZone || DEFAULT_TIME_ZONE;
+      const timeZone = validTimeZone(state.timeZone);
       const todayIso = todayInTimeZone(now, timeZone);
 
       const notifications = buildNotifications(state, todayIso, now, timeZone);
@@ -539,5 +554,5 @@ module.exports = async (req, res) => {
 
 // Exportados como propriedades da function para testes determinísticos,
 // sem expor nenhuma rota adicional em produção.
-module.exports._test = { buildNotifications, todayInTimeZone, zonedDateTimeToUtc, deliverChannel, sendWhatsAppReminder, sendPush };
+module.exports._test = { buildNotifications, todayInTimeZone, zonedDateTimeToUtc, validTimeZone, deliverChannel, sendWhatsAppReminder, sendPush };
 

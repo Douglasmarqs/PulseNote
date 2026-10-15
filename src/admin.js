@@ -11,7 +11,7 @@ const SECTION_LABELS = {
   overview: "Visão geral", users: "Usuários", plans: "Planos", subscriptions: "Assinaturas", charges: "Cobranças",
   features: "Recursos", integrations: "Integrações", settings: "Configurações",
 };
-const state = { user: null, config: null, plans: [], users: [], usersNextPageToken: null, currentSection: "overview", loadSequence: 0 };
+const state = { user: null, config: null, plans: [], users: [], usersNextPageToken: null, currentSection: "overview", loadSequence: 0, authSequence: 0 };
 const $ = (selector) => document.querySelector(selector);
 
 function escapeHtml(value) {
@@ -355,19 +355,26 @@ function bindActions() {
 bindNavigation();
 bindActions();
 onAuthStateChanged(auth, async (user) => {
+  const sequence = ++state.authSequence;
   state.user = user;
+  // A resposta de uma sessão anterior nunca deve reabrir o painel após logout
+  // ou troca de conta enquanto a validação da nova sessão ainda está pendente.
+  $(".ad-shell").classList.add("is-locked");
+  $("#adContent").hidden = true;
+  $("#adGate").hidden = false;
+  closeMenu();
   if (!user) {
-    $(".ad-shell").classList.add("is-locked");
-    $("#adContent").hidden = true;
-    $("#adGate").hidden = false;
     $("#adAccount").textContent = "Não conectado";
-    closeMenu();
     $("#adGate").innerHTML = `Entre no PulseNote para acessar a administração. <a href="/login">Ir para o login</a>`;
     return;
   }
+  $("#adAccount").textContent = "Verificando acesso";
+  $("#adGate").textContent = "Verificando acesso administrativo…";
   try {
     await user.getIdToken(true);
+    if (sequence !== state.authSequence || state.user !== user) return;
     const data = await request("dashboard");
+    if (sequence !== state.authSequence || state.user !== user) return;
     $(".ad-shell").classList.remove("is-locked");
     $("#adGate").hidden = true;
     $("#adContent").hidden = false;
@@ -376,9 +383,11 @@ onAuthStateChanged(auth, async (user) => {
     renderStats(data.metrics);
     renderAudit(data.recentAudit);
     const results = await Promise.allSettled([loadUsers(), loadPlans(), loadIntegrations(), loadConfig()]);
+    if (sequence !== state.authSequence || state.user !== user) return;
     const failed = results.find((result) => result.status === "rejected");
     if (failed) setLoadError(`Parte do painel não carregou: ${failed.reason.message}. Tente novamente.`);
   } catch (error) {
+    if (sequence !== state.authSequence || state.user !== user) return;
     $(".ad-shell").classList.add("is-locked");
     $("#adContent").hidden = true;
     $("#adGate").hidden = false;

@@ -1349,29 +1349,57 @@ function bindSettingsView() {
   // ── Excluir conta permanentemente ─────────────────────────────────
   document.getElementById("settingsDeleteAccountBtn")?.addEventListener("click", async () => {
     hideSettingsMsg();
+    const account = currentUser;
+    if (!account?.email) {
+      showSettingsMsg("Entre novamente na sua conta antes de excluí-la.", "error");
+      return;
+    }
     if (!confirm("Tem certeza que quer excluir sua conta? Todos os seus dados (notas, tarefas, agenda, metas e finanças) serão apagados PERMANENTEMENTE. Essa ação não pode ser desfeita.")) return;
 
     const pw = prompt("Por segurança, digite sua senha atual para confirmar a exclusão:");
     if (!pw) return;
 
     try {
-      const credential = EmailAuthProvider.credential(currentUser.email, pw);
-      await reauthenticateWithCredential(currentUser, credential);
+      const credential = EmailAuthProvider.credential(account.email, pw);
+      await reauthenticateWithCredential(account, credential);
 
-      await deleteDoc(doc(db, "userData", currentUser.uid)).catch((err) => {
-        console.warn("Não foi possível apagar os dados no Firestore (a conta será excluída mesmo assim):", err);
+      // O vínculo é protegido pelo servidor e precisa sair antes da
+      // identidade. Se falhar, mantemos a conta para não deixar um
+      // número associado a um UID que já não existe.
+      const token = await account.getIdToken();
+      const unlinkResponse = await fetch("/api/whatsapp-unlink", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${token}` },
       });
+      if (!unlinkResponse.ok) {
+        const unlinkError = new Error("Não foi possível desvincular o WhatsApp. Sua conta foi mantida; tente novamente mais tarde.");
+        unlinkError.code = "data/unlink-failed";
+        throw unlinkError;
+      }
+
+      // Nunca remova a identidade se a limpeza dos dados falhar: isso
+      // deixaria um documento órfão ao qual a pessoa não consegue voltar.
+      try {
+        await deleteDoc(doc(db, "userData", account.uid));
+      } catch (err) {
+        console.error("Falha ao apagar dados antes da exclusão da conta:", err?.code || err?.name || "erro");
+        const deletionError = new Error("Não foi possível remover seus dados agora. Sua conta foi mantida; tente novamente mais tarde.");
+        deletionError.code = "data/delete-failed";
+        throw deletionError;
+      }
 
       const key = getStorageKey();
       if (key) localStorage.removeItem(key);
 
-      await deleteUser(currentUser);
+      await deleteUser(account);
       window.location.replace("/login");
     } catch (err) {
       const messages = {
         "auth/wrong-password":        "Senha incorreta.",
         "auth/invalid-credential":    "Senha incorreta.",
         "auth/requires-recent-login": "Por segurança, saia e entre na conta novamente antes de excluí-la.",
+        "data/unlink-failed":       "Não foi possível desvincular o WhatsApp. Sua conta foi mantida; tente novamente mais tarde.",
+        "data/delete-failed":        "Não foi possível remover seus dados agora. Sua conta foi mantida; tente novamente mais tarde.",
       };
       showSettingsMsg(messages[err.code] || `Erro ao excluir conta: ${err.message}`, "error");
     }

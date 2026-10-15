@@ -66,6 +66,7 @@ const { getUserEntitlements } = require("./_lib/admin");
 const { listAutopilotSuggestions, executeAutopilotSuggestion } = require("./_lib/autopilotService");
 const { findSuggestion, formatSuggestionsForWhatsApp } = require("./_lib/autopilot");
 const { checkAutopilotAccess } = require("./_lib/autopilotAccess");
+const { META_GRAPH_VERSION } = require("./_lib/metaGraph");
 const messageContext = new AsyncLocalStorage();
 
 function logStage(stage, startedAt, messageId) {
@@ -190,7 +191,7 @@ function fixBrazilianMobileNumber(phone) {
 }
 
 async function sendWhatsAppPayload(to, payload) {
-  const url = `https://graph.facebook.com/v20.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
+  const url = `https://graph.facebook.com/${META_GRAPH_VERSION}/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
   const toFixed = fixBrazilianMobileNumber(to);
   const startedAt = Date.now();
   try {
@@ -257,7 +258,7 @@ async function sendWhatsAppButtons(to, body, buttons, footer = "") {
 // FormData/Blob são globais nativos do Node usado aqui (18+), não
 // precisou de nenhuma lib nova só pra isso.
 async function uploadWhatsAppMedia(buffer, filename, mimeType) {
-  const url = `https://graph.facebook.com/v20.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/media`;
+  const url = `https://graph.facebook.com/${META_GRAPH_VERSION}/${process.env.WHATSAPP_PHONE_NUMBER_ID}/media`;
   try {
     const form = new FormData();
     form.append("messaging_product", "whatsapp");
@@ -291,7 +292,23 @@ async function sendWhatsAppDocument(to, mediaId, filename, caption) {
 // Só retorna algo depois que handleLinkCommand() já criou o vínculo.
 async function findUidForPhone(fb, phone) {
   const snap = await fb.firestore().collection("whatsappLinks").doc(phone).get();
-  return snap.exists ? snap.data().uid : null;
+  const uid = snap.exists ? snap.data()?.uid : null;
+  if (!uid) return null;
+  // A exclusão de uma conta pode deixar um vínculo legado para trás
+  // (inclusive em versões antigas do app). Nunca recrie userData por
+  // mensagem recebida se a identidade correspondente já não existe.
+  try {
+    const user = await fb.auth().getUser(uid);
+    if (user.disabled) return null;
+    // O índice do telefone pode ter ficado para trás depois de uma troca
+    // feita por uma versão antiga. A fonte da verdade é a conta: um número
+    // antigo jamais pode continuar operando só porque ainda possui índice.
+    const userSnap = await fb.firestore().collection("userData").doc(uid).get();
+    return userSnap.exists && userSnap.data()?.data?.whatsappLinkedPhone === phone ? uid : null;
+  } catch (err) {
+    if (err?.code === "auth/user-not-found" || err?.code === "auth/invalid-uid") return null;
+    throw err;
+  }
 }
 
 // ── Helper genérico de leitura+mutação+escrita ─────────────────────
@@ -341,13 +358,49 @@ async function getAppliedOperation(fb, uid, messageId, operationName) {
   return snap.exists ? snap.data().result : null;
 }
 
-async function confirmWhatsAppLink(fb, uid, phone) {
-  await withUserData(fb, uid, (state) => {
+async function confirmWhatsAppLink(fb, uid, phone, code) {
+  const db = fb.firestore();
+  const userRef = db.collection("userData").doc(uid);
+  const newLinkRef = db.collection("whatsappLinks").doc(phone);
+  const statusRef = db.collection("adminUserStatus").doc(uid);
+  return db.runTransaction(async (tx) => {
+    const [userSnap, newLinkSnap, statusSnap] = await Promise.all([
+      tx.get(userRef), tx.get(newLinkRef), tx.get(statusRef),
+    ]);
+    if (!userSnap.exists || statusSnap.data()?.disabled === true) return "invalid";
+    const state = { ...(userSnap.data()?.data || {}) };
+    if (state.whatsappLinkCode !== code ||
+        !state.whatsappLinkCodeExpiresAt ||
+        new Date(state.whatsappLinkCodeExpiresAt).getTime() <= Date.now()) return "invalid";
+    if (newLinkSnap.exists && newLinkSnap.data()?.uid !== uid) {
+      // Versões antigas podiam deixar o índice após trocar/desvincular.
+      // Só bloqueie um número que ainda consta como ativo na outra conta;
+      // um índice órfão pode ser reaproveitado por quem provou possuir o
+      // telefone e o novo código de vinculação.
+      const previousUid = newLinkSnap.data()?.uid;
+      if (typeof previousUid === "string" && previousUid) {
+        const previousUser = await tx.get(db.collection("userData").doc(previousUid));
+        if (previousUser.exists && previousUser.data()?.data?.whatsappLinkedPhone === phone) {
+          return "already_linked";
+        }
+      }
+    }
+
+    const oldPhone = state.whatsappLinkedPhone;
+    const oldLinkRef = oldPhone && oldPhone !== phone
+      ? db.collection("whatsappLinks").doc(oldPhone) : null;
+    const oldLinkSnap = oldLinkRef ? await tx.get(oldLinkRef) : null;
+    // Firestore exige todas as leituras antes das escritas. Trocar o índice
+    // e o número no usuário numa transação impede a janela de dois números
+    // simultaneamente autorizados, inclusive quando há corrida com unlink.
     state.whatsappLinkCode = null;
     state.whatsappLinkCodeExpiresAt = null;
     state.whatsappLinkedPhone = phone;
-    return true;
-  }, "confirm_link");
+    if (oldLinkSnap?.data()?.uid === uid) tx.delete(oldLinkRef);
+    tx.set(newLinkRef, { uid, linkedAt: new Date().toISOString() });
+    tx.set(userRef, { data: state, updatedAt: new Date().toISOString() }, { merge: true });
+    return "linked";
+  });
 }
 
 // Trata "vincular 123456" — o único jeito de um número NOVO (ainda sem
@@ -365,12 +418,6 @@ async function handleLinkCommand(fb, phone, text) {
   }
 
   const db = fb.firestore();
-
-  const existingLink = await db.collection("whatsappLinks").doc(phone).get();
-  if (existingLink.exists) {
-    await sendWhatsAppMessage(phone, "Esse número já está vinculado a uma conta do PulseNote ✅");
-    return;
-  }
 
   // Índice de campo único (data.whatsappLinkCode) é automático no
   // Firestore — não precisa criar índice composto pra essa query.
@@ -400,8 +447,15 @@ async function handleLinkCommand(fb, phone, text) {
     return;
   }
 
-  await db.collection("whatsappLinks").doc(phone).set({ uid: matchUid, linkedAt: new Date().toISOString() });
-  await confirmWhatsAppLink(fb, matchUid, phone);
+  const result = await confirmWhatsAppLink(fb, matchUid, phone, code);
+  if (result === "already_linked") {
+    await sendWhatsAppMessage(phone, "Esse número já está vinculado a outra conta do PulseNote. Desvincule-o da conta anterior antes de usar este código.");
+    return;
+  }
+  if (result !== "linked") {
+    await sendWhatsAppMessage(phone, "Esse código expirou ou já foi usado. Gere um novo em Configurações > Integrações no PulseNote.");
+    return;
+  }
   await sendWhatsAppMessage(phone, WELCOME_MESSAGE);
 }
 
@@ -553,7 +607,7 @@ async function appendFinanceEntry(fb, uid, entry, rawMessage) {
 async function downloadWhatsAppMedia(mediaId) {
   if (!/^[a-zA-Z0-9_-]{6,120}$/.test(String(mediaId || ""))) return null;
   try {
-    const metaRes = await fetch(`https://graph.facebook.com/v20.0/${mediaId}`, {
+    const metaRes = await fetch(`https://graph.facebook.com/${META_GRAPH_VERSION}/${mediaId}`, {
       headers: { Authorization: `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}` },
       signal: AbortSignal.timeout(10000),
     });
@@ -1912,5 +1966,5 @@ module.exports.config = { api: { bodyParser: false } };
 module.exports._test = {
   formatWhatsAppFinanceConfirmation, inferPaymentMethod, formatWhatsAppAmount,
   isPhotoNoteRequest, isDestructiveAudioIntent, buttonFallbackText,
-  parseFinanceReferenceCommand, sendWhatsAppDocument,
+  parseFinanceReferenceCommand, sendWhatsAppDocument, findUidForPhone, confirmWhatsAppLink,
 };

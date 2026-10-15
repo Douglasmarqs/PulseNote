@@ -58,12 +58,16 @@ async function requestNotificationPermission() {
     (window.PulseNoteShowToast || console.log)("Seu navegador não suporta notificações.");
     return false;
   }
-  if (Notification.permission === "granted") return true;
   if (Notification.permission === "denied") {
     (window.PulseNoteShowToast || console.log)("Notificações bloqueadas. Ative nas configurações do navegador.");
     return false;
   }
-  const result = await Notification.requestPermission();
+  // A permissão pode já ter sido concedida nas configurações do navegador
+  // ou numa instalação anterior. Mesmo assim precisamos registrar o token
+  // FCM deste aparelho: só a permissão não habilita push com o app fechado.
+  const result = Notification.permission === "granted"
+    ? "granted"
+    : await Notification.requestPermission();
   if (result === "granted") {
     (window.PulseNoteShowToast || console.log)("🔔 Notificações ativadas!");
     localStorage.setItem("pn_notifications_enabled", "1");
@@ -86,7 +90,8 @@ async function requestNotificationPermission() {
 function notificationsAreEnabled() {
   return "Notification" in window
     && Notification.permission === "granted"
-    && localStorage.getItem("pn_notifications_enabled") === "1";
+    && localStorage.getItem("pn_notifications_enabled") === "1"
+    && window.PulseNoteState?.appReminderOptIn !== false;
 }
 
 // ── Verificações específicas por área do app ──────────────────
@@ -94,22 +99,24 @@ function notificationsAreEnabled() {
 // Tarefas com vencimento hoje ou atrasadas
 function checkTaskNotifications() {
   if (!window.PulseNoteState.tasks) return;
-  const today = new Date().toISOString().slice(0, 10);
   const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 
   // Tarefas com horário recebem alerta no minuto definido pela pessoa. As
   // tarefas antigas, sem horário, continuam no resumo diário logo abaixo.
   window.PulseNoteState.tasks.forEach((task) => {
     if (task.status === "Concluida" || task.status === "Cancelada" || !task.dueDate || !task.dueTime) return;
+    if (task.reminder === false || task.reminder === "none") return;
     const dueAt = new Date(`${task.dueDate}T${task.dueTime}`);
     const minutesUntil = (dueAt - now) / 60000;
-    const reminderMinutes = Number(task.reminder) || 15;
+    const reminderMinutes = Number(task.reminder ?? 15);
+    if (!Number.isFinite(reminderMinutes) || reminderMinutes < 0) return;
     const notifyKey = `task_${task.id}`;
-    if (minutesUntil > 0 && minutesUntil <= reminderMinutes && !alreadyNotifiedToday(notifyKey)) {
+    if (minutesUntil > -1 && minutesUntil <= reminderMinutes && !alreadyNotifiedToday(notifyKey)) {
       fireNotification(
         "Tarefa em breve",
         `“${task.title}” vence às ${task.dueTime}.`,
-        notifyKey,
+        `task-${task.id}`,
         "planner",
         task.id
       );
@@ -152,14 +159,16 @@ function checkEventNotifications() {
   const now = new Date();
 
   window.PulseNoteState.events.forEach((event) => {
-    if (!event.date || !event.time) return;
+    if (!event.date || !event.time || event.status === "Concluida" || event.status === "Cancelada") return;
+    if (event.reminder === false || event.reminder === "none") return;
     const eventDateTime = new Date(`${event.date}T${event.time}`);
     const minutesUntil = (eventDateTime - now) / 60000;
-    const reminderMinutes = Number(event.reminder) || 15;
+    const reminderMinutes = Number(event.reminder ?? 15);
+    if (!Number.isFinite(reminderMinutes) || reminderMinutes < 0) return;
 
     // Dispara quando o evento está dentro da janela de lembrete
     // (ex: lembrete de 15min, e faltam entre 0 e 15 minutos)
-    if (minutesUntil > 0 && minutesUntil <= reminderMinutes) {
+    if (minutesUntil > -1 && minutesUntil <= reminderMinutes) {
       const notifyKey = `event_${event.id}`;
       if (!alreadyNotifiedToday(notifyKey)) {
         fireNotification(

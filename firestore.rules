@@ -18,13 +18,22 @@ service cloud.firestore {
                   && request.auth.uid == userId
                   && !userDisabled(userId);
 
-      allow write: if request.auth != null
-                   && request.auth.uid == userId
-                   && !userDisabled(userId)
-                   && !maintenanceEnabled()
-                   && request.resource.data.keys().hasOnly(['data', 'updatedAt'])
-                   && request.resource.data.data is map
-                   && request.resource.data.updatedAt is string;
+      // request.resource is null on delete, so document-shape checks only apply
+      // to writes that create or update a document.
+      allow create, update: if request.auth != null
+                            && request.auth.uid == userId
+                            && !userDisabled(userId)
+                            && !maintenanceEnabled()
+                            && request.resource.data.keys().hasOnly(['data', 'updatedAt'])
+                            && request.resource.data.data is map
+                            && request.resource.data.updatedAt is string;
+
+      // Account deletion must be able to remove its own userData document.
+      // Maintenance mode and a disabled account still block this write.
+      allow delete: if request.auth != null
+                    && request.auth.uid == userId
+                    && !userDisabled(userId)
+                    && !maintenanceEnabled();
     }
 
     match /{document=**} {

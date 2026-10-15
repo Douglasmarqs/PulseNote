@@ -110,6 +110,33 @@ function addDaysIso(baseDate, delta) {
   return toIsoDate(d);
 }
 
+function validDateAtNoon(year, month, day) {
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)
+    || month < 0 || month > 11 || day < 1 || day > 31) return null;
+  const candidate = new Date(year, month, day, 12);
+  return candidate.getFullYear() === year && candidate.getMonth() === month && candidate.getDate() === day
+    ? candidate : null;
+}
+
+function nearestYearDate(today, month, day, direction) {
+  const step = direction === "past" ? -1 : 1;
+  for (let offset = 0; offset <= 8; offset++) {
+    const candidate = validDateAtNoon(today.getFullYear() + step * offset, month, day);
+    if (candidate && (direction === "past" ? candidate <= today : candidate >= today)) return candidate;
+  }
+  return null;
+}
+
+function nearestMonthDate(today, day, direction) {
+  const step = direction === "past" ? -1 : 1;
+  for (let offset = 0; offset <= 12; offset++) {
+    const monthStart = new Date(today.getFullYear(), today.getMonth() + step * offset, 1, 12);
+    const candidate = validDateAtNoon(monthStart.getFullYear(), monthStart.getMonth(), day);
+    if (candidate && (direction === "past" ? candidate <= today : candidate >= today)) return candidate;
+  }
+  return null;
+}
+
 // Extrai uma referência de data relativa/explícita do texto e devolve
 // { date, cleaned } — "cleaned" é o texto com o trecho de data já
 // removido (útil pra não confundir número de data com valor em reais
@@ -182,21 +209,17 @@ function extractDateAndClean(text, todayIso, direction = "future") {
         const hasExplicitYear = !!explicitDate[3];
         let year = hasExplicitYear ? parseInt(explicitDate[3], 10) : today.getFullYear();
         if (year < 100) year += 2000;
-        let d = new Date(year, month, day);
-        if (!hasExplicitYear && !isNaN(d)) {
-          if (direction === "future" && d < today) d = new Date(year + 1, month, day);
-          else if (direction === "past" && d > today) d = new Date(year - 1, month, day);
-        }
-        if (!isNaN(d)) date = toIsoDate(d);
+        const d = hasExplicitYear
+          ? validDateAtNoon(year, month, day)
+          : nearestYearDate(today, month, day, direction);
+        if (d) date = toIsoDate(d);
         working = working.replace(explicitDate[0], " ");
       } else if (monthNameMatch) {
         const day = parseInt(monthNameMatch[1], 10);
         const monthKeyName = monthNameMatch[2].replace("ç", "c");
         const month = FIN_MONTH_NAMES[monthKeyName];
-        let d = new Date(today.getFullYear(), month, day);
-        if (direction === "future" && d < today) d = new Date(today.getFullYear() + 1, month, day); // futuro mais próximo pra compromisso
-        else if (direction === "past" && d > today) d = new Date(today.getFullYear() - 1, month, day); // passado mais próximo pra gasto/receita
-        if (!isNaN(d)) date = toIsoDate(d);
+        const d = nearestYearDate(today, month, day, direction);
+        if (d) date = toIsoDate(d);
         working = working.replace(monthNameMatch[0], " ");
       } else if (weekdayMatch) {
         const normalized = weekdayMatch[1].replace("-feira", "").replace("ç", "c").replace("á", "a");
@@ -210,12 +233,8 @@ function extractDateAndClean(text, todayIso, direction = "future") {
         working = working.replace(weekdayMatch[0], " ");
       } else if (dayOnlyMatch) {
         const day = parseInt(dayOnlyMatch[1], 10);
-        if (day >= 1 && day <= 31) {
-          let d = new Date(today.getFullYear(), today.getMonth(), day);
-          if (direction === "future" && d < today) d = new Date(today.getFullYear(), today.getMonth() + 1, day);
-          else if (direction === "past" && d > today) d = new Date(today.getFullYear(), today.getMonth() - 1, day);
-          if (!isNaN(d)) date = toIsoDate(d);
-        }
+        const d = nearestMonthDate(today, day, direction);
+        if (d) date = toIsoDate(d);
         working = working.replace(dayOnlyMatch[0], " ");
       }
     }
