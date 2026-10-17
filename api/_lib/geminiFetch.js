@@ -38,7 +38,7 @@ function sleep(ms) {
 // intenções possíveis, correção implícita, categoria por sentido em vez
 // de palavra-chave) vale o raciocínio extra; pra chamada simples e
 // sensível a latência, deixe no padrão.
-async function fetchGeminiJson({ model, apiKey, systemPrompt, contents, generationConfig, label, attempts = 2, thinkingLevel }) {
+async function fetchGeminiJson({ model, apiKey, systemPrompt, contents, generationConfig, label, attempts = 2, thinkingLevel, timeoutMs = 9000 }) {
   let lastFailure = { ok: false, status: 502, error: "ai_request_failed" };
   const fullGenerationConfig = thinkingLevel
     ? { ...generationConfig, thinkingConfig: { thinkingLevel } }
@@ -46,12 +46,14 @@ async function fetchGeminiJson({ model, apiKey, systemPrompt, contents, generati
 
   for (let attempt = 1; attempt <= attempts; attempt++) {
     let raw;
+    const startedAt = Date.now();
     try {
       const aiRes = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+          signal: AbortSignal.timeout(timeoutMs),
           body: JSON.stringify({
             systemInstruction: { parts: [{ text: systemPrompt }] },
             contents: [{ parts: contents }],
@@ -61,8 +63,7 @@ async function fetchGeminiJson({ model, apiKey, systemPrompt, contents, generati
       );
 
       if (!aiRes.ok) {
-        const errBody = await aiRes.text();
-        console.error(`Erro na API do Gemini (${label}), tentativa ${attempt}/${attempts}:`, aiRes.status, errBody);
+        console.error("gemini_request", { label, attempt, status: aiRes.status, durationMs: Date.now() - startedAt });
         lastFailure = aiRes.status === 429
           ? { ok: false, status: 429, error: "ai_rate_limited" }
           : { ok: false, status: 502, error: "ai_request_failed" };
@@ -75,8 +76,9 @@ async function fetchGeminiJson({ model, apiKey, systemPrompt, contents, generati
 
       const data = await aiRes.json();
       raw = (data.candidates?.[0]?.content?.parts || []).map((p) => p.text || "").join("");
+      console.info("gemini_request", { label, attempt, status: aiRes.status, durationMs: Date.now() - startedAt });
     } catch (err) {
-      console.error(`Erro inesperado chamando o Gemini (${label}), tentativa ${attempt}/${attempts}:`, err);
+      console.error("gemini_request", { label, attempt, error: err?.name || "network_error", durationMs: Date.now() - startedAt });
       lastFailure = { ok: false, status: 502, error: "ai_request_failed" };
       if (attempt < attempts) {
         await sleep(350 * attempt);
@@ -90,7 +92,7 @@ async function fetchGeminiJson({ model, apiKey, systemPrompt, contents, generati
       const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : raw);
       return { ok: true, parsed, raw };
     } catch (err) {
-      console.error(`Resposta do Gemini (${label}) não é um JSON válido, tentativa ${attempt}/${attempts}:`, raw);
+      console.error("gemini_bad_json", { label, attempt, durationMs: Date.now() - startedAt });
       lastFailure = { ok: false, status: 502, error: "ai_bad_response" };
       if (attempt < attempts) {
         await sleep(250 * attempt);
