@@ -317,17 +317,24 @@ function bindActions() {
     } catch (error) { toast(error.message, true); }
   });
 
+  $("#adChargeForm").addEventListener("input", (event) => { delete event.currentTarget.dataset.requestId; });
   $("#adChargeForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     const form = event.currentTarget;
+    const submitButton = form.querySelector('button[type="submit"]');
+    if (submitButton.disabled) return;
     const raw = form.elements.amount.value.trim().replace(/\s|R\$/g, "");
     const normalized = raw.includes(",") ? raw.replace(/\./g, "").replace(",", ".") : raw;
     const amount = Number(normalized);
     if (!Number.isFinite(amount) || amount <= 0 || !/^\d+(?:[.,]\d{1,2})?$/.test(normalized)) return toast("Informe um valor com até duas casas decimais.", true);
+    form.dataset.requestId ||= crypto.randomUUID();
+    submitButton.disabled = true;
     try {
-      await request("charge-create", { uid: form.elements.uid.value.trim(), amountCents: Math.round(amount * 100), dueDate: form.elements.dueDate.value, note: form.elements.note.value });
-      toast("Registro manual criado."); form.reset(); await loadCharges();
+      const result = await request("charge-create", { uid: form.elements.uid.value.trim(), amountCents: Math.round(amount * 100), dueDate: form.elements.dueDate.value, note: form.elements.note.value, requestId: form.dataset.requestId });
+      toast(result.alreadyCreated ? "Registro já confirmado. Nenhuma cobrança duplicada foi criada." : "Registro manual criado.");
+      form.reset(); delete form.dataset.requestId; await loadCharges();
     } catch (error) { toast(error.message, true); }
+    finally { submitButton.disabled = false; }
   });
 
   $("#adFeaturesForm").addEventListener("submit", async (event) => {

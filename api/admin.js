@@ -227,20 +227,36 @@ async function createCharge(firebase, db, actor, body) {
   const uid = text(body.uid, 128);
   const amountCents = Number(body.amountCents);
   const dueDate = text(body.dueDate, 10);
+  const requestId = text(body.requestId, 64);
   if (!uid || !Number.isSafeInteger(amountCents) || amountCents <= 0 || amountCents > 100_000_000
-    || (dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(dueDate))) fail(400, "invalid_charge");
+    || (dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(dueDate))
+    || (requestId && !/^[a-f0-9-]{36}$/i.test(requestId))) fail(400, "invalid_charge");
   await firebase.auth().getUser(uid);
-  const id = crypto.randomUUID();
+  // The browser reuses the same request ID after an ambiguous network failure.
+  // A deterministic document ID keeps a retry from creating another charge.
+  const id = requestId
+    ? crypto.createHash("sha256").update(`${actor.uid}:${requestId}`).digest("hex")
+    : crypto.randomUUID();
   const charge = { uid, amountCents, currency: "BRL", dueDate: dueDate || null,
     note: text(body.note, 300), status: "manual_pending", source: "manual",
-    createdAt: new Date().toISOString(), createdBy: actor.uid };
-  const batch = db.batch();
-  batch.set(db.collection("adminCharges").doc(id), charge);
-  batch.set(db.collection("adminAudit").doc(), { at: new Date().toISOString(), actorUid: actor.uid,
-    actorEmail: actor.email, action: "manual_charge_created", target: id,
-    details: { uid, amountCents, status: charge.status } });
-  await batch.commit();
-  return { charge: { id, ...charge } };
+    createdAt: new Date().toISOString(), createdBy: actor.uid,
+    ...(requestId ? { requestId } : {}) };
+  const ref = db.collection("adminCharges").doc(id);
+  return db.runTransaction(async (tx) => {
+    const existing = await tx.get(ref);
+    if (existing.exists) {
+      const previous = existing.data();
+      if (!requestId || previous.requestId !== requestId || previous.createdBy !== actor.uid
+        || previous.uid !== charge.uid || previous.amountCents !== charge.amountCents
+        || previous.dueDate !== charge.dueDate || previous.note !== charge.note) fail(409, "charge_request_conflict");
+      return { charge: { id, ...previous }, alreadyCreated: true };
+    }
+    tx.create(ref, charge);
+    tx.create(db.collection("adminAudit").doc(), { at: new Date().toISOString(), actorUid: actor.uid,
+      actorEmail: actor.email, action: "manual_charge_created", target: id,
+      details: { uid, amountCents, status: charge.status } });
+    return { charge: { id, ...charge }, alreadyCreated: false };
+  });
 }
 
 async function updateCharge(db, actor, body) {
@@ -248,15 +264,15 @@ async function updateCharge(db, actor, body) {
   const status = body.status;
   if (!id || !["manual_pending", "manual_received", "manual_cancelled"].includes(status)) fail(400, "invalid_charge_update");
   const ref = db.collection("adminCharges").doc(id);
-  const previous = await ref.get();
-  if (!previous.exists || previous.data().source !== "manual") fail(404, "charge_not_found");
-  if (previous.data().status !== "manual_pending") fail(409, "charge_already_finalized");
-  const batch = db.batch();
-  batch.update(ref, { status, updatedAt: new Date().toISOString(), updatedBy: actor.uid });
-  batch.set(db.collection("adminAudit").doc(), { at: new Date().toISOString(), actorUid: actor.uid,
-    actorEmail: actor.email, action: "manual_charge_updated", target: id, details: { status } });
-  await batch.commit();
-  return { id, status };
+  return db.runTransaction(async (tx) => {
+    const previous = await tx.get(ref);
+    if (!previous.exists || previous.data().source !== "manual") fail(404, "charge_not_found");
+    if (previous.data().status !== "manual_pending") fail(409, "charge_already_finalized");
+    tx.update(ref, { status, updatedAt: new Date().toISOString(), updatedBy: actor.uid });
+    tx.create(db.collection("adminAudit").doc(), { at: new Date().toISOString(), actorUid: actor.uid,
+      actorEmail: actor.email, action: "manual_charge_updated", target: id, details: { status } });
+    return { id, status };
+  });
 }
 
 module.exports = async function adminApi(req, res) {
@@ -298,4 +314,4 @@ module.exports = async function adminApi(req, res) {
   }
 };
 
-module.exports._test = { validateFeatureMap, integrationStatus, countAuthUsers, dashboard, listUsers, updateConfig, setEntitlement };
+module.exports._test = { validateFeatureMap, integrationStatus, countAuthUsers, dashboard, listUsers, updateConfig, setEntitlement, createCharge, updateCharge };

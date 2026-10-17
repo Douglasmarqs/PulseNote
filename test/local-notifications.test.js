@@ -78,6 +78,20 @@ test("desativar o lembrete individual impede alertas locais", async () => {
   assert.equal(app.shown.length, 0);
 });
 
+test("resumos locais não incluem tarefas cujo lembrete foi desligado", async () => {
+  const app = loadNotifications({ state: {
+    tasks: [
+      { id: "late-off", title: "Antiga", status: "Pendente", dueDate: "2026-09-09", reminder: false },
+      { id: "today-off", title: "Hoje", status: "Pendente", dueDate: "2026-09-10", reminder: "none" },
+    ],
+    events: [], goals: [], finances: [],
+  } });
+  app.stored.set("pn_notifications_enabled", "1");
+  app.window.runAllNotificationChecks();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(app.shown.length, 0);
+});
+
 test("desativar lembretes no aplicativo bloqueia também o agendador local", async () => {
   const app = loadNotifications({ state: {
     appReminderOptIn: false,

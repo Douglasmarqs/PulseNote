@@ -3,6 +3,7 @@
 // ============================================================
 import { auth, db } from "./firebase-init.js";
 import { createAutopilotUI } from "./autopilot-ui.js";
+import { deleteAccountDataAndIdentity } from "./account-deletion.mjs";
 import { cloneState, changedStateKeys, mergeDirtyState } from "./state-sync.js";
 import {
   onAuthStateChanged,
@@ -16,6 +17,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   doc,
+  getDocFromServer,
   setDoc,
   deleteDoc,
   onSnapshot,
@@ -172,6 +174,9 @@ function getStorageKey() {
 let currentUser   = null;   // objeto do usuário logado (Firebase Auth)
 let unsubscribeDoc = null;  // função para parar de "escutar" o Firestore
 let syncTimer      = null;
+let accountDeletionInProgress = false;
+let accountDeletionRequested = false;
+const activeSyncs = new Set();
 const SERVER_OWNED_FIELDS = ["fcmTokens", "serverNotifications"];
 let observedState = null;
 const dirtyBases = {};
@@ -226,7 +231,15 @@ function stripUndefinedDeep(value) {
 // Sem esse guard, chamadas durante a inicialização (antes do onAuthStateChanged
 // terminar) disparavam "Erro ao salvar" mesmo sem nenhuma ação do usuário.
 let _syncRetries = 0;
-async function syncToServer() {
+function syncToServer() {
+  if (accountDeletionInProgress) return;
+  const work = performSyncToServer();
+  activeSyncs.add(work);
+  work.then(() => activeSyncs.delete(work), () => activeSyncs.delete(work));
+  return work;
+}
+
+async function performSyncToServer() {
   if (!currentUser || !currentUser.emailVerified || !state) return;
   const fields = Object.keys(dirtyBases);
   if (!fields.length) return;
@@ -295,6 +308,7 @@ async function syncToServer() {
 }
 
 function scheduleSyncToServer() {
+  if (accountDeletionInProgress) return;
   clearTimeout(syncTimer);
   syncTimer = setTimeout(syncToServer, 1200);
 }
@@ -326,6 +340,10 @@ const appReady = new Promise((resolve) => {
 
   onAuthStateChanged(auth, async (user) => {
     if (!user) {
+      // Durante a exclusão, o handler abaixo limpa o cache local antes
+      // de navegar. O evento de Auth pode chegar antes de deleteUser
+      // resolver; não redirecione cedo demais deixando dados no aparelho.
+      if (accountDeletionInProgress) return;
       window.location.replace("/login");
       return;
     }
@@ -388,6 +406,10 @@ const appReady = new Promise((resolve) => {
     unsubscribeDoc = onSnapshot(
       userDocRef,
       (snapshot) => {
+        // A exclusão apaga este documento ANTES da identidade Firebase.
+        // Não confunda esse evento com o primeiro login e não recrie os
+        // dados enquanto a exclusão está em andamento.
+        if (!snapshot.exists() && accountDeletionInProgress) return;
         if (snapshot.exists()) {
           const remote = snapshot.data().data;
           if (remote && typeof remote === "object") {
@@ -1348,6 +1370,7 @@ function bindSettingsView() {
 
   // ── Excluir conta permanentemente ─────────────────────────────────
   document.getElementById("settingsDeleteAccountBtn")?.addEventListener("click", async () => {
+    if (accountDeletionRequested) return;
     hideSettingsMsg();
     const account = currentUser;
     if (!account?.email) {
@@ -1359,6 +1382,8 @@ function bindSettingsView() {
     const pw = prompt("Por segurança, digite sua senha atual para confirmar a exclusão:");
     if (!pw) return;
 
+    accountDeletionRequested = true;
+    let whatsappUnlinked = false;
     try {
       const credential = EmailAuthProvider.credential(account.email, pw);
       await reauthenticateWithCredential(account, credential);
@@ -1376,22 +1401,51 @@ function bindSettingsView() {
         unlinkError.code = "data/unlink-failed";
         throw unlinkError;
       }
+      whatsappUnlinked = true;
 
-      // Nunca remova a identidade se a limpeza dos dados falhar: isso
-      // deixaria um documento órfão ao qual a pessoa não consegue voltar.
+      // Firestore e Auth não são transacionais entre si. Confirme uma
+      // cópia do servidor para poder restaurar o documento se a remoção
+      // da identidade falhar. Não limpe o cache local até ambos concluírem.
+      const userDocRef = doc(db, "userData", account.uid);
+      accountDeletionInProgress = true;
+      if (syncTimer) { clearTimeout(syncTimer); syncTimer = null; }
       try {
-        await deleteDoc(doc(db, "userData", account.uid));
+        // Uma sincronização já em curso poderia recriar o documento logo
+        // depois do delete. Aguarde as operações deste navegador terminarem.
+        await Promise.allSettled([...activeSyncs]);
+        await deleteAccountDataAndIdentity({
+          readData: async () => {
+            const snapshot = await getDocFromServer(userDocRef);
+            return snapshot.exists() ? snapshot.data() : null;
+          },
+          deleteData: async () => {
+            try {
+              await deleteDoc(userDocRef);
+            } catch (err) {
+              console.error("Falha ao apagar dados antes da exclusão da conta:", err?.code || err?.name || "erro");
+              const deletionError = new Error("Não foi possível remover seus dados agora. Sua conta foi mantida; tente novamente mais tarde.", { cause: err });
+              deletionError.code = "data/delete-failed";
+              throw deletionError;
+            }
+          },
+          deleteIdentity: () => deleteUser(account),
+          restoreData: (backup) => runTransaction(db, async (transaction) => {
+            const current = await transaction.get(userDocRef);
+            if (!current.exists()) transaction.set(userDocRef, backup);
+          }),
+        });
       } catch (err) {
-        console.error("Falha ao apagar dados antes da exclusão da conta:", err?.code || err?.name || "erro");
-        const deletionError = new Error("Não foi possível remover seus dados agora. Sua conta foi mantida; tente novamente mais tarde.");
-        deletionError.code = "data/delete-failed";
-        throw deletionError;
+        accountDeletionInProgress = false;
+        if (Object.keys(dirtyBases).length) scheduleSyncToServer();
+        throw err;
       }
 
-      const key = getStorageKey();
-      if (key) localStorage.removeItem(key);
-
-      await deleteUser(account);
+      // deleteUser pode encerrar a sessão imediatamente: use chaves
+      // baseadas no UID capturado, não em currentUser (que já pode ser null).
+      try {
+        localStorage.removeItem(`${BASE_STORAGE_KEY}:${account.uid}`);
+        localStorage.removeItem(`${BASE_STORAGE_KEY}:pending:${account.uid}`);
+      } catch { /* a conta já foi removida; a navegação prossegue */ }
       window.location.replace("/login");
     } catch (err) {
       const messages = {
@@ -1399,9 +1453,14 @@ function bindSettingsView() {
         "auth/invalid-credential":    "Senha incorreta.",
         "auth/requires-recent-login": "Por segurança, saia e entre na conta novamente antes de excluí-la.",
         "data/unlink-failed":       "Não foi possível desvincular o WhatsApp. Sua conta foi mantida; tente novamente mais tarde.",
+        "data/snapshot-failed":      "Não foi possível confirmar seus dados na nuvem. Sua conta foi mantida; verifique a conexão e tente novamente.",
         "data/delete-failed":        "Não foi possível remover seus dados agora. Sua conta foi mantida; tente novamente mais tarde.",
+        "data/restore-failed":       "A exclusão não terminou e não foi possível restaurar os dados na nuvem. Não saia desta conta e entre em contato com o suporte.",
       };
-      showSettingsMsg(messages[err.code] || `Erro ao excluir conta: ${err.message}`, "error");
+      const message = messages[err.code] || `Erro ao excluir conta: ${err.message}`;
+      showSettingsMsg(`${message}${whatsappUnlinked ? " O WhatsApp foi desvinculado e pode ser vinculado novamente nas configurações." : ""}`, "error");
+    } finally {
+      accountDeletionRequested = false;
     }
   });
 }

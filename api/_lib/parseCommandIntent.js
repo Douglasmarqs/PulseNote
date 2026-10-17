@@ -290,8 +290,17 @@ function parseDeterministicIntent(text, todayIso, categories = []) {
     };
   }
 
+  // "quanto gastei em Uber" é uma busca por lançamento, não um
+  // relatório. Só a consulta com período reconhecível é mensal.
+  const hasReportPeriod = /\b(?:mes passado|este mes|esse mes|neste mes|nesse mes)\b/.test(command)
+    || MONTH_NAMES.some((name) => new RegExp(`\\b${name}\\b`).test(command));
+  const questionWithoutPeriod = command
+    .replace(/\b(?:mes passado|este mes|esse mes|neste mes|nesse mes)\b/g, " ")
+    .replace(new RegExp(`\\b(?:${MONTH_NAMES.join("|")})\\b`, "g"), " ")
+    .replace(/\s+/g, " ").trim();
+  const hasSearchSubject = /^quanto (?:gastei|recebi)\s+(?:com|em|de|no|na)\s+\S/.test(questionWithoutPeriod);
   const asksForReport = /\b(relatorio|pdf|arquivo)\b/.test(command)
-    || (/^quanto (gastei|recebi)\b/.test(command) && (command.includes(" em ") || /\bmes passado\b/.test(command)));
+    || (/^quanto (gastei|recebi)\b/.test(command) && hasReportPeriod && !hasSearchSubject);
   if (asksForReport) {
     return {
       ok: true,
@@ -302,8 +311,12 @@ function parseDeterministicIntent(text, todayIso, categories = []) {
 
   // Consultas da agenda não precisam da IA. Deixamos a criação de evento
   // abaixo, pois "agenda reunião amanhã" é uma ação e não uma consulta.
-  if (/\b(tarefas?|compromissos?|agenda)\b/.test(command)
-    || /\b(o que|quais?) (tenho|faco|fazer)\b/.test(command)) {
+  // Verbos de criação e o atalho "tarefa:" têm prioridade sobre a
+  // consulta genérica da agenda. Sem isto, "nova tarefa..." e
+  // "adiciona tarefa..." respondem com a lista em vez de criar.
+  const isExplicitTaskCreation = /^\s*(?:(?:cria[r]?|adiciona[r]?)\s+(?:uma\s+)?tarefa\b|nova\s+tarefa\b|tarefa\s*[:\-–—])/i.test(text);
+  if (!isExplicitTaskCreation && (/\b(tarefas?|compromissos?|agenda)\b/.test(command)
+    || /\b(o que|quais?) (tenho|faco|fazer)\b/.test(command))) {
     if (/\b(atrasad[ao]s?|vencid[ao]s?)\b/.test(command)) return { ok: true, intent: "agenda", agenda: { filter: "atrasadas" } };
     if (/\b(hoje)\b/.test(command)) return { ok: true, intent: "agenda", agenda: { filter: "hoje" } };
     if (/\b(semana|proximos dias|pr[oó]ximos dias)\b/.test(command)) return { ok: true, intent: "agenda", agenda: { filter: "semana" } };
@@ -376,10 +389,21 @@ function parseDeterministicIntent(text, todayIso, categories = []) {
   }
 
   if (FINANCE_SEARCH_TRIGGERS.some((pattern) => pattern.test(text))) {
-    const query = compactTitle(stripKnownTriggers(text, FINANCE_SEARCH_TRIGGERS), 60)
+    const monthIndex = MONTH_NAMES.findIndex((name) => new RegExp(`\\b${name}\\b`).test(command));
+    const period = monthIndex >= 0 ? resolveReportPeriod(command, todayIso) : null;
+    let query = compactTitle(stripKnownTriggers(text, FINANCE_SEARCH_TRIGGERS), 60);
+    if (period) {
+      const monthWord = MONTH_NAMES[monthIndex] === "marco" ? "mar[çc]o" : MONTH_NAMES[monthIndex];
+      query = query
+        .replace(new RegExp(`\\b(?:(?:em|no|na|de)\\s+)?${monthWord}(?:\\s+de\\s+20\\d{2})?\\b`, "gi"), " ")
+        .replace(/\b20\d{2}\b/g, " ");
+    }
+    query = query
       .replace(/\b(?:esse|este|do|no|na)\s+m[eê]s\b/gi, "")
+      .replace(/^\s*(?:com|em|de|no|na)\s+/i, "")
+      .replace(/\s+(?:com|em|de|no|na)\s*$/i, "")
       .replace(/\s+/g, " ").trim();
-    if (query) return { ok: true, intent: "finance_search", search: { query, month: null, year: null } };
+    if (query) return { ok: true, intent: "finance_search", search: { query, month: period?.month || null, year: period?.year || null } };
   }
   // Lançamentos inequívocos não precisam esperar pela IA. Exigimos um
   // verbo de movimento ou a forma curta "35 conta de luz", além de uma

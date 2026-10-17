@@ -124,10 +124,12 @@ function checkTaskNotifications() {
   });
 
   const overdue = window.PulseNoteState.tasks.filter(
-    (t) => t.status !== "Concluida" && t.status !== "Cancelada" && t.dueDate && t.dueDate < today
+    (t) => t.status !== "Concluida" && t.status !== "Cancelada"
+      && t.reminder !== false && t.reminder !== "none" && t.dueDate && t.dueDate < today
   );
   const dueToday = window.PulseNoteState.tasks.filter(
-    (t) => t.status !== "Concluida" && t.status !== "Cancelada" && t.dueDate === today && !t.dueTime
+    (t) => t.status !== "Concluida" && t.status !== "Cancelada"
+      && t.reminder !== false && t.reminder !== "none" && t.dueDate === today && !t.dueTime
   );
 
   if (overdue.length > 0 && !alreadyNotifiedToday("tasks_overdue")) {

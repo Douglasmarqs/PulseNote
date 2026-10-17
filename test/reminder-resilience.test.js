@@ -27,6 +27,18 @@ test("lembrete zero ou desligado conserva a intenção também no servidor", () 
   assert.deepEqual(due.map((item) => item.key), ["task_hora"]);
 });
 
+test("resumos do cron não incluem tarefas cujo lembrete foi desligado", () => {
+  const today = "2026-09-10";
+  const now = new Date("2026-09-10T12:00:00Z");
+  const tasks = [
+    { id: "late-off", title: "Antiga", status: "Pendente", dueDate: "2026-09-09", reminder: false },
+    { id: "today-off", title: "Hoje", status: "Pendente", dueDate: today, reminder: "none" },
+  ];
+  assert.deepEqual(buildNotifications({ tasks }, today, now).map((item) => item.key), []);
+  tasks.push({ id: "today-on", title: "Outra", status: "Pendente", dueDate: today });
+  assert.deepEqual(buildNotifications({ tasks }, today, now).map((item) => item.key), ["tasksToday"]);
+});
+
 test("coleções antigas ou malformadas não interrompem os outros lembretes", () => {
   const now = new Date("2026-09-10T11:45:00Z");
   const notifications = buildNotifications({

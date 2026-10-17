@@ -235,11 +235,11 @@ function buildNotifications(state, todayIso, now, timeZone = DEFAULT_TIME_ZONE) 
   const isOpen = (item) => item.status !== "Concluida" && item.status !== "Cancelada";
 
   const tasks = Array.isArray(state.tasks) ? state.tasks : [];
-  const overdue = tasks.filter((t) => t && isOpen(t) && t.dueDate && t.dueDate < todayIso);
+  const overdue = tasks.filter((t) => t && isOpen(t) && t.reminder !== false && t.reminder !== "none" && t.dueDate && t.dueDate < todayIso);
   // Tarefas com hora própria recebem um único aviso na antecedência que a
   // pessoa escolheu. As sem hora continuam no resumo diário, para manter
   // compatibilidade com tarefas antigas e com quem só define o dia.
-  const dueToday = tasks.filter((t) => t && isOpen(t) && t.dueDate === todayIso && !t.dueTime);
+  const dueToday = tasks.filter((t) => t && isOpen(t) && t.reminder !== false && t.reminder !== "none" && t.dueDate === todayIso && !t.dueTime);
   if (overdue.length > 0) {
     results.push({
       key: "tasksOverdue",
