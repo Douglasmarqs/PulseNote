@@ -172,16 +172,23 @@ async function updateUser(firebase, db, actor, body) {
   if (body.disabled && (role.data()?.enabled === true || configuredAdminEmails().has((user.email || "").toLowerCase()))) {
     fail(403, "cannot_disable_admin");
   }
-  // Server-only marker gates WhatsApp, reminders and client Firestore writes
-  // immediately. Firebase Auth's disabled flag alone can leave an existing
-  // ID token usable until it expires.
-  await db.collection("adminUserStatus").doc(uid).set({
+  // Auth and Firestore cannot commit atomically. Disable the server-side gate
+  // first; on reactivation, clear it only after Auth accepts the change. A
+  // partial failure must leave the account blocked, not restore API access.
+  const statusRef = db.collection("adminUserStatus").doc(uid);
+  const status = {
     disabled: body.disabled,
     updatedAt: new Date().toISOString(),
     updatedBy: actor.uid,
-  });
-  await firebase.auth().updateUser(uid, { disabled: body.disabled });
-  if (body.disabled) await firebase.auth().revokeRefreshTokens(uid);
+  };
+  if (body.disabled) {
+    await statusRef.set(status);
+    await firebase.auth().updateUser(uid, { disabled: true });
+    await firebase.auth().revokeRefreshTokens(uid);
+  } else {
+    await firebase.auth().updateUser(uid, { disabled: false });
+    await statusRef.set(status);
+  }
   await logAction(db, actor, body.disabled ? "user_disabled" : "user_enabled", uid);
   return { uid, disabled: body.disabled };
 }
@@ -314,4 +321,5 @@ module.exports = async function adminApi(req, res) {
   }
 };
 
-module.exports._test = { validateFeatureMap, integrationStatus, countAuthUsers, dashboard, listUsers, updateConfig, setEntitlement, createCharge, updateCharge };
+module.exports._test = { validateFeatureMap, integrationStatus, countAuthUsers, dashboard, listUsers, updateConfig, updateUser, setEntitlement, createCharge, updateCharge };
+
