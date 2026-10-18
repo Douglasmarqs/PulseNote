@@ -584,7 +584,7 @@ async function appendFinanceEntry(fb, uid, entry, rawMessage) {
       description: entry.description,
       date: entry.date,
       whatsappRawMessage: rawMessage || "",
-      paymentMethod: inferPaymentMethod(rawMessage),
+      paymentMethod: paymentMethodForEntry(entry, rawMessage),
     };
     finances.unshift(record);
     const categoryGoal = (state.finGoals || []).find((goal) => goal.categoryId === entry.categoryId && Number(goal.limit) > 0);
@@ -672,6 +672,28 @@ function inferPaymentMethod(rawMessage) {
   return "";
 }
 
+function paymentMethodForEntry(entry, rawMessage) {
+  // Uma mídia pode ter método desconhecido mesmo que a legenda mencione
+  // "boleto" como tipo do documento. O valor vazio é intencional.
+  return typeof entry?.paymentMethod === "string" ? entry.paymentMethod : inferPaymentMethod(rawMessage);
+}
+
+function inferMediaCaptionPaymentMethod(caption) {
+  const method = inferPaymentMethod(caption);
+  if (method !== "Boleto") return method;
+  const text = String(caption || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  return /\b(?:paguei|pago|paga|quitado|quitada)\b.{0,40}\bboleto\b|\bboleto\b.{0,40}\b(?:pago|paga|quitado|quitada)\b/.test(text)
+    ? "Boleto" : "";
+}
+
+function paymentMethodForMedia(assessment, caption) {
+  const detected = assessment?.paymentMethod;
+  // Em boleto ainda pendente, o tipo do documento não comprova como ele
+  // será pago. Uma legenda que confirma o pagamento pode esclarecer.
+  return (detected === "Boleto" && assessment?.paymentStatus !== "pago" ? "" : detected)
+    || inferMediaCaptionPaymentMethod(caption);
+}
+
 function isPhotoNoteRequest(caption) {
   const text = String(caption || "").trim();
   // "nota fiscal" é um documento financeiro, não uma anotação pessoal.
@@ -691,7 +713,8 @@ function formatWhatsAppFinanceConfirmation(record, entry, categories) {
   const categoryName = categoryNameForWhatsApp(categoryLabel, categoryId || "Outros");
   const reference = String(record?.id || "").replace(/^wa_/, "").slice(-6) || "novo";
   const heading = record?.type === "receita" ? "Nova Receita Registrada!" : "Novo Gasto Registrado!";
-  const paymentMethod = record?.paymentMethod || inferPaymentMethod(record?.whatsappRawMessage);
+  const paymentMethod = typeof record?.paymentMethod === "string"
+    ? record.paymentMethod : inferPaymentMethod(record?.whatsappRawMessage);
   const budgetLine = Number.isFinite(Number(record?.budgetUsagePercent))
     ? `\n📣 Você já utilizou ${Number(record.budgetUsagePercent).toFixed(2)}% do seu limite mensal.`
     : "";
@@ -1904,7 +1927,7 @@ module.exports = async (req, res) => {
       }
       const caption = String(message.image?.caption || message.document?.caption || "").trim().slice(0, 300);
       const token = crypto.createHash("sha256").update(message.id).digest("hex").slice(0, 10);
-      const rawMessage = message.type === "document" ? "[PDF de boleto/comprovante]" : "[foto de boleto/comprovante]";
+      const rawMessage = `${message.type === "document" ? "[PDF de documento financeiro]" : "[foto de documento financeiro]"}${caption ? ` ${caption}` : ""}`;
       const noteRequested = isPhotoNoteRequest(caption);
       if (noteRequested) {
         const noteResult = await timeStage("note_ocr", message.id, () => parseNoteImage({ imageBase64: media.base64, mimeType: media.mimeType, caption }));
@@ -1928,6 +1951,7 @@ module.exports = async (req, res) => {
         return respondOk();
       }
       const assessment = result.mediaAssessment || {};
+      result.entry.paymentMethod = paymentMethodForMedia(assessment, caption);
       const needsConfirmation = assessment.paymentStatus !== "pago";
       if (needsConfirmation) {
         await savePendingMediaEntry(fb, uid, { token, entry: result.entry, assessment, rawMessage });
@@ -1964,7 +1988,9 @@ module.exports.config = { api: { bodyParser: false } };
 // Superfície pequena e sem I/O para os testes de regressão do formato de
 // resposta. A função HTTP continua sendo o export principal da Vercel.
 module.exports._test = {
-  formatWhatsAppFinanceConfirmation, inferPaymentMethod, formatWhatsAppAmount,
+  formatWhatsAppFinanceConfirmation, inferPaymentMethod, paymentMethodForEntry,
+  inferMediaCaptionPaymentMethod, paymentMethodForMedia, formatWhatsAppAmount,
   isPhotoNoteRequest, isDestructiveAudioIntent, buttonFallbackText,
   parseFinanceReferenceCommand, sendWhatsAppDocument, findUidForPhone, confirmWhatsAppLink,
 };
+
