@@ -1,6 +1,28 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildNotifications, deliverChannel, sendWhatsAppReminder, sendPush } = require('../api/send-reminders')._test;
+const { buildNotifications, verifiedReminderWhatsAppPhone, deliverChannel, sendWhatsAppReminder, sendPush } = require('../api/send-reminders')._test;
+
+test('WhatsApp reminder only uses the server-owned phone link for the same UID', async () => {
+  const phone = '5531999999999';
+  const links = new Map([[phone, { uid: 'u1' }]]);
+  let reads = 0;
+  const db = { collection: (name) => {
+    assert.equal(name, 'whatsappLinks');
+    return { doc: (id) => ({ get: async () => {
+      reads++;
+      const link = links.get(id);
+      return { exists: Boolean(link), data: () => link };
+    } }) };
+  } };
+
+  assert.equal(await verifiedReminderWhatsAppPhone(db, 'u1', phone), phone);
+  assert.equal(await verifiedReminderWhatsAppPhone(db, 'u2', phone), null);
+  links.delete(phone);
+  assert.equal(await verifiedReminderWhatsAppPhone(db, 'u1', phone), null);
+  assert.equal(await verifiedReminderWhatsAppPhone(db, 'u1', '../outro'), null);
+  assert.equal(await verifiedReminderWhatsAppPhone(db, 'u1', null), null);
+  assert.equal(reads, 3, 'invalid phone numbers must not become Firestore document paths');
+});
 
 function memoryDb() {
   const docs = new Map();
