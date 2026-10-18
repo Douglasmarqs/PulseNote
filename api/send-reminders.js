@@ -55,6 +55,14 @@ const { getUserEntitlements } = require("./_lib/admin");
 const { META_GRAPH_VERSION } = require("./_lib/metaGraph");
 const DEFAULT_TIME_ZONE = "America/Sao_Paulo";
 
+// O telefone em userData pode ser editado pelo cliente. Somente o índice
+// privado whatsappLinks prova a titularidade do número de destino.
+async function verifiedReminderWhatsAppPhone(db, uid, phone) {
+  if (typeof uid !== "string" || !uid || typeof phone !== "string" || !/^\d{8,15}$/.test(phone)) return null;
+  const link = await db.collection("whatsappLinks").doc(phone).get();
+  return link.exists && link.data()?.uid === uid ? phone : null;
+}
+
 function validTimeZone(value) {
   if (typeof value !== "string" || !value.trim()) return DEFAULT_TIME_ZONE;
   const timeZone = value.trim();
@@ -489,6 +497,16 @@ module.exports = async (req, res) => {
       }
 
       const tokens = Array.isArray(state.fcmTokens) ? state.fcmTokens : [];
+      let verifiedWhatsAppPhone = null;
+      if (runtime.features.whatsapp && planAllows("whatsapp") && state.whatsappReminderOptIn && state.whatsappLinkedPhone) {
+        try {
+          verifiedWhatsAppPhone = await verifiedReminderWhatsAppPhone(db, uid, state.whatsappLinkedPhone);
+        } catch (error) {
+          // Falha fechada no WhatsApp, sem interromper push nem outros usuários.
+          console.warn("Falha ao validar vínculo WhatsApp para lembrete:", error?.code || error?.name || "unknown");
+          errors.push({ uid, key: "whatsapp_link", channel: "whatsapp", error: "whatsapp_link_lookup_failed" });
+        }
+      }
       let invalidTokens = [];
       for (const n of notifications) {
         let anyAccepted = false;
@@ -502,8 +520,8 @@ module.exports = async (req, res) => {
           }
           if (!successes) throw new Error("push_no_tokens_accepted");
         }]);
-        if (runtime.features.whatsapp && planAllows("whatsapp") && state.whatsappReminderOptIn && state.whatsappLinkedPhone) {
-          channels.push(["whatsapp", () => sendWhatsAppReminder(state.whatsappLinkedPhone, n.plain)]);
+        if (verifiedWhatsAppPhone) {
+          channels.push(["whatsapp", () => sendWhatsAppReminder(verifiedWhatsAppPhone, n.plain)]);
         }
         if (!channels.length) skippedNoChannel++;
         for (const [channel, send] of channels) {
@@ -554,5 +572,5 @@ module.exports = async (req, res) => {
 
 // Exportados como propriedades da function para testes determinísticos,
 // sem expor nenhuma rota adicional em produção.
-module.exports._test = { buildNotifications, todayInTimeZone, zonedDateTimeToUtc, validTimeZone, deliverChannel, sendWhatsAppReminder, sendPush };
+module.exports._test = { buildNotifications, todayInTimeZone, zonedDateTimeToUtc, validTimeZone, verifiedReminderWhatsAppPhone, deliverChannel, sendWhatsAppReminder, sendPush };
 
