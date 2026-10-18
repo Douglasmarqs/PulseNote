@@ -28,7 +28,8 @@
 // v16: entrega a saudação, o Planner mensal e o editor de notas revisados.
 // v21: entrega a consolidação responsiva de Notas e Planner em mobile.css.
 // v22: invalida o CSS antigo do painel administrativo após a correção responsiva.
-const CACHE_NAME = "pulsenote-v22";
+// v23: atualiza o fluxo de retorno à administração após o login.
+const CACHE_NAME = "pulsenote-v23";
 
 // ── Firebase Cloud Messaging (push em segundo plano) ──────────────
 // Isso é o que permite uma notificação aparecer mesmo com o PulseNote
@@ -222,4 +223,3 @@ self.addEventListener("notificationclick", (event) => {
     })
   );
 });
-
