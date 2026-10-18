@@ -29,7 +29,8 @@
 // v21: entrega a consolidação responsiva de Notas e Planner em mobile.css.
 // v22: invalida o CSS antigo do painel administrativo após a correção responsiva.
 // v23: atualiza o fluxo de retorno à administração após o login.
-const CACHE_NAME = "pulsenote-v23";
+// v24: entrega o Dashboard com painéis sempre visíveis no PWA instalado.
+const CACHE_NAME = "pulsenote-v24";
 
 // ── Firebase Cloud Messaging (push em segundo plano) ──────────────
 // Isso é o que permite uma notificação aparecer mesmo com o PulseNote
