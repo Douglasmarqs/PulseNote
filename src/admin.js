@@ -372,7 +372,7 @@ onAuthStateChanged(auth, async (user) => {
   closeMenu();
   if (!user) {
     $("#adAccount").textContent = "Não conectado";
-    $("#adGate").innerHTML = `Entre no PulseNote para acessar a administração. <a href="/login">Ir para o login</a>`;
+    $("#adGate").innerHTML = `Entre no PulseNote para acessar a administração. <a href="/login?next=%2Fadmin">Entrar com sua conta</a>`;
     return;
   }
   $("#adAccount").textContent = "Verificando acesso";
@@ -398,9 +398,9 @@ onAuthStateChanged(auth, async (user) => {
     $(".ad-shell").classList.add("is-locked");
     $("#adContent").hidden = true;
     $("#adGate").hidden = false;
-    $("#adAccount").textContent = error.status === 403 ? "Acesso não autorizado" : "Falha na verificação";
+    $("#adAccount").textContent = error.status === 403 ? (user.email || "Acesso não autorizado") : "Falha na verificação";
     $("#adGate").innerHTML = error.status === 403
-      ? `Esta conta não tem permissão administrativa. <a href="/app">Voltar ao aplicativo</a>`
+      ? `Esta conta não tem permissão administrativa. <a href="/login?next=%2Fadmin&amp;switch=1">Entrar com outra conta</a> ou <a href="/app">voltar ao aplicativo</a>.`
       : `Não foi possível validar o acesso agora. <button type="button" id="adRetry">Tentar novamente</button>`;
     $("#adRetry")?.addEventListener("click", () => location.reload());
   }
