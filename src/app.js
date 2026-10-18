@@ -1647,31 +1647,6 @@ function bindNavigation() {
       requestAnimationFrame(() => target?.scrollIntoView({ behavior: "smooth", block: "start" }));
     });
   });
-  initDashPanelCollapse();
-}
-
-// Painéis do início (Prioridades do dia, Próximos compromissos,
-// Desempenho semanal, Foco da semana) podem ser minimizados — o estado
-// fica salvo no localStorage por painel, então a tela continua do jeito
-// que a pessoa deixou da última vez que abriu o app.
-function initDashPanelCollapse() {
-  document.querySelectorAll(".dash-panel").forEach((panel) => {
-    const id = panel.dataset.panelId;
-    const btn = panel.querySelector("[data-collapse-toggle]");
-    if (!id || !btn) return;
-    const storageKey = `pn_dash_collapsed_${id}`;
-    const setCollapsed = (collapsed) => {
-      panel.classList.toggle("is-collapsed", collapsed);
-      btn.setAttribute("aria-expanded", String(!collapsed));
-      btn.title = collapsed ? "Expandir" : "Minimizar";
-    };
-    setCollapsed(localStorage.getItem(storageKey) === "1");
-    btn.addEventListener("click", () => {
-      const collapsed = !panel.classList.contains("is-collapsed");
-      setCollapsed(collapsed);
-      localStorage.setItem(storageKey, collapsed ? "1" : "0");
-    });
-  });
 }
 
 function bindForms() {
