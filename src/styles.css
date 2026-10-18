@@ -1061,17 +1061,9 @@ button.overview-card-action {
 
 .panel-header h2 { font-size: 0.94rem; font-weight: 700; color: var(--text); }
 
-/* ---------- DASHBOARD PANELS — compactos e recolhíveis ---------- */
-/* Antes cada painel do início vinha sempre expandido, com cabeçalho maior
-   e listas vazias em caixas tracejadas de 24px de padding — em uma conta
-   nova (tudo vazio), a tela virava uma sequência de blocos grandes sem
-   informação nenhuma. Agora cada painel pode ser minimizado (o estado
-   fica salvo por painel, ver initDashPanelCollapse em app.js) e o
-   cabeçalho/conteúdo em si ocupam bem menos espaço. */
+/* ---------- DASHBOARD PANELS — compactos e sempre visíveis ---------- */
 .dash-panel-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 
-.dash-panel-collapse-btn { font-size: 0.8rem; transition: transform 200ms ease, background 160ms, color 160ms; }
-.dash-panel.is-collapsed .dash-panel-collapse-btn { transform: rotate(-90deg); }
 
 .dash-panel-body {
   display: grid;
@@ -1080,8 +1072,6 @@ button.overview-card-action {
   grid-template-rows: 1fr;
 }
 .dash-panel-body > * { min-height: 0; overflow: hidden; }
-.dash-panel.is-collapsed .dash-panel-body { grid-template-rows: 0fr; }
-.dash-panel.is-collapsed .panel-header { margin-bottom: 0; }
 
 .icon-button {
   width: 34px;
