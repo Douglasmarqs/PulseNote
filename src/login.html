@@ -198,6 +198,8 @@
            de segundo. Ver auth.js para onde a marca de "já conhecido" é gravada. -->
       <script>
         (function () {
+          // O acesso ao painel é sempre uma entrada, nunca um novo cadastro.
+          if (new URLSearchParams(location.search).get("next") === "/admin") return;
           try {
             if (localStorage.getItem("pulsenote_known_device") === "1") return;
           } catch (e) { return; }
@@ -248,6 +250,6 @@
   </main>
 
   <script src="/src/pwa-install.js"></script>
-  <script type="module" src="/src/auth.js"></script>
+  <script type="module" src="/src/auth.js?v=23"></script>
 </body>
 </html>
