@@ -31,7 +31,7 @@ Regras OBRIGATÓRIAS:
 - "type": "despesa" por padrão. Use "receita" APENAS se for entrada de dinheiro (salário, recebimento, venda, reembolso, freelance, rendimento etc.) — cupom fiscal é sempre "despesa".
 - "categoryId": escolha o id que melhor descreve o que foi dito/comprado. Priorize o mais específico (ex.: se a frase cita "mercado" ou o cupom é de supermercado, escolha "mercado" — não "outros"). Deve ser do mesmo tipo de "type". NUNCA escolha uma categoria genérica tipo "outros"/"outros_receita" se qualquer categoria mais específica da lista puder se aplicar pelo SENTIDO do que foi dito, mesmo sem a palavra exata (ex.: "gastei com o veterinário" → categoria de pet; "comprei fralda" → categoria de filhos/família; "paguei o seguro do carro" → categoria de seguros). Só use "outros"/"outros_receita" quando genuinely nenhuma categoria da lista tiver relação com o que foi dito.
 - "description": 2 a 5 palavras que descrevam O QUE foi gasto/recebido — NÃO use o nome da categoria como descrição. Se for cupom, use o nome do estabelecimento (ex.: "Supermercado Extra", "Farmácia Drogasil"). Se for texto, extraia do que foi dito, removendo só conectores ("gastei", "paguei", "recebi", "reais", "de", "com", "no", "na" etc.).
-${mediaMode ? '- Para imagem/PDF, informe também "documentKind" (cupom, nota_fiscal, comprovante, boleto ou outro), "paymentStatus" (pago, pendente ou desconhecido) e "dueDate" somente quando o vencimento estiver legível. Boleto com código de barras e vencimento, sem comprovante de quitação, é pendente. Nota fiscal não comprova sozinha a quitação. Se o valor total não estiver legível, não invente.' : ''}
+${mediaMode ? '- Para imagem/PDF, informe também "documentKind" (cupom, nota_fiscal, comprovante, boleto ou outro), "paymentStatus" (pago, pendente ou desconhecido) e "dueDate" somente quando o vencimento estiver legível. Informe "paymentMethod" (pix, boleto, cartao_debito, cartao_credito, dinheiro, transferencia ou desconhecido) apenas se o meio de pagamento estiver explícito no documento; um boleto ou uma nota fiscal por si só NÃO comprovam o meio usado nem a quitação. Boleto com código de barras e vencimento, sem comprovante de quitação, é pendente. Se o valor total não estiver legível, não invente.' : ''}
 
 Exemplo 1 — entrada: "gastei 32 reais no ifood ontem"
 Saída: {"type":"despesa","amount":32,"categoryId":"alimentacao","description":"iFood","date":"${todayIso}"}
@@ -84,6 +84,7 @@ async function callGeminiForEntry({ contents, categories, today, mediaMode = fal
           ...(mediaMode ? {
             documentKind: { type: "string", enum: ["cupom", "nota_fiscal", "comprovante", "boleto", "outro"] },
             paymentStatus: { type: "string", enum: ["pago", "pendente", "desconhecido"] },
+            paymentMethod: { type: "string", enum: ["pix", "boleto", "cartao_debito", "cartao_credito", "dinheiro", "transferencia", "desconhecido"] },
             dueDate: { type: "string" },
           } : {}),
         },
@@ -120,6 +121,11 @@ async function callGeminiForEntry({ contents, categories, today, mediaMode = fal
       paymentStatus: statuses.includes(parsed.paymentStatus) ? parsed.paymentStatus : "desconhecido",
       dueDate: /^\d{4}-\d{2}-\d{2}$/.test(parsed.dueDate) ? parsed.dueDate : "",
     };
+    const methods = {
+      pix: "Pix", boleto: "Boleto", cartao_debito: "Cartão de débito",
+      cartao_credito: "Cartão de crédito", dinheiro: "Dinheiro", transferencia: "Transferência",
+    };
+    if (methods[parsed.paymentMethod]) result.mediaAssessment.paymentMethod = methods[parsed.paymentMethod];
   }
   return result;
 }
@@ -230,3 +236,4 @@ async function transcribeAudio({ audioBase64, mimeType }) {
 }
 
 module.exports = { parseTransactionText, parseTransactionImage, parseNoteImage, transcribeAudio };
+
