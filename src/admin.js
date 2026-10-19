@@ -36,7 +36,7 @@ function setLoadError(message = "") {
 }
 
 function closeMenu() {
-  $("#adSidebar").classList.remove("is-open");
+  $("#pnRail").classList.remove("is-open");
   $("#adMenuBackdrop").hidden = true;
   $("#adMenuButton").setAttribute("aria-expanded", "false");
   $("#adMenuButton").setAttribute("aria-label", "Abrir menu");
@@ -211,7 +211,7 @@ function bindNavigation() {
     if (section) showSection(section);
   });
   $("#adMenuButton").addEventListener("click", () => {
-    const open = $("#adSidebar").classList.toggle("is-open");
+    const open = $("#pnRail").classList.toggle("is-open");
     $("#adMenuButton").setAttribute("aria-expanded", String(open));
     $("#adMenuButton").setAttribute("aria-label", open ? "Fechar menu" : "Abrir menu");
     $("#adMenuBackdrop").hidden = !open;
@@ -219,7 +219,7 @@ function bindNavigation() {
   $("#adMenuBackdrop").addEventListener("click", closeMenu);
   $("#adSectionRetry").addEventListener("click", () => showSection(state.currentSection));
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && $("#adSidebar").classList.contains("is-open")) {
+    if (event.key === "Escape" && $("#pnRail").classList.contains("is-open")) {
       closeMenu();
       $("#adMenuButton").focus();
     }
