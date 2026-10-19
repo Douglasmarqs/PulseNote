@@ -4,6 +4,8 @@ const { readFileSync } = require("node:fs");
 const { join } = require("node:path");
 
 const css = readFileSync(join(__dirname, "..", "src", "admin.css"), "utf8");
+const html = readFileSync(join(__dirname, "..", "src", "admin.html"), "utf8");
+const js = readFileSync(join(__dirname, "..", "src", "admin.js"), "utf8");
 
 function baseRule(selector) {
   return css.split("\n").find((line) => line.startsWith(`${selector}{`)) || "";
@@ -21,3 +23,12 @@ test("admin narrow-container layout does not depend only on viewport media queri
   assert.match(css, /\.ad-stats,\.ad-overview-grid,\.ad-overview-side,\.ad-two-col\{grid-template-columns:minmax\(0,1fr\)\}/);
 });
 
+test("admin navigation avoids ad-blocker identifiers and keeps the page in its grid track", () => {
+  assert.match(html, /class="pn-rail" id="pnRail"/);
+  assert.match(html, /aria-controls="pnRail"/);
+  assert.match(js, /#pnRail/);
+  assert.doesNotMatch(html, /adSidebar|class="ad-sidebar"/);
+  assert.match(baseRule(".ad-page"), /grid-column:2/);
+  assert.match(baseRule(".ad-shell.is-locked .ad-page"), /grid-column:1/);
+  assert.match(css, /\.ad-page\{grid-column:auto\}/);
+});
