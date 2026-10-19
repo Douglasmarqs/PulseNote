@@ -7,11 +7,11 @@
   <meta name="theme-color" content="#f6f5fc" />
   <title>Administração · PulseNote</title>
   <link rel="icon" type="image/png" href="/icons/favicon-32.png" />
-  <link rel="stylesheet" href="/src/admin.css?v=24" />
+  <link rel="stylesheet" href="/src/admin.css?v=25" />
 </head>
 <body>
   <div class="ad-shell is-locked">
-    <aside class="ad-sidebar" id="adSidebar" aria-label="Seções administrativas">
+    <aside class="pn-rail" id="pnRail" aria-label="Seções administrativas">
       <a class="ad-brand" href="/app" aria-label="PulseNote, voltar ao aplicativo">
         <span class="ad-brand-mark">⌁</span><span>PulseNote</span>
       </a>
@@ -32,7 +32,7 @@
 
     <div class="ad-page">
       <header class="ad-topbar">
-        <button class="ad-menu-button" id="adMenuButton" type="button" aria-expanded="false" aria-controls="adSidebar" aria-label="Abrir menu">☰</button>
+        <button class="ad-menu-button" id="adMenuButton" type="button" aria-expanded="false" aria-controls="pnRail" aria-label="Abrir menu">☰</button>
         <span class="ad-topbar-title">PulseNote <span>Admin</span></span>
         <span class="ad-account" id="adAccount">Verificando acesso…</span>
       </header>
@@ -125,4 +125,3 @@
   <script type="module" src="/src/admin.js?v=23"></script>
 </body>
 </html>
-
