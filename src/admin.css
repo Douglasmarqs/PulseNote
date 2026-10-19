@@ -6,9 +6,10 @@ button{cursor:pointer}
 [hidden]{display:none!important}
 .ad-shell{width:100%;min-width:0;min-height:100vh;display:grid;grid-template-columns:226px minmax(0,1fr)}
 .ad-shell.is-locked{grid-template-columns:minmax(0,1fr)}
-.ad-shell.is-locked .ad-sidebar,.ad-shell.is-locked .ad-menu-button,.ad-shell.is-locked .ad-mobile-tabs{display:none}
+.ad-shell.is-locked .pn-rail,.ad-shell.is-locked .ad-menu-button,.ad-shell.is-locked .ad-mobile-tabs{display:none}
+.ad-shell.is-locked .ad-page{grid-column:1}
 .ad-shell.is-locked .ad-main{max-width:680px;margin:clamp(44px,10vh,110px) auto 0}
-.ad-sidebar{background:linear-gradient(180deg,#fff 0%,#f8f8ff 100%);border-right:1px solid #e8e9f4;padding:22px 14px;display:flex;flex-direction:column;gap:12px;position:sticky;top:0;height:100vh;overflow-y:auto;z-index:10}
+.pn-rail{background:linear-gradient(180deg,#fff 0%,#f8f8ff 100%);border-right:1px solid #e8e9f4;padding:22px 14px;display:flex;flex-direction:column;gap:12px;position:sticky;top:0;height:100vh;overflow-y:auto;z-index:10}
 .ad-menu-backdrop{display:none}
 .ad-brand{display:flex;align-items:center;gap:9px;padding:4px 10px 20px;color:#121635;font-weight:800;font-size:19px;text-decoration:none;letter-spacing:-.035em}
 .ad-brand-mark{font-size:35px;line-height:24px;color:#6556f5;font-weight:900;transform:rotate(-8deg)}
@@ -19,7 +20,7 @@ button{cursor:pointer}
 .ad-nav button:hover,.ad-nav button.is-active{background:#efedff;color:#5046d9}
 .ad-nav button.is-active span{color:#5d51e7}
 .ad-back{margin-top:auto;padding:12px;color:#535c80;text-decoration:none;font-size:13px;font-weight:650}
-.ad-page{width:100%;min-width:0}
+.ad-page{width:100%;min-width:0;grid-column:2}
 .ad-topbar{height:64px;border-bottom:1px solid #e7e8f1;background:#fff;display:flex;align-items:center;gap:14px;padding:0 clamp(18px,3vw,44px)}
 .ad-topbar-title{font-size:14px;font-weight:800;letter-spacing:-.02em}
 .ad-topbar-title span{color:#7668f0;font-weight:650;margin-left:5px}
@@ -112,7 +113,7 @@ button{cursor:pointer}
 .ad-toast{position:fixed;right:18px;bottom:18px;max-width:320px;z-index:40;background:#20244a;color:#fff;border-radius:12px;padding:12px 15px;box-shadow:0 16px 38px #1b214733;font-size:13px;font-weight:650}
 .ad-toast.is-error{background:#9c2534}
 @media(max-width:1040px){.ad-shell{grid-template-columns:190px minmax(0,1fr)}}
-@media(max-width:760px){.ad-shell{display:block}.ad-sidebar{display:none;position:fixed;width:min(285px,84vw);box-shadow:20px 0 48px #15194233}.ad-sidebar.is-open{display:flex}.ad-menu-backdrop:not([hidden]){display:block;position:fixed;inset:0;z-index:9;border:0;border-radius:0;background:rgba(18,22,53,.48);cursor:default}.ad-menu-button{display:grid;place-items:center}.ad-topbar{padding:0 16px}.ad-main{padding:25px 16px 70px}.ad-shell.is-locked .ad-menu-button{display:none}.ad-shell.is-locked .ad-main{margin:clamp(36px,8vh,72px) auto 0;padding:0 16px}.ad-heading{align-items:start}.ad-heading h1{font-size:31px}.ad-heading>div>p:last-child{display:none}.ad-session{display:none}.ad-mobile-tabs{display:flex;flex-wrap:nowrap;gap:18px;border-bottom:1px solid #e4e6f2;margin:-1px 0 20px;padding:0 2px;overflow-x:auto;white-space:nowrap;scrollbar-width:thin;-webkit-overflow-scrolling:touch}.ad-mobile-tabs button{flex:0 0 auto;border:0;background:none;padding:12px 2px;color:#676e92;font-size:12px;font-weight:700;border-bottom:2px solid transparent}.ad-two-col{grid-template-columns:1fr}.ad-overview-side{grid-template-columns:1fr}}
+@media(max-width:760px){.ad-shell{display:block}.pn-rail{display:none;position:fixed;width:min(285px,84vw);box-shadow:20px 0 48px #15194233}.pn-rail.is-open{display:flex}.ad-menu-backdrop:not([hidden]){display:block;position:fixed;inset:0;z-index:9;border:0;border-radius:0;background:rgba(18,22,53,.48);cursor:default}.ad-page{grid-column:auto}.ad-menu-button{display:grid;place-items:center}.ad-topbar{padding:0 16px}.ad-main{padding:25px 16px 70px}.ad-shell.is-locked .ad-menu-button{display:none}.ad-shell.is-locked .ad-main{margin:clamp(36px,8vh,72px) auto 0;padding:0 16px}.ad-heading{align-items:start}.ad-heading h1{font-size:31px}.ad-heading>div>p:last-child{display:none}.ad-session{display:none}.ad-mobile-tabs{display:flex;flex-wrap:nowrap;gap:18px;border-bottom:1px solid #e4e6f2;margin:-1px 0 20px;padding:0 2px;overflow-x:auto;white-space:nowrap;scrollbar-width:thin;-webkit-overflow-scrolling:touch}.ad-mobile-tabs button{flex:0 0 auto;border:0;background:none;padding:12px 2px;color:#676e92;font-size:12px;font-weight:700;border-bottom:2px solid transparent}.ad-two-col{grid-template-columns:1fr}.ad-overview-side{grid-template-columns:1fr}}
 @media(max-width:520px){.ad-main{padding:20px 13px 60px}.ad-heading{margin-bottom:18px}.ad-heading h1{font-size:27px}.ad-stats{gap:9px;margin-bottom:17px}.ad-stat{min-height:114px;padding:13px;display:block}.ad-stat-icon{width:34px;height:34px;font-size:17px;border-radius:11px;margin-bottom:7px}.ad-stat strong{font-size:22px}.ad-stat small{font-size:10px;margin-top:5px}.ad-stat-label{font-size:11px;margin-bottom:5px}.ad-card{padding:15px}.ad-card-head{gap:8px}.ad-card h2{font-size:16px}.ad-user{grid-template-columns:1fr}.ad-user-actions{justify-content:flex-start}.ad-inline-form{flex-wrap:wrap}.ad-inline-form input{flex-basis:100%}.ad-check-grid{grid-template-columns:1fr}.ad-account{font-size:10px}.ad-load-error{align-items:flex-start;flex-direction:column}}
 @media(max-width:380px){.ad-stats{grid-template-columns:1fr}.ad-stat{min-height:0;display:flex;align-items:center;gap:12px}.ad-stat-icon{margin:0;flex-basis:38px;width:38px;height:38px}.ad-stat small{margin-top:4px}.ad-card-head,.ad-plan,.ad-charge{flex-wrap:wrap}.ad-plan-actions,.ad-charge-actions{width:100%;justify-content:flex-start}.ad-integration{flex-wrap:wrap}.ad-integration .ad-pill{margin-left:47px}.ad-feature-row,.ad-switch-row{overflow-wrap:anywhere}}
 /* A área útil pode ser estreita mesmo num viewport largo (janela dividida ou painel embutido). */
@@ -131,4 +132,3 @@ button{cursor:pointer}
   .ad-feature-row span,.ad-switch-row span{min-width:0;overflow-wrap:anywhere}
 }
 @media(prefers-reduced-motion:no-preference){button,.ad-nav button{transition:background .17s,color .17s,border-color .17s}}
-
