@@ -6,6 +6,7 @@ const { join } = require("node:path");
 const css = readFileSync(join(__dirname, "..", "src", "admin.css"), "utf8");
 const html = readFileSync(join(__dirname, "..", "src", "admin.html"), "utf8");
 const js = readFileSync(join(__dirname, "..", "src", "admin.js"), "utf8");
+const appJs = readFileSync(join(__dirname, "..", "src", "app.js"), "utf8");
 
 function baseRule(selector) {
   return css.split("\n").find((line) => line.startsWith(`${selector}{`)) || "";
@@ -32,3 +33,12 @@ test("admin navigation avoids ad-blocker identifiers and keeps the page in its g
   assert.match(baseRule(".ad-shell.is-locked .ad-page"), /grid-column:1/);
   assert.match(css, /\.ad-page\{grid-column:auto\}/);
 });
+
+test("the same signed-in account can switch between the personal app and administration", () => {
+  assert.match(html, /class="ad-app-switch" href="\/app"/);
+  assert.match(html, /Abrir meu PulseNote/);
+  assert.match(appJs, /id="dropdownAdmin" hidden/);
+  assert.match(appJs, /window\.location\.assign\("\/admin"\)/);
+  assert.match(appJs, /dropdownEntry\.hidden = !allowed/);
+});
+

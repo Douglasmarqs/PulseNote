@@ -2,6 +2,7 @@
 
 const admin = require("firebase-admin");
 const { DEFAULT_FEATURES, normalizeRuntimeConfig, getRuntimeConfig } = require("./adminConfig");
+const DEPLOYMENT_OWNER_EMAIL = "douglas1201.santos@gmail.com";
 
 function getAdmin() {
   if (!admin.apps.length) {
@@ -17,13 +18,13 @@ function getAdmin() {
 }
 
 function configuredAdminEmails() {
-  return new Set([process.env.PRIMARY_ADMIN_EMAIL || "", ...(process.env.ADMIN_EMAILS || "").split(",")]
+  return new Set([process.env.PRIMARY_ADMIN_EMAIL || DEPLOYMENT_OWNER_EMAIL, ...(process.env.ADMIN_EMAILS || "").split(",")]
     .map((email) => email.trim().toLowerCase())
     .filter(Boolean));
 }
 
 function configuredPrimaryAdminEmail() {
-  return (process.env.PRIMARY_ADMIN_EMAIL || (process.env.ADMIN_EMAILS || "").split(",")[0] || "").trim().toLowerCase();
+  return (process.env.PRIMARY_ADMIN_EMAIL || (process.env.ADMIN_EMAILS || "").split(",")[0] || DEPLOYMENT_OWNER_EMAIL).trim().toLowerCase();
 }
 
 async function requireAdmin(req, firebase = getAdmin()) {
@@ -110,3 +111,4 @@ module.exports = {
   getUserEntitlements,
   checkUserFeature,
 };
+

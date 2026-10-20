@@ -7,14 +7,14 @@
   <meta name="theme-color" content="#060a18" />
   <title>Administração · PulseNote</title>
   <link rel="icon" type="image/png" href="/icons/favicon-32.png" />
-  <link rel="stylesheet" href="/src/admin.css?v=26" />
+  <link rel="stylesheet" href="/src/admin.css?v=27" />
 </head>
 <body>
   <div class="ad-shell is-locked">
     <aside class="pn-rail" id="pnRail" aria-label="Seções administrativas">
-      <a class="ad-brand" href="/app" aria-label="PulseNote, voltar ao aplicativo"><span class="ad-brand-mark" aria-hidden="true">⌁</span><span>PulseNote</span></a>
+      <a class="ad-brand" href="/app" aria-label="PulseNote, voltar ao aplicativo"><span class="ad-brand-mark" aria-hidden="true"><span></span><span></span></span><span><strong>PulseNote</strong><small>Workspace administrativo</small></span></a>
       <div class="ad-admin-identity"><span class="ad-admin-avatar" id="adAdminAvatar">PN</span><div><strong id="adAdminName">Administrador</strong><small id="adAdminRole">Acesso protegido</small></div></div>
-      <p class="ad-sidebar-label">ADMINISTRAÇÃO</p>
+      <p class="ad-sidebar-label">CENTRO DE CONTROLE</p>
       <nav class="ad-nav" id="adNav" aria-label="Navegação do painel">
         <button type="button" class="is-active" data-section="overview"><span aria-hidden="true">⌂</span>Visão geral</button>
         <button type="button" data-section="users"><span aria-hidden="true">♧</span>Usuários</button>
@@ -26,7 +26,10 @@
         <button type="button" data-section="security"><span aria-hidden="true">♢</span>Segurança</button>
         <button type="button" data-section="settings"><span aria-hidden="true">⚙</span>Configurações</button>
       </nav>
-      <a class="ad-back" href="/app">← Voltar ao aplicativo</a>
+      <div class="ad-rail-footer">
+        <span>Conta única</span>
+        <a class="ad-back" href="/app"><span aria-hidden="true">↗</span><span><strong>Abrir meu PulseNote</strong><small>Voltar ao uso pessoal</small></span></a>
+      </div>
     </aside>
     <button class="ad-menu-backdrop" id="adMenuBackdrop" type="button" aria-label="Fechar menu" hidden></button>
 
@@ -35,7 +38,7 @@
         <button class="ad-menu-button" id="adMenuButton" type="button" aria-expanded="false" aria-controls="pnRail" aria-label="Abrir menu">☰</button>
         <span class="ad-topbar-title">PulseNote <span>Admin</span></span>
         <span class="ad-environment">Ambiente de produção</span>
-        <div class="ad-topbar-actions"><button class="ad-icon-button" id="adThemeButton" type="button" aria-label="Alternar tema">☼</button><span class="ad-account" id="adAccount">Verificando acesso…</span></div>
+        <div class="ad-topbar-actions"><a class="ad-app-switch" href="/app">Meu aplicativo</a><button class="ad-icon-button" id="adThemeButton" type="button" aria-label="Alternar tema">☼</button><span class="ad-account" id="adAccount">Verificando acesso…</span></div>
       </header>
 
       <main class="ad-main">
@@ -47,6 +50,24 @@
           <div class="ad-mobile-tabs" id="adMobileTabs" aria-label="Seções administrativas"></div>
 
           <section class="ad-section is-active" id="ad-overview" aria-labelledby="ad-overview-title">
+            <section class="ad-command-hero" aria-labelledby="ad-overview-title">
+              <div class="ad-command-copy">
+                <span class="ad-command-kicker"><i aria-hidden="true"></i> Operação PulseNote</span>
+                <h2 id="adGreeting">Seu centro de comando está pronto.</h2>
+                <p>Tenha uma visão clara do produto e acesse rapidamente as ações que movem usuários, receita e confiabilidade.</p>
+                <div class="ad-command-actions">
+                  <button class="ad-primary-button" type="button" data-go="users">Gerenciar usuários</button>
+                  <button class="ad-subtle-button" type="button" data-go="plans">Planos e cobrança</button>
+                  <button class="ad-subtle-button" type="button" data-go="integrations">Ver integrações</button>
+                </div>
+              </div>
+              <div class="ad-command-status">
+                <span class="ad-command-date" id="adCurrentDate"></span>
+                <div class="ad-command-orbit" aria-hidden="true"><span></span><span></span><span></span><b>PN</b></div>
+                <div class="ad-command-health"><i aria-hidden="true"></i><span><strong>Monitoramento ativo</strong><small id="adLastRefresh">Atualizando dados reais…</small></span></div>
+              </div>
+            </section>
+
             <div class="ad-overview-grid">
               <div class="ad-card">
                 <div class="ad-card-head"><div><h2 id="ad-overview-title">Usuários e assinaturas</h2><p>Contas recentes e situação de acesso.</p></div><button class="ad-link" type="button" data-go="users">Ver usuários →</button></div>
@@ -57,7 +78,8 @@
                 <div class="ad-card ad-maintenance-card"><div class="ad-card-head"><div><h2>Modo de manutenção</h2><p>Interrompe gravações durante uma intervenção.</p></div><span class="ad-pill" id="adMaintenanceStatus">Carregando…</span></div><button type="button" class="ad-subtle-button" data-go="settings">Gerenciar manutenção →</button></div>
               </div>
             </div>
-            <div class="ad-card ad-audit-card"><div class="ad-card-head"><div><h2>Atividade recente</h2><p>Registro de alterações administrativas reais.</p></div><button class="ad-link" type="button" id="adAuditRefresh">Atualizar ↻</button></div><div id="adAuditPreview" class="ad-empty">Nenhuma ação registrada ainda.</div></div>
+            <div class="ad-operations-strip" id="adOperationsSummary" aria-label="Atividade operacional dos últimos 30 dias"></div>
+            <div class="ad-card ad-audit-card"><div class="ad-card-head"><div><span class="ad-card-kicker">AUDITORIA</span><h2>Atividade recente</h2><p>Registro de alterações administrativas reais.</p></div><button class="ad-link" type="button" id="adAuditRefresh">Atualizar ↻</button></div><div id="adAuditPreview" class="ad-empty">Nenhuma ação registrada ainda.</div></div>
           </section>
 
           <section class="ad-section" id="ad-users" aria-labelledby="ad-users-title">
@@ -109,6 +131,7 @@
     </div>
   </div>
   <div id="adToast" class="ad-toast" role="status" aria-live="polite" hidden></div>
-  <script type="module" src="/src/admin.js?v=24"></script>
+  <script type="module" src="/src/admin.js?v=25"></script>
 </body>
 </html>
+

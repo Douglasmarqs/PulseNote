@@ -31,7 +31,7 @@
 // v23: atualiza o fluxo de retorno à administração após o login.
 // v24: entrega o Dashboard com painéis sempre visíveis no PWA instalado.
 // v25: entrega o novo painel administrativo e a área de assinatura.
-const CACHE_NAME = "pulsenote-v25";
+const CACHE_NAME = "pulsenote-v26";
 
 // ── Firebase Cloud Messaging (push em segundo plano) ──────────────
 // Isso é o que permite uma notificação aparecer mesmo com o PulseNote
@@ -225,3 +225,4 @@ self.addEventListener("notificationclick", (event) => {
     })
   );
 });
+

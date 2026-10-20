@@ -846,6 +846,9 @@ function renderProfileButton(user) {
     <button class="dropdown-item" id="dropdownNotifications">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;vertical-align:-2px"><path d="M6 8.5a6 6 0 0 1 12 0c0 4.2 1.3 5.8 2 6.5H4c.7-.7 2-2.3 2-6.5z"/><path d="M9.5 17.5a2.5 2.5 0 0 0 5 0"/></svg>${window.notificationsAreEnabled?.() ? "Notificações ativadas" : "Ativar notificações"}
     </button>
+    <button class="dropdown-item" id="dropdownAdmin" hidden>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;vertical-align:-2px"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M8 9h8M8 13h3M14 13h2M8 17h5"/></svg>Abrir administração
+    </button>
     <button class="dropdown-item danger" id="dropdownLogout"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;vertical-align:-2px"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>Sair da conta</button>
   `;
   document.body.appendChild(dropdown);
@@ -897,6 +900,11 @@ function renderProfileButton(user) {
     }
     closeDropdown();
     await window.requestNotificationPermission?.();
+  });
+
+  document.getElementById("dropdownAdmin").addEventListener("click", () => {
+    closeDropdown();
+    window.location.assign("/admin");
   });
 }
 
@@ -1164,15 +1172,23 @@ async function forceAppUpdate() {
 
 async function checkAdminAccess() {
   const card = document.getElementById("adminAccessCard");
-  if (!card || !currentUser?.emailVerified) return;
+  const dropdownEntry = document.getElementById("dropdownAdmin");
+  if (!currentUser?.emailVerified) {
+    if (card) card.hidden = true;
+    if (dropdownEntry) dropdownEntry.hidden = true;
+    return;
+  }
   try {
     const token = await currentUser.getIdToken();
     const response = await fetch("/api/admin?action=me", {
       headers: { Authorization: `Bearer ${token}` },
     });
-    card.hidden = response.status !== 200;
+    const allowed = response.status === 200;
+    if (card) card.hidden = !allowed;
+    if (dropdownEntry) dropdownEntry.hidden = !allowed;
   } catch {
-    card.hidden = true;
+    if (card) card.hidden = true;
+    if (dropdownEntry) dropdownEntry.hidden = true;
   }
 }
 
@@ -7565,3 +7581,4 @@ window.updateGoalProgress = updateGoalProgress;
 // silenciosamente não faziam nada.
 window.setView = setView;
 window.setNotesFolderFilter = setNotesFolderFilter;
+

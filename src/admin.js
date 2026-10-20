@@ -95,6 +95,19 @@ function readableTimestamp(value) {
   }).format(date);
 }
 
+function renderAdminWelcome(user = state.user) {
+  const now = new Date();
+  const hour = Number(new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo", hour: "2-digit", hour12: false,
+  }).format(now));
+  const greeting = hour < 12 ? "Bom dia" : hour < 18 ? "Boa tarde" : "Boa noite";
+  const firstName = String(user?.displayName || user?.email?.split("@")[0] || "Administrador").trim().split(/\s+/)[0];
+  $("#adGreeting").textContent = `${greeting}, ${firstName}. Tudo sob controle.`;
+  $("#adCurrentDate").textContent = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo", weekday: "long", day: "2-digit", month: "long",
+  }).format(now);
+}
+
 function renderStats(metrics) {
   const items = [
     ["♧", "Usuários ativos", metrics.users, "Contas no Firebase Auth"],
@@ -105,6 +118,12 @@ function renderStats(metrics) {
   $("#adStats").innerHTML = items.map(([icon, label, count, subtitle]) =>
     `<div class="ad-stat"><span class="ad-stat-icon" aria-hidden="true">${icon}</span><div><span class="ad-stat-label">${label}</span><strong>${typeof count === "number" ? count.toLocaleString("pt-BR") : escapeHtml(count)}</strong><small>${subtitle}</small></div></div>`
   ).join("");
+  $("#adOperationsSummary").innerHTML = [
+    ["✦", metrics.usersWithSavedChanges30d ?? 0, "usuários com atividade"],
+    ["◉", metrics.whatsappReceived30d ?? 0, "mensagens no WhatsApp"],
+    ["⌁", metrics.reminderDeliveriesAccepted30d ?? 0, "lembretes aceitos"],
+  ].map(([symbol, value, label]) => `<div class="ad-operation"><span aria-hidden="true">${symbol}</span><div><strong>${Number(value).toLocaleString("pt-BR")}</strong><small>${label} nos últimos 30 dias</small></div></div>`).join("");
+  if ($("#adLastRefresh")) $("#adLastRefresh").textContent = `Dados atualizados às ${new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" }).format(new Date())}`;
 }
 
 function renderAudit(events) {
@@ -448,6 +467,7 @@ onAuthStateChanged(auth, async (user) => {
     $("#adSession").textContent = "Acesso administrativo";
     $("#adAdminName").textContent = user.displayName || user.email || "Administrador";
     $("#adAdminAvatar").textContent = (user.displayName || user.email || "PN").split(/\s+|@/).filter(Boolean).slice(0, 2).map((part) => part[0].toUpperCase()).join("");
+    renderAdminWelcome(user);
     renderStats(data.metrics);
     renderAudit(data.recentAudit);
     const results = await Promise.allSettled([loadUsers(), loadPlans(), loadIntegrations(), loadConfig(), loadAdmins()]);
@@ -467,3 +487,4 @@ onAuthStateChanged(auth, async (user) => {
     $("#adRetry")?.addEventListener("click", () => location.reload());
   }
 });
+

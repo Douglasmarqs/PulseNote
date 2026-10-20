@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { requireAdmin, checkUserFeature } = require("../api/_lib/admin");
+const { requireAdmin, checkUserFeature, configuredPrimaryAdminEmail } = require("../api/_lib/admin");
 const { getRuntimeConfig, assertFeatureEnabled } = require("../api/_lib/adminConfig");
 const { validateFeatureMap, integrationStatus, setEntitlement } = require("../api/admin")._test;
 
@@ -49,6 +49,21 @@ test("aceita somente e-mail confirmado na allowlist ou papel privado no servidor
     const role = await requireAdmin({ headers: { authorization: "Bearer token" } }, fakeFirebase({ role: true }));
     assert.equal(role.uid, "u1");
   } finally { if (original === undefined) delete process.env.ADMIN_EMAILS; else process.env.ADMIN_EMAILS = original; }
+});
+
+test("mantém a conta principal do proprietário autorizada quando a variável da Vercel não está disponível", async () => {
+  const originalPrimary = process.env.PRIMARY_ADMIN_EMAIL;
+  const originalAdmins = process.env.ADMIN_EMAILS;
+  delete process.env.PRIMARY_ADMIN_EMAIL;
+  delete process.env.ADMIN_EMAILS;
+  try {
+    assert.equal(configuredPrimaryAdminEmail(), "douglas1201.santos@gmail.com");
+    const allowed = await requireAdmin({ headers: { authorization: "Bearer token" } }, fakeFirebase({ email: "douglas1201.santos@gmail.com" }));
+    assert.equal(allowed.isOwner, true);
+  } finally {
+    if (originalPrimary === undefined) delete process.env.PRIMARY_ADMIN_EMAIL; else process.env.PRIMARY_ADMIN_EMAIL = originalPrimary;
+    if (originalAdmins === undefined) delete process.env.ADMIN_EMAILS; else process.env.ADMIN_EMAILS = originalAdmins;
+  }
 });
 
 test("manutenção e flags do servidor bloqueiam ações sem mudar acesso legado", async () => {
@@ -121,3 +136,4 @@ test("monitoramento mostra sinais reais e não confunde credenciais com entrega"
   assert.equal(qstash.runStatus, "ok");
   assert.match(result.note, /presença de credenciais/);
 });
+
