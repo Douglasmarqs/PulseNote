@@ -29,6 +29,10 @@ test("admin navigation avoids ad-blocker identifiers and keeps the page in its g
   assert.match(html, /aria-controls="pnRail"/);
   assert.match(js, /#pnRail/);
   assert.doesNotMatch(html, /adSidebar|class="ad-sidebar"/);
+  assert.doesNotMatch(html, /class="ad-section/);
+  assert.match(html, /class="pn-console-view is-active" id="pn-console-overview"/);
+  assert.match(js, /querySelectorAll\("\.pn-console-view"\)/);
+  assert.match(js, /`pn-console-\$\{section\}`/);
   assert.match(baseRule(".ad-page"), /grid-column:2/);
   assert.match(baseRule(".ad-shell.is-locked .ad-page"), /grid-column:1/);
   assert.match(css, /\.ad-page\{grid-column:auto\}/);
@@ -39,6 +43,6 @@ test("the same signed-in account can switch between the personal app and adminis
   assert.match(html, /Abrir meu PulseNote/);
   assert.match(appJs, /id="dropdownAdmin" hidden/);
   assert.match(appJs, /window\.location\.assign\("\/admin"\)/);
-  assert.match(appJs, /dropdownEntry\.hidden = !allowed/);
+  assert.match(appJs, /douglas1201\.santos@gmail\.com/);
+  assert.match(appJs, /dropdownEntry\.hidden = !\(allowed \|\| isPrimaryOwner\)/);
 });
-

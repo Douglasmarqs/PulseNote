@@ -238,7 +238,7 @@ async function showSection(section) {
   const sequence = ++state.loadSequence;
   $("#adPageTitle").textContent = section === "overview" ? "Administração" : SECTION_LABELS[section];
   $("#adPageSubtitle").textContent = SECTION_SUBTITLES[section];
-  document.querySelectorAll(".ad-section").forEach((element) => element.classList.toggle("is-active", element.id === `ad-${section}`));
+  document.querySelectorAll(".pn-console-view").forEach((element) => element.classList.toggle("is-active", element.id === `pn-console-${section}`));
   document.querySelectorAll("[data-section]").forEach((button) => button.classList.toggle("is-active", button.dataset.section === section));
   closeMenu();
   setLoadError();
@@ -487,4 +487,3 @@ onAuthStateChanged(auth, async (user) => {
     $("#adRetry")?.addEventListener("click", () => location.reload());
   }
 });
-

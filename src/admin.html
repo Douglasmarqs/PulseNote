@@ -49,7 +49,7 @@
           <div class="ad-stats" id="adStats" aria-label="Métricas dos últimos 30 dias"></div>
           <div class="ad-mobile-tabs" id="adMobileTabs" aria-label="Seções administrativas"></div>
 
-          <section class="ad-section is-active" id="ad-overview" aria-labelledby="ad-overview-title">
+          <section class="pn-console-view is-active" id="pn-console-overview" aria-labelledby="ad-overview-title">
             <section class="ad-command-hero" aria-labelledby="ad-overview-title">
               <div class="ad-command-copy">
                 <span class="ad-command-kicker"><i aria-hidden="true"></i> Operação PulseNote</span>
@@ -82,14 +82,14 @@
             <div class="ad-card ad-audit-card"><div class="ad-card-head"><div><span class="ad-card-kicker">AUDITORIA</span><h2>Atividade recente</h2><p>Registro de alterações administrativas reais.</p></div><button class="ad-link" type="button" id="adAuditRefresh">Atualizar ↻</button></div><div id="adAuditPreview" class="ad-empty">Nenhuma ação registrada ainda.</div></div>
           </section>
 
-          <section class="ad-section" id="ad-users" aria-labelledby="ad-users-title">
+          <section class="pn-console-view" id="pn-console-users" aria-labelledby="ad-users-title">
             <div class="ad-card"><div class="ad-card-head"><div><h2 id="ad-users-title">Gestão de usuários</h2><p>Localize contas, altere planos e bloqueie acessos. Notas e finanças pessoais não são exibidas.</p></div></div>
               <form id="adUserSearch" class="ad-inline-form"><input id="adUserEmail" type="email" autocomplete="off" placeholder="Buscar pelo e-mail exato" aria-label="E-mail do usuário" /><button class="ad-primary-button" type="submit">Buscar</button><button class="ad-subtle-button" id="adUserClear" type="button">Limpar</button></form>
               <div id="adUsersList" class="ad-list"></div><div class="ad-list-footer"><span id="adUsersPageLabel"></span><button class="ad-subtle-button" id="adUsersNext" type="button">Próxima página →</button></div>
             </div>
           </section>
 
-          <section class="ad-section" id="ad-plans" aria-labelledby="ad-plans-title">
+          <section class="pn-console-view" id="pn-console-plans" aria-labelledby="ad-plans-title">
             <div class="ad-two-col">
               <div class="ad-card"><div class="ad-card-head"><div><h2 id="ad-plans-title">Planos e preços</h2><p>Recursos e preço exibido para cada assinatura.</p></div></div><div id="adPlansList" class="ad-list"></div></div>
               <div class="ad-card"><h2>Criar ou editar plano</h2><p>O Stripe Price ID só é usado quando a integração de pagamentos estiver conectada.</p><form id="adPlanForm" class="ad-form">
@@ -102,30 +102,30 @@
             </div>
           </section>
 
-          <section class="ad-section" id="ad-subscriptions" aria-labelledby="ad-subscriptions-title">
+          <section class="pn-console-view" id="pn-console-subscriptions" aria-labelledby="ad-subscriptions-title">
             <div class="ad-two-col"><div class="ad-card"><div class="ad-card-head"><div><h2 id="ad-subscriptions-title">Assinaturas</h2><p>Acesso manual e assinaturas sincronizadas pelo provedor.</p></div></div><div id="adSubscriptionsList" class="ad-list"></div></div>
               <div class="ad-card"><h2>Gerenciar acesso manual</h2><p>Use para suporte ou concessões administrativas; pagamentos automáticos são atualizados por webhook.</p><form id="adSubscriptionForm" class="ad-form"><label>UID do usuário<input name="uid" required maxlength="128" placeholder="UID do Firebase Auth" /></label><label>Plano<select name="planId" required id="adSubscriptionPlanSelect"></select></label><div class="ad-form-row"><label>Situação<select name="status"><option value="active">Ativa</option><option value="paused">Pausada</option><option value="cancelled">Cancelada</option></select></label><label>Válida até<input name="validUntil" type="date" /></label></div><button class="ad-primary-button" type="submit">Salvar acesso</button></form></div>
             </div>
           </section>
 
-          <section class="ad-section" id="ad-charges" aria-labelledby="ad-charges-title">
+          <section class="pn-console-view" id="pn-console-charges" aria-labelledby="ad-charges-title">
             <div class="ad-card ad-narrow-card"><div class="ad-card-head"><div><h2 id="ad-charges-title">Provedor de pagamentos</h2><p>Conexão para Checkout, assinaturas e portal do cliente.</p></div></div><div id="adBillingStatus" class="ad-provider"><span class="ad-provider-logo">S</span><div><strong>Stripe Billing</strong><small>Verificando credenciais e webhook…</small></div><span class="ad-pill is-warn">Verificando</span></div></div>
             <div class="ad-two-col ad-audit-card"><div class="ad-card"><div class="ad-card-head"><div><h2>Cobranças registradas</h2><p>Inclui apenas registros existentes no PulseNote.</p></div></div><div id="adChargesList" class="ad-list"></div></div>
               <div class="ad-card"><h2>Novo registro manual</h2><p>Não movimenta dinheiro e não substitui a confirmação do provedor.</p><form id="adChargeForm" class="ad-form"><label>UID do usuário<input name="uid" required maxlength="128" placeholder="UID do Firebase Auth" /></label><div class="ad-form-row"><label>Valor em reais<input name="amount" required inputmode="decimal" placeholder="0,00" /></label><label>Vencimento<input name="dueDate" type="date" /></label></div><label>Observação<textarea name="note" maxlength="300" rows="2"></textarea></label><button class="ad-primary-button" type="submit">Registrar manualmente</button></form></div>
             </div>
           </section>
 
-          <section class="ad-section" id="ad-features" aria-labelledby="ad-features-title"><div class="ad-card ad-narrow-card"><h2 id="ad-features-title">Recursos do produto</h2><p>Alterações globais são aplicadas no backend; o plano do usuário ainda pode limitar cada recurso.</p><form id="adFeaturesForm" class="ad-form"><div id="adFeatureSwitches"></div><button class="ad-primary-button" type="submit">Salvar recursos</button></form></div></section>
+          <section class="pn-console-view" id="pn-console-features" aria-labelledby="ad-features-title"><div class="ad-card ad-narrow-card"><h2 id="ad-features-title">Recursos do produto</h2><p>Alterações globais são aplicadas no backend; o plano do usuário ainda pode limitar cada recurso.</p><form id="adFeaturesForm" class="ad-form"><div id="adFeatureSwitches"></div><button class="ad-primary-button" type="submit">Salvar recursos</button></form></div></section>
 
-          <section class="ad-section" id="ad-integrations" aria-labelledby="ad-integrations-title"><div class="ad-card ad-narrow-card"><h2 id="ad-integrations-title">Integrações</h2><p>Credenciais, eventos recentes e execução dos serviços.</p><div id="adIntegrationsList"></div><p class="ad-fineprint" id="adIntegrationNote"></p></div></section>
+          <section class="pn-console-view" id="pn-console-integrations" aria-labelledby="ad-integrations-title"><div class="ad-card ad-narrow-card"><h2 id="ad-integrations-title">Integrações</h2><p>Credenciais, eventos recentes e execução dos serviços.</p><div id="adIntegrationsList"></div><p class="ad-fineprint" id="adIntegrationNote"></p></div></section>
 
-          <section class="ad-section" id="ad-security" aria-labelledby="ad-security-title">
+          <section class="pn-console-view" id="pn-console-security" aria-labelledby="ad-security-title">
             <div class="ad-two-col"><div class="ad-card"><div class="ad-card-head"><div><h2 id="ad-security-title">Acessos administrativos</h2><p>A mesma conta do PulseNote pode ter papel de usuário e administrador.</p></div></div><div id="adAdminsList" class="ad-list"></div></div>
               <div class="ad-card"><h2>Conceder acesso</h2><p>Somente o proprietário principal pode adicionar ou remover administradores.</p><form id="adAdminForm" class="ad-form"><label>E-mail verificado do usuário<input name="email" type="email" required autocomplete="off" placeholder="usuario@exemplo.com" /></label><button class="ad-primary-button" type="submit">Conceder acesso administrativo</button></form><p class="ad-security-note">O acesso usa a sessão Google/Firebase já existente e é revalidado pelo servidor em cada operação administrativa.</p></div>
             </div>
           </section>
 
-          <section class="ad-section" id="ad-settings" aria-labelledby="ad-settings-title"><div class="ad-card ad-narrow-card"><h2 id="ad-settings-title">Configurações gerais</h2><p>Estes valores são consumidos pelo servidor e alteram o funcionamento real do produto.</p><form id="adSettingsForm" class="ad-form"><label class="ad-switch-row"><span><strong>Modo manutenção</strong><small>Suspende gravações dos usuários durante uma intervenção.</small></span><input id="adMaintenanceInput" type="checkbox" name="maintenance" /></label><label>Mensagem de manutenção<textarea name="maintenanceMessage" maxlength="240" rows="2"></textarea></label><button class="ad-primary-button" type="submit">Salvar configurações</button></form></div></section>
+          <section class="pn-console-view" id="pn-console-settings" aria-labelledby="ad-settings-title"><div class="ad-card ad-narrow-card"><h2 id="ad-settings-title">Configurações gerais</h2><p>Estes valores são consumidos pelo servidor e alteram o funcionamento real do produto.</p><form id="adSettingsForm" class="ad-form"><label class="ad-switch-row"><span><strong>Modo manutenção</strong><small>Suspende gravações dos usuários durante uma intervenção.</small></span><input id="adMaintenanceInput" type="checkbox" name="maintenance" /></label><label>Mensagem de manutenção<textarea name="maintenanceMessage" maxlength="240" rows="2"></textarea></label><button class="ad-primary-button" type="submit">Salvar configurações</button></form></div></section>
         </div>
       </main>
     </div>
@@ -134,4 +134,3 @@
   <script type="module" src="/src/admin.js?v=25"></script>
 </body>
 </html>
-
