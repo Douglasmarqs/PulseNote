@@ -30,7 +30,8 @@
 // v22: invalida o CSS antigo do painel administrativo após a correção responsiva.
 // v23: atualiza o fluxo de retorno à administração após o login.
 // v24: entrega o Dashboard com painéis sempre visíveis no PWA instalado.
-const CACHE_NAME = "pulsenote-v24";
+// v25: entrega o novo painel administrativo e a área de assinatura.
+const CACHE_NAME = "pulsenote-v25";
 
 // ── Firebase Cloud Messaging (push em segundo plano) ──────────────
 // Isso é o que permite uma notificação aparecer mesmo com o PulseNote

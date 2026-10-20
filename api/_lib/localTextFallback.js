@@ -455,14 +455,14 @@ const TASK_CREATE_TRIGGERS = [
 // TASK_CREATE_TRIGGERS aqui não batia com nada e deixava o comando
 // inteiro (verbo incluso) como "alvo" da busca por tarefa.
 const TASK_COMPLETE_DELETE_TRIGGERS = [
-  /^\s*conclu[íi][r]?\s+(a\s+)?tarefa\s*(de|do|da)?\s*/i,
-  /^\s*termin[ei][i]?\s+(a\s+)?tarefa\s*(de|do|da)?\s*/i,
-  /^\s*finaliz[ei][i]?\s+(a\s+)?tarefa\s*(de|do|da)?\s*/i,
-  /^\s*marca[r]?\s+(a\s+)?tarefa\s*(de|do|da)?\s*(como\s+(feita|conclu[íi]da))?\s*/i,
-  /^\s*apag[ae][i]?[r]?\s+(a\s+)?tarefa\s*(de|do|da)?\s*/i,
-  /^\s*exclu[íi][i]?[r]?\s+(a\s+)?tarefa\s*(de|do|da)?\s*/i,
-  /^\s*deleta[r]?\s+(a\s+)?tarefa\s*(de|do|da)?\s*/i,
-  /^\s*remov[ei][i]?[r]?\s+(a\s+)?tarefa\s*(de|do|da)?\s*/i,
+  /^\s*conclu[íi][r]?\s+(a\s+)?tarefa\s*(?:(?:de|do|da)\b\s*)?/i,
+  /^\s*termin[ei][i]?\s+(a\s+)?tarefa\s*(?:(?:de|do|da)\b\s*)?/i,
+  /^\s*finaliz[ei][i]?\s+(a\s+)?tarefa\s*(?:(?:de|do|da)\b\s*)?/i,
+  /^\s*marca[r]?\s+(a\s+)?tarefa\s*(?:(?:de|do|da)\b\s*)?(como\s+(feita|conclu[íi]da))?\s*/i,
+  /^\s*apag[ae][i]?[r]?\s+(a\s+)?tarefa\s*(?:(?:de|do|da)\b\s*)?/i,
+  /^\s*exclu[íi][i]?[r]?\s+(a\s+)?tarefa\s*(?:(?:de|do|da)\b\s*)?/i,
+  /^\s*deleta[r]?\s+(a\s+)?tarefa\s*(?:(?:de|do|da)\b\s*)?/i,
+  /^\s*remov[ei][i]?[r]?\s+(a\s+)?tarefa\s*(?:(?:de|do|da)\b\s*)?/i,
 ];
 
 const GOAL_CREATE_TRIGGERS = [

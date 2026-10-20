@@ -361,7 +361,7 @@ function parseDeterministicIntent(text, todayIso, categories = []) {
     if (query) return { ok: true, intent: "note_action", note: { action: "search", query } };
   }
   if (/^\s*(apaga|exclui|deleta|remove)\s+(?:a\s+)?nota\b/i.test(text)) {
-    const query = compactTitle(text.replace(/^\s*(?:apaga|exclui|deleta|remove)\s+(?:a\s+)?nota\s*(?:de|do|da|sobre)?\s*/i, ""), 80);
+    const query = compactTitle(text.replace(/^\s*(?:apaga|exclui|deleta|remove)\s+(?:a\s+)?nota\s*(?:(?:de|do|da|sobre)\b\s*)?/i, ""), 80);
     if (query) return { ok: true, intent: "note_action", note: { action: "delete", query } };
   }
 
@@ -791,14 +791,15 @@ async function parseTextIntent({ text, categories, today, lastFinanceEntry, aiEn
 // entre um texto livre ("dentista") e o título de um item existente
 // (tarefa/nota/meta) — usado por task_action/note_action/goal_action
 // quando o alvo já existe, em vez de mandar a lista inteira pra IA.
-// Retorna o item de melhor pontuação, ou null se nada bater o suficiente.
-function findBestMatch(query, items, titleKey = "title") {
+// Retorna todos os itens empatados na melhor pontuação (ou [] sem match).
+// O wrapper singular preserva o comportamento das ações não destrutivas.
+function findBestMatches(query, items, titleKey = "title") {
   const norm = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
   const q = norm(query);
-  if (!q) return null;
+  if (!q) return [];
   const qTokens = q.split(/\s+/).filter(Boolean);
 
-  let best = null;
+  let best = [];
   let bestScore = 0;
   for (const item of items) {
     const title = norm(item[titleKey]);
@@ -813,10 +814,16 @@ function findBestMatch(query, items, titleKey = "title") {
     }
     if (score > bestScore) {
       bestScore = score;
-      best = item;
+      best = [item];
+    } else if (score > 0 && score === bestScore) {
+      best.push(item);
     }
   }
-  return bestScore >= 20 ? best : null;
+  return bestScore >= 20 ? best : [];
 }
 
-module.exports = { parseTextIntent, findBestMatch };
+function findBestMatch(query, items, titleKey = "title") {
+  return findBestMatches(query, items, titleKey)[0] || null;
+}
+
+module.exports = { parseTextIntent, findBestMatch, findBestMatches };

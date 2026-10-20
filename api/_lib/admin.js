@@ -17,10 +17,13 @@ function getAdmin() {
 }
 
 function configuredAdminEmails() {
-  return new Set((process.env.ADMIN_EMAILS || "")
-    .split(",")
+  return new Set([process.env.PRIMARY_ADMIN_EMAIL || "", ...(process.env.ADMIN_EMAILS || "").split(",")]
     .map((email) => email.trim().toLowerCase())
     .filter(Boolean));
+}
+
+function configuredPrimaryAdminEmail() {
+  return (process.env.PRIMARY_ADMIN_EMAIL || (process.env.ADMIN_EMAILS || "").split(",")[0] || "").trim().toLowerCase();
 }
 
 async function requireAdmin(req, firebase = getAdmin()) {
@@ -55,7 +58,7 @@ async function requireAdmin(req, firebase = getAdmin()) {
     error.status = 403;
     throw error;
   }
-  return { uid: user.uid, email, firebase };
+  return { uid: user.uid, email, firebase, isOwner: email === configuredPrimaryAdminEmail() };
 }
 
 async function getUserEntitlements(db, uid) {
@@ -68,7 +71,7 @@ async function getUserEntitlements(db, uid) {
   }
   const data = entitlement.data() || {};
   if (!data.planId) return { planId: null, features: {}, status: "unassigned" };
-  if (data.status === "paused" || data.status === "cancelled") {
+  if (data.status && data.status !== "active") {
     return { planId: data.planId, features: {}, status: data.status };
   }
   const parts = new Intl.DateTimeFormat("en-US", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
@@ -99,6 +102,7 @@ async function checkUserFeature(db, uid, feature) {
 module.exports = {
   DEFAULT_FEATURES,
   configuredAdminEmails,
+  configuredPrimaryAdminEmail,
   getAdmin,
   requireAdmin,
   normalizeRuntimeConfig,

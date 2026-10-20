@@ -69,4 +69,3 @@ test("app e WhatsApp usam a mesma categoria nos lançamentos cotidianos", async 
     assert.equal(commandResult.entry?.categoryId, expected, `comando WhatsApp: ${message}`);
   }
 });
-

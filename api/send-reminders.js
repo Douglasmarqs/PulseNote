@@ -55,14 +55,6 @@ const { getUserEntitlements } = require("./_lib/admin");
 const { META_GRAPH_VERSION } = require("./_lib/metaGraph");
 const DEFAULT_TIME_ZONE = "America/Sao_Paulo";
 
-// O telefone em userData pode ser editado pelo cliente. Somente o índice
-// privado whatsappLinks prova a titularidade do número de destino.
-async function verifiedReminderWhatsAppPhone(db, uid, phone) {
-  if (typeof uid !== "string" || !uid || typeof phone !== "string" || !/^\d{8,15}$/.test(phone)) return null;
-  const link = await db.collection("whatsappLinks").doc(phone).get();
-  return link.exists && link.data()?.uid === uid ? phone : null;
-}
-
 function validTimeZone(value) {
   if (typeof value !== "string" || !value.trim()) return DEFAULT_TIME_ZONE;
   const timeZone = value.trim();
@@ -74,6 +66,14 @@ function validTimeZone(value) {
     // os lembretes de todos os outros usuários nesta execução.
     return DEFAULT_TIME_ZONE;
   }
+}
+
+// The phone mirrored in userData is client-writable. Only the server-owned
+// whatsappLinks index proves that this account linked the destination number.
+async function verifiedReminderWhatsAppPhone(db, uid, phone) {
+  if (typeof uid !== "string" || !uid || typeof phone !== "string" || !/^\d{8,15}$/.test(phone)) return null;
+  const link = await db.collection("whatsappLinks").doc(phone).get();
+  return link.exists && link.data()?.uid === uid ? phone : null;
 }
 
 // Cooldown (em horas) até poder notificar de novo o MESMO tipo de aviso
@@ -502,7 +502,7 @@ module.exports = async (req, res) => {
         try {
           verifiedWhatsAppPhone = await verifiedReminderWhatsAppPhone(db, uid, state.whatsappLinkedPhone);
         } catch (error) {
-          // Falha fechada no WhatsApp, sem interromper push nem outros usuários.
+          // Fail closed for WhatsApp without interrupting push or other users.
           console.warn("Falha ao validar vínculo WhatsApp para lembrete:", error?.code || error?.name || "unknown");
           errors.push({ uid, key: "whatsapp_link", channel: "whatsapp", error: "whatsapp_link_lookup_failed" });
         }

@@ -106,4 +106,3 @@ test("meio explícito no OCR ou na legenda permanece no lançamento", async () =
   assert.equal(paymentMethodForMedia({ paymentStatus: "desconhecido" }, "paguei no Pix"), "Pix");
   assert.equal(inferMediaCaptionPaymentMethod("boleto pago"), "Boleto");
 });
-

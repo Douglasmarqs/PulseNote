@@ -1016,6 +1016,76 @@ function renderSettings() {
     : initial;
 
   renderWhatsAppSettings();
+  loadBillingSettings();
+}
+
+let billingRequest = null;
+function billingMoney(cents) {
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format((Number(cents) || 0) / 100);
+}
+
+async function billingApi(action, method = "GET", body) {
+  if (!currentUser) throw new Error("unauthorized");
+  const token = await currentUser.getIdToken();
+  const response = await fetch(`/api/billing?action=${encodeURIComponent(action)}`, {
+    method,
+    headers: { "Authorization": `Bearer ${token}`, ...(body ? { "Content-Type": "application/json" } : {}) },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw Object.assign(new Error(payload.error || "billing_request_failed"), { code: payload.error });
+  return payload;
+}
+
+async function loadBillingSettings(force = false) {
+  const grid = document.getElementById("billingPlanGrid");
+  if (!grid || !currentUser) return;
+  if (billingRequest && !force) return billingRequest;
+  const statusBadge = document.getElementById("billingStatusBadge");
+  const statusText = document.getElementById("billingStatusText");
+  billingRequest = billingApi("status").then((data) => {
+    const current = data.subscription || {};
+    const active = current.status === "active";
+    statusBadge.textContent = active ? "Assinatura ativa" : current.planId ? "Assinatura pausada" : "Sem plano contratado";
+    statusBadge.className = `billing-status-badge ${active ? "is-active" : current.planId ? "is-warning" : ""}`;
+    statusText.textContent = !data.configured
+      ? "Os pagamentos ainda não foram ativados pelo administrador. Seus recursos atuais continuam funcionando normalmente."
+      : active ? "Seu acesso é atualizado automaticamente após cada confirmação do provedor de pagamento."
+        : "Escolha um plano para ativar os recursos correspondentes.";
+    grid.innerHTML = data.plans.length ? data.plans.map((plan) => {
+      const isCurrent = current.planId === plan.id;
+      const disabled = isCurrent || !plan.checkoutAvailable;
+      return `<article class="billing-plan-card ${isCurrent ? "is-current" : ""}">
+        <h3>${escapeHtml(plan.name)}</h3><p>${escapeHtml(plan.description || "Recursos definidos pelo administrador.")}</p>
+        <div class="billing-plan-price">${billingMoney(plan.priceCents)} <small>/${plan.billingInterval === "year" ? "ano" : "mês"}</small></div>
+        <button type="button" class="${isCurrent ? "ghost-button" : "primary-button"}" data-billing-plan="${escapeHtml(plan.id)}" ${disabled ? "disabled" : ""}>${isCurrent ? "Plano atual" : plan.checkoutAvailable ? "Assinar plano" : "Indisponível"}</button>
+      </article>`;
+    }).join("") : `<div class="empty-state">Nenhum plano público está disponível no momento.</div>`;
+    document.getElementById("billingActions").hidden = current.provider !== "stripe";
+    grid.querySelectorAll("[data-billing-plan]").forEach((button) => button.addEventListener("click", async () => {
+      if (button.disabled) return;
+      const original = button.textContent;
+      button.disabled = true;
+      button.textContent = "Abrindo pagamento…";
+      try {
+        const result = await billingApi("checkout", "POST", { planId: button.dataset.billingPlan });
+        window.location.assign(result.url);
+      } catch (error) {
+        console.error("Falha ao iniciar checkout:", error.code || error.message);
+        button.disabled = false;
+        button.textContent = original;
+        showToast("Não foi possível abrir o pagamento agora.");
+      }
+    }));
+    return data;
+  }).catch((error) => {
+    console.error("Falha ao carregar cobrança:", error.code || error.message);
+    statusBadge.textContent = "Indisponível";
+    statusBadge.className = "billing-status-badge is-warning";
+    statusText.textContent = "Não foi possível consultar sua assinatura agora. Tente novamente em instantes.";
+    grid.innerHTML = "";
+  }).finally(() => { billingRequest = null; });
+  return billingRequest;
 }
 
 // Mostra o estado atual da integração com WhatsApp em Configurações:
@@ -1117,6 +1187,22 @@ function bindSettingsView() {
   function hideSettingsMsg() {
     msgEl.hidden = true;
   }
+
+  document.getElementById("billingPortalButton")?.addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    const original = button.textContent;
+    button.disabled = true;
+    button.textContent = "Abrindo portal…";
+    try {
+      const result = await billingApi("portal", "POST");
+      window.location.assign(result.url);
+    } catch (error) {
+      console.error("Falha ao abrir portal de cobrança:", error.code || error.message);
+      button.disabled = false;
+      button.textContent = original;
+      showSettingsMsg("Não foi possível abrir a gestão da assinatura agora.", "error");
+    }
+  });
 
   // ── Upload de foto (processada localmente, sem Firebase Storage) ──
   document.getElementById("settingsPhotoInput").addEventListener("change", async (e) => {

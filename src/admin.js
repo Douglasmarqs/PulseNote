@@ -9,10 +9,31 @@ const FEATURE_LABELS = {
 };
 const SECTION_LABELS = {
   overview: "Visão geral", users: "Usuários", plans: "Planos", subscriptions: "Assinaturas", charges: "Cobranças",
-  features: "Recursos", integrations: "Integrações", settings: "Configurações",
+  features: "Recursos", integrations: "Integrações", security: "Segurança", settings: "Configurações",
 };
-const state = { user: null, config: null, plans: [], users: [], usersNextPageToken: null, currentSection: "overview", loadSequence: 0, authSequence: 0 };
+const SECTION_SUBTITLES = {
+  overview: "Gerencie usuários, planos, cobranças e a operação do PulseNote.",
+  users: "Pesquise contas, controle acesso e atribua planos.",
+  plans: "Defina preços e recursos disponíveis em cada oferta.",
+  subscriptions: "Acompanhe concessões manuais e assinaturas do provedor.",
+  charges: "Monitore pagamentos e registros financeiros administrativos.",
+  features: "Ative ou suspenda recursos globais do produto.",
+  integrations: "Acompanhe credenciais, eventos e saúde dos serviços.",
+  security: "Gerencie administradores e revise o acesso privilegiado.",
+  settings: "Controle manutenção e configurações operacionais.",
+};
+const state = { user: null, config: null, plans: [], users: [], admins: [], usersNextPageToken: null, currentSection: "overview", loadSequence: 0, authSequence: 0, isOwner: false };
 const $ = (selector) => document.querySelector(selector);
+
+function applyTheme(choice = globalThis.localStorage?.getItem("pulsenote-theme") || "aurora") {
+  const normalized = choice === "light" ? "light" : choice === "eclipse" ? "eclipse" : "aurora";
+  document.documentElement?.setAttribute("data-theme", normalized);
+  globalThis.localStorage?.setItem("pulsenote-theme", normalized);
+  $("#adThemeButton")?.setAttribute("aria-label", normalized === "light" ? "Ativar tema escuro" : "Ativar tema claro");
+  if ($("#adThemeButton")) $("#adThemeButton").textContent = normalized === "light" ? "☾" : "☼";
+}
+
+applyTheme();
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (character) => ({
@@ -76,13 +97,13 @@ function readableTimestamp(value) {
 
 function renderStats(metrics) {
   const items = [
-    ["♧", "Usuários", metrics.users, "Contas no Firebase Auth"],
-    ["▥", "Com alterações", metrics.usersWithSavedChanges30d, "Salvaram dados nos últimos 30 dias"],
-    ["◉", "WhatsApp", metrics.whatsappReceived30d, "Mensagens recebidas em 30 dias"],
-    ["♧", "Lembretes", metrics.reminderDeliveriesAccepted30d, "Entregas aceitas em 30 dias"],
+    ["♧", "Usuários ativos", metrics.users, "Contas no Firebase Auth"],
+    ["▣", "Assinaturas", metrics.activeSubscriptions ?? 0, "Acessos ativos por plano"],
+    ["$", "Receita registrada", money(metrics.revenueCents30d ?? 0), "Recebimentos confirmados em 30 dias"],
+    ["↗", "Integrações saudáveis", `${metrics.integrationsHealthy ?? 0}/${metrics.integrationsTotal ?? 0}`, "Serviços com credenciais completas"],
   ];
   $("#adStats").innerHTML = items.map(([icon, label, count, subtitle]) =>
-    `<div class="ad-stat"><span class="ad-stat-icon" aria-hidden="true">${icon}</span><div><span class="ad-stat-label">${label}</span><strong>${Number(count).toLocaleString("pt-BR")}</strong><small>${subtitle}</small></div></div>`
+    `<div class="ad-stat"><span class="ad-stat-icon" aria-hidden="true">${icon}</span><div><span class="ad-stat-label">${label}</span><strong>${typeof count === "number" ? count.toLocaleString("pt-BR") : escapeHtml(count)}</strong><small>${subtitle}</small></div></div>`
   ).join("");
 }
 
@@ -94,7 +115,7 @@ function renderAudit(events) {
 }
 
 function renderIntegrationRows(data, selector, compact = false) {
-  const symbols = { firebase: "◆", whatsapp: "◉", gemini: "✦", qstash: "▣" };
+  const symbols = { firebase: "◆", whatsapp: "◉", gemini: "✦", qstash: "▣", stripe: "$" };
   $(selector).innerHTML = data.integrations.map((item) => {
     const detail = item.id === "qstash"
       ? `Última execução: ${readableTimestamp(item.lastRunAt)} · ${item.runStatus === "ok" ? "sem falhas" : item.runStatus === "unknown" ? "sem histórico" : item.runStatus}`
@@ -104,6 +125,10 @@ function renderIntegrationRows(data, selector, compact = false) {
     return `<div class="ad-integration"><span class="ad-integration-icon" aria-hidden="true">${symbols[item.id] || "◇"}</span><span class="ad-integration-content"><strong>${escapeHtml(item.label)}</strong><small>${escapeHtml(detail)}</small></span><span class="ad-pill ${item.configured ? "" : "is-warn"}">${item.configured ? "Configurado" : "Pendente"}</span></div>`;
   }).join("");
   if (!compact) $("#adIntegrationNote").textContent = data.note || "";
+  const stripe = data.integrations.find((item) => item.id === "stripe");
+  if (stripe && $("#adBillingStatus")) {
+    $("#adBillingStatus").innerHTML = `<span class="ad-provider-logo">S</span><div><strong>Stripe Billing</strong><small>${escapeHtml(stripe.detail)}</small></div><span class="ad-pill ${stripe.configured ? "" : "is-warn"}">${stripe.configured ? "Conectado" : "Configuração pendente"}</span>`;
+  }
 }
 
 function userRow(user) {
@@ -131,7 +156,7 @@ async function loadUsers(query = {}) {
 async function loadPlans() {
   const data = await request("plans");
   state.plans = data.plans;
-  $("#adPlansList").innerHTML = state.plans.length ? state.plans.map((plan) => `<div class="ad-plan"><div><strong>${escapeHtml(plan.name)}</strong><small>${escapeHtml(plan.id)} · ${escapeHtml(plan.description || "Sem descrição")}</small></div><div class="ad-plan-actions"><span class="ad-pill ${plan.active ? "" : "is-off"}">${plan.active ? "Ativo" : "Inativo"}</span><button class="ad-subtle-button" type="button" data-edit-plan="${escapeHtml(plan.id)}">Editar</button></div></div>`).join("") : `<div class="ad-empty">Nenhum plano criado. Contas sem plano mantêm o acesso atual.</div>`;
+  $("#adPlansList").innerHTML = state.plans.length ? state.plans.map((plan) => `<div class="ad-plan"><div><strong>${escapeHtml(plan.name)}${plan.priceCents ? ` · ${money(plan.priceCents)}/${plan.billingInterval === "year" ? "ano" : "mês"}` : ""}</strong><small>${escapeHtml(plan.id)} · ${escapeHtml(plan.description || "Sem descrição")}${plan.stripePriceId ? " · Checkout conectado" : " · Sem checkout"}</small></div><div class="ad-plan-actions"><span class="ad-pill ${plan.active ? "" : "is-off"}">${plan.active ? "Ativo" : "Inativo"}</span><button class="ad-subtle-button" type="button" data-edit-plan="${escapeHtml(plan.id)}">Editar</button></div></div>`).join("") : `<div class="ad-empty">Nenhum plano criado. Contas sem plano mantêm o acesso atual.</div>`;
   $("#adSubscriptionPlanSelect").innerHTML = `<option value="">Selecione um plano</option>` + state.plans.filter((plan) => plan.active !== false).map((plan) => `<option value="${escapeHtml(plan.id)}">${escapeHtml(plan.name)}</option>`).join("");
   renderUsers();
 }
@@ -174,6 +199,14 @@ async function loadIntegrations() {
   renderIntegrationRows(data, "#adIntegrationsList");
 }
 
+async function loadAdmins() {
+  const data = await request("admins");
+  state.admins = data.admins || [];
+  state.isOwner = data.isOwner === true;
+  $("#adAdminForm").hidden = !state.isOwner;
+  $("#adAdminsList").innerHTML = state.admins.length ? state.admins.map((admin) => `<div class="ad-admin-row"><div><strong>${escapeHtml(admin.displayName || admin.email)}</strong><small>${escapeHtml(admin.email)} · ${admin.owner ? "Proprietário principal" : "Administrador"}${admin.source === "environment" ? " · Configuração do servidor" : " · Regra no Firebase"}</small></div><div class="ad-plan-actions"><span class="ad-pill ${admin.owner ? "" : "is-off"}">${admin.owner ? "Proprietário" : "Admin"}</span>${state.isOwner && !admin.owner && admin.uid !== state.user?.uid ? `<button class="ad-subtle-button" type="button" data-revoke-admin="${escapeHtml(admin.uid)}">Remover</button>` : ""}</div></div>`).join("") : `<div class="ad-empty">Nenhum administrador adicional cadastrado.</div>`;
+}
+
 async function loadDashboard() {
   const data = await request("dashboard");
   renderStats(data.metrics);
@@ -184,6 +217,8 @@ async function showSection(section) {
   if (!SECTION_LABELS[section]) return;
   state.currentSection = section;
   const sequence = ++state.loadSequence;
+  $("#adPageTitle").textContent = section === "overview" ? "Administração" : SECTION_LABELS[section];
+  $("#adPageSubtitle").textContent = SECTION_SUBTITLES[section];
   document.querySelectorAll(".ad-section").forEach((element) => element.classList.toggle("is-active", element.id === `ad-${section}`));
   document.querySelectorAll("[data-section]").forEach((button) => button.classList.toggle("is-active", button.dataset.section === section));
   closeMenu();
@@ -196,6 +231,7 @@ async function showSection(section) {
     charges: [loadCharges],
     features: [loadConfig],
     integrations: [loadIntegrations],
+    security: [loadAdmins],
     settings: [loadConfig],
   };
   const results = await Promise.allSettled(loads[section].map((load) => load()));
@@ -217,6 +253,7 @@ function bindNavigation() {
     $("#adMenuBackdrop").hidden = !open;
   });
   $("#adMenuBackdrop").addEventListener("click", closeMenu);
+  $("#adThemeButton").addEventListener("click", () => applyTheme(document.documentElement.dataset.theme === "light" ? "aurora" : "light"));
   $("#adSectionRetry").addEventListener("click", () => showSection(state.currentSection));
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && $("#pnRail").classList.contains("is-open")) {
@@ -251,6 +288,9 @@ function bindActions() {
       form.elements.id.value = plan.id;
       form.elements.name.value = plan.name;
       form.elements.description.value = plan.description || "";
+      form.elements.price.value = plan.priceCents ? String(plan.priceCents / 100).replace(".", ",") : "";
+      form.elements.billingInterval.value = plan.billingInterval || "month";
+      form.elements.stripePriceId.value = plan.stripePriceId || "";
       form.elements.active.checked = plan.active !== false;
       for (const key of Object.keys(FEATURE_LABELS)) form.elements[`feature-${key}`].checked = plan.features?.[key] === true;
       form.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -273,6 +313,12 @@ function bindActions() {
       form.elements.status.value = subscriptionButton.dataset.status;
       form.elements.validUntil.value = subscriptionButton.dataset.validUntil;
       form.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+    const revokeAdmin = event.target.closest("[data-revoke-admin]");
+    if (revokeAdmin) {
+      const uid = revokeAdmin.dataset.revokeAdmin;
+      if (!uid || !window.confirm("Remover o acesso administrativo desta conta? A conta continuará existindo como usuário comum.")) return;
+      try { await request("admin-role-set", { uid, enabled: false }); toast("Acesso administrativo removido."); await loadAdmins(); } catch (error) { toast(error.message, true); }
     }
   });
 
@@ -297,11 +343,17 @@ function bindActions() {
     const form = event.currentTarget;
     const features = Object.fromEntries(Object.keys(FEATURE_LABELS).map((key) => [key, form.elements[`feature-${key}`].checked]));
     const existing = state.plans.find((plan) => plan.id === form.elements.id.value.trim().toLowerCase());
+    const rawPrice = form.elements.price.value.trim().replace(/\s|R\$/g, "");
+    const normalizedPrice = rawPrice.includes(",") ? rawPrice.replace(/\./g, "").replace(",", ".") : rawPrice;
+    const price = normalizedPrice ? Number(normalizedPrice) : 0;
+    if (!Number.isFinite(price) || price < 0 || (normalizedPrice && !/^\d+(?:\.\d{1,2})?$/.test(normalizedPrice))) return toast("Informe um preço válido com até duas casas decimais.", true);
     if (existing && (existing.active !== form.elements.active.checked
       || Object.keys(FEATURE_LABELS).some((key) => existing.features?.[key] !== features[key]))
       && !window.confirm(`Alterar os recursos do plano ${existing.name}? Isso pode mudar o acesso de todos os assinantes imediatamente.`)) return;
     try {
-      await request("plan-save", { id: form.elements.id.value, name: form.elements.name.value, description: form.elements.description.value, active: form.elements.active.checked, features });
+      await request("plan-save", { id: form.elements.id.value, name: form.elements.name.value, description: form.elements.description.value,
+        priceCents: Math.round(price * 100), billingInterval: form.elements.billingInterval.value,
+        stripePriceId: form.elements.stripePriceId.value.trim(), active: form.elements.active.checked, features });
       toast("Plano salvo."); form.reset(); await loadPlans();
     } catch (error) { toast(error.message, true); }
   });
@@ -357,6 +409,13 @@ function bindActions() {
       state.config = data.config; renderConfig(); toast("Configurações atualizadas no servidor.");
     } catch (error) { toast(error.message, true); }
   });
+  $("#adAdminForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const email = form.elements.email.value.trim().toLowerCase();
+    if (!window.confirm(`Conceder acesso administrativo a ${email}? Essa conta poderá alterar usuários, recursos e configurações.`)) return;
+    try { await request("admin-role-set", { email, enabled: true }); toast("Administrador adicionado."); form.reset(); await loadAdmins(); } catch (error) { toast(error.message, true); }
+  });
 }
 
 bindNavigation();
@@ -387,10 +446,13 @@ onAuthStateChanged(auth, async (user) => {
     $("#adContent").hidden = false;
     $("#adAccount").textContent = user.email || "Administrador";
     $("#adSession").textContent = "Acesso administrativo";
+    $("#adAdminName").textContent = user.displayName || user.email || "Administrador";
+    $("#adAdminAvatar").textContent = (user.displayName || user.email || "PN").split(/\s+|@/).filter(Boolean).slice(0, 2).map((part) => part[0].toUpperCase()).join("");
     renderStats(data.metrics);
     renderAudit(data.recentAudit);
-    const results = await Promise.allSettled([loadUsers(), loadPlans(), loadIntegrations(), loadConfig()]);
+    const results = await Promise.allSettled([loadUsers(), loadPlans(), loadIntegrations(), loadConfig(), loadAdmins()]);
     if (sequence !== state.authSequence || state.user !== user) return;
+    $("#adAdminRole").textContent = state.isOwner ? "Proprietário principal" : "Administrador";
     const failed = results.find((result) => result.status === "rejected");
     if (failed) setLoadError(`Parte do painel não carregou: ${failed.reason.message}. Tente novamente.`);
   } catch (error) {

@@ -236,4 +236,3 @@ async function transcribeAudio({ audioBase64, mimeType }) {
 }
 
 module.exports = { parseTransactionText, parseTransactionImage, parseNoteImage, transcribeAudio };
-

@@ -281,11 +281,8 @@
             </button>
           </div>
 
-          <!-- Dashboard panels — cada um pode ser minimizado (estado fica
-               salvo, então continua do jeito que a pessoa deixou da
-               próxima vez que abrir o app). O botão "→" continua levando
-               pra tela cheia daquele assunto; o chevron só encolhe/expande
-               o cartão aqui no início. -->
+          <!-- Painéis do Dashboard ficam sempre visíveis. Os botões "→"
+               continuam abrindo a área correspondente. -->
           <!-- Coluna principal + barra lateral, como qualquer dashboard
                profissional: a ordem visual sempre bate com a ordem aqui
                no HTML (nada de grid "dense" reordenando cartões sozinho). -->
@@ -452,11 +449,13 @@
                   <label class="pqa-icon-row">
                     <span class="pqa-row-icon" style="color:var(--teal)">◷</span>
                     <span class="pqa-row-label">Horário</span>
-                    <input id="pqaTaskTime" type="time" class="pqa-row-control" value="09:00" />
+                    <input id="pqaTaskTime" type="time" class="pqa-row-control" />
                   </label>
                   <select id="pqaTaskReminder" aria-label="Antecedência do lembrete da tarefa">
+                    <option value="none" selected>Sem lembrete</option>
+                    <option value="0">Lembrar na hora</option>
                     <option value="5">Lembrar 5 min antes</option>
-                    <option value="15" selected>Lembrar 15 min antes</option>
+                    <option value="15">Lembrar 15 min antes</option>
                     <option value="30">Lembrar 30 min antes</option>
                     <option value="60">Lembrar 1 hora antes</option>
                     <option value="1440">Lembrar 1 dia antes</option>
@@ -464,7 +463,7 @@
                   </select>
                   <label id="pqaTaskReminderCustom" class="reminder-custom-field" hidden>
                     <span>Lembrar com</span>
-                    <input id="pqaTaskReminderMinutes" type="number" min="5" max="10080" step="5" inputmode="numeric" placeholder="ex.: 90" />
+                    <input id="pqaTaskReminderMinutes" type="number" min="1" max="10080" step="1" inputmode="numeric" placeholder="ex.: 90" />
                     <span>minutos de antecedência</span>
                   </label>
                 </div>
@@ -476,8 +475,10 @@
                   </div>
                   <input id="pqaEventLocation" placeholder="Local ou link" style="margin-top:10px" />
                   <select id="pqaEventReminder" style="margin-top:10px">
+                    <option value="none" selected>Sem lembrete</option>
+                    <option value="0">Lembrar na hora</option>
                     <option value="5">Lembrar 5 min antes</option>
-                    <option value="15" selected>Lembrar 15 min antes</option>
+                    <option value="15">Lembrar 15 min antes</option>
                     <option value="30">Lembrar 30 min antes</option>
                       <option value="60">Lembrar 1 hora antes</option>
                       <option value="1440">Lembrar 1 dia antes</option>
@@ -485,7 +486,7 @@
                     </select>
                     <label id="pqaEventReminderCustom" class="reminder-custom-field" hidden>
                       <span>Lembrar com</span>
-                      <input id="pqaEventReminderMinutes" type="number" min="5" max="10080" step="5" inputmode="numeric" placeholder="ex.: 90" />
+                      <input id="pqaEventReminderMinutes" type="number" min="1" max="10080" step="1" inputmode="numeric" placeholder="ex.: 90" />
                       <span>minutos de antecedência</span>
                     </label>
                   <textarea id="pqaEventNotes" rows="2" placeholder="Notas do compromisso (opcional)" style="margin-top:10px"></textarea>
@@ -1205,6 +1206,23 @@
                 <button type="button" class="theme-toggle-btn" data-theme-choice="system" role="radio">
                   <span class="theme-toggle-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4.5" width="19" height="13" rx="2"/><path d="M8 21h8"/><path d="M12 17.5V21"/></svg></span><span>Automático</span>
                 </button>
+              </div>
+            </section>
+
+            <p class="settings-section-label">Plano e cobrança</p>
+
+            <section class="panel billing-settings-card" id="billingSettingsCard">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Assinatura</p>
+                  <h2>Seu plano PulseNote</h2>
+                </div>
+                <span class="billing-status-badge" id="billingStatusBadge">Carregando…</span>
+              </div>
+              <p class="task-meta" id="billingStatusText">Consultando os planos disponíveis e o estado da sua assinatura.</p>
+              <div class="billing-plan-grid" id="billingPlanGrid" aria-live="polite"></div>
+              <div class="form-actions billing-actions" id="billingActions" hidden>
+                <button id="billingPortalButton" type="button" class="ghost-button">Gerenciar pagamento e assinatura</button>
               </div>
             </section>
 

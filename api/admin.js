@@ -1,7 +1,7 @@
 "use strict";
 
 const crypto = require("node:crypto");
-const { getAdmin, requireAdmin, configuredAdminEmails } = require("./_lib/admin");
+const { getAdmin, requireAdmin, configuredAdminEmails, configuredPrimaryAdminEmail } = require("./_lib/admin");
 const { DEFAULT_FEATURES, getRuntimeConfig, normalizeRuntimeConfig } = require("./_lib/adminConfig");
 
 function fail(status, code) {
@@ -43,16 +43,25 @@ async function countAuthUsers(firebase) {
 
 async function dashboard(firebase, db) {
   const since = new Date(Date.now() - 30 * 86400000).toISOString();
-  const [users, recentUsers, whatsapp, reminders, recentAudit] = await Promise.all([
+  const [users, recentUsers, whatsapp, reminders, activeSubscriptions, recentCharges, recentAudit, integrations] = await Promise.all([
     countAuthUsers(firebase),
     db.collection("userData").where("updatedAt", ">=", since).count().get().then(countValue),
     db.collection("whatsappProcessedMessages").where("processedAt", ">=", since).count().get().then(countValue),
     db.collection("reminderDeliveries").where("acceptedAt", ">=", since).count().get().then(countValue),
+    db.collection("adminEntitlements").where("status", "==", "active").count().get().then(countValue),
+    db.collection("adminCharges").where("createdAt", ">=", since).limit(500).get(),
     db.collection("adminAudit").orderBy("at", "desc").limit(6).get(),
+    integrationStatus(db),
   ]);
+  const revenueCents30d = recentCharges.docs.reduce((total, entry) => {
+    const charge = entry.data();
+    return charge.status === "manual_received" || charge.status === "paid" ? total + (Number(charge.amountCents) || 0) : total;
+  }, 0);
+  const integrationsHealthy = integrations.integrations.filter((item) => item.configured).length;
   return {
     periodDays: 30,
-    metrics: { users, usersWithSavedChanges30d: recentUsers, whatsappReceived30d: whatsapp, reminderDeliveriesAccepted30d: reminders },
+    metrics: { users, activeSubscriptions, revenueCents30d, integrationsHealthy, integrationsTotal: integrations.integrations.length,
+      usersWithSavedChanges30d: recentUsers, whatsappReceived30d: whatsapp, reminderDeliveriesAccepted30d: reminders },
     recentAudit: recentAudit.docs.map((entry) => ({ id: entry.id, ...entry.data() })),
   };
 }
@@ -111,6 +120,57 @@ async function listAudit(db) {
   return { events: snapshot.docs.map((entry) => ({ id: entry.id, ...entry.data() })) };
 }
 
+async function listAdmins(firebase, db, actor) {
+  const primaryEmail = configuredPrimaryAdminEmail();
+  const configured = [...configuredAdminEmails()];
+  const roles = await db.collection("adminRoles").where("enabled", "==", true).limit(100).get();
+  const byUid = new Map();
+  for (const email of configured) {
+    try {
+      const user = await firebase.auth().getUserByEmail(email);
+      byUid.set(user.uid, { uid: user.uid, email: user.email || email, displayName: user.displayName || "", owner: email === primaryEmail, source: "environment" });
+    } catch (error) {
+      if (error.code !== "auth/user-not-found") throw error;
+    }
+  }
+  await Promise.all(roles.docs.map(async (entry) => {
+    if (byUid.has(entry.id)) return;
+    try {
+      const user = await firebase.auth().getUser(entry.id);
+      byUid.set(user.uid, { uid: user.uid, email: user.email || "", displayName: user.displayName || "", owner: (user.email || "").toLowerCase() === primaryEmail, source: "firestore" });
+    } catch (error) {
+      if (error.code !== "auth/user-not-found") throw error;
+    }
+  }));
+  return { admins: [...byUid.values()].sort((a, b) => Number(b.owner) - Number(a.owner) || a.email.localeCompare(b.email)), isOwner: actor.isOwner === true };
+}
+
+async function setAdminRole(firebase, db, actor, body) {
+  if (!actor.isOwner) fail(403, "owner_required");
+  if (typeof body.enabled !== "boolean") fail(400, "invalid_admin_role");
+  let user;
+  if (body.enabled) {
+    const email = text(body.email, 200).toLowerCase();
+    if (!email) fail(400, "email_required");
+    user = await firebase.auth().getUserByEmail(email);
+    if (!user.emailVerified) fail(400, "verified_email_required");
+  } else {
+    const uid = text(body.uid, 128);
+    if (!uid) fail(400, "uid_required");
+    user = await firebase.auth().getUser(uid);
+  }
+  const email = (user.email || "").toLowerCase();
+  if (email === configuredPrimaryAdminEmail() || user.uid === actor.uid) fail(403, "cannot_change_owner");
+  const now = new Date().toISOString();
+  const batch = db.batch();
+  batch.set(db.collection("adminRoles").doc(user.uid), { enabled: body.enabled, email, updatedAt: now, updatedBy: actor.uid }, { merge: true });
+  batch.set(db.collection("adminAudit").doc(), { at: now, actorUid: actor.uid, actorEmail: actor.email,
+    action: body.enabled ? "admin_access_granted" : "admin_access_revoked", target: user.uid, details: { email } });
+  await batch.commit();
+  if (!body.enabled) await firebase.auth().revokeRefreshTokens(user.uid);
+  return { uid: user.uid, email, enabled: body.enabled };
+}
+
 async function integrationStatus(db) {
   const configured = (names) => names.every((name) => Boolean(process.env[name]));
   const [webhookEvents, reminderHealth] = await Promise.all([
@@ -131,6 +191,10 @@ async function integrationStatus(db) {
       { id: "qstash", label: "QStash / lembretes", configured: configured(["QSTASH_CURRENT_SIGNING_KEY", "QSTASH_NEXT_SIGNING_KEY", "QSTASH_DESTINATION_URL"]),
         detail: `Última execução: ${reminders.lastRunAt || "nenhuma"}; estado: ${reminders.status || "desconhecido"}`,
         lastRunAt: reminders.lastRunAt || null, runStatus: reminders.status || "unknown" },
+      { id: "stripe", label: "Stripe Billing", configured: configured(["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"]),
+        detail: configured(["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"])
+          ? "Credenciais e assinatura de webhook presentes no servidor"
+          : "Defina STRIPE_SECRET_KEY e STRIPE_WEBHOOK_SECRET na Vercel para ativar cobranças automáticas" },
     ],
     note: "Os eventos e a execução são registros reais do servidor. 'Configurado' confirma só a presença de credenciais; a entrega final depende do provedor.",
   };
@@ -198,7 +262,14 @@ async function savePlan(db, actor, body) {
   const name = text(body.name, 80);
   if (!/^[a-z0-9_-]{2,40}$/.test(id) || !name || typeof body.active !== "boolean") fail(400, "invalid_plan");
   const features = validateFeatureMap(body.features);
+  const priceCents = Number(body.priceCents || 0);
+  const billingInterval = body.billingInterval || "month";
+  const stripePriceId = text(body.stripePriceId, 128);
+  if (!Number.isSafeInteger(priceCents) || priceCents < 0 || priceCents > 100_000_000
+    || !["month", "year"].includes(billingInterval)
+    || (stripePriceId && !/^price_[A-Za-z0-9]+$/.test(stripePriceId))) fail(400, "invalid_plan_billing");
   const plan = { name, description: text(body.description, 300), active: body.active, features,
+    priceCents, currency: "BRL", billingInterval, stripePriceId: stripePriceId || null,
     updatedAt: new Date().toISOString(), updatedBy: actor.uid };
   const batch = db.batch();
   batch.set(db.collection("adminPlans").doc(id), plan, { merge: true });
@@ -293,7 +364,7 @@ module.exports = async function adminApi(req, res) {
     const action = String(req.query?.action || "dashboard");
     let result;
     if (req.method === "GET") {
-      if (action === "me") result = { isAdmin: true, uid: actor.uid, email: actor.email };
+      if (action === "me") result = { isAdmin: true, isOwner: actor.isOwner === true, uid: actor.uid, email: actor.email };
       else if (action === "dashboard") result = await dashboard(firebase, db);
       else if (action === "users") result = await listUsers(firebase, db, req.query || {});
       else if (action === "plans") result = await listPlans(db);
@@ -302,6 +373,7 @@ module.exports = async function adminApi(req, res) {
       else if (action === "features" || action === "settings") result = { config: await getRuntimeConfig(db) };
       else if (action === "integrations") result = await integrationStatus(db);
       else if (action === "audit") result = await listAudit(db);
+      else if (action === "admins") result = await listAdmins(firebase, db, actor);
       else fail(404, "unknown_action");
     } else {
       const body = req.body || {};
@@ -311,6 +383,7 @@ module.exports = async function adminApi(req, res) {
       else if (action === "entitlement-set") result = await setEntitlement(firebase, db, actor, body);
       else if (action === "charge-create") result = await createCharge(firebase, db, actor, body);
       else if (action === "charge-update") result = await updateCharge(db, actor, body);
+      else if (action === "admin-role-set") result = await setAdminRole(firebase, db, actor, body);
       else fail(404, "unknown_action");
     }
     return res.status(200).json({ ok: true, ...result });
@@ -321,5 +394,4 @@ module.exports = async function adminApi(req, res) {
   }
 };
 
-module.exports._test = { validateFeatureMap, integrationStatus, countAuthUsers, dashboard, listUsers, updateConfig, updateUser, setEntitlement, createCharge, updateCharge };
-
+module.exports._test = { validateFeatureMap, integrationStatus, countAuthUsers, dashboard, listUsers, listAdmins, updateConfig, updateUser, setEntitlement, createCharge, updateCharge, setAdminRole };

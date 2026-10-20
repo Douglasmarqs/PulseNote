@@ -70,4 +70,3 @@ test('reactivation clears the server gate only after Auth succeeds', async () =>
   assert.deepEqual(calls, ['auth:false', 'marker:false', 'audit']);
   assert.equal(state.markerDisabled, false);
 });
-

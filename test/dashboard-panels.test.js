@@ -26,4 +26,3 @@ test("dashboard shortcuts still open their matching areas", () => {
   assert.match(html, /data-view-shortcut="finances" title="Ver finanças"/);
   assert.match(app, /document\.querySelectorAll\("\[data-view-shortcut\]"\)/);
 });
-

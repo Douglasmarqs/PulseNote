@@ -59,7 +59,7 @@ const crypto = require("node:crypto");
 const { AsyncLocalStorage } = require("node:async_hooks");
 const admin = require("firebase-admin");
 const { parseTransactionImage, parseNoteImage, transcribeAudio } = require("./_lib/parseTransactionAI");
-const { parseTextIntent, findBestMatch } = require("./_lib/parseCommandIntent");
+const { parseTextIntent, findBestMatch, findBestMatches } = require("./_lib/parseCommandIntent");
 const { buildPdfReportBuffer } = require("./_lib/buildPdfReport");
 const { getRuntimeConfig, assertFeatureEnabled } = require("./_lib/adminConfig");
 const { getUserEntitlements } = require("./_lib/admin");
@@ -490,8 +490,9 @@ async function getUserCategoriesAndContext(fb, uid) {
   const pendingClarification = state.whatsappPendingClarification || null;
   const pendingFinanceEdit = state.whatsappPendingFinanceEdit || null;
   const pendingMediaEntry = state.whatsappPendingMediaEntry || null;
+  const pendingDelete = state.whatsappPendingDelete || null;
 
-  return { categories, lastFinanceEntry, pendingClarification, pendingFinanceEdit, pendingMediaEntry };
+  return { categories, lastFinanceEntry, pendingClarification, pendingFinanceEdit, pendingMediaEntry, pendingDelete };
 }
 
 // 10 minutos pra responder "qual categoria" antes da pergunta expirar
@@ -797,13 +798,27 @@ function normalizeCommand(text) {
 // devolver — por isso viravam "não entendi". Isso aqui cobre o verbo
 // (apagar/apaga/excluir/exclua/deletar/deleta/remover/remove/desfazer/
 // cancelar) com "o/a", "ultimo/ultima/penultimo" e o objeto
-// (gasto/despesa/receita/lançamento/compra/registro) todos opcionais —
-// e qualquer frase que ainda assim escapar disso cai no fallback de IA
-// (intent "finance_delete_last" em parseCommandIntent.js), então não
-// depende mais só desta lista pra funcionar.
+// (gasto/despesa/receita/lançamento/compra/registro). Só uma posição
+// explícita autoriza a exclusão; uma classificação da IA nunca basta.
 const DELETE_COMMAND_RE = /^(apaga|apagar|exclui|exclua|excluir|deleta|deletar|remove|remover|desfaz|desfazer|cancela|cancelar)(\s+(o|a))?(\s+(ultimo|ultima|penultimo|penultima))?(\s+(gasto|despesa|receita|lancamento|compra|registro))?$/;
 function isDeleteCommand(norm) {
   return DELETE_COMMAND_RE.test(norm);
+}
+
+function financeDeletionTarget(norm) {
+  if (!isDeleteCommand(norm)) return null;
+  const words = norm.split(/\s+/);
+  const hasPosition = words.some((word) => /^(?:ultimo|ultima|penultimo|penultima)$/.test(word));
+  const hasObject = words.some((word) => /^(?:gasto|despesa|receita|lancamento|compra|registro)$/.test(word));
+  // Mantém apenas o atalho legado anunciado na ajuda. Outros verbos
+  // sem objeto ("cancela o último") podem se referir a tarefas/notas.
+  const legacyLastEntry = /^apaga(?:r)?\s+(?:o\s+)?ultimo$/.test(norm);
+  return {
+    underspecified: !hasPosition || (!hasObject && !legacyLastEntry),
+    offset: words.some((word) => word === "penultimo" || word === "penultima") ? 1 : 0,
+    type: words.includes("receita") ? "receita"
+      : words.some((word) => ["gasto", "despesa", "compra"].includes(word)) ? "despesa" : null,
+  };
 }
 
 function isBalanceCommand(norm) {
@@ -814,15 +829,18 @@ function isBalanceCommand(norm) {
   return /^quanto (gastei|recebi)( (nesse|neste|esse|este) mes)?[?!. ]*$/.test(norm);
 }
 
-// Apaga o lançamento mais recente ENTRE OS FEITOS PELO WHATSAPP (nunca
-// mexe em algo que a pessoa lançou pelo próprio app — "apagar último" só
-// deve desfazer o que ela acabou de mandar por aqui). Como o app sempre
-// usa unshift() (mais novo primeiro), procuramos do topo pra baixo o
-// primeiro com source "whatsapp".
-async function deleteLastWhatsAppEntry(fb, uid) {
+// Apaga só lançamentos feitos pelo WhatsApp (nunca pelo app). O alvo
+// explícito é exigido aqui também, para que nenhum novo chamador da IA
+// possa contornar a validação do handler.
+async function deleteLastWhatsAppEntry(fb, uid, target) {
+  if (!target || target.underspecified || ![0, 1].includes(target.offset)
+    || ![null, "receita", "despesa"].includes(target.type)) return undefined;
+  const { offset, type } = target;
   return withUserData(fb, uid, (state) => {
     const finances = Array.isArray(state.finances) ? state.finances : [];
-    const idx = finances.findIndex((f) => f.source === "whatsapp");
+    const matchingIndexes = finances.flatMap((entry, index) =>
+      entry.source === "whatsapp" && (!type || entry.type === type) ? [index] : []);
+    const idx = matchingIndexes[offset] ?? -1;
     if (idx === -1) return undefined;
     const deletedEntry = finances[idx];
     state.finances = [...finances.slice(0, idx), ...finances.slice(idx + 1)];
@@ -1151,13 +1169,70 @@ async function completeTaskByQuery(fb, uid, query, todayIso) {
   }, "complete_task");
 }
 
+// Exclusão por texto nunca escolhe arbitrariamente entre itens empatados.
+// Guarda somente IDs oferecidos ao usuário; a escolha é revalidada na
+// transação seguinte, inclusive se o item tiver sido removido pelo app.
+function offerDeleteChoices(state, kind, matches) {
+  if (matches.length > 10) {
+    state.whatsappPendingDelete = null;
+    return { status: "too_many", kind };
+  }
+  const choices = matches.map((item) => ({
+    id: item.id,
+    title: item.title || "Sem título",
+    date: item.dueDate || item.createdAt || "",
+  }));
+  state.whatsappPendingDelete = { kind, choices, createdAt: new Date().toISOString() };
+  return { status: "ambiguous", kind, choices };
+}
+
+function formatDeleteChoices(result) {
+  const noun = result.kind === "task" ? "tarefa" : "nota";
+  if (result.status === "too_many") return `Encontrei muitas ${noun}s parecidas. Não apaguei nada. Envie um nome mais específico.`;
+  const lines = result.choices.map((choice, index) => {
+    const date = String(choice.date || "").slice(0, 10);
+    const reference = String(choice.id || "").slice(0, 6);
+    return `${index + 1}) ${String(choice.title).slice(0, 65)}${date ? ` — ${date}` : ""}${reference ? ` (#${reference})` : ""}`;
+  });
+  return `Encontrei ${result.choices.length} ${noun}s parecidas. Não apaguei nenhuma. Qual delas deseja excluir?\n${lines.join("\n")}\n\nResponda com o número ou *cancelar* (até 10 minutos).`;
+}
+
+async function clearPendingDelete(fb, uid) {
+  return withUserData(fb, uid, (state) => {
+    state.whatsappPendingDelete = null;
+    return true;
+  }, "clear_pending_delete");
+}
+
+async function selectPendingDelete(fb, uid, number) {
+  return withUserData(fb, uid, (state) => {
+    const pending = state.whatsappPendingDelete;
+    if (!pendingIsFresh(pending)) {
+      state.whatsappPendingDelete = null;
+      return { status: "expired" };
+    }
+    const choice = pending.choices?.[number - 1];
+    if (!choice?.id || !["task", "note"].includes(pending.kind)) return { status: "invalid" };
+    const key = pending.kind === "task" ? "tasks" : "notes";
+    const items = Array.isArray(state[key]) ? state[key] : [];
+    const match = items.find((item) => item.id === choice.id);
+    state.whatsappPendingDelete = null;
+    if (!match) return { status: "missing", kind: pending.kind };
+    state[key] = items.filter((item) => item.id !== choice.id);
+    return { status: "deleted", kind: pending.kind, item: match };
+  }, "select_pending_delete");
+}
+
 async function deleteTaskByQuery(fb, uid, query) {
   return withUserData(fb, uid, (state) => {
     const tasks = Array.isArray(state.tasks) ? state.tasks : [];
-    const match = findBestMatch(query, tasks, "title");
-    if (!match) return undefined;
+    const matches = findBestMatches(query, tasks, "title");
+    if (!matches.length) return undefined;
+    if (matches.length > 1) return offerDeleteChoices(state, "task", matches);
+    const match = matches[0];
     state.tasks = tasks.filter((t) => t.id !== match.id);
-    return match;
+    state.whatsappPendingDelete = null;
+    return { status: "deleted", kind: "task", item: match };
   }, "delete_task");
 }
 
@@ -1215,11 +1290,14 @@ async function searchNotes(fb, uid, query) {
 async function deleteNoteByQuery(fb, uid, query) {
   return withUserData(fb, uid, (state) => {
     const notes = Array.isArray(state.notes) ? state.notes : [];
-    const match = findBestMatch(query, notes, "title")
-      || findBestMatch(query, notes, "description");
-    if (!match) return undefined;
+    const titleMatches = findBestMatches(query, notes, "title");
+    const matches = titleMatches.length ? titleMatches : findBestMatches(query, notes, "description");
+    if (!matches.length) return undefined;
+    if (matches.length > 1) return offerDeleteChoices(state, "note", matches);
+    const match = matches[0];
     state.notes = notes.filter((n) => n.id !== match.id);
-    return match;
+    state.whatsappPendingDelete = null;
+    return { status: "deleted", kind: "note", item: match };
   }, "delete_note");
 }
 
@@ -1559,7 +1637,7 @@ module.exports = async (req, res) => {
     }
     const aiEnabled = canUse("aiParsing");
 
-    const { categories, lastFinanceEntry, pendingClarification, pendingFinanceEdit, pendingMediaEntry } =
+    const { categories, lastFinanceEntry, pendingClarification, pendingFinanceEdit, pendingMediaEntry, pendingDelete } =
       await timeStage("load_user_context", message.id, () => getUserCategoriesAndContext(fb, uid));
     const today = getTodayInBrazil();
 
@@ -1608,6 +1686,37 @@ module.exports = async (req, res) => {
       const rawText = message.text.body;
       const norm = normalizeCommand(rawText);
       const referenceCommand = parseFinanceReferenceCommand(norm);
+
+      if (pendingDelete) {
+        if (/^cancelar(?: exclusao)?$/.test(norm)) {
+          await clearPendingDelete(fb, uid);
+          await sendWhatsAppMessage(fromPhone, "Exclusão cancelada. Não apaguei nada.");
+          return respondOk();
+        }
+        const choice = norm.match(/^(?:opcao\s*)?(\d{1,2})$/);
+        if (choice) {
+          if (message.wasAudio) {
+            await sendWhatsAppMessage(fromPhone, "Por segurança, digite o número da opção para excluir. Não apaguei nada a partir do áudio.");
+            return respondOk();
+          }
+          if (!pendingIsFresh(pendingDelete)) {
+            await clearPendingDelete(fb, uid);
+            await sendWhatsAppMessage(fromPhone, "Essa escolha expirou. Envie o comando de exclusão novamente.");
+            return respondOk();
+          }
+          const selected = await selectPendingDelete(fb, uid, Number(choice[1]));
+          if (selected?.status === "deleted") {
+            const noun = selected.kind === "task" ? "tarefa" : "nota";
+            await sendWhatsAppMessage(fromPhone, `🗑️ Apaguei a ${noun} "${selected.item.title}".`);
+          } else if (selected?.status === "invalid") {
+            await sendWhatsAppMessage(fromPhone, `Escolha um número de 1 a ${pendingDelete.choices.length} ou mande *cancelar*. Não apaguei nada.`);
+          } else {
+            await sendWhatsAppMessage(fromPhone, "Essa escolha expirou ou o item já foi removido no app. Não apaguei nada.");
+          }
+          return respondOk();
+        }
+        await clearPendingDelete(fb, uid);
+      }
 
       if (message.wasAudio && (isDeleteCommand(norm) || ["delete", "confirm_delete"].includes(referenceCommand?.action))) {
         await sendWhatsAppMessage(fromPhone, "Por segurança, digite o comando para excluir um lançamento. Não apaguei nada a partir do áudio.");
@@ -1671,10 +1780,15 @@ module.exports = async (req, res) => {
         await clearWhatsAppPendingClarification(fb, uid);
       }
 
-      if (isDeleteCommand(norm)) {
-        const deleted = await deleteLastWhatsAppEntry(fb, uid);
+      const financeDelete = financeDeletionTarget(norm);
+      if (financeDelete) {
+        if (financeDelete.underspecified) {
+          await sendWhatsAppMessage(fromPhone, "O que deseja excluir? Diga *apagar último gasto*, *apagar última receita* ou use o ID mostrado na confirmação. Não apaguei nada.");
+          return respondOk();
+        }
+        const deleted = await deleteLastWhatsAppEntry(fb, uid, financeDelete);
         if (!deleted) {
-          await sendWhatsAppMessage(fromPhone, "Não achei nenhum lançamento feito por aqui pra apagar 🤷");
+          await sendWhatsAppMessage(fromPhone, "Não achei um lançamento correspondente feito por aqui. Não apaguei nada.");
         } else {
           const verb = deleted.type === "receita" ? "Receita" : "Gasto";
           await sendWhatsAppMessage(
@@ -1761,16 +1875,10 @@ module.exports = async (req, res) => {
       }
 
       if (result.ok && result.intent === "finance_delete_last") {
-        const deleted = await deleteLastWhatsAppEntry(fb, uid);
-        if (!deleted) {
-          await sendWhatsAppMessage(fromPhone, "Não achei nenhum lançamento feito por aqui pra apagar 🤷");
-        } else {
-          const verb = deleted.type === "receita" ? "Receita" : "Gasto";
-          await sendWhatsAppMessage(
-            fromPhone,
-            `🗑️ Apaguei: ${verb} de R$ ${formatWhatsAppAmount(deleted.amount)} — ${deleted.description || "sem descrição"}.`
-          );
-        }
+        // Uma frase que chegou à IA escapou do parser determinístico.
+        // Mesmo que o modelo a interprete como exclusão, não há alvo
+        // verificado para mutar os dados com segurança.
+        await sendWhatsAppMessage(fromPhone, "Não apaguei nada. Para excluir, diga *apagar último gasto*, *apagar última receita* ou use o ID mostrado na confirmação.");
         return respondOk();
       }
 
@@ -1818,10 +1926,12 @@ module.exports = async (req, res) => {
             task ? `✅ Concluí: "${task.title}". Mandou bem! 🎉` : `Não achei nenhuma tarefa parecida com "${result.task.query}" 🤔`
           );
         } else {
-          const task = await deleteTaskByQuery(fb, uid, result.task.query);
+          const deletion = await deleteTaskByQuery(fb, uid, result.task.query);
           await sendWhatsAppMessage(
             fromPhone,
-            task ? `🗑️ Apaguei a tarefa "${task.title}".` : `Não achei nenhuma tarefa parecida com "${result.task.query}" 🤔`
+            deletion?.status === "deleted" ? `🗑️ Apaguei a tarefa "${deletion.item.title}".`
+              : deletion ? formatDeleteChoices(deletion)
+                : `Não achei nenhuma tarefa parecida com "${result.task.query}" 🤔`
           );
         }
         return respondOk();
@@ -1850,10 +1960,12 @@ module.exports = async (req, res) => {
             await sendWhatsAppMessage(fromPhone, msg);
           }
         } else {
-          const note = await deleteNoteByQuery(fb, uid, result.note.query);
+          const deletion = await deleteNoteByQuery(fb, uid, result.note.query);
           await sendWhatsAppMessage(
             fromPhone,
-            note ? `🗑️ Apaguei a nota "${note.title}".` : `Não achei nenhuma nota parecida com "${result.note.query}" 🤔`
+            deletion?.status === "deleted" ? `🗑️ Apaguei a nota "${deletion.item.title}".`
+              : deletion ? formatDeleteChoices(deletion)
+                : `Não achei nenhuma nota parecida com "${result.note.query}" 🤔`
           );
         }
         return respondOk();
@@ -1992,5 +2104,6 @@ module.exports._test = {
   inferMediaCaptionPaymentMethod, paymentMethodForMedia, formatWhatsAppAmount,
   isPhotoNoteRequest, isDestructiveAudioIntent, buttonFallbackText,
   parseFinanceReferenceCommand, sendWhatsAppDocument, findUidForPhone, confirmWhatsAppLink,
+  deleteTaskByQuery, deleteNoteByQuery, selectPendingDelete, clearPendingDelete, formatDeleteChoices,
+  financeDeletionTarget, deleteLastWhatsAppEntry,
 };
-

@@ -1064,7 +1064,6 @@ button.overview-card-action {
 /* ---------- DASHBOARD PANELS — compactos e sempre visíveis ---------- */
 .dash-panel-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 
-
 .dash-panel-body {
   display: grid;
   overflow: hidden;
@@ -4544,6 +4543,24 @@ align-items:stretch;
 }
 .settings-message.success { background: var(--green-soft); color: var(--green); }
 .settings-message.error   { background: var(--red-soft);   color: var(--red); }
+
+.billing-settings-card { overflow: hidden; }
+.billing-status-badge {
+  display: inline-flex; align-items: center; min-height: 27px; padding: 5px 10px;
+  border: 1px solid var(--border); border-radius: 999px; color: var(--muted);
+  background: var(--surface2); font-size: .68rem; font-weight: 750; white-space: nowrap;
+}
+.billing-status-badge.is-active { color: var(--green); background: var(--green-soft); border-color: color-mix(in srgb,var(--green) 30%,var(--border)); }
+.billing-status-badge.is-warning { color: var(--orange); background: var(--orange-soft); border-color: color-mix(in srgb,var(--orange) 30%,var(--border)); }
+.billing-plan-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,210px),1fr)); gap: 10px; margin-top: 14px; }
+.billing-plan-card { min-width: 0; display: grid; gap: 9px; padding: 15px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface2); }
+.billing-plan-card.is-current { border-color: color-mix(in srgb,var(--accent) 62%,var(--border)); box-shadow: 0 0 0 2px color-mix(in srgb,var(--accent) 12%,transparent); }
+.billing-plan-card h3 { margin: 0; color: var(--text); font-size: .92rem; }
+.billing-plan-card p { margin: 0; color: var(--muted); font-size: .72rem; line-height: 1.45; }
+.billing-plan-price { color: var(--text); font-size: 1.14rem; font-weight: 850; letter-spacing: -.025em; }
+.billing-plan-price small { color: var(--muted); font-size: .66rem; font-weight: 650; letter-spacing: 0; }
+.billing-plan-card button { width: 100%; justify-content: center; }
+.billing-actions { margin-top: 12px; }
 
 .danger-button {
   background: var(--red-soft);
