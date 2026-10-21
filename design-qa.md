@@ -6,60 +6,82 @@
 - `C:\Users\Douglas\.codex\generated_images\01a08e2a-5ce9-7a13-a9df-58ebf780a596\exec-ba5dda1d-7fe9-4bad-a590-19571403e7de.png` — usuários e detalhe.
 - `C:\Users\Douglas\.codex\generated_images\01a08e2a-5ce9-7a13-a9df-58ebf780a596\exec-9ece4bb1-ab29-4608-8cf5-e10720ace3a8.png` — planos e cobrança.
 
-**Implementation screenshot path**
+**Implementation screenshot paths**
 
-- Indisponível nesta iteração. O painel exige uma sessão Firebase administrativa no preview público e o navegador automatizado não conseguiu alcançar o servidor local. Uma captura anterior do usuário representa a versão antiga e não serve como evidência da implementação atual.
+- `C:\Users\Douglas\.codex\visualizations\2026\09\11\01a08e2a-5ce9-7a13-a9df-58ebf780a596\pulsenote-admin-qa\admin-preview-desktop.png`
+- `C:\Users\Douglas\.codex\visualizations\2026\09\11\01a08e2a-5ce9-7a13-a9df-58ebf780a596\pulsenote-admin-qa\admin-preview-desktop-users.png`
+- `C:\Users\Douglas\.codex\visualizations\2026\09\11\01a08e2a-5ce9-7a13-a9df-58ebf780a596\pulsenote-admin-qa\admin-preview-mobile.png`
+- `C:\Users\Douglas\.codex\visualizations\2026\09\11\01a08e2a-5ce9-7a13-a9df-58ebf780a596\pulsenote-admin-qa\admin-preview-mobile-users.png`
+- `C:\Users\Douglas\.codex\visualizations\2026\09\11\01a08e2a-5ce9-7a13-a9df-58ebf780a596\pulsenote-admin-qa\admin-preview-mobile-plans.png`
 
-**Viewport**
+**Comparison evidence**
 
-- Alvo desktop: `1440 × 900` CSS px, `deviceScaleFactor: 1`.
-- Alvo mobile: `390 × 844` CSS px, `deviceScaleFactor: 1`.
+- `C:\Users\Douglas\.codex\visualizations\2026\09\11\01a08e2a-5ce9-7a13-a9df-58ebf780a596\pulsenote-admin-qa\design-qa-overview-comparison.png`
+- `C:\Users\Douglas\.codex\visualizations\2026\09\11\01a08e2a-5ce9-7a13-a9df-58ebf780a596\pulsenote-admin-qa\design-qa-users-comparison.png`
 
-**Pixel dimensions and normalization**
+**Viewport and normalization**
 
-- Source overview: `1488 × 1058` px.
-- Source users: `1488 × 1058` px.
-- Source plans: `1488 × 1058` px.
-- Implementation: não capturada; normalização visual ainda não pode ser concluída.
+- Desktop override: `1440 × 900` CSS px; browser capture: `1425 × 891` px; `deviceScaleFactor: 1`.
+- Mobile override: `390 × 844` CSS px; browser capture: `375 × 812` px; `deviceScaleFactor: 1`.
+- Source images: `1488 × 1058` px. Source and implementation were proportionally downsampled into `700 px`-wide panels on a single `1480 × 570` comparison canvas. No crop or synthetic device frame was used.
 
 **State**
 
-- Tema escuro Aurora, administrador principal autenticado, ambiente de preview, dados operacionais reais carregados.
+- Tema escuro Aurora.
+- Administrador principal autenticado no preview público da PR.
+- Dados reais do Firebase carregados.
+- Visão geral, usuários com drawer aberto e planos testados; nenhuma escrita administrativa foi executada.
 
 **Full-view comparison evidence**
 
-- Os três alvos visuais foram abertos e revisados. A implementação ainda não pôde ser capturada no mesmo estado, viewport e sessão; portanto não existe comparação visual válida nesta iteração.
+- A composição publicada preserva o shell profissional do alvo: rail lateral estável, barra superior, hierarquia de título, faixa de métricas e cards operacionais.
+- A visão geral prioriza os sinais reais solicitados (último acesso Firebase, jornada de adoção e fluxo por área) no lugar de atividade fictícia ou valores ilustrativos do conceito.
+- Em mobile, o rail vira menu, as métricas passam para duas colunas e os controles persistentes continuam visíveis sem vazamento horizontal da página.
 
 **Focused region comparison evidence**
 
-- Bloqueada junto com a captura completa. As regiões prioritárias para a próxima passagem são: navegação lateral, faixa de métricas, gráfico de acesso, tabela/drawer de usuários e matriz de recursos dos planos.
+- Usuários: a tabela compacta, estados, plano e drawer operacional foram comparados no mesmo canvas. O drawer mostra último uso do app, último login Firebase, sincronização, fuso, totais agregados e canais sem revelar conteúdo privado.
+- Planos: o formulário publicado empilha corretamente no mobile e mantém preço, ciclo, Stripe Price ID e grupos de recursos com enforcement real no backend.
+- Tipografia: família do sistema, pesos e hierarquia acompanham o PulseNote; títulos não cortam e textos auxiliares mantêm contraste.
+- Espaçamento e ritmo: grade, gutters, cartões, raios e alinhamentos permanecem coerentes entre desktop e mobile.
+- Cores e tokens: Aurora escuro, ciano, violeta e estados semânticos seguem a linguagem do app principal.
+- Imagem e marca: não há fotografia ou ilustração decorativa a validar; o brand mark é o mesmo componente vetorial/CSS usado pelo PulseNote.
+- Copy: rótulos descrevem ações e dados reais; planos e cobranças deixam explícito quando dependem do Stripe ou são registros manuais.
 
 **Findings**
 
-- [P1] Falta evidência renderizada autenticada da versão atual
-  Location: `/admin` no preview da PR.
-  Evidence: os alvos visuais estão disponíveis, mas não há captura da implementação atual no mesmo estado.
-  Impact: tipografia, densidade, alinhamento, responsividade e estados interativos não podem ser aprovados apenas pelo código.
-  Fix: publicar o preview, abrir `/admin` com a conta administrativa, capturar desktop e mobile e executar a comparação visual combinada.
+- Nenhum P0, P1 ou P2 permaneceu após a publicação e a comparação.
+- [P3] A navegação móvel usa rolagem horizontal para nove seções. Ela é funcional e não cria overflow da página, mas poderia ganhar um indicador de continuidade em uma rodada futura.
+- [P3] O conceito previa busca global; a implementação usa busca contextual na área de usuários para evitar sugerir uma busca que ainda não existe no backend.
 
-**Open Questions**
+**Primary interactions tested**
 
-- Nenhuma decisão de produto está pendente. Falta somente evidência visual autenticada após o deploy.
+- Troca entre Visão geral, Usuários e Planos.
+- Abertura do detalhe operacional de um usuário.
+- Renderização dos filtros, busca, seletor de plano e estados da conta.
+- Retorno “Meu aplicativo” presente no mesmo domínio.
+- Tema e navegação disponíveis em desktop e mobile.
+- Console verificado: nenhum erro ou warning.
+
+**Comparison history**
+
+- Iteração 1: a versão antiga exibida pelo usuário comprimida o conteúdo numa coluna estreita e deixava grande área vazia. A grade foi reestruturada e a navegação deixou de usar identificadores confundidos por bloqueadores.
+- Iteração 2: a visão geral foi substituída por métricas, acesso, jornada e fluxo reais; usuários ganharam tabela e drawer; planos ganharam catálogo e matriz de capacidades.
+- Iteração 3: o preview do commit `728c5850` foi capturado em desktop/mobile, comparado em canvases combinados e testado sem erros de console. Nenhum P0/P1/P2 foi encontrado.
 
 **Implementation Checklist**
 
-- Publicar a branch da PR e aguardar o preview ficar pronto.
-- Capturar a visão geral em `1440 × 900` e `390 × 844`.
-- Testar navegação, busca/filtros de usuários, drawer, edição de plano e retorno ao app.
-- Verificar console e rede sem erros.
-- Comparar as capturas com os três alvos e corrigir qualquer P0/P1/P2.
-
-**Comparison History**
-
-- Iteração 1: a versão antiga exibida pelo usuário tinha conteúdo comprimido numa coluna estreita e grande área vazia. O painel foi reestruturado com grade responsiva, tabelas operacionais, detalhes de usuário, fluxo real e matriz de planos. Evidência pós-correção ainda não capturada.
+- [x] Preview publicado e autenticado.
+- [x] Desktop e mobile capturados.
+- [x] Navegação, usuários/drawer e planos verificados.
+- [x] Console verificado.
+- [x] Alvo e implementação comparados juntos.
+- [x] Segurança e privacidade dos dados administrativos revisadas.
 
 **Follow-up Polish**
 
-- Avaliar microajustes P3 de densidade, truncamento e contraste após a captura real.
+- Indicador visual de rolagem nos tabs mobile.
+- Busca global somente quando houver endpoint único e escopo claro.
 
-final result: blocked
+final result: passed
+
