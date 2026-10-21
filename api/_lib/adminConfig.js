@@ -5,6 +5,10 @@ const DEFAULT_FEATURES = Object.freeze({
   aiParsing: true,
   reminders: true,
   autopilot: true,
+  mediaRecognition: true,
+  whatsappReminders: true,
+  pushNotifications: true,
+  pdfReports: true,
 });
 
 function normalizeRuntimeConfig(data = {}) {

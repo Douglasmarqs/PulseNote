@@ -1636,6 +1636,8 @@ module.exports = async (req, res) => {
       return respondOk();
     }
     const aiEnabled = canUse("aiParsing");
+    const mediaRecognitionEnabled = canUse("mediaRecognition");
+    const pdfReportsEnabled = canUse("pdfReports");
 
     const { categories, lastFinanceEntry, pendingClarification, pendingFinanceEdit, pendingMediaEntry, pendingDelete } =
       await timeStage("load_user_context", message.id, () => getUserCategoriesAndContext(fb, uid));
@@ -1644,7 +1646,7 @@ module.exports = async (req, res) => {
     // Voz usa o mesmo roteador de intenções do texto. Assim tarefas, notas,
     // metas e compromissos ditados não ficam presos ao caminho de finanças.
     if (message.type === "audio") {
-      if (!aiEnabled) {
+      if (!aiEnabled || !mediaRecognitionEnabled) {
         await sendWhatsAppMessage(fromPhone, "A leitura de áudio está pausada no seu plano. Envie seu comando em texto por enquanto.");
         return respondOk();
       }
@@ -1820,6 +1822,10 @@ module.exports = async (req, res) => {
         const summary = await buildMonthlyReport(fb, uid, result.report.month, result.report.year);
 
         if (result.report.format === "arquivo") {
+          if (!pdfReportsEnabled) {
+            await sendWhatsAppMessage(fromPhone, "A geração de PDF não está disponível no seu plano. Posso mostrar o relatório completo aqui na conversa.");
+            return respondOk();
+          }
           if (!summary.hasEntries) {
             await sendWhatsAppMessage(fromPhone, `📊 Não encontrei nenhum lançamento em ${summary.monthName} pra exportar.`);
             return respondOk();
@@ -2023,7 +2029,7 @@ module.exports = async (req, res) => {
     }
 
     if (message.type === "image" || message.type === "document") {
-      if (!aiEnabled) {
+      if (!aiEnabled || !mediaRecognitionEnabled) {
         await sendWhatsAppMessage(fromPhone, "A leitura de fotos/PDF está pausada no seu plano. Você ainda pode registrar em texto, por exemplo: *gastei 45 no mercado*.");
         return respondOk();
       }

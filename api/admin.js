@@ -41,11 +41,96 @@ async function countAuthUsers(firebase) {
   return total;
 }
 
+function timestampValue(value) {
+  if (!value) return null;
+  if (typeof value.toDate === "function") return value.toDate().toISOString();
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function summarizeUserState(snapshot) {
+  const document = snapshot?.exists ? snapshot.data() || {} : {};
+  const state = document.data || {};
+  const count = (key) => Array.isArray(state[key]) ? state[key].length : 0;
+  const tasks = Array.isArray(state.tasks) ? state.tasks : [];
+  const events = Array.isArray(state.events) ? state.events : [];
+  const goals = Array.isArray(state.goals) ? state.goals : [];
+  const reminderItems = [...tasks, ...events, ...goals].filter((item) => item?.reminder !== undefined && item?.reminder !== null && item.reminder !== false && item.reminder !== "none");
+  const tokens = Array.isArray(state.fcmTokens) ? state.fcmTokens.filter(Boolean) : [];
+  return {
+    lastDataUpdateAt: timestampValue(document.updatedAt),
+    timeZone: text(state.timeZone, 80) || "America/Sao_Paulo",
+    whatsappLinked: Boolean(state.whatsappLinkedPhone),
+    whatsappReminderEnabled: state.whatsappReminderOptIn === true && Boolean(state.whatsappLinkedPhone),
+    pushEnabled: state.appReminderOptIn !== false && tokens.length > 0,
+    activity: {
+      tasks: count("tasks"),
+      notes: count("notes"),
+      events: count("events"),
+      goals: count("goals"),
+      finances: count("finances"),
+      reminderItems: reminderItems.length,
+    },
+  };
+}
+
+function summarizeUsage(snapshot) {
+  const usage = snapshot?.exists ? snapshot.data() || {} : {};
+  return {
+    lastActiveAt: timestampValue(usage.lastSeenAt),
+    lastArea: text(usage.lastArea, 40),
+    totalViews: Number(usage.totalViews) || 0,
+    areaCounts: usage.areaCounts && typeof usage.areaCounts === "object" ? usage.areaCounts : {},
+  };
+}
+
+function aggregateUsage(snapshot) {
+  const areaCounts = {};
+  const transitions = {};
+  let trackedUsers = 0;
+  for (const entry of snapshot.docs) {
+    const usage = entry.data() || {};
+    if (usage.lastSeenAt) trackedUsers++;
+    for (const [area, count] of Object.entries(usage.areaCounts || {})) areaCounts[area] = (areaCounts[area] || 0) + (Number(count) || 0);
+    for (const [transition, count] of Object.entries(usage.transitions || {})) transitions[transition] = (transitions[transition] || 0) + (Number(count) || 0);
+  }
+  const ranked = (values, limit) => Object.entries(values).map(([key, count]) => ({ key, count })).sort((a, b) => b.count - a.count).slice(0, limit);
+  return { trackedUsers, topAreas: ranked(areaCounts, 7), topTransitions: ranked(transitions, 6) };
+}
+
+async function authUserActivity(firebase, days = 30) {
+  const users = [];
+  let cursor;
+  do {
+    const page = await firebase.auth().listUsers(1000, cursor);
+    users.push(...page.users);
+    cursor = page.pageToken;
+  } while (cursor);
+  const today = new Date();
+  const start = new Date(today.getTime() - (days - 1) * 86400000);
+  start.setUTCHours(0, 0, 0, 0);
+  const buckets = Array.from({ length: days }, (_, index) => {
+    const date = new Date(start.getTime() + index * 86400000);
+    return { date: date.toISOString().slice(0, 10), users: 0 };
+  });
+  const byDate = new Map(buckets.map((entry) => [entry.date, entry]));
+  let active30d = 0;
+  for (const user of users) {
+    const last = timestampValue(user.metadata?.lastSignInTime);
+    if (!last || new Date(last) < start) continue;
+    active30d++;
+    const bucket = byDate.get(last.slice(0, 10));
+    if (bucket) bucket.users++;
+  }
+  return { total: users.length, active30d, lastAccessByDay: buckets };
+}
+
 async function dashboard(firebase, db) {
   const since = new Date(Date.now() - 30 * 86400000).toISOString();
-  const [users, recentUsers, whatsapp, reminders, activeSubscriptions, recentCharges, recentAudit, integrations] = await Promise.all([
-    countAuthUsers(firebase),
-    db.collection("userData").where("updatedAt", ">=", since).count().get().then(countValue),
+  const [authActivity, userData, usage, whatsapp, reminders, activeSubscriptions, recentCharges, recentAudit, integrations] = await Promise.all([
+    authUserActivity(firebase),
+    db.collection("userData").limit(2000).get(),
+    db.collection("adminUsage").limit(2000).get(),
     db.collection("whatsappProcessedMessages").where("processedAt", ">=", since).count().get().then(countValue),
     db.collection("reminderDeliveries").where("acceptedAt", ">=", since).count().get().then(countValue),
     db.collection("adminEntitlements").where("status", "==", "active").count().get().then(countValue),
@@ -58,10 +143,23 @@ async function dashboard(firebase, db) {
     return charge.status === "manual_received" || charge.status === "paid" ? total + (Number(charge.amountCents) || 0) : total;
   }, 0);
   const integrationsHealthy = integrations.integrations.filter((item) => item.configured).length;
+  const accountSignals = userData.docs.map((entry) => summarizeUserState(entry));
+  const usersWithSavedChanges30d = accountSignals.filter((item) => item.lastDataUpdateAt && item.lastDataUpdateAt >= since).length;
+  const journey = {
+    accounts: authActivity.total,
+    savedData: accountSignals.filter((item) => Object.values(item.activity).some((value) => value > 0)).length,
+    whatsappLinked: accountSignals.filter((item) => item.whatsappLinked).length,
+    remindersConfigured: accountSignals.filter((item) => item.whatsappReminderEnabled || item.pushEnabled || item.activity.reminderItems > 0).length,
+    planAssigned: activeSubscriptions,
+  };
   return {
     periodDays: 30,
-    metrics: { users, activeSubscriptions, revenueCents30d, integrationsHealthy, integrationsTotal: integrations.integrations.length,
-      usersWithSavedChanges30d: recentUsers, whatsappReceived30d: whatsapp, reminderDeliveriesAccepted30d: reminders },
+    metrics: { users: authActivity.total, activeUsers30d: authActivity.active30d, activeSubscriptions, revenueCents30d,
+      integrationsHealthy, integrationsTotal: integrations.integrations.length,
+      usersWithSavedChanges30d, whatsappReceived30d: whatsapp, reminderDeliveriesAccepted30d: reminders },
+    lastAccessByDay: authActivity.lastAccessByDay,
+    journey,
+    usageFlow: aggregateUsage(usage),
     recentAudit: recentAudit.docs.map((entry) => ({ id: entry.id, ...entry.data() })),
   };
 }
@@ -82,7 +180,12 @@ async function listUsers(firebase, db, query) {
     users = page.users;
     nextPageToken = page.pageToken || null;
   }
-  const profiles = await Promise.all(users.map((user) => db.collection("adminEntitlements").doc(user.uid).get()));
+  users.sort((a, b) => new Date(b.metadata?.lastSignInTime || 0) - new Date(a.metadata?.lastSignInTime || 0));
+  const details = await Promise.all(users.map((user) => Promise.all([
+    db.collection("adminEntitlements").doc(user.uid).get(),
+    db.collection("userData").doc(user.uid).get(),
+    db.collection("adminUsage").doc(user.uid).get(),
+  ])));
   return {
     users: users.map((user, index) => ({
       uid: user.uid,
@@ -92,9 +195,11 @@ async function listUsers(firebase, db, query) {
       emailVerified: user.emailVerified,
       createdAt: user.metadata.creationTime || null,
       lastSignInAt: user.metadata.lastSignInTime || null,
-      planId: profiles[index].data()?.planId || null,
-      subscriptionStatus: profiles[index].data()?.status || (profiles[index].data()?.planId ? "active" : "unassigned"),
-      validUntil: profiles[index].data()?.validUntil || null,
+      planId: details[index][0].data()?.planId || null,
+      subscriptionStatus: details[index][0].data()?.status || (details[index][0].data()?.planId ? "active" : "unassigned"),
+      validUntil: details[index][0].data()?.validUntil || null,
+      ...summarizeUserState(details[index][1]),
+      ...summarizeUsage(details[index][2]),
     })),
     nextPageToken,
   };
@@ -394,4 +499,5 @@ module.exports = async function adminApi(req, res) {
   }
 };
 
-module.exports._test = { validateFeatureMap, integrationStatus, countAuthUsers, dashboard, listUsers, listAdmins, updateConfig, updateUser, setEntitlement, createCharge, updateCharge, setAdminRole };
+module.exports._test = { validateFeatureMap, integrationStatus, countAuthUsers, authUserActivity, summarizeUserState, summarizeUsage, aggregateUsage,
+  dashboard, listUsers, listAdmins, updateConfig, updateUser, setEntitlement, createCharge, updateCharge, setAdminRole };

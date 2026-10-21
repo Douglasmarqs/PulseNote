@@ -84,6 +84,7 @@ test("app impede recriação do documento durante exclusão e só limpa cache ap
   assert.match(source, /if \(!user\) \{[\s\S]*?if \(accountDeletionInProgress\) return;[\s\S]*?window\.location\.replace\("\/login"\)/);
   assert.match(source, /function syncToServer\(\) \{\s*if \(accountDeletionInProgress\) return;/);
   assert.match(flow, /await fetch\("\/api\/whatsapp-unlink"/);
+  assert.match(flow, /await fetch\("\/api\/account-delete-cleanup"/);
   assert.match(flow, /if \(accountDeletionRequested\) return;/);
   assert.match(flow, /await Promise\.allSettled\(\[\.\.\.activeSyncs\]\)/);
   assert.match(flow, /getDocFromServer\(userDocRef\)/);

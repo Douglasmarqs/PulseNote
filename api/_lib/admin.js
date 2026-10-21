@@ -85,7 +85,21 @@ async function getUserEntitlements(db, uid) {
   if (!plan.exists || plan.data()?.active === false) {
     return { planId: data.planId, features: {}, status: "inactive_plan" };
   }
-  return { planId: data.planId, features: plan.data()?.features || {}, status: "active" };
+  const storedFeatures = plan.data()?.features || {};
+  // Planos criados antes da expansão do catálogo não podem perder recursos
+  // que já estavam implícitos. Novos planos persistem todas as chaves.
+  const features = {
+    ...storedFeatures,
+    mediaRecognition: typeof storedFeatures.mediaRecognition === "boolean"
+      ? storedFeatures.mediaRecognition : storedFeatures.aiParsing === true && storedFeatures.whatsapp === true,
+    whatsappReminders: typeof storedFeatures.whatsappReminders === "boolean"
+      ? storedFeatures.whatsappReminders : storedFeatures.reminders === true && storedFeatures.whatsapp === true,
+    pushNotifications: typeof storedFeatures.pushNotifications === "boolean"
+      ? storedFeatures.pushNotifications : storedFeatures.reminders === true,
+    pdfReports: typeof storedFeatures.pdfReports === "boolean"
+      ? storedFeatures.pdfReports : storedFeatures.whatsapp === true,
+  };
+  return { planId: data.planId, features, status: "active" };
 }
 
 async function checkUserFeature(db, uid, feature) {

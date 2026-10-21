@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#060a18" />
   <title>Administração · PulseNote</title>
   <link rel="icon" type="image/png" href="/icons/favicon-32.png" />
-  <link rel="stylesheet" href="/src/admin.css?v=28" />
+  <link rel="stylesheet" href="/src/admin.css?v=29" />
 </head>
 <body>
   <div class="ad-shell is-locked">
@@ -46,58 +46,58 @@
         <div id="adContent" hidden>
           <div class="ad-heading"><div><h1 id="adPageTitle">Administração</h1><p id="adPageSubtitle">Gerencie usuários, planos, cobranças e a operação do PulseNote.</p></div><span class="ad-session" id="adSession"></span></div>
           <div id="adLoadError" class="ad-load-error" role="alert" hidden><span id="adLoadErrorText"></span><button class="ad-subtle-button" id="adSectionRetry" type="button">Tentar novamente</button></div>
-          <div class="ad-stats" id="adStats" aria-label="Métricas dos últimos 30 dias"></div>
           <div class="ad-mobile-tabs" id="adMobileTabs" aria-label="Seções administrativas"></div>
 
           <section class="pn-console-view is-active" id="pn-console-overview" aria-labelledby="ad-overview-title">
-            <section class="ad-command-hero" aria-labelledby="ad-overview-title">
-              <div class="ad-command-copy">
-                <span class="ad-command-kicker"><i aria-hidden="true"></i> Operação PulseNote</span>
-                <h2 id="adGreeting">Seu centro de comando está pronto.</h2>
-                <p>Tenha uma visão clara do produto e acesse rapidamente as ações que movem usuários, receita e confiabilidade.</p>
-                <div class="ad-command-actions">
-                  <button class="ad-primary-button" type="button" data-go="users">Gerenciar usuários</button>
-                  <button class="ad-subtle-button" type="button" data-go="plans">Planos e cobrança</button>
-                  <button class="ad-subtle-button" type="button" data-go="integrations">Ver integrações</button>
-                </div>
-              </div>
-              <div class="ad-command-status">
-                <span class="ad-command-date" id="adCurrentDate"></span>
-                <div class="ad-command-orbit" aria-hidden="true"><span></span><span></span><span></span><b>PN</b></div>
-                <div class="ad-command-health"><i aria-hidden="true"></i><span><strong>Monitoramento ativo</strong><small id="adLastRefresh">Atualizando dados reais…</small></span></div>
-              </div>
-            </section>
-
-            <div class="ad-overview-grid">
-              <div class="ad-card">
-                <div class="ad-card-head"><div><h2 id="ad-overview-title">Usuários e assinaturas</h2><p>Contas recentes e situação de acesso.</p></div><button class="ad-link" type="button" data-go="users">Ver usuários →</button></div>
-                <div id="adUsersPreview"></div>
-              </div>
-              <div class="ad-overview-side">
-                <div class="ad-card"><div class="ad-card-head"><div><h2>Status das integrações</h2><p>Saúde dos serviços essenciais.</p></div><button class="ad-link" type="button" data-go="integrations">Ver todas →</button></div><div id="adIntegrationsPreview"></div></div>
-                <div class="ad-card ad-maintenance-card"><div class="ad-card-head"><div><h2>Modo de manutenção</h2><p>Interrompe gravações durante uma intervenção.</p></div><span class="ad-pill" id="adMaintenanceStatus">Carregando…</span></div><button type="button" class="ad-subtle-button" data-go="settings">Gerenciar manutenção →</button></div>
-              </div>
+            <div class="ad-overview-toolbar">
+              <div><span class="ad-eyebrow">OPERAÇÃO PULSENOTE</span><h2 id="ad-overview-title"><span id="adGreeting">Visão geral</span></h2><p id="adCurrentDate">Dados verificados no Firebase e nos serviços conectados.</p></div>
+              <div class="ad-command-actions"><button class="ad-primary-button" type="button" data-go="users">Ver usuários</button><button class="ad-subtle-button" type="button" data-go="plans">Editar planos</button></div>
             </div>
+            <div class="ad-stats" id="adStats" aria-label="Métricas dos últimos 30 dias"></div>
             <div class="ad-operations-strip" id="adOperationsSummary" aria-label="Atividade operacional dos últimos 30 dias"></div>
-            <div class="ad-card ad-audit-card"><div class="ad-card-head"><div><span class="ad-card-kicker">AUDITORIA</span><h2>Atividade recente</h2><p>Registro de alterações administrativas reais.</p></div><button class="ad-link" type="button" id="adAuditRefresh">Atualizar ↻</button></div><div id="adAuditPreview" class="ad-empty">Nenhuma ação registrada ainda.</div></div>
+
+            <div class="ad-insight-grid">
+              <article class="ad-card ad-access-panel">
+                <div class="ad-card-head"><div><span class="ad-card-kicker">ACESSO REAL</span><h2>Usuários que voltaram</h2><p>Distribuição do último acesso registrado pelo Firebase Auth nos últimos 30 dias.</p></div><span class="ad-live-label"><i></i><span id="adLastRefresh">Atualizando…</span></span></div>
+                <div id="adAccessChart" class="ad-access-chart" role="img" aria-label="Gráfico de último acesso dos usuários"></div>
+              </article>
+              <article class="ad-card ad-journey-panel">
+                <div class="ad-card-head"><div><span class="ad-card-kicker">JORNADA</span><h2>Adoção do produto</h2><p>Marcos reais encontrados nas contas, sem rastreamento fictício.</p></div></div>
+                <div id="adJourney" class="ad-journey"></div>
+                <div class="ad-flow-divider"><strong>Fluxo real por área</strong><small>Começa a ser medido nesta versão, sem registrar conteúdo pessoal.</small></div>
+                <div id="adUsageFlow" class="ad-usage-flow"></div>
+              </article>
+            </div>
+
+            <div class="ad-workspace-grid">
+              <article class="ad-card ad-users-preview-card"><div class="ad-card-head"><div><span class="ad-card-kicker">CONTAS</span><h2>Usuários recentes</h2><p>Último acesso, plano e canais habilitados.</p></div><button class="ad-link" type="button" data-go="users">Abrir gestão →</button></div><div id="adUsersPreview"></div></article>
+              <aside class="ad-overview-side">
+                <article class="ad-card"><div class="ad-card-head"><div><span class="ad-card-kicker">SAÚDE</span><h2>Integrações</h2><p>Credenciais e execução dos serviços.</p></div><button class="ad-link" type="button" data-go="integrations">Detalhes →</button></div><div id="adIntegrationsPreview"></div></article>
+                <article class="ad-card ad-maintenance-card"><div class="ad-card-head"><div><h2>Modo de manutenção</h2><p>Bloqueia alterações durante uma intervenção.</p></div><span class="ad-pill" id="adMaintenanceStatus">Carregando…</span></div><button type="button" class="ad-subtle-button" data-go="settings">Configurar operação</button></article>
+              </aside>
+            </div>
+            <article class="ad-card ad-audit-card"><div class="ad-card-head"><div><span class="ad-card-kicker">AUDITORIA</span><h2>Alterações administrativas</h2><p>Ações realizadas no painel, com responsável e horário.</p></div><button class="ad-link" type="button" id="adAuditRefresh">Atualizar ↻</button></div><div id="adAuditPreview" class="ad-empty">Nenhuma ação registrada ainda.</div></article>
           </section>
 
           <section class="pn-console-view" id="pn-console-users" aria-labelledby="ad-users-title">
-            <div class="ad-card"><div class="ad-card-head"><div><h2 id="ad-users-title">Gestão de usuários</h2><p>Localize contas, altere planos e bloqueie acessos. Notas e finanças pessoais não são exibidas.</p></div></div>
-              <form id="adUserSearch" class="ad-inline-form"><input id="adUserEmail" type="email" autocomplete="off" placeholder="Buscar pelo e-mail exato" aria-label="E-mail do usuário" /><button class="ad-primary-button" type="submit">Buscar</button><button class="ad-subtle-button" id="adUserClear" type="button">Limpar</button></form>
-              <div id="adUsersList" class="ad-list"></div><div class="ad-list-footer"><span id="adUsersPageLabel"></span><button class="ad-subtle-button" id="adUsersNext" type="button">Próxima página →</button></div>
+            <div class="ad-card ad-table-card"><div class="ad-card-head"><div><span class="ad-card-kicker">DIRETÓRIO</span><h2 id="ad-users-title">Usuários</h2><p>Dados de conta e totais de uso. O conteúdo privado de notas e finanças não é exibido.</p></div></div>
+              <form id="adUserSearch" class="ad-user-toolbar"><label class="ad-search-box"><span aria-hidden="true">⌕</span><input id="adUserEmail" type="search" autocomplete="off" placeholder="Buscar e-mail exato" aria-label="E-mail do usuário" /></label><button class="ad-primary-button" type="submit">Buscar</button><button class="ad-subtle-button" id="adUserClear" type="button">Limpar</button></form>
+              <div class="ad-filter-row" id="adUserFilters"><button type="button" class="is-active" data-user-filter="all">Todos</button><button type="button" data-user-filter="active">Ativos</button><button type="button" data-user-filter="whatsapp">WhatsApp</button><button type="button" data-user-filter="reminders">Lembretes</button></div>
+              <div class="ad-user-table-wrap"><div id="adUsersList" class="ad-user-table"></div></div><div class="ad-list-footer"><span id="adUsersPageLabel"></span><button class="ad-subtle-button" id="adUsersNext" type="button">Próxima página →</button></div>
             </div>
+            <aside class="ad-user-drawer" id="adUserDrawer" aria-labelledby="adUserDrawerTitle" aria-hidden="true"><button class="ad-drawer-close" id="adUserDrawerClose" type="button" aria-label="Fechar detalhes">×</button><div id="adUserDrawerContent"></div></aside>
           </section>
 
           <section class="pn-console-view" id="pn-console-plans" aria-labelledby="ad-plans-title">
-            <div class="ad-two-col">
-              <div class="ad-card"><div class="ad-card-head"><div><h2 id="ad-plans-title">Planos e preços</h2><p>Recursos e preço exibido para cada assinatura.</p></div></div><div id="adPlansList" class="ad-list"></div></div>
-              <div class="ad-card"><h2>Criar ou editar plano</h2><p>O Stripe Price ID só é usado quando a integração de pagamentos estiver conectada.</p><form id="adPlanForm" class="ad-form">
+            <div class="ad-plan-workspace">
+              <div class="ad-card ad-plan-catalog"><div class="ad-card-head"><div><span class="ad-card-kicker">CATÁLOGO</span><h2 id="ad-plans-title">Planos</h2><p>Ofertas disponíveis e vínculo com a cobrança.</p></div></div><div id="adPlansList" class="ad-list"></div></div>
+              <div class="ad-card ad-plan-editor"><div class="ad-card-head"><div><span class="ad-card-kicker">CONFIGURAÇÃO</span><h2>Criar ou editar plano</h2><p>Os recursos selecionados são aplicados pelo backend. O Stripe Price ID ativa o checkout quando a integração estiver conectada.</p></div></div><form id="adPlanForm" class="ad-form">
                 <div class="ad-form-row"><label>ID do plano<input name="id" required pattern="[a-z0-9_-]{2,40}" maxlength="40" placeholder="essencial" /></label><label>Nome<input name="name" required maxlength="80" placeholder="Essencial" /></label></div>
                 <label>Descrição<textarea name="description" maxlength="300" rows="2" placeholder="O que este plano inclui"></textarea></label>
                 <div class="ad-form-row"><label>Preço em reais<input name="price" inputmode="decimal" placeholder="29,90" /></label><label>Ciclo<select name="billingInterval"><option value="month">Mensal</option><option value="year">Anual</option></select></label></div>
                 <label>Stripe Price ID<input name="stripePriceId" maxlength="128" placeholder="price_..." autocomplete="off" /></label>
-                <div id="adPlanFeatures" class="ad-check-grid"></div><label class="ad-check"><input type="checkbox" name="active" checked />Plano ativo</label><button class="ad-primary-button" type="submit">Salvar plano</button>
+                <div class="ad-core-features"><strong>Base incluída em todos os planos</strong><span>Planner e tarefas</span><span>Notas e checklists</span><span>Finanças</span><span>Metas e compromissos</span></div>
+                <div id="adPlanFeatures" class="ad-capability-groups"></div><div class="ad-form-footer"><label class="ad-check"><input type="checkbox" name="active" checked />Plano ativo</label><button class="ad-primary-button" type="submit">Salvar plano</button></div>
               </form></div>
             </div>
           </section>
@@ -131,6 +131,6 @@
     </div>
   </div>
   <div id="adToast" class="ad-toast" role="status" aria-live="polite" hidden></div>
-  <script type="module" src="/src/admin.js?v=28"></script>
+  <script type="module" src="/src/admin.js?v=29"></script>
 </body>
 </html>

@@ -498,7 +498,9 @@ module.exports = async (req, res) => {
 
       const tokens = Array.isArray(state.fcmTokens) ? state.fcmTokens : [];
       let verifiedWhatsAppPhone = null;
-      if (runtime.features.whatsapp && planAllows("whatsapp") && state.whatsappReminderOptIn && state.whatsappLinkedPhone) {
+      if (runtime.features.whatsapp && runtime.features.whatsappReminders
+        && planAllows("whatsapp") && planAllows("whatsappReminders")
+        && state.whatsappReminderOptIn && state.whatsappLinkedPhone) {
         try {
           verifiedWhatsAppPhone = await verifiedReminderWhatsAppPhone(db, uid, state.whatsappLinkedPhone);
         } catch (error) {
@@ -511,7 +513,8 @@ module.exports = async (req, res) => {
       for (const n of notifications) {
         let anyAccepted = false;
         const channels = [];
-        if (state.appReminderOptIn !== false && tokens.length) channels.push(["push", async () => {
+        if (runtime.features.pushNotifications && planAllows("pushNotifications")
+          && state.appReminderOptIn !== false && tokens.length) channels.push(["push", async () => {
           let successes = 0;
           for (let i = 0; i < tokens.length; i += 500) {
             const result = await sendPush(fb, tokens.slice(i, i + 500), n);

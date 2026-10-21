@@ -367,6 +367,7 @@ const appReady = new Promise((resolve) => {
       showVerifyEmailGate();
       return;
     }
+    trackUsageArea(activeView);
 
     // IMPORTANTE: o state SEMPRE começa "vazio" (defaults de fábrica) até
     // o Firestore confirmar os dados reais deste usuário específico.
@@ -457,6 +458,22 @@ const viewTitles = {
   profile: "Perfil",
   settings: "Configurações",
 };
+
+let lastUsageArea = "";
+let lastUsageAt = 0;
+function trackUsageArea(area) {
+  if (!currentUser || !Object.hasOwn(viewTitles, area)) return;
+  const now = Date.now();
+  if (lastUsageArea === area && now - lastUsageAt < 60_000) return;
+  lastUsageArea = area;
+  lastUsageAt = now;
+  currentUser.getIdToken().then((token) => fetch("/api/usage-event", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ area }),
+    keepalive: true,
+  })).catch(() => { /* Telemetria operacional nunca bloqueia o aplicativo. */ });
+}
 
 // Catálogo padrão de categorias — cobre os casos mais comuns de despesa
 // pessoal (moradia, contas, alimentação, saúde, lazer, família, finanças...)
@@ -1515,6 +1532,18 @@ function bindSettingsView() {
       }
       whatsappUnlinked = true;
 
+      // Remove dados operacionais protegidos pelo Admin SDK. Esses documentos
+      // não podem ser apagados diretamente pelo navegador por design.
+      const cleanupResponse = await fetch("/api/account-delete-cleanup", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${token}` },
+      });
+      if (!cleanupResponse.ok) {
+        const cleanupError = new Error("Não foi possível remover os dados operacionais. Sua conta foi mantida; tente novamente mais tarde.");
+        cleanupError.code = "data/cleanup-failed";
+        throw cleanupError;
+      }
+
       // Firestore e Auth não são transacionais entre si. Confirme uma
       // cópia do servidor para poder restaurar o documento se a remoção
       // da identidade falhar. Não limpe o cache local até ambos concluírem.
@@ -1565,6 +1594,7 @@ function bindSettingsView() {
         "auth/invalid-credential":    "Senha incorreta.",
         "auth/requires-recent-login": "Por segurança, saia e entre na conta novamente antes de excluí-la.",
         "data/unlink-failed":       "Não foi possível desvincular o WhatsApp. Sua conta foi mantida; tente novamente mais tarde.",
+        "data/cleanup-failed":      "Não foi possível remover os dados operacionais agora. Sua conta foi mantida; tente novamente mais tarde.",
         "data/snapshot-failed":      "Não foi possível confirmar seus dados na nuvem. Sua conta foi mantida; verifique a conexão e tente novamente.",
         "data/delete-failed":        "Não foi possível remover seus dados agora. Sua conta foi mantida; tente novamente mais tarde.",
         "data/restore-failed":       "A exclusão não terminou e não foi possível restaurar os dados na nuvem. Não saia desta conta e entre em contato com o suporte.",
@@ -2026,6 +2056,7 @@ function setView(view, { fromHistory = false } = {}) {
 
   const previousView = activeView;
   activeView = view;
+  trackUsageArea(view);
   // Sync sidebar nav
   document.querySelectorAll(".nav-item").forEach((item) => {
     item.classList.toggle("active", item.dataset.view === view);

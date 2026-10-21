@@ -1,8 +1,8 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { requireAdmin, checkUserFeature, configuredPrimaryAdminEmail } = require("../api/_lib/admin");
+const { requireAdmin, checkUserFeature, configuredPrimaryAdminEmail, getUserEntitlements } = require("../api/_lib/admin");
 const { getRuntimeConfig, assertFeatureEnabled } = require("../api/_lib/adminConfig");
-const { validateFeatureMap, integrationStatus, setEntitlement } = require("../api/admin")._test;
+const { validateFeatureMap, integrationStatus, setEntitlement, summarizeUserState, summarizeUsage, aggregateUsage } = require("../api/admin")._test;
 
 function fakeFirebase({ email = "dono@example.com", verified = true, disabled = false, role = false, revoked = false } = {}) {
   const docs = {
@@ -110,10 +110,59 @@ test("plano atribuído controla o recurso; sem plano preserva acesso existente",
 });
 
 test("configuração rejeita atributos desconhecidos e tipos falsos", () => {
-  const valid = { whatsapp: true, aiParsing: true, reminders: false, autopilot: true };
+  const valid = { whatsapp: true, aiParsing: true, reminders: false, autopilot: true,
+    mediaRecognition: true, whatsappReminders: false, pushNotifications: true, pdfReports: true };
   assert.deepEqual(validateFeatureMap(valid), valid);
   assert.throws(() => validateFeatureMap({ ...valid, admin: true }), { code: "invalid_features" });
   assert.throws(() => validateFeatureMap({ ...valid, whatsapp: "false" }), { code: "invalid_features" });
+});
+
+test("planos antigos herdam capacidades já implícitas sem reabrir recursos desligados", async () => {
+  const docs = {
+    "adminEntitlements/u1": { planId: "legacy", status: "active" },
+    "adminPlans/legacy": { active: true, features: { whatsapp: true, aiParsing: true, reminders: true, autopilot: false } },
+  };
+  const db = { collection: (name) => ({ doc: (id) => ({ get: async () => ({
+    exists: Boolean(docs[`${name}/${id}`]), data: () => docs[`${name}/${id}`],
+  }) }) }) };
+  const entitlement = await getUserEntitlements(db, "u1");
+  assert.equal(entitlement.features.mediaRecognition, true);
+  assert.equal(entitlement.features.whatsappReminders, true);
+  assert.equal(entitlement.features.pushNotifications, true);
+  assert.equal(entitlement.features.pdfReports, true);
+  assert.equal(entitlement.features.autopilot, false);
+});
+
+test("resumo administrativo expõe somente totais e estados operacionais", () => {
+  const snapshot = { exists: true, data: () => ({ updatedAt: "2026-10-20T12:00:00.000Z", data: {
+    tasks: [{ reminder: 30 }, { title: "privado" }], notes: [{ description: "segredo" }],
+    events: [{ reminder: 10 }], goals: [{ reminder: false }], finances: [{ amount: 99 }],
+    whatsappLinkedPhone: "5531999999999", whatsappReminderOptIn: true,
+    appReminderOptIn: true, fcmTokens: ["token"], timeZone: "America/Sao_Paulo",
+  } }) };
+  const result = summarizeUserState(snapshot);
+  assert.deepEqual(result.activity, { tasks: 2, notes: 1, events: 1, goals: 1, finances: 1, reminderItems: 2 });
+  assert.equal(result.whatsappLinked, true);
+  assert.equal(result.pushEnabled, true);
+  assert.equal(JSON.stringify(result).includes("segredo"), false);
+  assert.equal(JSON.stringify(result).includes("5531999999999"), false);
+});
+
+test("fluxo de uso agrega somente áreas e transições permitidas, sem conteúdo pessoal", () => {
+  const usage = summarizeUsage({ exists: true, data: () => ({
+    lastSeenAt: "2026-10-21T01:00:00.000Z", lastArea: "planner", totalViews: 7,
+    areaCounts: { dashboard: 3, planner: 4 }, privateNote: "não expor",
+  }) });
+  assert.equal(usage.lastArea, "planner");
+  assert.equal(usage.totalViews, 7);
+  assert.equal(JSON.stringify(usage).includes("não expor"), false);
+  const aggregated = aggregateUsage({ docs: [
+    { data: () => ({ lastSeenAt: "2026-10-21T01:00:00.000Z", areaCounts: { dashboard: 2, planner: 1 }, transitions: { "dashboard>planner": 1 } }) },
+    { data: () => ({ lastSeenAt: "2026-10-21T02:00:00.000Z", areaCounts: { dashboard: 1 }, transitions: {} }) },
+  ] });
+  assert.equal(aggregated.trackedUsers, 2);
+  assert.deepEqual(aggregated.topAreas[0], { key: "dashboard", count: 3 });
+  assert.deepEqual(aggregated.topTransitions[0], { key: "dashboard>planner", count: 1 });
 });
 
 test("administrador não pode remover plano e restaurar acesso legado sem querer", async () => {
