@@ -2,6 +2,9 @@
 // PulseNote — Autenticação e sincronização via Firebase
 // ============================================================
 import { auth, db } from "./firebase-init.js";
+import { createAutopilotUI } from "./autopilot-ui.js";
+import { deleteAccountDataAndIdentity } from "./account-deletion.mjs";
+import { cloneState, changedStateKeys, mergeDirtyState } from "./state-sync.js";
 import {
   onAuthStateChanged,
   signOut,
@@ -14,9 +17,11 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   doc,
+  getDocFromServer,
   setDoc,
   deleteDoc,
   onSnapshot,
+  runTransaction,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 // ============================================================
@@ -169,6 +174,26 @@ function getStorageKey() {
 let currentUser   = null;   // objeto do usuário logado (Firebase Auth)
 let unsubscribeDoc = null;  // função para parar de "escutar" o Firestore
 let syncTimer      = null;
+let accountDeletionInProgress = false;
+let accountDeletionRequested = false;
+const activeSyncs = new Set();
+const SERVER_OWNED_FIELDS = ["fcmTokens", "serverNotifications"];
+let observedState = null;
+const dirtyBases = {};
+const dirtyVersions = {};
+
+function pendingSyncKey() {
+  return currentUser ? `${BASE_STORAGE_KEY}:pending:${currentUser.uid}` : null;
+}
+
+function persistPendingSync() {
+  const key = pendingSyncKey();
+  if (!key) return;
+  try {
+    if (Object.keys(dirtyBases).length) localStorage.setItem(key, JSON.stringify(dirtyBases));
+    else localStorage.removeItem(key);
+  } catch { /* armazenamento indisponível; o estado atual segue em memória */ }
+}
 
 // ── Helpers de usuário (substituem getToken/getUser antigos) ──
 function getUser() {
@@ -206,8 +231,18 @@ function stripUndefinedDeep(value) {
 // Sem esse guard, chamadas durante a inicialização (antes do onAuthStateChanged
 // terminar) disparavam "Erro ao salvar" mesmo sem nenhuma ação do usuário.
 let _syncRetries = 0;
-async function syncToServer() {
+function syncToServer() {
+  if (accountDeletionInProgress) return;
+  const work = performSyncToServer();
+  activeSyncs.add(work);
+  work.then(() => activeSyncs.delete(work), () => activeSyncs.delete(work));
+  return work;
+}
+
+async function performSyncToServer() {
   if (!currentUser || !currentUser.emailVerified || !state) return;
+  const fields = Object.keys(dirtyBases);
+  if (!fields.length) return;
 
   // Documento único por usuário: se ele crescer demais (fotos grandes,
   // muitos anos de lançamentos), o Firestore recusa a escrita (limite de
@@ -216,6 +251,8 @@ async function syncToServer() {
   const clean = stripUndefinedDeep(state);
   delete clean.fcmTokens;
   delete clean.serverNotifications;
+  const basesAtStart = cloneState(dirtyBases);
+  const versionsAtStart = { ...dirtyVersions };
   const approxBytes = new Blob([JSON.stringify(clean)]).size;
   if (approxBytes > 900_000) {
     console.error("Não foi possível sincronizar: os dados excedem o limite seguro do documento do Firestore.");
@@ -225,13 +262,35 @@ async function syncToServer() {
   }
 
   try {
-    await setDoc(doc(db, "userData", currentUser.uid), {
-      data: clean,
-      updatedAt: new Date().toISOString(),
-    }, { mergeFields: ["updatedAt", ...Object.keys(clean).map((key) => `data.${key}`)] });
+    const ref = doc(db, "userData", currentUser.uid);
+    const merged = await runTransaction(db, async (transaction) => {
+      const snapshot = await transaction.get(ref);
+      const remote = snapshot.exists() ? snapshot.data().data || {} : {};
+      const next = mergeDirtyState(remote, clean, basesAtStart);
+      const patch = {};
+      for (const field of fields) {
+        if (next[field] !== undefined) patch[field] = next[field];
+      }
+      transaction.set(ref, { data: patch, updatedAt: new Date().toISOString() }, {
+        mergeFields: ["updatedAt", ...Object.keys(patch).map((key) => `data.${key}`)],
+      });
+      return next;
+    });
+    for (const field of fields) {
+      if (dirtyVersions[field] === versionsAtStart[field]) {
+        delete dirtyBases[field];
+        delete dirtyVersions[field];
+      } else {
+        // A pessoa editou novamente durante a transação: o próximo merge
+        // usa esta gravação confirmada como base, sem perder a edição nova.
+        dirtyBases[field] = cloneState(merged[field]);
+      }
+    }
+    persistPendingSync();
     const key = getStorageKey();
     if (key) localStorage.setItem(key, JSON.stringify(state));
     _syncRetries = 0; // reset ao ter sucesso
+    if (Object.keys(dirtyBases).length) scheduleSyncToServer();
   } catch (err) {
     console.error("Erro ao salvar no Firestore:", err);
     const key = getStorageKey();
@@ -249,6 +308,7 @@ async function syncToServer() {
 }
 
 function scheduleSyncToServer() {
+  if (accountDeletionInProgress) return;
   clearTimeout(syncTimer);
   syncTimer = setTimeout(syncToServer, 1200);
 }
@@ -280,6 +340,10 @@ const appReady = new Promise((resolve) => {
 
   onAuthStateChanged(auth, async (user) => {
     if (!user) {
+      // Durante a exclusão, o handler abaixo limpa o cache local antes
+      // de navegar. O evento de Auth pode chegar antes de deleteUser
+      // resolver; não redirecione cedo demais deixando dados no aparelho.
+      if (accountDeletionInProgress) return;
       window.location.replace("/login");
       return;
     }
@@ -300,6 +364,7 @@ const appReady = new Promise((resolve) => {
       showVerifyEmailGate();
       return;
     }
+    trackUsageArea(activeView);
 
     // IMPORTANTE: o state SEMPRE começa "vazio" (defaults de fábrica) até
     // o Firestore confirmar os dados reais deste usuário específico.
@@ -317,6 +382,19 @@ const appReady = new Promise((resolve) => {
         if (parsed && typeof parsed === "object") state = normalizeState(parsed);
       } catch { /* cache corrompido — ignora e segue com defaults */ }
     }
+    observedState = cloneState(state);
+    if (cached) {
+      try {
+        const pending = JSON.parse(localStorage.getItem(pendingSyncKey()) || "{}");
+        if (pending && typeof pending === "object" && !Array.isArray(pending)) {
+          for (const [field, base] of Object.entries(pending)) {
+            if (SERVER_OWNED_FIELDS.includes(field) || !(field in state)) continue;
+            dirtyBases[field] = base;
+            dirtyVersions[field] = 1;
+          }
+        }
+      } catch { /* metadados antigos/corrompidos — usa o servidor */ }
+    }
 
     renderAll(); // mostra algo imediatamente (cache ou defaults) enquanto busca o Firestore
 
@@ -325,13 +403,21 @@ const appReady = new Promise((resolve) => {
     // onSnapshot escuta mudanças em tempo real no Firestore.
     // É chamado: (1) imediatamente com os dados atuais, (2) toda vez
     // que outro dispositivo/aba salvar algo novo para ESTE MESMO usuário.
+    let firstSnapshotForUser = true;
     unsubscribeDoc = onSnapshot(
       userDocRef,
       (snapshot) => {
+        // A exclusão apaga este documento ANTES da identidade Firebase.
+        // Não confunda esse evento com o primeiro login e não recrie os
+        // dados enquanto a exclusão está em andamento.
+        if (!snapshot.exists() && accountDeletionInProgress) return;
         if (snapshot.exists()) {
           const remote = snapshot.data().data;
           if (remote && typeof remote === "object") {
-            state = normalizeState(remote);
+            state = normalizeState(Object.keys(dirtyBases).length
+              ? mergeDirtyState(remote, state, dirtyBases)
+              : remote);
+            observedState = cloneState(state);
             const k = getStorageKey();
             if (k) localStorage.setItem(k, JSON.stringify(state));
           }
@@ -345,6 +431,9 @@ const appReady = new Promise((resolve) => {
         }
 
         renderAll(); // re-renderiza com os dados confirmados do servidor
+        autopilotUi.invalidate();
+        if (firstSnapshotForUser && Object.keys(dirtyBases).length) scheduleSyncToServer();
+        firstSnapshotForUser = false;
 
         if (!resolved) { resolved = true; resolve(); }
       },
@@ -362,9 +451,26 @@ const viewTitles = {
   planner: "Planner",
   notes: "Anotações",
   finances: "Finanças",
+  autopilot: "Pulse Autopilot",
   profile: "Perfil",
   settings: "Configurações",
 };
+
+let lastUsageArea = "";
+let lastUsageAt = 0;
+function trackUsageArea(area) {
+  if (!currentUser || !Object.hasOwn(viewTitles, area)) return;
+  const now = Date.now();
+  if (lastUsageArea === area && now - lastUsageAt < 60_000) return;
+  lastUsageArea = area;
+  lastUsageAt = now;
+  currentUser.getIdToken().then((token) => fetch("/api/usage-event", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ area }),
+    keepalive: true,
+  })).catch(() => { /* Telemetria operacional nunca bloqueia o aplicativo. */ });
+}
 
 // Catálogo padrão de categorias — cobre os casos mais comuns de despesa
 // pessoal (moradia, contas, alimentação, saúde, lazer, família, finanças...)
@@ -499,6 +605,7 @@ const appTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "America
 // pelos dados reais do usuário DEPOIS que o Firebase confirma o login
 // (dentro do bloco onAuthStateChanged, em appReady) — nunca antes disso.
 let state = loadDefaultState();
+observedState = cloneState(state);
 
 // Ponte para o notifications.js: como ele é um <script> normal (não um
 // módulo ES), não tem acesso direto às variáveis internas deste módulo.
@@ -529,6 +636,11 @@ const elements = {
   globalSearch: document.querySelector("#globalSearch"),
   toast: document.querySelector("#toast"),
 };
+const autopilotUi = createAutopilotUI({
+  getToken: () => currentUser,
+  openArea: (area) => setView(["finances", "planner", "notes"].includes(area) ? area : "dashboard"),
+  notify: (message) => showToast(message),
+});
 
 document.addEventListener("DOMContentLoaded", async () => {
   // Mostra overlay de carregamento enquanto o Firebase autentica.
@@ -603,12 +715,14 @@ document.addEventListener("DOMContentLoaded", async () => {
   setInterval(updateEventCountdowns, 30000);
 
   bindNavigation();
+  autopilotUi.bind();
   bindPlannerNav();
   bindPlannerQuickAdd();
   bindNoteDetail();
   bindForms();
   bindActions();
   bindSettingsView();
+  checkAdminAccess();
   bindThemeToggle();
   bindFinTabs();
   bindFinanceMonthControls();
@@ -625,6 +739,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     history.replaceState({ ...(history.state || {}), pnView: activeView, noteDetail: false }, "");
   }
   renderAll();
+  autopilotUi.load();
   handlePwaShortcutAction();
 });
 
@@ -748,6 +863,9 @@ function renderProfileButton(user) {
     <button class="dropdown-item" id="dropdownNotifications">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;vertical-align:-2px"><path d="M6 8.5a6 6 0 0 1 12 0c0 4.2 1.3 5.8 2 6.5H4c.7-.7 2-2.3 2-6.5z"/><path d="M9.5 17.5a2.5 2.5 0 0 0 5 0"/></svg>${window.notificationsAreEnabled?.() ? "Notificações ativadas" : "Ativar notificações"}
     </button>
+    <button class="dropdown-item" id="dropdownAdmin" hidden>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;vertical-align:-2px"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M8 9h8M8 13h3M14 13h2M8 17h5"/></svg>Abrir administração
+    </button>
     <button class="dropdown-item danger" id="dropdownLogout"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;vertical-align:-2px"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>Sair da conta</button>
   `;
   document.body.appendChild(dropdown);
@@ -799,6 +917,11 @@ function renderProfileButton(user) {
     }
     closeDropdown();
     await window.requestNotificationPermission?.();
+  });
+
+  document.getElementById("dropdownAdmin").addEventListener("click", () => {
+    closeDropdown();
+    window.location.assign("/admin");
   });
 }
 
@@ -918,6 +1041,76 @@ function renderSettings() {
     : initial;
 
   renderWhatsAppSettings();
+  loadBillingSettings();
+}
+
+let billingRequest = null;
+function billingMoney(cents) {
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format((Number(cents) || 0) / 100);
+}
+
+async function billingApi(action, method = "GET", body) {
+  if (!currentUser) throw new Error("unauthorized");
+  const token = await currentUser.getIdToken();
+  const response = await fetch(`/api/billing?action=${encodeURIComponent(action)}`, {
+    method,
+    headers: { "Authorization": `Bearer ${token}`, ...(body ? { "Content-Type": "application/json" } : {}) },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw Object.assign(new Error(payload.error || "billing_request_failed"), { code: payload.error });
+  return payload;
+}
+
+async function loadBillingSettings(force = false) {
+  const grid = document.getElementById("billingPlanGrid");
+  if (!grid || !currentUser) return;
+  if (billingRequest && !force) return billingRequest;
+  const statusBadge = document.getElementById("billingStatusBadge");
+  const statusText = document.getElementById("billingStatusText");
+  billingRequest = billingApi("status").then((data) => {
+    const current = data.subscription || {};
+    const active = current.status === "active";
+    statusBadge.textContent = active ? "Assinatura ativa" : current.planId ? "Assinatura pausada" : "Sem plano contratado";
+    statusBadge.className = `billing-status-badge ${active ? "is-active" : current.planId ? "is-warning" : ""}`;
+    statusText.textContent = !data.configured
+      ? "Os pagamentos ainda não foram ativados pelo administrador. Seus recursos atuais continuam funcionando normalmente."
+      : active ? "Seu acesso é atualizado automaticamente após cada confirmação do provedor de pagamento."
+        : "Escolha um plano para ativar os recursos correspondentes.";
+    grid.innerHTML = data.plans.length ? data.plans.map((plan) => {
+      const isCurrent = current.planId === plan.id;
+      const disabled = isCurrent || !plan.checkoutAvailable;
+      return `<article class="billing-plan-card ${isCurrent ? "is-current" : ""}">
+        <h3>${escapeHtml(plan.name)}</h3><p>${escapeHtml(plan.description || "Recursos definidos pelo administrador.")}</p>
+        <div class="billing-plan-price">${billingMoney(plan.priceCents)} <small>/${plan.billingInterval === "year" ? "ano" : "mês"}</small></div>
+        <button type="button" class="${isCurrent ? "ghost-button" : "primary-button"}" data-billing-plan="${escapeHtml(plan.id)}" ${disabled ? "disabled" : ""}>${isCurrent ? "Plano atual" : plan.checkoutAvailable ? "Assinar plano" : "Indisponível"}</button>
+      </article>`;
+    }).join("") : `<div class="empty-state">Nenhum plano público está disponível no momento.</div>`;
+    document.getElementById("billingActions").hidden = current.provider !== "stripe";
+    grid.querySelectorAll("[data-billing-plan]").forEach((button) => button.addEventListener("click", async () => {
+      if (button.disabled) return;
+      const original = button.textContent;
+      button.disabled = true;
+      button.textContent = "Abrindo pagamento…";
+      try {
+        const result = await billingApi("checkout", "POST", { planId: button.dataset.billingPlan });
+        window.location.assign(result.url);
+      } catch (error) {
+        console.error("Falha ao iniciar checkout:", error.code || error.message);
+        button.disabled = false;
+        button.textContent = original;
+        showToast("Não foi possível abrir o pagamento agora.");
+      }
+    }));
+    return data;
+  }).catch((error) => {
+    console.error("Falha ao carregar cobrança:", error.code || error.message);
+    statusBadge.textContent = "Indisponível";
+    statusBadge.className = "billing-status-badge is-warning";
+    statusText.textContent = "Não foi possível consultar sua assinatura agora. Tente novamente em instantes.";
+    grid.innerHTML = "";
+  }).finally(() => { billingRequest = null; });
+  return billingRequest;
 }
 
 // Mostra o estado atual da integração com WhatsApp em Configurações:
@@ -994,6 +1187,35 @@ async function forceAppUpdate() {
 }
 
 
+async function checkAdminAccess() {
+  const card = document.getElementById("adminAccessCard");
+  const dropdownEntry = document.getElementById("dropdownAdmin");
+  const isPrimaryOwner = (currentUser?.email || "").trim().toLowerCase() === "douglas1201.santos@gmail.com";
+  if (!currentUser?.emailVerified) {
+    if (card) card.hidden = true;
+    if (dropdownEntry) dropdownEntry.hidden = true;
+    return;
+  }
+  // Mantém o atalho visível para a conta proprietária mesmo se a consulta
+  // transitória falhar. A página /admin ainda valida a autorização no servidor.
+  if (isPrimaryOwner) {
+    if (card) card.hidden = false;
+    if (dropdownEntry) dropdownEntry.hidden = false;
+  }
+  try {
+    const token = await currentUser.getIdToken();
+    const response = await fetch("/api/admin?action=me", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const allowed = response.status === 200;
+    if (card) card.hidden = !(allowed || isPrimaryOwner);
+    if (dropdownEntry) dropdownEntry.hidden = !(allowed || isPrimaryOwner);
+  } catch {
+    if (card) card.hidden = !isPrimaryOwner;
+    if (dropdownEntry) dropdownEntry.hidden = !isPrimaryOwner;
+  }
+}
+
 function bindSettingsView() {
   const msgEl = document.getElementById("settingsMessage");
   function showSettingsMsg(text, type) {
@@ -1005,6 +1227,22 @@ function bindSettingsView() {
   function hideSettingsMsg() {
     msgEl.hidden = true;
   }
+
+  document.getElementById("billingPortalButton")?.addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    const original = button.textContent;
+    button.disabled = true;
+    button.textContent = "Abrindo portal…";
+    try {
+      const result = await billingApi("portal", "POST");
+      window.location.assign(result.url);
+    } catch (error) {
+      console.error("Falha ao abrir portal de cobrança:", error.code || error.message);
+      button.disabled = false;
+      button.textContent = original;
+      showSettingsMsg("Não foi possível abrir a gestão da assinatura agora.", "error");
+    }
+  });
 
   // ── Upload de foto (processada localmente, sem Firebase Storage) ──
   document.getElementById("settingsPhotoInput").addEventListener("change", async (e) => {
@@ -1157,6 +1395,24 @@ function bindSettingsView() {
     showToast(e.target.checked ? "🔔 Lembretes por WhatsApp ativados!" : "Lembretes por WhatsApp desativados.");
   });
 
+  // Este listener pertence à inicialização da tela, não à normalização de
+  // dados. Normalizar ocorre a cada snapshot; colocá-lo lá duplicava o
+  // handler e repetia pedidos de permissão e gravações.
+  document.getElementById("appReminderOptIn")?.addEventListener("change", async (e) => {
+    if (e.target.checked) {
+      const allowed = await window.requestNotificationPermission?.();
+      if (!allowed) {
+        state.appReminderOptIn = false;
+        e.target.checked = false;
+        saveState();
+        return;
+      }
+    }
+    state.appReminderOptIn = e.target.checked;
+    saveState();
+    showToast(e.target.checked ? "Lembretes no aplicativo ativados." : "Lembretes no aplicativo desativados.");
+  });
+
   // ── WhatsApp: desvincular ──────────────────────────────────────────
   document.getElementById("settingsWhatsappUnlinkBtn")?.addEventListener("click", async () => {
     hideSettingsMsg();
@@ -1240,32 +1496,110 @@ function bindSettingsView() {
 
   // ── Excluir conta permanentemente ─────────────────────────────────
   document.getElementById("settingsDeleteAccountBtn")?.addEventListener("click", async () => {
+    if (accountDeletionRequested) return;
     hideSettingsMsg();
+    const account = currentUser;
+    if (!account?.email) {
+      showSettingsMsg("Entre novamente na sua conta antes de excluí-la.", "error");
+      return;
+    }
     if (!confirm("Tem certeza que quer excluir sua conta? Todos os seus dados (notas, tarefas, agenda, metas e finanças) serão apagados PERMANENTEMENTE. Essa ação não pode ser desfeita.")) return;
 
     const pw = prompt("Por segurança, digite sua senha atual para confirmar a exclusão:");
     if (!pw) return;
 
+    accountDeletionRequested = true;
+    let whatsappUnlinked = false;
     try {
-      const credential = EmailAuthProvider.credential(currentUser.email, pw);
-      await reauthenticateWithCredential(currentUser, credential);
+      const credential = EmailAuthProvider.credential(account.email, pw);
+      await reauthenticateWithCredential(account, credential);
 
-      await deleteDoc(doc(db, "userData", currentUser.uid)).catch((err) => {
-        console.warn("Não foi possível apagar os dados no Firestore (a conta será excluída mesmo assim):", err);
+      // O vínculo é protegido pelo servidor e precisa sair antes da
+      // identidade. Se falhar, mantemos a conta para não deixar um
+      // número associado a um UID que já não existe.
+      const token = await account.getIdToken();
+      const unlinkResponse = await fetch("/api/whatsapp-unlink", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${token}` },
       });
+      if (!unlinkResponse.ok) {
+        const unlinkError = new Error("Não foi possível desvincular o WhatsApp. Sua conta foi mantida; tente novamente mais tarde.");
+        unlinkError.code = "data/unlink-failed";
+        throw unlinkError;
+      }
+      whatsappUnlinked = true;
 
-      const key = getStorageKey();
-      if (key) localStorage.removeItem(key);
+      // Remove métricas operacionais protegidas pelo Admin SDK. Elas não
+      // podem ser apagadas diretamente pelo navegador por design.
+      const cleanupResponse = await fetch("/api/account-delete-cleanup", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${token}` },
+      });
+      if (!cleanupResponse.ok) {
+        const cleanupError = new Error("Não foi possível remover os dados operacionais. Sua conta foi mantida; tente novamente mais tarde.");
+        cleanupError.code = "data/cleanup-failed";
+        throw cleanupError;
+      }
 
-      await deleteUser(currentUser);
+      // Firestore e Auth não são transacionais entre si. Confirme uma
+      // cópia do servidor para poder restaurar o documento se a remoção
+      // da identidade falhar. Não limpe o cache local até ambos concluírem.
+      const userDocRef = doc(db, "userData", account.uid);
+      accountDeletionInProgress = true;
+      if (syncTimer) { clearTimeout(syncTimer); syncTimer = null; }
+      try {
+        // Uma sincronização já em curso poderia recriar o documento logo
+        // depois do delete. Aguarde as operações deste navegador terminarem.
+        await Promise.allSettled([...activeSyncs]);
+        await deleteAccountDataAndIdentity({
+          readData: async () => {
+            const snapshot = await getDocFromServer(userDocRef);
+            return snapshot.exists() ? snapshot.data() : null;
+          },
+          deleteData: async () => {
+            try {
+              await deleteDoc(userDocRef);
+            } catch (err) {
+              console.error("Falha ao apagar dados antes da exclusão da conta:", err?.code || err?.name || "erro");
+              const deletionError = new Error("Não foi possível remover seus dados agora. Sua conta foi mantida; tente novamente mais tarde.", { cause: err });
+              deletionError.code = "data/delete-failed";
+              throw deletionError;
+            }
+          },
+          deleteIdentity: () => deleteUser(account),
+          restoreData: (backup) => runTransaction(db, async (transaction) => {
+            const current = await transaction.get(userDocRef);
+            if (!current.exists()) transaction.set(userDocRef, backup);
+          }),
+        });
+      } catch (err) {
+        accountDeletionInProgress = false;
+        if (Object.keys(dirtyBases).length) scheduleSyncToServer();
+        throw err;
+      }
+
+      // deleteUser pode encerrar a sessão imediatamente: use chaves
+      // baseadas no UID capturado, não em currentUser (que já pode ser null).
+      try {
+        localStorage.removeItem(`${BASE_STORAGE_KEY}:${account.uid}`);
+        localStorage.removeItem(`${BASE_STORAGE_KEY}:pending:${account.uid}`);
+      } catch { /* a conta já foi removida; a navegação prossegue */ }
       window.location.replace("/login");
     } catch (err) {
       const messages = {
         "auth/wrong-password":        "Senha incorreta.",
         "auth/invalid-credential":    "Senha incorreta.",
         "auth/requires-recent-login": "Por segurança, saia e entre na conta novamente antes de excluí-la.",
+        "data/unlink-failed":       "Não foi possível desvincular o WhatsApp. Sua conta foi mantida; tente novamente mais tarde.",
+        "data/cleanup-failed":      "Não foi possível remover os dados operacionais agora. Sua conta foi mantida; tente novamente mais tarde.",
+        "data/snapshot-failed":      "Não foi possível confirmar seus dados na nuvem. Sua conta foi mantida; verifique a conexão e tente novamente.",
+        "data/delete-failed":        "Não foi possível remover seus dados agora. Sua conta foi mantida; tente novamente mais tarde.",
+        "data/restore-failed":       "A exclusão não terminou e não foi possível restaurar os dados na nuvem. Não saia desta conta e entre em contato com o suporte.",
       };
-      showSettingsMsg(messages[err.code] || `Erro ao excluir conta: ${err.message}`, "error");
+      const message = messages[err.code] || `Erro ao excluir conta: ${err.message}`;
+      showSettingsMsg(`${message}${whatsappUnlinked ? " O WhatsApp foi desvinculado e pode ser vinculado novamente nas configurações." : ""}`, "error");
+    } finally {
+      accountDeletionRequested = false;
     }
   });
 }
@@ -1355,21 +1689,6 @@ function normalizeState(parsed) {
     if (!Number.isFinite(Number(t.reminder))) t.reminder = 15;
   });
 
-  // ── Notificações no aplicativo (push/local) ─────────────────────
-  document.getElementById("appReminderOptIn")?.addEventListener("change", async (e) => {
-    if (e.target.checked) {
-      const allowed = await window.requestNotificationPermission?.();
-      if (!allowed) {
-        state.appReminderOptIn = false;
-        e.target.checked = false;
-        saveState();
-        return;
-      }
-    }
-    state.appReminderOptIn = e.target.checked;
-    saveState();
-    showToast(e.target.checked ? "Lembretes no aplicativo ativados." : "Lembretes no aplicativo desativados.");
-  });
   parsed.notes.forEach((n) => { if (!n.tags) n.tags = []; });
   parsed.goals.forEach((g) => { if (!g.milestones) g.milestones = []; });
   return parsed;
@@ -1400,6 +1719,12 @@ function loadDefaultState() {
 // Salva mudanças localmente de imediato e agenda o envio para o Firestore
 // (debounce de 1.2s — evita gravar a cada tecla digitada, por exemplo)
 function saveState() {
+  for (const field of changedStateKeys(observedState, state, SERVER_OWNED_FIELDS)) {
+    if (!(field in dirtyBases)) dirtyBases[field] = cloneState(observedState?.[field]);
+    dirtyVersions[field] = (dirtyVersions[field] || 0) + 1;
+  }
+  observedState = cloneState(state);
+  persistPendingSync();
   const key = getStorageKey();
   if (key) localStorage.setItem(key, JSON.stringify(state));
   // Só agenda sync se já temos usuário autenticado e verificado.
@@ -1459,31 +1784,6 @@ function bindNavigation() {
         ? document.querySelector(".planner-goals-panel")
         : document.querySelector("#plannerView");
       requestAnimationFrame(() => target?.scrollIntoView({ behavior: "smooth", block: "start" }));
-    });
-  });
-  initDashPanelCollapse();
-}
-
-// Painéis do início (Prioridades do dia, Próximos compromissos,
-// Desempenho semanal, Foco da semana) podem ser minimizados — o estado
-// fica salvo no localStorage por painel, então a tela continua do jeito
-// que a pessoa deixou da última vez que abriu o app.
-function initDashPanelCollapse() {
-  document.querySelectorAll(".dash-panel").forEach((panel) => {
-    const id = panel.dataset.panelId;
-    const btn = panel.querySelector("[data-collapse-toggle]");
-    if (!id || !btn) return;
-    const storageKey = `pn_dash_collapsed_${id}`;
-    const setCollapsed = (collapsed) => {
-      panel.classList.toggle("is-collapsed", collapsed);
-      btn.setAttribute("aria-expanded", String(!collapsed));
-      btn.title = collapsed ? "Expandir" : "Minimizar";
-    };
-    setCollapsed(localStorage.getItem(storageKey) === "1");
-    btn.addEventListener("click", () => {
-      const collapsed = !panel.classList.contains("is-collapsed");
-      setCollapsed(collapsed);
-      localStorage.setItem(storageKey, collapsed ? "1" : "0");
     });
   });
 }
@@ -1753,6 +2053,7 @@ function setView(view, { fromHistory = false } = {}) {
 
   const previousView = activeView;
   activeView = view;
+  trackUsageArea(view);
   // Sync sidebar nav
   document.querySelectorAll(".nav-item").forEach((item) => {
     item.classList.toggle("active", item.dataset.view === view);
@@ -1775,6 +2076,7 @@ function setView(view, { fromHistory = false } = {}) {
   // gente reexecuta o autofit pra medir e ajustar certo.
   if (view === "finances") fitCurrencyValues("finReceitas", "finDespesas", "finSaldo");
   if (view === "dashboard") fitCurrencyValues("summaryFinSaldo", "dashFinReceitas", "dashFinDespesas", "dashFinSaldo");
+  if (view === "autopilot" || view === "dashboard") autopilotUi.show();
 
   // A navegação entre áreas ganha uma entrada real no histórico: voltar no
   // navegador/celular retorna à tela anterior em vez de sair do app.
@@ -5339,11 +5641,17 @@ function updateGoalProgress(id, value, event) {
 const FIN_CATEGORY_KEYWORDS = {
   alimentacao:  ["almoço","almoco","jantar","lanche","restaurante","comida","ifood","padaria","café","cafe","pizza","hambúrguer","hamburguer","churrasco","marmita","delivery","açaí","acai","sorvete","doces","rappi","padoca","brunch","sushi","mcdonalds","mcdonald's","mc donalds","mac donalds","burger king","bk","coxinha","pastel","esfiha","sanduíche","sanduiche","bolo","pão","pao"],
   mercado:      ["mercado","supermercado","mercadinho","hipermercado","atacadão","atacadao","assaí","assai","carrefour","pão de açúcar","pao de acucar","hortifruti","sacolão","sacolao","feira","açougue","acougue"],
-  transporte:   ["uber","99","gasolina","combustível","combustivel","ônibus","onibus","metro","metrô","táxi","taxi","passagem","estacionamento","pedágio","pedagio","posto","oficina","seguro do carro","ipva","licenciamento","manutenção do carro","manutencao do carro","mecânico","mecanico"],
-  saude:        ["farmácia","farmacia","remédio","remedio","médico","medico","consulta","dentista","plano de saúde","plano de saude","exame","hospital","academia","psicólogo","psicologo","terapia","fisioterapia","óculos","oculos","vacina","laboratório","laboratorio"],
+  transporte:   ["uber","99","ônibus","onibus","metro","metrô","táxi","taxi","passagem","estacionamento","pedágio","pedagio"],
+  combustivel:  ["gasolina","combustível","combustivel","etanol","diesel","gnv","posto","abastecimento"],
+  saude:        ["farmácia","farmacia","remédio","remedio","médico","medico","consulta","dentista","plano de saúde","plano de saude","exame","hospital","psicólogo","psicologo","terapia","fisioterapia","óculos","oculos","vacina","laboratório","laboratorio"],
+  academia:     ["academia","smart fit","bluefit","personal trainer","crossfit","pilates","yoga","musculação","musculacao","natação","natacao"],
   lazer:        ["cinema","show","viagem","bar","balada","streaming","jogo","passeio","ingresso","netflix","festa","parque","hospedagem","hotel","pousada","passeio turístico"],
   educacao:     ["curso","faculdade","livro","mensalidade escolar","escola","material escolar","apostila","aula","udemy","mensalidade da faculdade","pós-graduação","pos-graduacao"],
-  moradia:      ["aluguel","condomínio","condominio","luz","água","agua","internet","gás","gas","iptu","reforma","conta de","celular","telefone","tv a cabo","wifi","manutenção","manutencao"],
+  moradia:      ["aluguel","condomínio","condominio","iptu","reforma","móveis","moveis","sofá","sofa"],
+  contas:       ["conta de luz","conta de água","conta de agua","luz","água","agua","internet","gás","gas","conta de","celular","telefone","tv a cabo","wifi","energia","recarga"],
+  manutencao:  ["oficina","mecânico","mecanico","manutenção do carro","manutencao do carro","manutenção","manutencao"],
+  seguros:     ["seguro do carro","seguro"],
+  impostos:    ["ipva","licenciamento"],
   roupas:       ["roupa","calça","calca","camisa","tênis","tenis","sapato","blusa","jaqueta","acessório","acessorio","bolsa","perfume"],
   assinaturas:  ["assinatura","spotify","amazon prime","youtube premium","mensalidade do","disney+","disney plus","hbo max","globoplay","apple music","icloud","google one"],
   salario:      ["salário","salario","contracheque","pagamento do trabalho","pagamento da empresa","holerite"],
@@ -7311,3 +7619,4 @@ window.updateGoalProgress = updateGoalProgress;
 // silenciosamente não faziam nada.
 window.setView = setView;
 window.setNotesFolderFilter = setNotesFolderFilter;
+

@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="robots" content="noindex,nofollow" />
+  <meta name="theme-color" content="#060a18" />
+  <title>Administração · PulseNote</title>
+  <link rel="icon" type="image/png" href="/icons/favicon-32.png" />
+  <link rel="stylesheet" href="/src/admin.css?v=29" />
+</head>
+<body>
+  <div class="ad-shell is-locked">
+    <aside class="pn-rail" id="pnRail" aria-label="Seções administrativas">
+      <a class="ad-brand" href="/app" aria-label="PulseNote, voltar ao aplicativo"><span class="ad-brand-mark" aria-hidden="true"><span></span><span></span></span><span><strong>PulseNote</strong><small>Workspace administrativo</small></span></a>
+      <div class="ad-admin-identity"><span class="ad-admin-avatar" id="adAdminAvatar">PN</span><div><strong id="adAdminName">Administrador</strong><small id="adAdminRole">Acesso protegido</small></div></div>
+      <p class="ad-sidebar-label">CENTRO DE CONTROLE</p>
+      <nav class="ad-nav" id="adNav" aria-label="Navegação do painel">
+        <button type="button" class="is-active" data-section="overview"><span aria-hidden="true">⌂</span>Visão geral</button>
+        <button type="button" data-section="users"><span aria-hidden="true">♧</span>Usuários</button>
+        <button type="button" data-section="plans"><span aria-hidden="true">◇</span>Planos e preços</button>
+        <button type="button" data-section="subscriptions"><span aria-hidden="true">▣</span>Assinaturas</button>
+        <button type="button" data-section="charges"><span aria-hidden="true">▤</span>Cobranças</button>
+        <button type="button" data-section="features"><span aria-hidden="true">⬡</span>Recursos</button>
+        <button type="button" data-section="integrations"><span aria-hidden="true">↗</span>Integrações</button>
+        <button type="button" data-section="security"><span aria-hidden="true">♢</span>Segurança</button>
+        <button type="button" data-section="settings"><span aria-hidden="true">⚙</span>Configurações</button>
+      </nav>
+      <div class="ad-rail-footer">
+        <span>Conta única</span>
+        <a class="ad-back" href="/app"><span aria-hidden="true">↗</span><span><strong>Abrir meu PulseNote</strong><small>Voltar ao uso pessoal</small></span></a>
+      </div>
+    </aside>
+    <button class="ad-menu-backdrop" id="adMenuBackdrop" type="button" aria-label="Fechar menu" hidden></button>
+
+    <div class="ad-page">
+      <header class="ad-topbar">
+        <button class="ad-menu-button" id="adMenuButton" type="button" aria-expanded="false" aria-controls="pnRail" aria-label="Abrir menu">☰</button>
+        <span class="ad-topbar-title">PulseNote <span>Admin</span></span>
+        <span class="ad-environment">Ambiente de produção</span>
+        <div class="ad-topbar-actions"><a class="ad-app-switch" href="/app">Meu aplicativo</a><button class="ad-icon-button" id="adThemeButton" type="button" aria-label="Alternar tema">☼</button><span class="ad-account" id="adAccount">Verificando acesso…</span></div>
+      </header>
+
+      <main class="ad-main">
+        <div id="adGate" class="ad-gate" role="status">Verificando sua permissão de administrador…</div>
+        <div id="adContent" hidden>
+          <div class="ad-heading"><div><h1 id="adPageTitle">Administração</h1><p id="adPageSubtitle">Gerencie usuários, planos, cobranças e a operação do PulseNote.</p></div><span class="ad-session" id="adSession"></span></div>
+          <div id="adLoadError" class="ad-load-error" role="alert" hidden><span id="adLoadErrorText"></span><button class="ad-subtle-button" id="adSectionRetry" type="button">Tentar novamente</button></div>
+          <div class="ad-mobile-tabs" id="adMobileTabs" aria-label="Seções administrativas"></div>
+
+          <section class="pn-console-view is-active" id="pn-console-overview" aria-labelledby="ad-overview-title">
+            <div class="ad-overview-toolbar">
+              <div><span class="ad-eyebrow">OPERAÇÃO PULSENOTE</span><h2 id="ad-overview-title"><span id="adGreeting">Visão geral</span></h2><p id="adCurrentDate">Dados verificados no Firebase e nos serviços conectados.</p></div>
+              <div class="ad-command-actions"><button class="ad-primary-button" type="button" data-go="users">Ver usuários</button><button class="ad-subtle-button" type="button" data-go="plans">Editar planos</button></div>
+            </div>
+            <div class="ad-stats" id="adStats" aria-label="Métricas dos últimos 30 dias"></div>
+            <div class="ad-operations-strip" id="adOperationsSummary" aria-label="Atividade operacional dos últimos 30 dias"></div>
+
+            <div class="ad-insight-grid">
+              <article class="ad-card ad-access-panel">
+                <div class="ad-card-head"><div><span class="ad-card-kicker">ACESSO REAL</span><h2>Usuários que voltaram</h2><p>Distribuição do último acesso registrado pelo Firebase Auth nos últimos 30 dias.</p></div><span class="ad-live-label"><i></i><span id="adLastRefresh">Atualizando…</span></span></div>
+                <div id="adAccessChart" class="ad-access-chart" role="img" aria-label="Gráfico de último acesso dos usuários"></div>
+              </article>
+              <article class="ad-card ad-journey-panel">
+                <div class="ad-card-head"><div><span class="ad-card-kicker">JORNADA</span><h2>Adoção do produto</h2><p>Marcos reais encontrados nas contas, sem rastreamento fictício.</p></div></div>
+                <div id="adJourney" class="ad-journey"></div>
+                <div class="ad-flow-divider"><strong>Fluxo real por área</strong><small>Começa a ser medido nesta versão, sem registrar conteúdo pessoal.</small></div>
+                <div id="adUsageFlow" class="ad-usage-flow"></div>
+              </article>
+            </div>
+
+            <div class="ad-workspace-grid">
+              <article class="ad-card ad-users-preview-card"><div class="ad-card-head"><div><span class="ad-card-kicker">CONTAS</span><h2>Usuários recentes</h2><p>Último acesso, plano e canais habilitados.</p></div><button class="ad-link" type="button" data-go="users">Abrir gestão →</button></div><div id="adUsersPreview"></div></article>
+              <aside class="ad-overview-side">
+                <article class="ad-card"><div class="ad-card-head"><div><span class="ad-card-kicker">SAÚDE</span><h2>Integrações</h2><p>Credenciais e execução dos serviços.</p></div><button class="ad-link" type="button" data-go="integrations">Detalhes →</button></div><div id="adIntegrationsPreview"></div></article>
+                <article class="ad-card ad-maintenance-card"><div class="ad-card-head"><div><h2>Modo de manutenção</h2><p>Bloqueia alterações durante uma intervenção.</p></div><span class="ad-pill" id="adMaintenanceStatus">Carregando…</span></div><button type="button" class="ad-subtle-button" data-go="settings">Configurar operação</button></article>
+              </aside>
+            </div>
+            <article class="ad-card ad-audit-card"><div class="ad-card-head"><div><span class="ad-card-kicker">AUDITORIA</span><h2>Alterações administrativas</h2><p>Ações realizadas no painel, com responsável e horário.</p></div><button class="ad-link" type="button" id="adAuditRefresh">Atualizar ↻</button></div><div id="adAuditPreview" class="ad-empty">Nenhuma ação registrada ainda.</div></article>
+          </section>
+
+          <section class="pn-console-view" id="pn-console-users" aria-labelledby="ad-users-title">
+            <div class="ad-card ad-table-card"><div class="ad-card-head"><div><span class="ad-card-kicker">DIRETÓRIO</span><h2 id="ad-users-title">Usuários</h2><p>Dados de conta e totais de uso. O conteúdo privado de notas e finanças não é exibido.</p></div></div>
+              <form id="adUserSearch" class="ad-user-toolbar"><label class="ad-search-box"><span aria-hidden="true">⌕</span><input id="adUserEmail" type="search" autocomplete="off" placeholder="Buscar e-mail exato" aria-label="E-mail do usuário" /></label><button class="ad-primary-button" type="submit">Buscar</button><button class="ad-subtle-button" id="adUserClear" type="button">Limpar</button></form>
+              <div class="ad-filter-row" id="adUserFilters"><button type="button" class="is-active" data-user-filter="all">Todos</button><button type="button" data-user-filter="active">Ativos</button><button type="button" data-user-filter="whatsapp">WhatsApp</button><button type="button" data-user-filter="reminders">Lembretes</button></div>
+              <div class="ad-user-table-wrap"><div id="adUsersList" class="ad-user-table"></div></div><div class="ad-list-footer"><span id="adUsersPageLabel"></span><button class="ad-subtle-button" id="adUsersNext" type="button">Próxima página →</button></div>
+            </div>
+            <aside class="ad-user-drawer" id="adUserDrawer" aria-labelledby="adUserDrawerTitle" aria-hidden="true"><button class="ad-drawer-close" id="adUserDrawerClose" type="button" aria-label="Fechar detalhes">×</button><div id="adUserDrawerContent"></div></aside>
+          </section>
+
+          <section class="pn-console-view" id="pn-console-plans" aria-labelledby="ad-plans-title">
+            <div class="ad-plan-workspace">
+              <div class="ad-card ad-plan-catalog"><div class="ad-card-head"><div><span class="ad-card-kicker">CATÁLOGO</span><h2 id="ad-plans-title">Planos</h2><p>Ofertas disponíveis e vínculo com a cobrança.</p></div></div><div id="adPlansList" class="ad-list"></div></div>
+              <div class="ad-card ad-plan-editor"><div class="ad-card-head"><div><span class="ad-card-kicker">CONFIGURAÇÃO</span><h2>Criar ou editar plano</h2><p>Os recursos selecionados são aplicados pelo backend. O Stripe Price ID ativa o checkout quando a integração estiver conectada.</p></div></div><form id="adPlanForm" class="ad-form">
+                <div class="ad-form-row"><label>ID do plano<input name="id" required pattern="[a-z0-9_-]{2,40}" maxlength="40" placeholder="essencial" /></label><label>Nome<input name="name" required maxlength="80" placeholder="Essencial" /></label></div>
+                <label>Descrição<textarea name="description" maxlength="300" rows="2" placeholder="O que este plano inclui"></textarea></label>
+                <div class="ad-form-row"><label>Preço em reais<input name="price" inputmode="decimal" placeholder="29,90" /></label><label>Ciclo<select name="billingInterval"><option value="month">Mensal</option><option value="year">Anual</option></select></label></div>
+                <label>Stripe Price ID<input name="stripePriceId" maxlength="128" placeholder="price_..." autocomplete="off" /></label>
+                <div class="ad-core-features"><strong>Base incluída em todos os planos</strong><span>Planner e tarefas</span><span>Notas e checklists</span><span>Finanças</span><span>Metas e compromissos</span></div>
+                <div id="adPlanFeatures" class="ad-capability-groups"></div><div class="ad-form-footer"><label class="ad-check"><input type="checkbox" name="active" checked />Plano ativo</label><button class="ad-primary-button" type="submit">Salvar plano</button></div>
+              </form></div>
+            </div>
+          </section>
+
+          <section class="pn-console-view" id="pn-console-subscriptions" aria-labelledby="ad-subscriptions-title">
+            <div class="ad-two-col"><div class="ad-card"><div class="ad-card-head"><div><h2 id="ad-subscriptions-title">Assinaturas</h2><p>Acesso manual e assinaturas sincronizadas pelo provedor.</p></div></div><div id="adSubscriptionsList" class="ad-list"></div></div>
+              <div class="ad-card"><h2>Gerenciar acesso manual</h2><p>Use para suporte ou concessões administrativas; pagamentos automáticos são atualizados por webhook.</p><form id="adSubscriptionForm" class="ad-form"><label>UID do usuário<input name="uid" required maxlength="128" placeholder="UID do Firebase Auth" /></label><label>Plano<select name="planId" required id="adSubscriptionPlanSelect"></select></label><div class="ad-form-row"><label>Situação<select name="status"><option value="active">Ativa</option><option value="paused">Pausada</option><option value="cancelled">Cancelada</option></select></label><label>Válida até<input name="validUntil" type="date" /></label></div><button class="ad-primary-button" type="submit">Salvar acesso</button></form></div>
+            </div>
+          </section>
+
+          <section class="pn-console-view" id="pn-console-charges" aria-labelledby="ad-charges-title">
+            <div class="ad-card ad-narrow-card"><div class="ad-card-head"><div><h2 id="ad-charges-title">Provedor de pagamentos</h2><p>Conexão para Checkout, assinaturas e portal do cliente.</p></div></div><div id="adBillingStatus" class="ad-provider"><span class="ad-provider-logo">S</span><div><strong>Stripe Billing</strong><small>Verificando credenciais e webhook…</small></div><span class="ad-pill is-warn">Verificando</span></div></div>
+            <div class="ad-two-col ad-audit-card"><div class="ad-card"><div class="ad-card-head"><div><h2>Cobranças registradas</h2><p>Inclui apenas registros existentes no PulseNote.</p></div></div><div id="adChargesList" class="ad-list"></div></div>
+              <div class="ad-card"><h2>Novo registro manual</h2><p>Não movimenta dinheiro e não substitui a confirmação do provedor.</p><form id="adChargeForm" class="ad-form"><label>UID do usuário<input name="uid" required maxlength="128" placeholder="UID do Firebase Auth" /></label><div class="ad-form-row"><label>Valor em reais<input name="amount" required inputmode="decimal" placeholder="0,00" /></label><label>Vencimento<input name="dueDate" type="date" /></label></div><label>Observação<textarea name="note" maxlength="300" rows="2"></textarea></label><button class="ad-primary-button" type="submit">Registrar manualmente</button></form></div>
+            </div>
+          </section>
+
+          <section class="pn-console-view" id="pn-console-features" aria-labelledby="ad-features-title"><div class="ad-card ad-narrow-card"><h2 id="ad-features-title">Recursos do produto</h2><p>Alterações globais são aplicadas no backend; o plano do usuário ainda pode limitar cada recurso.</p><form id="adFeaturesForm" class="ad-form"><div id="adFeatureSwitches"></div><button class="ad-primary-button" type="submit">Salvar recursos</button></form></div></section>
+
+          <section class="pn-console-view" id="pn-console-integrations" aria-labelledby="ad-integrations-title"><div class="ad-card ad-narrow-card"><h2 id="ad-integrations-title">Integrações</h2><p>Credenciais, eventos recentes e execução dos serviços.</p><div id="adIntegrationsList"></div><p class="ad-fineprint" id="adIntegrationNote"></p></div></section>
+
+          <section class="pn-console-view" id="pn-console-security" aria-labelledby="ad-security-title">
+            <div class="ad-two-col"><div class="ad-card"><div class="ad-card-head"><div><h2 id="ad-security-title">Acessos administrativos</h2><p>A mesma conta do PulseNote pode ter papel de usuário e administrador.</p></div></div><div id="adAdminsList" class="ad-list"></div></div>
+              <div class="ad-card"><h2>Conceder acesso</h2><p>Somente o proprietário principal pode adicionar ou remover administradores.</p><form id="adAdminForm" class="ad-form"><label>E-mail verificado do usuário<input name="email" type="email" required autocomplete="off" placeholder="usuario@exemplo.com" /></label><button class="ad-primary-button" type="submit">Conceder acesso administrativo</button></form><p class="ad-security-note">O acesso usa a sessão Google/Firebase já existente e é revalidado pelo servidor em cada operação administrativa.</p></div>
+            </div>
+          </section>
+
+          <section class="pn-console-view" id="pn-console-settings" aria-labelledby="ad-settings-title"><div class="ad-card ad-narrow-card"><h2 id="ad-settings-title">Configurações gerais</h2><p>Estes valores são consumidos pelo servidor e alteram o funcionamento real do produto.</p><form id="adSettingsForm" class="ad-form"><label class="ad-switch-row"><span><strong>Modo manutenção</strong><small>Suspende gravações dos usuários durante uma intervenção.</small></span><input id="adMaintenanceInput" type="checkbox" name="maintenance" /></label><label>Mensagem de manutenção<textarea name="maintenanceMessage" maxlength="240" rows="2"></textarea></label><button class="ad-primary-button" type="submit">Salvar configurações</button></form></div></section>
+        </div>
+      </main>
+    </div>
+  </div>
+  <div id="adToast" class="ad-toast" role="status" aria-live="polite" hidden></div>
+  <script type="module" src="/src/admin.js?v=29"></script>
+</body>
+</html>

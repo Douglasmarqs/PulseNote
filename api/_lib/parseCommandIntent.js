@@ -74,6 +74,57 @@ const INTENTS = [
   "finance_edit_last", "finance_delete_last", "finance_search", "stats",
 ];
 
+// Uma antecedência só é reconhecida quando vem acompanhada da unidade e
+// de "antes"/"antecedência". Isso impede que "R$ 30" vire 30 minutos.
+const REMINDER_VALUE = "(\\d{1,4}|meia|meio|um|uma|dois|duas)";
+const REMINDER_UNIT = "(minutos?|mins?|min|horas?|h|dias?)";
+const REMINDER_AFTER = new RegExp(`\\b${REMINDER_VALUE}\\s*${REMINDER_UNIT}\\s*(?:antes|de\\s+antecedencia)\\b`, "i");
+const REMINDER_BEFORE = new RegExp(`\\bantecedencia\\s+de\\s+${REMINDER_VALUE}\\s*${REMINDER_UNIT}\\b`, "i");
+
+function extractReminderMinutes(text) {
+  const normalized = String(text || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  if (/\b(?:na hora|no horario|sem antecedencia)\b/.test(normalized)) return 0;
+  const match = normalized.match(REMINDER_AFTER) || normalized.match(REMINDER_BEFORE);
+  if (!match) return null;
+  const words = { meia: 0.5, meio: 0.5, um: 1, uma: 1, dois: 2, duas: 2 };
+  const value = words[match[1]] ?? Number(match[1]);
+  const multiplier = /^h|^hora/.test(match[2]) ? 60 : /^dia/.test(match[2]) ? 1440 : 1;
+  const minutes = value * multiplier;
+  return Number.isInteger(minutes) && minutes >= 0 && minutes <= 10080 ? minutes : null;
+}
+
+function stripScheduleFromTitle(title) {
+  const value = `${REMINDER_VALUE}\\s*${REMINDER_UNIT}`;
+  return stripDateWordsFromDescription(String(title || "")
+    .replace(new RegExp(`\\b(?:com\\s+)?${value}\\s*(?:antes|de\\s+anteced[eê]ncia)\\b`, "giu"), " ")
+    .replace(new RegExp(`\\banteced[eê]ncia\\s+de\\s+${value}\\b`, "giu"), " ")
+    .replace(/\b(?:na hora|no hor[aá]rio|sem anteced[eê]ncia)\b/giu, " ")
+    .replace(/(?<![\p{L}\p{N}])(?:às\s+|as\s+)?\d{1,2}\s*(?:h(?:oras?)?)?\s+da\s+(?:manh[ãa]|tarde|noite)\b/giu, " ")
+    .replace(/(?<![\p{L}\p{N}])(?:às|as|pelas|para as|para às)\s*\d{1,2}(?::[0-5]\d|h(?:[0-5]\d)?)?\b/giu, " ")
+    .replace(/\b\d{1,2}h(?:[0-5]\d)?\b/giu, " "))
+    .replace(/^[\s,;:–—-]+|[\s,;:–—-]+$/g, "")
+    .replace(/\b(?:às|as|para|de|em|com)\s*$/i, "")
+    .trim();
+}
+
+function validTime(value) {
+  return /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(value || ""));
+}
+
+function extractScheduledTime(text) {
+  const normalized = String(text || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const period = normalized.match(/\b(\d{1,2})\s*(?:h(?:oras?)?)?\s+da\s+(manha|tarde|noite)\b/);
+  if (period) {
+    let hour = Number(period[1]);
+    if (hour >= 1 && hour <= 12) {
+      if (period[2] === "tarde" && hour < 12) hour += 12;
+      if (period[2] === "noite") hour = hour === 12 ? 0 : hour + 12;
+      return `${String(hour).padStart(2, "0")}:00`;
+    }
+  }
+  return extractTimeFromText(text);
+}
+
 function buildIntentPrompt({ todayIso, categoryList, recentEntryNote }) {
   return `Você entende o que uma pessoa quis dizer numa mensagem de WhatsApp pro PulseNote (app pessoal de notas/tarefas/agenda/metas/finanças). Classifique a intenção em UMA destas:
 
@@ -112,7 +163,7 @@ Em "finance_edit_last", só inclua os campos que a pessoa claramente quis corrig
 Se "finance_search": preencha "searchQuery" (palavra-chave central, ex.: "uber", "farmácia", "mercado") e, se houver período claro, "searchMonth"/"searchYear".
 
 Se "task_action": preencha "taskAction" ("create"|"complete"|"delete").
-  - Se "create": "taskTitle" (título curto e claro da tarefa, no que a pessoa disse, sem palavras de comando tipo "cria uma tarefa pra"), "taskDueDate" (YYYY-MM-DD resolvendo data relativa; sem menção nenhuma de prazo, deixe "" — tarefa sem data), "taskPriority" ("Alta" se a pessoa usar palavras como "urgente"/"importante"/"prioridade", senão "Media").
+  - Se "create": "taskTitle" (título curto e claro da tarefa, sem palavras de comando, horário ou antecedência), "taskDueDate" (YYYY-MM-DD resolvendo data relativa; sem menção de prazo, deixe ""), "taskDueTime" (HH:MM quando houver horário, senão ""), "taskPriority" ("Alta" se a pessoa usar "urgente"/"importante"/"prioridade", senão "Media"). Antecedência explicitamente pedida é extraída do texto pelo servidor; não confunda valor em reais com minutos.
   - Se "complete" ou "delete": "taskQuery" (texto curto que identifica a tarefa já existente que a pessoa quer marcar/apagar, ex.: da frase "concluí a tarefa do dentista" → "dentista").
 
 Se "note_action": preencha "noteAction" ("create"|"search"|"delete").
@@ -123,7 +174,7 @@ Se "goal_action": preencha "goalAction" ("create"|"update").
   - Se "create": "goalTitle", "goalTarget" (número alvo da meta).
   - Se "update": "goalQuery" (texto que identifica a meta existente), "goalProgressMode" ("delta" se a pessoa falou um AVANÇO, ex.: "avancei 200" → delta; "absolute" se falou um valor TOTAL atual, ex.: "já bati 3" → absolute), "goalProgressValue" (o número).
 
-Se "event_create": preencha "eventTitle", "eventDate" (YYYY-MM-DD, resolvendo data relativa/dia da semana a partir de hoje), "eventTime" (HH:MM 24h; sem horário mencionado, deixe ""), "eventLocation" (sem menção, deixe "").
+Se "event_create": preencha "eventTitle" (sem horário nem antecedência), "eventDate" (YYYY-MM-DD, resolvendo data relativa/dia da semana a partir de hoje), "eventTime" (HH:MM 24h; sem horário mencionado, deixe ""), "eventLocation" (sem menção, deixe ""). Antecedência explicitamente pedida é extraída do texto pelo servidor.
 
 Se não conseguir classificar com confiança em nenhuma intenção específica, responda "expense" mesmo — se não der pra extrair um valor válido, o app já sabe pedir pra pessoa reformular.
 
@@ -220,7 +271,7 @@ function goalTitleFromCommand(text) {
 // Comandos que precisam funcionar mesmo quando a IA estiver sem chave,
 // temporariamente indisponível ou responder fora do schema. São consultas
 // sem ambiguidade e não devem cair no "não consegui entender".
-function parseDeterministicIntent(text, todayIso) {
+function parseDeterministicIntent(text, todayIso, categories = []) {
   const command = normalizeQuickCommand(text);
   const clean = command.replace(/[!?.,;:]+$/g, "").trim();
   if (/^(ajuda|help|comandos?|o que (voce|vc) (faz|entende))$/.test(clean)) {
@@ -239,8 +290,17 @@ function parseDeterministicIntent(text, todayIso) {
     };
   }
 
+  // "quanto gastei em Uber" é uma busca por lançamento, não um
+  // relatório. Só a consulta com período reconhecível é mensal.
+  const hasReportPeriod = /\b(?:mes passado|este mes|esse mes|neste mes|nesse mes)\b/.test(command)
+    || MONTH_NAMES.some((name) => new RegExp(`\\b${name}\\b`).test(command));
+  const questionWithoutPeriod = command
+    .replace(/\b(?:mes passado|este mes|esse mes|neste mes|nesse mes)\b/g, " ")
+    .replace(new RegExp(`\\b(?:${MONTH_NAMES.join("|")})\\b`, "g"), " ")
+    .replace(/\s+/g, " ").trim();
+  const hasSearchSubject = /^quanto (?:gastei|recebi)\s+(?:com|em|de|no|na)\s+\S/.test(questionWithoutPeriod);
   const asksForReport = /\b(relatorio|pdf|arquivo)\b/.test(command)
-    || (/^quanto (gastei|recebi)\b/.test(command) && (command.includes(" em ") || /\bmes passado\b/.test(command)));
+    || (/^quanto (gastei|recebi)\b/.test(command) && hasReportPeriod && !hasSearchSubject);
   if (asksForReport) {
     return {
       ok: true,
@@ -251,8 +311,12 @@ function parseDeterministicIntent(text, todayIso) {
 
   // Consultas da agenda não precisam da IA. Deixamos a criação de evento
   // abaixo, pois "agenda reunião amanhã" é uma ação e não uma consulta.
-  if (/\b(tarefas?|compromissos?|agenda)\b/.test(command)
-    || /\b(o que|quais?) (tenho|faco|fazer)\b/.test(command)) {
+  // Verbos de criação e o atalho "tarefa:" têm prioridade sobre a
+  // consulta genérica da agenda. Sem isto, "nova tarefa..." e
+  // "adiciona tarefa..." respondem com a lista em vez de criar.
+  const isExplicitTaskCreation = /^\s*(?:(?:cria[r]?|adiciona[r]?)\s+(?:uma\s+)?tarefa\b|nova\s+tarefa\b|tarefa\s*[:\-–—])/i.test(text);
+  if (!isExplicitTaskCreation && (/\b(tarefas?|compromissos?|agenda)\b/.test(command)
+    || /\b(o que|quais?) (tenho|faco|fazer)\b/.test(command))) {
     if (/\b(atrasad[ao]s?|vencid[ao]s?)\b/.test(command)) return { ok: true, intent: "agenda", agenda: { filter: "atrasadas" } };
     if (/\b(hoje)\b/.test(command)) return { ok: true, intent: "agenda", agenda: { filter: "hoje" } };
     if (/\b(semana|proximos dias|pr[oó]ximos dias)\b/.test(command)) return { ok: true, intent: "agenda", agenda: { filter: "semana" } };
@@ -261,7 +325,7 @@ function parseDeterministicIntent(text, todayIso) {
 
   const rawTaskTitle = stripKnownTriggers(text, TASK_CREATE_TRIGGERS);
   if (TASK_CREATE_TRIGGERS.some((pattern) => pattern.test(text))) {
-    const title = compactTitle(stripDateWordsFromDescription(rawTaskTitle));
+    const title = compactTitle(stripScheduleFromTitle(rawTaskTitle));
     if (title) {
       return {
         ok: true,
@@ -270,6 +334,8 @@ function parseDeterministicIntent(text, todayIso) {
           action: "create",
           title,
           dueDate: detectDate(text, todayIso, "future") || "",
+          dueTime: extractScheduledTime(text) || "",
+          reminder: extractReminderMinutes(text) ?? 15,
           priority: /\b(urgente|importante|prioridade alta)\b/.test(command) ? "Alta" : "Media",
         },
       };
@@ -295,7 +361,7 @@ function parseDeterministicIntent(text, todayIso) {
     if (query) return { ok: true, intent: "note_action", note: { action: "search", query } };
   }
   if (/^\s*(apaga|exclui|deleta|remove)\s+(?:a\s+)?nota\b/i.test(text)) {
-    const query = compactTitle(text.replace(/^\s*(?:apaga|exclui|deleta|remove)\s+(?:a\s+)?nota\s*(?:de|do|da|sobre)?\s*/i, ""), 80);
+    const query = compactTitle(text.replace(/^\s*(?:apaga|exclui|deleta|remove)\s+(?:a\s+)?nota\s*(?:(?:de|do|da|sobre)\b\s*)?/i, ""), 80);
     if (query) return { ok: true, intent: "note_action", note: { action: "delete", query } };
   }
 
@@ -316,32 +382,59 @@ function parseDeterministicIntent(text, todayIso) {
 
   if (EVENT_CREATE_TRIGGERS.some((pattern) => pattern.test(text))) {
     const date = detectDate(text, todayIso, "future");
-    const title = compactTitle(stripDateWordsFromDescription(stripKnownTriggers(text, EVENT_CREATE_TRIGGERS)));
+    const title = compactTitle(stripScheduleFromTitle(stripKnownTriggers(text, EVENT_CREATE_TRIGGERS)));
     if (title && date) {
-      return { ok: true, intent: "event_create", event: { title, date, time: extractTimeFromText(text) || "", location: "" } };
+      return { ok: true, intent: "event_create", event: { title, date, time: extractScheduledTime(text) || "", reminder: extractReminderMinutes(text) ?? 15, location: "" } };
     }
   }
 
   if (FINANCE_SEARCH_TRIGGERS.some((pattern) => pattern.test(text))) {
-    const query = compactTitle(stripKnownTriggers(text, FINANCE_SEARCH_TRIGGERS), 60)
+    const monthIndex = MONTH_NAMES.findIndex((name) => new RegExp(`\\b${name}\\b`).test(command));
+    const period = monthIndex >= 0 ? resolveReportPeriod(command, todayIso) : null;
+    let query = compactTitle(stripKnownTriggers(text, FINANCE_SEARCH_TRIGGERS), 60);
+    if (period) {
+      const monthWord = MONTH_NAMES[monthIndex] === "marco" ? "mar[çc]o" : MONTH_NAMES[monthIndex];
+      query = query
+        .replace(new RegExp(`\\b(?:(?:em|no|na|de)\\s+)?${monthWord}(?:\\s+de\\s+20\\d{2})?\\b`, "gi"), " ")
+        .replace(/\b20\d{2}\b/g, " ");
+    }
+    query = query
       .replace(/\b(?:esse|este|do|no|na)\s+m[eê]s\b/gi, "")
+      .replace(/^\s*(?:com|em|de|no|na)\s+/i, "")
+      .replace(/\s+(?:com|em|de|no|na)\s*$/i, "")
       .replace(/\s+/g, " ").trim();
-    if (query) return { ok: true, intent: "finance_search", search: { query, month: null, year: null } };
+    if (query) return { ok: true, intent: "finance_search", search: { query, month: period?.month || null, year: period?.year || null } };
+  }
+  // Lançamentos inequívocos não precisam esperar pela IA. Exigimos um
+  // verbo de movimento ou a forma curta "35 conta de luz", além de uma
+  // categoria explícita; frases de intenção futura ficam para o modelo.
+  const clearMovement = /^\s*(?:gastei|gasto|paguei|comprei|recebi|ganhei|vendi)\b/i.test(text);
+  const amountFirst = /^\s*(?:r\$\s*)?\d[\d.,]*\s+\S/.test(text);
+  const amountLast = /^\s*[\p{L}\s'’-]{2,80}\s+(?:r\$\s*)?\d[\d.,]*(?:\s*(?:reais|real))?(?:\s+(?:no|na|pelo)\s+(?:pix|dinheiro|cartão|cartao))?\s*$/iu.test(text);
+  const futureOrCorrection = /\b(?:vou|preciso|lembrar|lembrete|amanh[ãa]|pr[oó]xim[ao]|errei|corrig[eiir]|na verdade)\b/i.test(text);
+  if ((clearMovement || amountFirst || amountLast) && !futureOrCorrection && Array.isArray(categories) && categories.length) {
+    const local = localExpenseFallback({ text, categories, todayIso });
+    if (local && guessSpecificCategoryId(text, local.type, categories)) {
+      return { ok: true, intent: "expense", entry: local };
+    }
   }
   return null;
 }
 
-async function parseTextIntent({ text, categories, today, lastFinanceEntry }) {
+async function parseTextIntent({ text, categories, today, lastFinanceEntry, aiEnabled = true }) {
   if (!text || typeof text !== "string" || !text.trim() || text.length > 400) {
     return { ok: false, status: 400, error: "invalid_text" };
   }
   const todayIso = /^\d{4}-\d{2}-\d{2}$/.test(today) ? today : new Date().toISOString().slice(0, 10);
   const rawMessage = text.trim().slice(0, 400);
-  const deterministic = parseDeterministicIntent(rawMessage, todayIso);
+  const deterministic = parseDeterministicIntent(rawMessage, todayIso, categories);
   if (deterministic) return deterministic;
 
   if (!Array.isArray(categories) || categories.length === 0) {
     return { ok: false, status: 400, error: "invalid_categories" };
+  }
+  if (!aiEnabled) {
+    return { ok: false, status: 503, error: "ai_parsing_disabled" };
   }
   if (!process.env.GEMINI_API_KEY) {
     console.error("GEMINI_API_KEY não configurada.");
@@ -366,7 +459,7 @@ async function parseTextIntent({ text, categories, today, lastFinanceEntry }) {
     // de primeira, e o custo extra de tokens de "pensamento" é
     // insignificante perto de gastar uma segunda mensagem pedindo pra
     // pessoa reformular.
-    thinkingLevel: "high",
+    thinkingLevel: "medium",
     generationConfig: {
       maxOutputTokens: 400,
       responseMimeType: "application/json",
@@ -398,6 +491,7 @@ async function parseTextIntent({ text, categories, today, lastFinanceEntry }) {
           taskAction: { type: "string", enum: ["create", "complete", "delete"] },
           taskTitle: { type: "string" },
           taskDueDate: { type: "string" },
+          taskDueTime: { type: "string" },
           taskPriority: { type: "string", enum: ["Baixa", "Media", "Alta"] },
           taskQuery: { type: "string" },
           // note_action
@@ -430,10 +524,10 @@ async function parseTextIntent({ text, categories, today, lastFinanceEntry }) {
     // o caso "escrevi um gasto simples e a IA deu uma engasgada".
     const local = localExpenseFallback({ text: rawMessage, categories, todayIso });
     if (local) {
-      console.warn("Intent do WhatsApp recuperada localmente após falha do Gemini:", rawMessage);
+      console.warn("Intent do WhatsApp recuperada localmente após falha do Gemini.");
       return { ok: true, intent: "expense", entry: local };
     }
-    console.error("Não deu pra recuperar a intenção localmente (sem valor reconhecível):", rawMessage, aiResult.error);
+    console.error("Não deu pra recuperar a intenção localmente:", aiResult.error);
     return aiResult;
   }
 
@@ -486,7 +580,7 @@ async function parseTextIntent({ text, categories, today, lastFinanceEntry }) {
       searchQuery = stripKnownTriggers(rawMessage, FINANCE_SEARCH_TRIGGERS).slice(0, 60);
     }
     if (!searchQuery) {
-      console.error("finance_search sem palavra-chave recuperável:", rawMessage);
+      console.error("finance_search sem palavra-chave recuperável");
       return { ok: false, status: 422, error: "ai_invalid_search" };
     }
     const month = Number.isInteger(Number(parsed.searchMonth)) ? Number(parsed.searchMonth) : null;
@@ -521,7 +615,7 @@ async function parseTextIntent({ text, categories, today, lastFinanceEntry }) {
       if (Number.isFinite(localAmount) && localAmount > 0) {
         patch.amount = localAmount;
       } else {
-        console.error("finance_edit_last sem nenhum campo recuperável:", rawMessage);
+        console.error("finance_edit_last sem nenhum campo recuperável");
         return { ok: false, status: 422, error: "ai_empty_edit" };
       }
     }
@@ -534,20 +628,22 @@ async function parseTextIntent({ text, categories, today, lastFinanceEntry }) {
     if (action === "create") {
       let title = String(parsed.taskTitle || "").trim().slice(0, 120);
       if (!title) title = stripKnownTriggers(rawMessage, TASK_CREATE_TRIGGERS).slice(0, 120);
-      title = stripDateWordsFromDescription(title) || title;
+      title = stripScheduleFromTitle(title) || title;
       if (!title) {
-        console.error("task_action create sem título recuperável:", rawMessage);
+        console.error("task_action create sem título recuperável");
         return { ok: false, status: 422, error: "ai_invalid_task_title" };
       }
       const dueDate = detectDate(rawMessage, todayIso, "future") ||
         (/^\d{4}-\d{2}-\d{2}$/.test(parsed.taskDueDate) ? parsed.taskDueDate : "");
+      const dueTime = extractScheduledTime(rawMessage) || (validTime(parsed.taskDueTime) ? parsed.taskDueTime : "");
+      const reminder = extractReminderMinutes(rawMessage) ?? 15;
       const priority = ["Baixa", "Media", "Alta"].includes(parsed.taskPriority) ? parsed.taskPriority : "Media";
-      return { ok: true, intent: "task_action", task: { action, title, dueDate, priority } };
+      return { ok: true, intent: "task_action", task: { action, title, dueDate, dueTime, reminder, priority } };
     }
     const query = String(parsed.taskQuery || "").trim().slice(0, 80)
       || stripKnownTriggers(rawMessage, TASK_COMPLETE_DELETE_TRIGGERS).slice(0, 80);
     if (!query) {
-      console.error("task_action complete/delete sem alvo recuperável:", rawMessage);
+      console.error("task_action complete/delete sem alvo recuperável");
       return { ok: false, status: 422, error: "ai_invalid_task_query" };
     }
     return { ok: true, intent: "task_action", task: { action, query } };
@@ -563,7 +659,7 @@ async function parseTextIntent({ text, categories, today, lastFinanceEntry }) {
     const query = String(parsed.noteQuery || "").trim().slice(0, 80)
       || stripKnownTriggers(rawMessage, NOTE_SEARCH_TRIGGERS).slice(0, 80);
     if (!query) {
-      console.error("note_action search/delete sem alvo recuperável:", rawMessage);
+      console.error("note_action search/delete sem alvo recuperável");
       return { ok: false, status: 422, error: "ai_invalid_note_query" };
     }
     return { ok: true, intent: "note_action", note: { action, query } };
@@ -578,7 +674,7 @@ async function parseTextIntent({ text, categories, today, lastFinanceEntry }) {
       if (!Number.isFinite(target) || target <= 0) target = extractAmountFromText(rawMessage);
       if (!title) title = stripKnownTriggers(rawMessage, GOAL_CREATE_TRIGGERS).slice(0, 120);
       if (!title || !Number.isFinite(target) || target <= 0) {
-        console.error("goal_action create sem título/alvo recuperável:", rawMessage);
+        console.error("goal_action create sem título/alvo recuperável");
         return { ok: false, status: 422, error: "ai_invalid_goal_create" };
       }
       return { ok: true, intent: "goal_action", goal: { action, title, target } };
@@ -589,7 +685,7 @@ async function parseTextIntent({ text, categories, today, lastFinanceEntry }) {
     let value = Number(parsed.goalProgressValue);
     if (!Number.isFinite(value)) value = extractAmountFromText(rawMessage);
     if (!query || !Number.isFinite(value)) {
-      console.error("goal_action update sem alvo/valor recuperável:", rawMessage);
+      console.error("goal_action update sem alvo/valor recuperável");
       return { ok: false, status: 422, error: "ai_invalid_goal_update" };
     }
     return { ok: true, intent: "goal_action", goal: { action, query, mode, value } };
@@ -599,7 +695,7 @@ async function parseTextIntent({ text, categories, today, lastFinanceEntry }) {
   if (intent === "event_create") {
     let title = String(parsed.eventTitle || "").trim().slice(0, 120);
     if (!title) title = stripKnownTriggers(rawMessage, EVENT_CREATE_TRIGGERS).slice(0, 120);
-    title = stripDateWordsFromDescription(title) || title;
+    title = stripScheduleFromTitle(title) || title;
     // Data/hora reconhecida no texto (regex, determinística) sempre vence
     // a que a IA devolveu — é matemática mecânica, e a IA pode "entender"
     // a frase certa mas errar a conta (ex.: ler "amanhã" e devolver a
@@ -607,13 +703,14 @@ async function parseTextIntent({ text, categories, today, lastFinanceEntry }) {
     const date = detectDate(rawMessage, todayIso, "future") ||
       (/^\d{4}-\d{2}-\d{2}$/.test(parsed.eventDate) ? parsed.eventDate : "");
     if (!title || !date) {
-      console.error("event_create sem título/data recuperável:", rawMessage);
+      console.error("event_create sem título/data recuperável");
       return { ok: false, status: 422, error: "ai_invalid_event" };
     }
-    const time = extractTimeFromText(rawMessage) ||
-      (/^\d{2}:\d{2}$/.test(parsed.eventTime) ? parsed.eventTime : "");
+    const time = extractScheduledTime(rawMessage) ||
+      (validTime(parsed.eventTime) ? parsed.eventTime : "");
+    const reminder = extractReminderMinutes(rawMessage) ?? 15;
     const location = String(parsed.eventLocation || "").trim().slice(0, 80);
-    return { ok: true, intent: "event_create", event: { title, date, time, location } };
+    return { ok: true, intent: "event_create", event: { title, date, time, reminder, location } };
   }
 
   // ── intent "expense" (ou falha da classificação) ──────────────────
@@ -636,7 +733,7 @@ async function parseTextIntent({ text, categories, today, lastFinanceEntry }) {
     amount = extractAmountFromText(rawMessage);
   }
   if (!Number.isFinite(amount) || amount <= 0) {
-    console.error("expense sem nenhum valor recuperável (IA e regex local falharam):", rawMessage);
+    console.error("expense sem nenhum valor recuperável (IA e regex local falharam)");
     return { ok: false, status: 422, error: "ai_invalid_amount" };
   }
 
@@ -694,14 +791,15 @@ async function parseTextIntent({ text, categories, today, lastFinanceEntry }) {
 // entre um texto livre ("dentista") e o título de um item existente
 // (tarefa/nota/meta) — usado por task_action/note_action/goal_action
 // quando o alvo já existe, em vez de mandar a lista inteira pra IA.
-// Retorna o item de melhor pontuação, ou null se nada bater o suficiente.
-function findBestMatch(query, items, titleKey = "title") {
+// Retorna todos os itens empatados na melhor pontuação (ou [] sem match).
+// O wrapper singular preserva o comportamento das ações não destrutivas.
+function findBestMatches(query, items, titleKey = "title") {
   const norm = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
   const q = norm(query);
-  if (!q) return null;
+  if (!q) return [];
   const qTokens = q.split(/\s+/).filter(Boolean);
 
-  let best = null;
+  let best = [];
   let bestScore = 0;
   for (const item of items) {
     const title = norm(item[titleKey]);
@@ -716,10 +814,16 @@ function findBestMatch(query, items, titleKey = "title") {
     }
     if (score > bestScore) {
       bestScore = score;
-      best = item;
+      best = [item];
+    } else if (score > 0 && score === bestScore) {
+      best.push(item);
     }
   }
-  return bestScore >= 20 ? best : null;
+  return bestScore >= 20 ? best : [];
 }
 
-module.exports = { parseTextIntent, findBestMatch };
+function findBestMatch(query, items, titleKey = "title") {
+  return findBestMatches(query, items, titleKey)[0] || null;
+}
+
+module.exports = { parseTextIntent, findBestMatch, findBestMatches };
