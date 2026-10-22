@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 92880)
-Total output lines: 7590
-
 // ============================================================
 // PulseNote — Autenticação e sincronização via Firebase
 // ============================================================
@@ -1199,8 +1196,8 @@ async function checkAdminAccess() {
     if (dropdownEntry) dropdownEntry.hidden = true;
     return;
   }
-  // Evita que a navegação principal desapareça durante uma falha transitória da API.
-  // A autorização real continua obrigatoriamente validada pelo servidor em /admin.
+  // Mantém o atalho visível para a conta proprietária mesmo se a consulta
+  // transitória falhar. A página /admin ainda valida a autorização no servidor.
   if (isPrimaryOwner) {
     if (card) card.hidden = false;
     if (dropdownEntry) dropdownEntry.hidden = false;
@@ -1532,8 +1529,8 @@ function bindSettingsView() {
       }
       whatsappUnlinked = true;
 
-      // Remove dados operacionais protegidos pelo Admin SDK. Esses documentos
-      // não podem ser apagados diretamente pelo navegador por design.
+      // Remove métricas operacionais protegidas pelo Admin SDK. Elas não
+      // podem ser apagadas diretamente pelo navegador por design.
       const cleanupResponse = await fetch("/api/account-delete-cleanup", {
         method: "POST",
         headers: { "Authorization": `Bearer ${token}` },
@@ -2142,7 +2139,3484 @@ function saveNote(event) {
     // versão da nota. Ao salvar, guardamos também o HTML equivalente para
     // que a cor apareça no cartão e no editor detalhado. Formatações ricas
     // existentes continuam intactas enquanto texto/cor não forem alterados.
-    description…42880 tokens truncated…goal.current >= goal.target;
+    descriptionHtml,
+  };
+
+  state.notes = id ? state.notes.map((note) => (note.id === id ? payload : note)) : [payload, ...state.notes];
+  saveState();
+  resetNoteForm();
+  renderAll();
+  showToast(id ? "Anotacao atualizada." : "Anotacao criada.");
+}
+
+function saveTask(event) {
+  event.preventDefault();
+  const task = createTask(valueOf("#taskTitle"), "Pendente", valueOf("#taskPriority"), valueOf("#taskDue") || todayIso);
+  state.tasks.unshift(task);
+  event.target.reset();
+  document.querySelector("#taskDue").value = todayIso;
+  saveState();
+  renderAll();
+  showToast("Tarefa adicionada.");
+}
+
+function saveEvent(event) {
+  event.preventDefault();
+  const date = valueOf("#eventDate");
+  const time = valueOf("#eventTime");
+
+  // Detecta conflito de horário: outro compromisso no mesmo dia a menos de
+  // 30 minutos de distância. Não bloqueia (a pessoa pode querer mesmo assim,
+  // ex.: dois compromissos rápidos e próximos), só avisa antes de salvar.
+  if (date && time) {
+    const [h, m] = time.split(":").map(Number);
+    const newMinutes = h * 60 + m;
+    const conflict = state.events.find((e) => {
+      if (e.date !== date || !e.time) return false;
+      const [eh, em] = e.time.split(":").map(Number);
+      return Math.abs((eh * 60 + em) - newMinutes) < 30;
+    });
+    if (conflict) {
+      if (!confirm(`⚠️ Você já tem "${conflict.title}" às ${conflict.time} nesse dia, bem perto desse horário. Adicionar mesmo assim?`)) return;
+    }
+  }
+
+  state.events.push({
+    id: crypto.randomUUID(),
+    title: valueOf("#eventTitle"),
+    date,
+    time,
+    location: valueOf("#eventLocation") || "Sem local",
+    reminder: Number(valueOf("#eventReminder")),
+    notes: valueOf("#eventNotes"),
+  });
+  event.target.reset();
+  setDefaultDates();
+  saveState();
+  renderAll();
+  showToast("Compromisso salvo com lembrete.");
+}
+
+function saveGoal(event) {
+  event.preventDefault();
+  state.goals.unshift({
+    id: crypto.randomUUID(),
+    title: valueOf("#goalTitle"),
+    target: Number(valueOf("#goalTarget") || 1),
+    current: 0,
+    milestones: [],
+  });
+  event.target.reset();
+  document.querySelector("#goalTarget").value = 5;
+  saveState();
+  renderAll();
+  showToast("Meta criada.");
+}
+
+// ── Marcos/checkpoints de uma meta (ex.: "Correr 10km" → 3 marcos) ──
+function addGoalMilestone(id, event) {
+  event?.stopPropagation();
+  const title = prompt("Nome do marco (ex.: “Primeiros 3km”):");
+  if (!title || !title.trim()) return;
+  const goal = state.goals.find((g) => g.id === id);
+  if (!goal) return;
+  if (!goal.milestones) goal.milestones = [];
+  goal.milestones.push({ id: crypto.randomUUID(), title: title.trim(), done: false });
+  saveState();
+  renderGoals();
+  renderPlannerGoalsStrip();
+}
+
+function toggleGoalMilestone(goalId, msId, event) {
+  event?.stopPropagation();
+  const goal = state.goals.find((g) => g.id === goalId);
+  if (!goal) return;
+  goal.milestones = (goal.milestones || []).map((m) => (m.id === msId ? { ...m, done: !m.done } : m));
+  saveState();
+  renderGoals();
+  renderPlannerGoalsStrip();
+}
+
+function deleteGoalMilestone(goalId, msId, event) {
+  event?.stopPropagation();
+  const goal = state.goals.find((g) => g.id === goalId);
+  if (!goal) return;
+  goal.milestones = (goal.milestones || []).filter((m) => m.id !== msId);
+  saveState();
+  renderGoals();
+  renderPlannerGoalsStrip();
+}
+
+function valueOf(selector) {
+  return document.querySelector(selector).value.trim();
+}
+
+function splitValues(value) {
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function splitLines(value) {
+  return value
+    .split("\n")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+const NOTE_TEXT_COLORS = new Set(["#8b5cf6", "#ff375f", "#30d158", "#0a84ff", "#bf5af2"]);
+
+function normalizeNoteTextColor(color) {
+  const normalized = String(color || "").trim().toLowerCase();
+  return NOTE_TEXT_COLORS.has(normalized) ? normalized : "";
+}
+
+function notePlainTextToHtml(text, color) {
+  const safeColor = normalizeNoteTextColor(color);
+  if (!safeColor || !text) return "";
+  const safeText = escapeHtml(text).replace(/\n/g, "<br>");
+  return `<span style="color:${safeColor}">${safeText}</span>`;
+}
+
+function setNoteDraftTextColor(color) {
+  const safeColor = normalizeNoteTextColor(color);
+  const input = document.querySelector("#noteTextColor");
+  const description = document.querySelector("#noteDescription");
+  if (input) input.value = safeColor;
+  if (description) description.style.color = safeColor || "";
+  document.querySelectorAll("#noteTextColorPicker [data-note-text-color]").forEach((button) => {
+    const selected = normalizeNoteTextColor(button.dataset.noteTextColor) === safeColor;
+    button.classList.toggle("active", selected);
+    button.setAttribute("aria-pressed", String(selected));
+  });
+}
+
+function resetNoteForm() {
+  const form = document.querySelector("#noteForm");
+  if (!form) return;
+  form.reset();
+  document.querySelector("#noteId").value = "";
+  document.querySelector("#notePriority").value = "Media";
+  document.querySelector("#noteColor").value = "blue";
+  document.querySelectorAll("#noteColorPicker .note-color-dot").forEach((dot) => dot.classList.toggle("active", dot.dataset.noteColor === "blue"));
+  setNoteDraftTextColor("");
+  document.querySelectorAll("#notePriorityPicker .note-priority-dot").forEach((d) => d.classList.toggle("active", d.dataset.priority === "Media"));
+  document.querySelector("#noteChecklistField").hidden = true;
+  document.querySelector("#noteChecklistToggle").classList.remove("active");
+  const moreDetails = document.querySelector(".note-more-details");
+  if (moreDetails) moreDetails.open = false;
+  document.querySelector("#noteEditingBanner").hidden = true;
+  document.querySelector("#noteSaveBtnLabel").textContent = "Salvar anotação";
+  enableAutogrowTextareas();
+}
+
+function bindNoteQuickControls() {
+  document.querySelectorAll("#noteColorPicker .note-color-dot").forEach((dot) => {
+    dot.addEventListener("click", () => {
+      document.querySelectorAll("#noteColorPicker .note-color-dot").forEach((item) => item.classList.remove("active"));
+      dot.classList.add("active");
+      document.querySelector("#noteColor").value = dot.dataset.noteColor;
+    });
+  });
+
+  document.querySelectorAll("#noteTextColorPicker [data-note-text-color]").forEach((button) => {
+    button.addEventListener("click", () => setNoteDraftTextColor(button.dataset.noteTextColor));
+  });
+
+  // Seletor de prioridade por bolinhas coloridas (substitui o <select> visível)
+  document.querySelectorAll("#notePriorityPicker .note-priority-dot").forEach((dot) => {
+    dot.addEventListener("click", () => {
+      document.querySelectorAll("#notePriorityPicker .note-priority-dot").forEach((d) => d.classList.remove("active"));
+      dot.classList.add("active");
+      document.querySelector("#notePriority").value = dot.dataset.priority;
+    });
+  });
+
+  // Mostra/esconde o campo de checklist sob demanda
+  const toggleBtn = document.querySelector("#noteChecklistToggle");
+  const field = document.querySelector("#noteChecklistField");
+  if (toggleBtn && field) {
+    toggleBtn.addEventListener("click", () => {
+      field.hidden = !field.hidden;
+      toggleBtn.classList.toggle("active", !field.hidden);
+      if (!field.hidden) document.querySelector("#noteChecklist").focus();
+    });
+  }
+
+  // Botão "Limpar" — antes não fazia nada
+  document.querySelector("#resetNoteForm")?.addEventListener("click", () => {
+    resetNoteForm();
+    document.querySelector("#noteTitle").focus();
+  });
+
+  // "Cancelar edição" dentro do aviso — mesmo efeito de Limpar, só que
+  // some sozinho quando não há edição em andamento (fica dentro do banner)
+  document.querySelector("#cancelEditNote")?.addEventListener("click", () => {
+    resetNoteForm();
+    document.querySelector("#noteTitle").focus();
+  });
+}
+
+// Faz os textareas marcados crescerem junto com o texto, em vez de
+// quebrarem o layout do cartão ou esconderem conteúdo num scroll interno.
+function enableAutogrowTextareas() {
+  document.querySelectorAll("textarea.autogrow").forEach((textarea) => {
+    const resize = () => {
+      textarea.style.height = "auto";
+      textarea.style.height = `${textarea.scrollHeight}px`;
+    };
+    if (!textarea.dataset.autogrowBound) {
+      textarea.addEventListener("input", resize);
+      textarea.dataset.autogrowBound = "1";
+    }
+    resize();
+  });
+}
+
+function renderAll() {
+  setDefaultDates();
+  renderDashboard();
+  renderPlanner();
+  renderNotes();
+  renderTasks();
+  renderCalendar();
+  renderGoals();
+  renderFinances();
+  renderProfile();
+  renderSettings();
+  refreshProfileAvatar();
+}
+
+function setDefaultDates() {
+  const taskDue = document.querySelector("#taskDue");
+  if (taskDue) taskDue.value ||= todayIso;
+  const eventDate = document.querySelector("#eventDate");
+  if (eventDate) eventDate.value ||= todayIso;
+  const eventTime = document.querySelector("#eventTime");
+  if (eventTime) eventTime.value ||= "09:00";
+  const expDate = document.querySelector("#expenseDate");
+  if (expDate) expDate.value ||= todayIso;
+}
+
+function queryFilter(items, fields) {
+  const query = elements.globalSearch.value.trim().toLowerCase();
+  if (!query) return items;
+  return items.filter((item) => fields.some((field) => String(item[field] || "").toLowerCase().includes(query)));
+}
+
+// ── XP/Nível: cálculo único, reaproveitado pelo Início e pelo Perfil.
+// Antes esse cálculo só existia dentro do renderDashboard — extraído
+// aqui pra não duplicar a fórmula em dois lugares. ──
+function calculateXpStats() {
+  const doneTotal = state.tasks.filter((task) => task.status === "Concluida").length;
+  const score = doneTotal * 25 + state.goals.reduce((sum, goal) => sum + goal.current * 10, 0);
+  const xpPerLevel = 150;
+  const level = Math.max(1, Math.floor(score / xpPerLevel) + 1);
+  const xpIntoLevel = score % xpPerLevel;
+  const levelProgress = Math.min(100, Math.round((xpIntoLevel / xpPerLevel) * 100));
+  return { score, level, levelProgress, xpIntoLevel, xpPerLevel };
+}
+
+// ── Conquistas: lista única de regras, reaproveitada pela tela antiga
+// de Metas e pelo novo Perfil. ──
+function getAchievementsList() {
+  const done = state.tasks.filter((task) => task.status === "Concluida").length;
+  const favorites = state.notes.filter((note) => note.favorite).length;
+  const completedGoals = state.goals.filter((goal) => goal.current >= goal.target).length;
+  const streak = calculateStreak();
+  const { level } = calculateXpStats();
+  return [
+    { title: "Primeiro check-in", detail: "Concluir uma tarefa", iconName: "checkCircle", unlocked: done >= 1 },
+    { title: "Dia produtivo", detail: "Concluir três tarefas", iconName: "zap", unlocked: done >= 3 },
+    { title: "Maratonista", detail: "Concluir dez tarefas", iconName: "flame", unlocked: done >= 10 },
+    { title: "Centena", detail: "Concluir cem tarefas", iconName: "trophy", unlocked: done >= 100 },
+    { title: "Biblioteca viva", detail: "Favoritar uma anotação", iconName: "star", unlocked: favorites >= 1 },
+    { title: "Colecionador de ideias", detail: "Ter dez anotações", iconName: "notebook", unlocked: state.notes.length >= 10 },
+    { title: "Meta batida", detail: "Completar uma meta", iconName: "target", unlocked: completedGoals >= 1 },
+    { title: "Trilha de metas", detail: "Completar três metas", iconName: "flag", unlocked: completedGoals >= 3 },
+    { title: "Constância", detail: "Sequência de 3 dias", iconName: "calendarCheck", unlocked: streak >= 3 },
+    { title: "Semana cheia", detail: "Sequência de 7 dias", iconName: "flame", unlocked: streak >= 7 },
+    { title: "Organizador", detail: "Ter cinco compromissos", iconName: "calendarWeek", unlocked: state.events.length >= 5 },
+    { title: "Em ascensão", detail: "Alcançar o nível 5", iconName: "sparkle", unlocked: level >= 5 },
+  ];
+}
+
+function renderDashboard() {
+  const doneToday = state.tasks.filter((task) => task.completedAt === todayIso).length;
+  const doneTotal = state.tasks.filter((task) => task.status === "Concluida").length;
+  const activeTasks = state.tasks.filter((task) => task.status !== "Cancelada");
+  const progress = activeTasks.length ? Math.round((doneTotal / activeTasks.length) * 100) : 0;
+  const nextEvents = state.events.filter((event) => event.date >= todayIso && event.date <= offsetDate(7));
+
+  // ── Resumo real do dia (sem gamificação) ──
+  const pendingTasks = state.tasks.filter((t) => t.status === "Pendente" || t.status === "Em andamento").length;
+  const monthKey = todayIso.slice(0, 7);
+  const monthEntries = (state.finances || []).filter((f) => f.date.startsWith(monthKey));
+  const monthReceitas = monthEntries.filter((f) => f.type === "receita").reduce((s, f) => s + f.amount, 0);
+  const monthDespesas = monthEntries.filter((f) => f.type === "despesa").reduce((s, f) => s + f.amount, 0);
+  const monthSaldo = getCarryOverBalance(monthKey) + monthReceitas - monthDespesas;
+  const upcomingSorted = [...state.events].filter((e) => e.date >= todayIso).sort(sortEvent);
+  const nextEvent = upcomingSorted[0];
+  const topGoal = [...state.goals].filter((g) => g.current < g.target).sort((a, b) => (b.current / b.target) - (a.current / a.target))[0];
+
+  const pendingEl = document.querySelector("#summaryTasksPending");
+  if (pendingEl) pendingEl.textContent = pendingTasks;
+  const saldoEl = document.querySelector("#summaryFinSaldo");
+  if (saldoEl) { saldoEl.textContent = formatCurrencyWrappable(monthSaldo); saldoEl.style.color = monthSaldo >= 0 ? "var(--green)" : "var(--red)"; }
+  fitCurrencyValues("summaryFinSaldo");
+  const eventEl = document.querySelector("#summaryNextEvent");
+  if (eventEl) eventEl.textContent = nextEvent ? `${nextEvent.title} · ${formatDate(nextEvent.date)}` : "Nenhum";
+  const goalEl = document.querySelector("#summaryTopGoal");
+  if (goalEl) goalEl.textContent = topGoal ? `${topGoal.title} (${Math.round((topGoal.current / topGoal.target) * 100)}%)` : "Nenhuma";
+
+  // "Tarefas concluídas hoje" virou o detalhe do card de "Tarefas pendentes"
+  // em vez de um card próprio — evita repetir a mesma ideia de tarefas
+  // duas vezes lado a lado no dashboard.
+  document.querySelector("#doneMetricDetail").textContent = `${doneToday} concluída${doneToday === 1 ? "" : "s"} hoje · ${doneTotal} no histórico`;
+  document.querySelector("#progressMetric").textContent = `${progress}%`;
+  document.querySelector("#eventMetric").textContent = `${nextEvents.length} nos próximos 7 dias`;
+  document.querySelector("#scoreMetric").textContent = calculateXpStats().score;
+  const { level, levelProgress } = calculateXpStats();
+  document.querySelector("#levelMetric").textContent = `Nivel ${level}`;
+  document.querySelector("#heroLevelLabel").textContent = `Nivel ${level}`;
+  document.querySelector("#heroProgressBar").style.width = `${levelProgress}%`;
+  document.querySelector("#heroProgressLabel").textContent = `${levelProgress}%`;
+  document.querySelector("#heroQuestLabel").textContent =
+    doneTotal > 0 ? "Sua rotina esta ganhando ritmo" : "Complete uma tarefa para iniciar sua sequencia";
+  document.querySelector("#streakCount").textContent = `${calculateStreak()} dias`;
+
+  renderList("#todayTasks", state.tasks.filter((task) => task.status !== "Concluida" && task.status !== "Cancelada").slice(0, 5), renderTaskRow, "Nenhuma tarefa pendente.", "empty-state-compact");
+  renderList("#upcomingEvents", nextEvents.sort(sortEvent).slice(0, 5), renderEventRow, "Nenhum compromisso nos proximos dias.", "empty-state-compact");
+  renderChart();
+  renderGoalSummary();
+  renderDashFinance();
+}
+
+function renderDashFinance() {
+  const el = document.querySelector("#dashFinancePanel");
+  if (!el || !state.finances) return;
+  const currentMonthKey = todayIso.slice(0, 7);
+  const entries = state.finances.filter((f) => f.date.startsWith(currentMonthKey));
+  const receitas = entries.filter((f) => f.type === "receita").reduce((s, f) => s + f.amount, 0);
+  const despesas = entries.filter((f) => f.type === "despesa").reduce((s, f) => s + f.amount, 0);
+  const saldo = receitas - despesas;
+  const usedPct = receitas > 0 ? Math.min(100, Math.round((despesas / receitas) * 100)) : 0;
+  el.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px">
+      <div style="text-align:center;min-width:0;overflow:hidden"><div style="font-size:0.75rem;color:var(--muted);font-weight:600;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Receitas</div><strong id="dashFinReceitas" style="display:block;color:var(--green);font-size:1rem;font-weight:800;white-space:nowrap">${formatCurrencyWrappable(receitas)}</strong></div>
+      <div style="text-align:center;min-width:0;overflow:hidden"><div style="font-size:0.75rem;color:var(--muted);font-weight:600;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Despesas</div><strong id="dashFinDespesas" style="display:block;color:var(--red);font-size:1rem;font-weight:800;white-space:nowrap">${formatCurrencyWrappable(despesas)}</strong></div>
+      <div style="text-align:center;min-width:0;overflow:hidden"><div style="font-size:0.75rem;color:var(--muted);font-weight:600;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Saldo</div><strong id="dashFinSaldo" style="display:block;color:${saldo >= 0 ? "var(--green)" : "var(--red)"};font-size:1rem;font-weight:800;white-space:nowrap">${formatCurrencyWrappable(saldo)}</strong></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <div class="progress-track" style="flex:1;height:8px"><div style="width:${usedPct}%;height:100%;border-radius:999px;background:${usedPct > 80 ? "var(--red)" : usedPct > 60 ? "var(--orange)" : "var(--green)"};transition:width 400ms"></div></div>
+      <span style="font-size:0.8rem;font-weight:700;color:var(--muted)">${usedPct}%</span>
+    </div>
+    ${
+      entries.length
+        ? entries
+            .slice(0, 3)
+            .map((f) => {
+              const cat = findCategory(f.category);
+              const isReceita = f.type === "receita";
+              return `<div class="connector-row"><span style="font-size:0.88rem;font-weight:600;display:inline-flex;align-items:center;gap:5px">${isReceita ? icon("trendingUp", 13) : cat.label.split(" ")[0]} ${escapeHtml(f.description)}</span><span style="font-weight:800;color:${isReceita ? "var(--green)" : "var(--red)"}">${isReceita ? "+" : "-"}${formatCurrency(f.amount)}</span></div>`;
+            })
+            .join("")
+        : emptyStateCompactHtml({ iconName: "calendar", text: "Nada lançado este mês ainda." })
+    }
+  `;
+  fitCurrencyValues("dashFinReceitas", "dashFinDespesas", "dashFinSaldo");
+}
+
+function calculateStreak() {
+  let streak = 0;
+  for (let days = 0; days < 30; days += 1) {
+    const date = offsetDate(-days);
+    if (state.tasks.some((task) => task.completedAt === date)) {
+      streak += 1;
+    } else if (days > 0) {
+      break;
+    }
+  }
+  return streak;
+}
+
+function renderChart() {
+  const chart = document.querySelector("#chartBars");
+  const days = [...Array(7)].map((_, index) => offsetDate(index - 6));
+  const counts = days.map((date) => state.tasks.filter((task) => task.completedAt === date).length);
+  const max = Math.max(1, ...counts);
+  document.querySelector("#weeklySummary").textContent = `${counts.reduce((sum, count) => sum + count, 0)} concluidas`;
+  chart.innerHTML = days
+    .map((date, index) => {
+      const label = safeFormatDate(`${date}T12:00:00`, { weekday: "short" }, "-");
+      const height = 14 + (counts[index] / max) * 90;
+      return `<div class="bar-item"><div class="bar" style="height:${height}px" title="${counts[index]} tarefas"></div><span>${label}</span></div>`;
+    })
+    .join("");
+}
+
+function renderGoalSummary() {
+  renderList(
+    "#goalSummary",
+    state.goals.slice(0, 4),
+    (goal) => {
+      const percent = Math.min(100, Math.round((goal.current / goal.target) * 100));
+      return `<div class="goal-row"><div><strong>${escapeHtml(goal.title)}</strong><div class="task-meta">${goal.current}/${goal.target}</div></div><span class="pill">${percent}%</span></div>`;
+    },
+    "Crie sua primeira meta.",
+    "empty-state-compact"
+  );
+}
+
+// ============================================================
+// PLANNER (NOVO) — hub unificado inspirado no app Calendars.
+// Não cria nenhum dado novo: só lê/escreve nos mesmos arrays de
+// sempre (state.tasks, state.events, state.goals) através das
+// MESMAS funções já usadas pelas telas antigas (toggleTask,
+// deleteTask, deleteEvent, changeGoal, createTask...), então o
+// comportamento e os dados salvos continuam idênticos — muda
+// só a apresentação.
+// ============================================================
+
+// ── Sistema de ícones (estilo Lucide, um traço só, sem emoji) ──
+// Substitui os emojis usados na primeira versão: o briefing de
+// design pede um único conjunto de ícones consistente em peso e
+// estilo, nunca emoji solto.
+const ICONS = {
+  list: '<path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>',
+  calendarWeek: '<rect x="3" y="4.5" width="18" height="16" rx="3"/><path d="M16 2.5v4"/><path d="M8 2.5v4"/><path d="M3 10h18"/><path d="M8 14.5h.01"/><path d="M12 14.5h.01"/><path d="M16 14.5h.01"/>',
+  calendarMonth: '<rect x="3" y="4.5" width="18" height="16" rx="3"/><path d="M16 2.5v4"/><path d="M8 2.5v4"/><path d="M3 10h18"/><path d="M7.5 14.5h2"/><path d="M14.5 14.5h2"/><path d="M7.5 18h2"/><path d="M14.5 18h2"/>',
+  notebook: '<rect x="5" y="3" width="15" height="18" rx="2.5"/><path d="M9 3v18"/><path d="M2.5 8h2.5"/><path d="M2.5 13h2.5"/><path d="M2.5 18h2.5"/>',
+  target: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.8"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/>',
+  checkCircle: '<circle cx="12" cy="12" r="9"/><path d="m8.5 12.3 2.3 2.3L16 9.6"/>',
+  calendar: '<rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17"/><path d="M8 3v4"/><path d="M16 3v4"/>',
+  star: '<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/>',
+  folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2.3h8A2 2 0 0 1 21 9.3V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  pencil: '<path d="M12 20h8"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
+  zap: '<path d="M12.5 2 4 13.5h6.5L11 22l8.5-11.5H13z"/>',
+  flame: '<path d="M12 2.5c1 3 .3 4.6-1 6.2-1.3 1.6-2.5 2.9-2.5 5a3.5 3.5 0 0 0 7 0c0-1-.3-1.8-.8-2.5.8.6 1.8 1.8 1.8 3.8a5.5 5.5 0 0 1-11 0c0-4.5 3-6.2 4.5-9 .6-1 1.3-2.2 2-3.5z"/>',
+  trophy: '<path d="M8 4h8v4a4 4 0 0 1-8 0z"/><path d="M8 5H4.5a2.5 2.5 0 0 0 0 5H8"/><path d="M16 5h3.5a2.5 2.5 0 0 1 0 5H16"/><path d="M10 13v3"/><path d="M14 13v3"/><path d="M7 21h10"/><path d="M8.5 21c0-2 1-3 3.5-3s3.5 1 3.5 3"/>',
+  lock: '<rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/>',
+  camera: '<path d="M4 8h3l1.5-2h7L17 8h3a1.5 1.5 0 0 1 1.5 1.5v9A1.5 1.5 0 0 1 20 20H4a1.5 1.5 0 0 1-1.5-1.5v-9A1.5 1.5 0 0 1 4 8z"/><circle cx="12" cy="14" r="3.6"/>',
+  trendingUp: '<path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/>',
+  repeat: '<path d="M17 2l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>',
+  arrowLeftRight: '<path d="m8 3-4 4 4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/>',
+  flag: '<path d="M5 21V4"/><path d="M5 4h12.5l-2 4.5L19.5 13H5"/>',
+  plus: '<path d="M12 5v14"/><path d="M5 12h14"/>',
+  alertTriangle: '<path d="M12 3 2.5 20h19L12 3z"/><path d="M12 9.5v4.3"/><path d="M12 17h.01"/>',
+  calendarCheck: '<rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17"/><path d="M8 3v4"/><path d="M16 3v4"/><path d="M8.5 14l2 2 4-4"/>',
+  arrowRight: '<path d="M5 12h13.5"/><path d="m13 6 6.5 6-6.5 6"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.2 3.2"/>',
+  mapPin: '<path d="M12 21.5s-7.2-6.6-7.2-11.4a7.2 7.2 0 0 1 14.4 0c0 4.8-7.2 11.4-7.2 11.4z"/><circle cx="12" cy="10.1" r="2.4"/>',
+  trash: '<path d="M4 7h16"/><path d="M6 7V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2"/><path d="M8 7v13a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2V7"/><path d="M10 11v6"/><path d="M14 11v6"/>',
+  chevronLeft: '<path d="m15 18-6-6 6-6"/>',
+  chevronRight: '<path d="m9 18 6-6-6-6"/>',
+  chevronDown: '<path d="m6 9 6 6 6-6"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  x: '<path d="M18 6 6 18"/><path d="M6 6 18 18"/>',
+  inbox: '<path d="M21.5 12h-5.6l-1.8 3h-4.2l-1.8-3H2.5"/><path d="M5.6 5.3 2.5 12v6a2 2 0 0 0 2 2h15a2 2 0 0 0 2-2v-6l-3.1-6.7A2 2 0 0 0 16.6 4H7.4a2 2 0 0 0-1.8 1.3z"/>',
+  sparkle: '<path d="M11 2.5 12.6 7l4.4 1.6-4.4 1.6L11 14.7l-1.6-4.5L5 8.6l4.4-1.6z"/><path d="M18.5 14l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/>',
+  compass: '<circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5z"/>',
+  moreVertical: '<circle cx="12" cy="5" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="19" r="1.6" fill="currentColor" stroke="none"/>',
+};
+
+function icon(name, size = 18, extraClass = "") {
+  const body = ICONS[name] || ICONS.sparkle;
+  return `<svg class="pn-icon ${extraClass}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
+}
+
+// ── Estado vazio premium (nunca caixa tracejada / texto seco) ──
+function emptyStateHtml({ iconName = "sparkle", tone = "accent", title, desc, ctaLabel, ctaOnClick, secondaryLabel, secondaryOnClick, mascot = false, mascotBadgeIcon }) {
+  // "mascot" é opt-in de propósito: só troca o ícone padrão pelo Pulsinho
+  // nos lugares que pedirem explicitamente (hoje: Notas e Metas), sem
+  // mudar nada nos outros estados vazios do app (Finanças, listas, etc.)
+  // que continuam com o selo de ícone de sempre.
+  const badge = mascot
+    ? `<div class="empty-state-pro-mascot">
+         <div class="pulsinho">
+           <div class="pulsinho__face">
+             <div class="pulsinho__eyes"><span class="pulsinho__eye"></span><span class="pulsinho__eye"></span></div>
+             <svg class="pulsinho__pulse" viewBox="0 0 120 26"><path d="M0,13 L28,13 L36,3 L44,23 L52,13 L64,13 L70,6 L76,20 L82,13 L120,13"/></svg>
+           </div>
+         </div>
+         ${mascotBadgeIcon ? `<span class="empty-state-pro-mascot-badge">${icon(mascotBadgeIcon, 12)}</span>` : ""}
+       </div>`
+    : `<div class="empty-state-pro-badge tone-${tone}">${icon(iconName, 26)}</div>`;
+  return `
+    <div class="empty-state-pro">
+      ${badge}
+      <h3>${title}</h3>
+      <p>${desc}</p>
+      ${ctaLabel ? `
+        <div class="empty-state-pro-actions">
+          <button class="primary-button" type="button" onclick="${ctaOnClick}">${icon("plus", 15)}<span>${ctaLabel}</span></button>
+          ${secondaryLabel ? `<button class="ghost-button" type="button" onclick="${secondaryOnClick}">${secondaryLabel}</button>` : ""}
+        </div>` : ""}
+    </div>
+  `;
+}
+
+// ── Variante compacta do estado vazio, para áreas pequenas dentro
+// de uma tela já preenchida (ex.: um dia sem compromisso dentro da
+// timeline) — continua com ícone, nunca texto seco isolado.
+function emptyStateCompactHtml({ iconName = "sparkle", text, tone = "accent" }) {
+  return `<div class="empty-state-compact-pro"><span class="tone-${tone}">${icon(iconName, 15)}</span><span>${text}</span></div>`;
+}
+
+function renderPlanner() {
+  const label = document.querySelector("#plannerHeaderLabel");
+  if (label) {
+    const pendingCount = state.tasks.filter((t) => t.status !== "Concluida" && t.status !== "Cancelada").length;
+    label.textContent = pendingCount ? `${pendingCount} pendência${pendingCount === 1 ? "" : "s"} para organizar` : "Tudo em dia por aqui";
+  }
+  renderPlannerProgressRing();
+  renderPlannerGoalsStrip();
+  if (plannerActiveTab === "list") renderPlannerList();
+  else if (plannerActiveTab === "day") renderPlannerDay();
+  else if (plannerActiveTab === "week") renderPlannerWeek();
+  else if (plannerActiveTab === "month") renderPlannerMonth();
+}
+
+// Anel de progresso do cabeçalho (referência TaskifyAI) — percentual
+// REAL de tarefas de hoje já concluídas, não é enfeite. SVG puro com
+// stroke-dasharray/stroke-dashoffset (matemática de círculo simples:
+// comprimento = 2πr, quanto preencher = comprimento × percentual) —
+// não depende de nenhuma lib de gráfico nova.
+function renderPlannerProgressRing() {
+  const el = document.querySelector("#plannerProgressRing");
+  if (!el) return;
+
+  const todaysTasks = state.tasks.filter((t) => t.dueDate === todayIso && t.status !== "Cancelada");
+  const total = todaysTasks.length;
+  const done = todaysTasks.filter((t) => t.status === "Concluida").length;
+  const pct = total ? Math.round((done / total) * 100) : 0;
+
+  if (!total) {
+    el.innerHTML = `<div class="planner-ring-empty">Sem tarefas<br>pra hoje</div>`;
+    return;
+  }
+
+  const size = 56;
+  const stroke = 6;
+  const radius = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference * (1 - pct / 100);
+
+  el.innerHTML = `
+    <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+      <circle cx="${size / 2}" cy="${size / 2}" r="${radius}" fill="none" stroke="rgba(255,255,255,0.18)" stroke-width="${stroke}"></circle>
+      <circle cx="${size / 2}" cy="${size / 2}" r="${radius}" fill="none" stroke="url(#plannerRingGradient)" stroke-width="${stroke}"
+        stroke-linecap="round" stroke-dasharray="${circumference}" stroke-dashoffset="${offset}"
+        transform="rotate(-90 ${size / 2} ${size / 2})"></circle>
+      <defs>
+        <linearGradient id="plannerRingGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#6c5ce7"></stop>
+          <stop offset="50%" stop-color="#5ac8fa"></stop>
+          <stop offset="100%" stop-color="#bf5af2"></stop>
+        </linearGradient>
+      </defs>
+    </svg>
+    <div class="planner-ring-label"><strong>${pct}%</strong><span>hoje</span></div>
+  `;
+}
+
+function setPlannerTab(tab) {
+  plannerActiveTab = tab;
+  document.querySelectorAll("#plannerView .planner-tabs button").forEach((b) => {
+    b.classList.toggle("active", b.dataset.plannerTab === tab);
+  });
+  document.querySelectorAll("#plannerView .planner-subview").forEach((el) => {
+    el.classList.toggle("active", el.dataset.plannerSubview === tab);
+  });
+  if (tab === "list") renderPlannerList();
+  else if (tab === "day") renderPlannerDay();
+  else if (tab === "week") renderPlannerWeek();
+  else if (tab === "month") renderPlannerMonth();
+}
+
+function bindPlannerNav() {
+  document.querySelectorAll("#plannerView .planner-tabs button[data-planner-tab]").forEach((btn) => {
+    btn.addEventListener("click", () => setPlannerTab(btn.dataset.plannerTab));
+  });
+  document.querySelector("#plannerDayPrev")?.addEventListener("click", () => changePlannerDay(-1));
+  document.querySelector("#plannerDayNext")?.addEventListener("click", () => changePlannerDay(1));
+  document.querySelector("#plannerDayToday")?.addEventListener("click", goToPlannerToday);
+  document.querySelector("#plannerWeekPrev")?.addEventListener("click", () => changePlannerWeek(-1));
+  document.querySelector("#plannerWeekNext")?.addEventListener("click", () => changePlannerWeek(1));
+  document.querySelector("#plannerWeekToday")?.addEventListener("click", goToPlannerThisWeek);
+  document.querySelector("#plannerMonthPrev")?.addEventListener("click", () => changePlannerMonth(-1));
+  document.querySelector("#plannerMonthNext")?.addEventListener("click", () => changePlannerMonth(1));
+  document.querySelector("#plannerMonthToday")?.addEventListener("click", goToPlannerThisMonth);
+  document.querySelector("#plannerNewGoalBtn")?.addEventListener("click", () => openPlannerQuickAdd("goal"));
+  document.querySelector("#plannerNewTaskBtn")?.addEventListener("click", () => openPlannerQuickAdd("task"));
+}
+
+// ── Cor determinística por item (mesma paleta pastel das notas) —
+// dá o efeito "colorido" do Calendars sem precisar de um campo novo
+// de cor no compromisso.
+function plannerColorTone(id) {
+  const tones = [
+    { bg: "var(--note-blue)", border: "var(--note-blue-border)" },
+    { bg: "var(--note-green)", border: "var(--note-green-border)" },
+    { bg: "var(--note-pink)", border: "var(--note-pink-border)" },
+    { bg: "var(--note-purple)", border: "var(--note-purple-border)" },
+    { bg: "var(--note-orange)", border: "var(--note-orange-border)" },
+    { bg: "var(--note-teal)", border: "var(--note-teal-border)" },
+    { bg: "var(--note-yellow)", border: "var(--note-yellow-border)" },
+    { bg: "var(--note-red)", border: "var(--note-red-border)" },
+  ];
+  let hash = 0;
+  for (const ch of String(id)) hash = (hash * 31 + ch.charCodeAt(0)) % 997;
+  return tones[Math.abs(hash) % tones.length];
+}
+
+function noteColorTone(note) {
+  const tones = {
+    blue:   { bg: "var(--note-blue)", border: "var(--note-blue-border)" },
+    green:  { bg: "var(--note-green)", border: "var(--note-green-border)" },
+    pink:   { bg: "var(--note-pink)", border: "var(--note-pink-border)" },
+    purple: { bg: "var(--note-purple)", border: "var(--note-purple-border)" },
+    orange: { bg: "var(--note-orange)", border: "var(--note-orange-border)" },
+    teal:   { bg: "var(--note-teal)", border: "var(--note-teal-border)" },
+  };
+  return tones[note?.color] || plannerColorTone(note?.id);
+}
+
+// ── Metas: fita horizontal compacta, sempre visível no topo do
+// Planner, com marcos expansíveis (toque no card pra abrir/fechar) ──
+function togglePlannerGoalExpand(id, event) {
+  event?.stopPropagation();
+  if (plannerExpandedGoals.has(id)) plannerExpandedGoals.delete(id);
+  else plannerExpandedGoals.add(id);
+  renderPlannerGoalsStrip();
+}
+
+function renderPlannerGoalsStrip() {
+  const root = document.querySelector("#plannerGoalsStrip");
+  if (!root) return;
+  const goals = state.goals;
+  if (!goals.length) {
+    // Sem botão aqui de propósito: o cabeçalho deste painel já tem um
+    // "Nova meta" fixo logo acima — repetir o mesmo botão dentro do
+    // estado vazio era redundante (dois botões idênticos, um em cima
+    // do outro, fazendo exatamente a mesma coisa).
+    root.innerHTML = emptyStateHtml({
+      iconName: "target",
+      title: "Defina sua primeira meta",
+      desc: "Metas ficam fixadas aqui em cima, com marcos que você vai riscando conforme avança. Toque em \"Nova meta\" ali em cima pra criar a primeira.",
+      mascot: true,
+      mascotBadgeIcon: "target",
+    });
+    return;
+  }
+  root.innerHTML = goals
+    .map((goal) => {
+      const percent = Math.min(100, Math.round((goal.current / goal.target) * 100));
+      const isComplete = goal.current >= goal.target;
+      const milestones = goal.milestones || [];
+      const msDone = milestones.filter((m) => m.done).length;
+      const expanded = plannerExpandedGoals.has(goal.id);
+      // O formulário de novo marco fica sempre disponível dentro do painel
+      // expandido — antes dependia de window.prompt(), que não funciona
+      // (retorna null em silêncio) num PWA instalado em modo standalone no
+      // iOS, deixando "Adicionar marco" sem nenhum efeito visível.
+      const milestonesHtml = expanded
+        ? `
+        <div class="planner-goal-milestones">
+          ${
+            milestones.length
+              ? milestones
+                  .map(
+                    (m) => `
+            <div class="goal-milestone-row">
+              <button class="goal-milestone-check ${m.done ? "done" : ""}" onclick="toggleGoalMilestone('${goal.id}','${m.id}', event)">${m.done ? icon("check", 12) : ""}</button>
+              <span class="${m.done ? "done" : ""}">${escapeHtml(m.title)}</span>
+              <button class="mini-button planner-ms-remove" onclick="deleteGoalMilestone('${goal.id}','${m.id}', event)">${icon("x", 12)}</button>
+            </div>`
+                  )
+                  .join("")
+              : `<p class="planner-goal-milestones-empty">Sem marcos ainda.</p>`
+          }
+          <form class="planner-inline-add-form" onsubmit="return submitGoalMilestoneForm('${goal.id}', event)">
+            <input type="text" maxlength="60" placeholder="Novo marco..." autocomplete="off" />
+            <button type="submit" class="mini-button" title="Adicionar marco">${icon("plus", 13)}</button>
+          </form>
+        </div>`
+        : "";
+      return `
+      <article class="planner-goal-chip ${isComplete ? "is-complete" : ""} ${expanded ? "is-expanded" : ""}" data-goal-id="${goal.id}">
+        <div class="planner-goal-chip-top" onclick="togglePlannerGoalExpand('${goal.id}', event)">
+          <strong>${escapeHtml(goal.title)}</strong>
+          <span class="pill" style="${isComplete ? "background:var(--green);color:#fff;border-color:var(--green);" : ""}">${percent}%</span>
+        </div>
+        <div class="progress-track"><div style="width:${percent}%;background:${isComplete ? "var(--green)" : "linear-gradient(90deg,var(--accent),var(--purple))"}"></div></div>
+        <label class="planner-goal-progress-control" onclick="event.stopPropagation()">
+          <span>Progresso</span>
+          <input type="range" min="0" max="${Math.max(1, Number(goal.target) || 1)}" value="${Math.max(0, Number(goal.current) || 0)}" aria-label="Progresso de ${escapeHtml(goal.title)}" oninput="updateGoalProgress('${goal.id}', this.value, event)" />
+          <input class="planner-goal-number" type="number" min="0" max="${Math.max(1, Number(goal.target) || 1)}" value="${Math.max(0, Number(goal.current) || 0)}" inputmode="numeric" aria-label="Valor atual de ${escapeHtml(goal.title)}" oninput="updateGoalProgress('${goal.id}', this.value, event)" />
+          <span class="task-meta">de ${goal.target}</span>
+        </label>
+        <div class="planner-goal-chip-controls">
+          <div class="planner-goal-stepper">
+            <button class="mini-button" onclick="changeGoal('${goal.id}', -1)" title="Diminuir">−</button>
+            <span class="task-meta">${goal.current}/${goal.target}</span>
+            <button class="mini-button" onclick="changeGoal('${goal.id}', 1)" title="Aumentar">+</button>
+          </div>
+          <button class="planner-goal-ms-toggle" type="button" onclick="togglePlannerGoalExpand('${goal.id}', event)">
+            ${icon("flag", 13)}<span>${milestones.length ? `${msDone}/${milestones.length} marcos` : "Marcos"}</span>${icon("chevronRight", 13, "planner-goal-chevron")}
+          </button>
+          <button class="mini-button planner-row-delete" onclick="deleteGoal('${goal.id}')" title="Excluir meta">${icon("trash", 13)}</button>
+        </div>
+        ${milestonesHtml}
+      </article>
+    `;
+    })
+    .join("");
+}
+
+// Cria um marco a partir do input do próprio card (sem prompt() nativo —
+// ver comentário acima). Mantém o goal expandido e devolve o foco ao
+// campo pra permitir adicionar vários marcos em sequência rapidamente.
+function submitGoalMilestoneForm(id, event) {
+  event.preventDefault();
+  const input = event.target.querySelector("input");
+  const title = (input?.value || "").trim();
+  if (!title) return false;
+  const goal = state.goals.find((g) => g.id === id);
+  if (!goal) return false;
+  if (!goal.milestones) goal.milestones = [];
+  goal.milestones.push({ id: crypto.randomUUID(), title, done: false });
+  saveState();
+  renderPlannerGoalsStrip();
+  renderGoals();
+  const freshInput = document.querySelector(`[data-goal-id="${id}"] .planner-inline-add-form input`);
+  freshInput?.focus();
+  return false;
+}
+
+// ── Lista: agrupa tarefas + compromissos por proximidade da data,
+// igual à tela "Today"/lista do Calendars (Atrasado / Hoje / Amanhã...) ──
+function getPlannerDateBuckets() {
+  const buckets = { overdue: [], today: [], tomorrow: [], week: [], later: [] };
+  const tmr = offsetDate(1);
+  const in7 = offsetDate(7);
+
+  state.tasks.forEach((task) => {
+    if (task.status === "Concluida" || task.status === "Cancelada") return;
+    const item = { kind: "task", data: task, time: null };
+    if (!task.dueDate) buckets.later.push(item);
+    else if (task.dueDate < todayIso) buckets.overdue.push(item);
+    else if (task.dueDate === todayIso) buckets.today.push(item);
+    else if (task.dueDate === tmr) buckets.tomorrow.push(item);
+    else if (task.dueDate <= in7) buckets.week.push(item);
+    else buckets.later.push(item);
+  });
+
+  state.events.forEach((ev) => {
+    if (!ev.date || ev.date < todayIso) return; // compromissos passados não poluem a lista
+    const item = { kind: "event", data: ev, time: ev.time };
+    if (ev.date === todayIso) buckets.today.push(item);
+    else if (ev.date === tmr) buckets.tomorrow.push(item);
+    else if (ev.date <= in7) buckets.week.push(item);
+    else buckets.later.push(item);
+  });
+
+  const sorter = (a, b) => {
+    const at = a.time || "99:99";
+    const bt = b.time || "99:99";
+    if (at !== bt) return at.localeCompare(bt);
+    return (a.data.title || "").localeCompare(b.data.title || "");
+  };
+  Object.values(buckets).forEach((arr) => arr.sort(sorter));
+  return buckets;
+}
+
+function renderPlannerList() {
+  const root = document.querySelector("#plannerListBody");
+  if (!root) return;
+  const query = elements.globalSearch.value.trim().toLowerCase();
+  const buckets = getPlannerDateBuckets();
+  const sections = [
+    { key: "overdue", label: "Atrasado", iconName: "alertTriangle", warn: true },
+    { key: "today", label: "Hoje", iconName: "calendarCheck" },
+    { key: "tomorrow", label: "Amanhã", iconName: "arrowRight" },
+    { key: "week", label: "Esta semana", iconName: "calendarWeek" },
+    { key: "later", label: "Sem data / mais tarde", iconName: "clock" },
+  ];
+
+  const html = sections
+    .map(({ key, label, iconName, warn }) => {
+      const items = buckets[key].filter((item) => !query || (item.data.title || "").toLowerCase().includes(query));
+      if (!items.length) return "";
+      return `
+        <div class="planner-section">
+          <div class="planner-section-title">
+            <span class="planner-section-title-label ${warn ? "is-warn" : ""}">${icon(iconName, 15)}<span>${label}</span></span>
+            <span class="pill">${items.length}</span>
+          </div>
+          <div class="planner-section-body">
+            ${items.map((item) => (item.kind === "task" ? renderPlannerTaskRow(item.data) : renderPlannerEventRow(item.data))).join("")}
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+
+  root.innerHTML =
+    html ||
+    emptyStateHtml({
+      iconName: "inbox",
+      title: "Sua lista está limpa",
+      desc: "Tarefas e compromissos aparecem aqui, agrupados por Atrasado, Hoje, Amanhã e Esta semana.",
+      ctaLabel: "Adicionar item",
+      ctaOnClick: "openPlannerQuickAdd('task')",
+    });
+}
+
+// Cor do anel do check por prioridade — dá uma pista visual de urgência
+// sem precisar ler o badge, e torna o botão de concluir mais chamativo
+// (antes era um círculo cinza neutro, fácil de ignorar/perder no meio
+// dos outros botões).
+// Baixa->verde, Média->teal, Alta->laranja, Urgente->vermelho: rampa
+// com 4 famílias de cor bem distintas entre si. Média usava
+// var(--accent) antes — no tema "eclipse" (fundo preto), --accent
+// (#e8ac3d, dourado) e --orange (#ffab4d) ficam quase idênticos, então
+// Média e Alta pareciam ter a mesma cor no aro da tarefa. --accent é a
+// cor de destaque geral do app (usada em botões, links...), não deveria
+// estar amarrada ao significado de "prioridade média" em primeiro lugar.
+const PRIORITY_RING = {
+  Baixa: "var(--green)",
+  Media: "var(--teal)",
+  Alta: "var(--orange)",
+  Urgente: "var(--red)",
+};
+
+function renderPlannerTaskRow(task) {
+  const isDone = task.status === "Concluida";
+  const subtasks = task.subtasks || [];
+  const doneCount = subtasks.filter((s) => s.done).length;
+  const detailsOpen = plannerExpandedTaskDetails.has(task.id);
+  const ringColor = PRIORITY_RING[task.priority] || "var(--line)";
+  return `
+    <article class="planner-row planner-row--task" data-task-id="${task.id}" data-priority="${task.priority}">
+      <div class="planner-row-head">
+        <button class="task-check ${isDone ? "is-done" : ""}" onclick="toggleTask('${task.id}')" title="Concluir tarefa" style="${isDone ? "" : `border-color:${ringColor}`}">${isDone ? icon("check", 15) : ""}</button>
+        <div class="planner-row-main" onclick="toggleTaskDetails('${task.id}', event)">
+          <strong class="${isDone ? "is-done-text" : ""}">${escapeHtml(task.title)}</strong>
+          <div class="planner-row-meta">
+            <span class="priority-pill priority-${task.priority}">${escapeHtml(task.priority)}</span>
+            ${task.status === "Em andamento" || task.status === "Cancelada" ? `<span class="status-pill status-${task.status.replace(" ", "-")}">${task.status}</span>` : ""}
+            ${task.dueDate ? `<span class="task-meta">${icon("calendarWeek", 12)}${formatDate(task.dueDate)}</span>` : ""}
+            ${task.recurrence ? `<span class="task-meta">${icon("repeat", 12)}${{ diaria: "Diária", semanal: "Semanal", mensal: "Mensal" }[task.recurrence]}</span>` : ""}
+            ${subtasks.length ? `<span class="task-meta">${icon("checkCircle", 12)}${doneCount}/${subtasks.length}</span>` : ""}
+          </div>
+        </div>
+        <button class="planner-row-kebab" onclick="openPlannerTaskActions('${task.id}', event)" title="Mais opções">${icon("moreVertical", 16)}</button>
+      </div>
+      <div class="task-subtasks ${detailsOpen ? "open" : ""}">
+        ${
+          subtasks
+            .map(
+              (s) => `
+          <div class="task-subtask-row">
+            <button class="task-subtask-check ${s.done ? "done" : ""}" onclick="toggleSubtask('${task.id}','${s.id}', event)">${s.done ? icon("check", 11) : ""}</button>
+            <span class="${s.done ? "done" : ""}">${escapeHtml(s.title)}</span>
+            <button class="mini-button" onclick="deleteSubtask('${task.id}','${s.id}', event)" style="padding:0;width:22px;height:22px;margin-left:auto">${icon("x", 11)}</button>
+          </div>`
+            )
+            .join("") || `<p class="planner-goal-milestones-empty">Sem itens na checklist ainda.</p>`
+        }
+        <form class="planner-inline-add-form" onsubmit="return submitSubtaskForm('${task.id}', event)">
+          <input type="text" maxlength="80" placeholder="Item da checklist..." autocomplete="off" />
+          <button type="submit" class="mini-button" title="Adicionar item">${icon("plus", 13)}</button>
+        </form>
+      </div>
+    </article>
+  `;
+}
+
+function renderPlannerEventRow(ev) {
+  const tone = plannerColorTone(ev.id);
+  return `
+    <article class="planner-row planner-row--event planner-row--interactive" data-event-id="${ev.id}" style="border-left:4px solid ${tone.border}" onclick="openPlannerEventEditor('${ev.id}')">
+      <div class="planner-row-head">
+        <div class="planner-row-time" style="background:${tone.bg};color:${tone.border}">${ev.time || "—"}</div>
+        <div class="planner-row-main">
+          <strong>${escapeHtml(ev.title)}</strong>
+          <div class="planner-row-meta">
+            <span class="task-meta">${icon("calendarWeek", 12)}${formatDate(ev.date)}</span>
+            ${ev.location && ev.location !== "Sem local" ? `<span class="task-meta">${icon("mapPin", 12)}${escapeHtml(ev.location)}</span>` : ""}
+          </div>
+        </div>
+        <button class="mini-button" onclick="event.stopPropagation();openPlannerEventEditor('${ev.id}')" title="Editar compromisso">${icon("pencil", 14)}</button>
+        <button class="mini-button planner-row-delete" onclick="event.stopPropagation();deleteEvent('${ev.id}')" title="Excluir">${icon("trash", 14)}</button>
+      </div>
+    </article>
+  `;
+}
+
+// ── Dia: navegador de data + checklist do dia + timeline por hora ──
+function changePlannerDay(delta) {
+  const date = new Date(`${plannerDayDate}T12:00:00`);
+  date.setDate(date.getDate() + delta);
+  plannerDayDate = toLocalIso(date);
+  renderPlannerDay();
+}
+
+function goToPlannerToday() {
+  plannerDayDate = todayIso;
+  renderPlannerDay();
+}
+
+// Toca num dia da faixa horizontal (referência TaskifyAI: "F S S M T
+// W T" com os números do mês, dia atual destacado) — pula direto pra
+// aquele dia, sem precisar clicar em "próximo" várias vezes.
+function selectPlannerDay(iso) {
+  plannerDayDate = iso;
+  renderPlannerDay();
+}
+
+function renderPlannerDayStrip() {
+  const el = document.querySelector("#plannerDayStrip");
+  if (!el) return;
+  const WEEKDAY_LETTER = ["D", "S", "T", "Q", "Q", "S", "S"]; // Dom Seg Ter Qua Qui Sex Sáb
+  const center = new Date(`${plannerDayDate}T12:00:00`);
+  let html = "";
+  for (let offset = -3; offset <= 3; offset++) {
+    const d = new Date(center);
+    d.setDate(d.getDate() + offset);
+    const iso = toLocalIso(d);
+    const isSelected = iso === plannerDayDate;
+    const isToday = iso === todayIso;
+    html += `
+      <button class="planner-day-chip${isSelected ? " is-selected" : ""}${isToday && !isSelected ? " is-today" : ""}" onclick="selectPlannerDay('${iso}')">
+        <span class="pdc-weekday">${WEEKDAY_LETTER[d.getDay()]}</span>
+        <span class="pdc-num">${d.getDate()}</span>
+      </button>
+    `;
+  }
+  el.innerHTML = html;
+}
+
+function jumpPlannerToDay(date) {
+  plannerDayDate = date;
+  setPlannerTab("day");
+}
+
+function renderPlannerDay() {
+  renderPlannerDayStrip();
+  const label = document.querySelector("#plannerDayLabel");
+  if (label) {
+    const date = new Date(`${plannerDayDate}T12:00:00`);
+    let text = safeFormatDate(date, { weekday: "long", day: "2-digit", month: "long" }, plannerDayDate || "");
+    text = text.charAt(0).toUpperCase() + text.slice(1);
+    label.textContent = plannerDayDate === todayIso ? `Hoje · ${text}` : text;
+  }
+
+  const dayTasks = state.tasks.filter((t) => t.dueDate === plannerDayDate && t.status !== "Cancelada");
+  const alldayRoot = document.querySelector("#plannerDayAllday");
+  if (alldayRoot) {
+    alldayRoot.innerHTML = dayTasks.length
+      ? dayTasks.map(renderPlannerTaskRow).join("")
+      : emptyStateCompactHtml({ iconName: "calendarCheck", text: "Nenhuma tarefa para este dia." });
+  }
+
+  const dayEvents = state.events.filter((e) => e.date === plannerDayDate).sort(sortEvent);
+  const timeline = document.querySelector("#plannerDayTimeline");
+  if (timeline) {
+    const startHour = 6;
+    const endHour = 23;
+    // Cartões faziam parte de uma camada absoluta. Como os compromissos não
+    // têm duração obrigatória, um título grande ou os botões podiam invadir
+    // as linhas seguintes da agenda. A agenda agora agrupa os cartões dentro
+    // do horário deles: cresce para baixo quando necessário, sem esconder
+    // nenhum horário nem cobrir outro compromisso.
+    const eventsByHour = new Map();
+    const earlyEvents = [];
+    const lateEvents = [];
+    dayEvents.forEach((event) => {
+      if (!event.time) return;
+      const hour = Number(event.time.split(":")[0]);
+      if (!Number.isFinite(hour) || hour < startHour) earlyEvents.push(event);
+      else if (hour > endHour) lateEvents.push(event);
+      else {
+        const entries = eventsByHour.get(hour) || [];
+        entries.push(event);
+        eventsByHour.set(hour, entries);
+      }
+    });
+    const renderTimelineEvent = (ev) => {
+      const tone = plannerColorTone(ev.id);
+      return `
+        <article class="planner-event-block planner-event-block--interactive" data-event-id="${ev.id}" onclick="openPlannerEventEditor('${ev.id}')" style="--planner-event-bg:${tone.bg};--planner-event-border:${tone.border}">
+          <div class="planner-event-block-main">
+            <strong>${ev.time} · ${escapeHtml(ev.title)}</strong>
+            ${ev.location && ev.location !== "Sem local" ? `<span>${icon("mapPin", 11)}${escapeHtml(ev.location)}</span>` : ""}
+            ${ev.notes ? `<small>${escapeHtml(ev.notes)}</small>` : ""}
+          </div>
+          <div class="planner-event-actions" aria-label="Ações do compromisso">
+            <button class="mini-button" type="button" onclick="event.stopPropagation();openPlannerEventEditor('${ev.id}')" title="Editar compromisso" aria-label="Editar compromisso">${icon("pencil", 12)}</button>
+            <button class="mini-button danger-action" type="button" onclick="event.stopPropagation();deleteEvent('${ev.id}')" title="Excluir compromisso" aria-label="Excluir compromisso">${icon("trash", 12)}</button>
+          </div>
+        </article>
+      `;
+    };
+    const hourRows = [...Array(endHour - startHour + 1)]
+      .map((_, i) => {
+        const hour = startHour + i;
+        const events = eventsByHour.get(hour) || [];
+        return `<div class="planner-timeline-hour ${events.length ? "has-events" : ""}">
+          <span>${String(hour).padStart(2, "0")}:00</span>
+          <div class="planner-timeline-slot">
+            <div class="planner-timeline-line"></div>
+            ${events.length ? `<div class="planner-timeline-events">${events.map(renderTimelineEvent).join("")}</div>` : ""}
+          </div>
+        </div>`;
+      })
+      .join("");
+    const noTimeEvents = dayEvents.filter((ev) => !ev.time);
+    const noTimeHtml = noTimeEvents.length ? `<div class="planner-day-notime"><p class="planner-timeline-section-label">Sem horário</p>${noTimeEvents.map(renderPlannerEventRow).join("")}</div>` : "";
+    const earlyHtml = earlyEvents.length ? `<div class="planner-day-notime"><p class="planner-timeline-section-label">Antes das ${String(startHour).padStart(2, "0")}:00</p>${earlyEvents.map(renderTimelineEvent).join("")}</div>` : "";
+    const lateHtml = lateEvents.length ? `<div class="planner-day-notime"><p class="planner-timeline-section-label">Após ${String(endHour).padStart(2, "0")}:00</p>${lateEvents.map(renderTimelineEvent).join("")}</div>` : "";
+    timeline.innerHTML = `
+      ${noTimeHtml}
+      ${earlyHtml}
+      <div class="planner-timeline-wrap"><div class="planner-timeline-hours">${hourRows}</div></div>
+      ${lateHtml}
+      ${!dayEvents.length ? emptyStateCompactHtml({ iconName: "compass", text: "Nenhum compromisso neste dia." }) : ""}
+    `;
+  }
+}
+
+// ── Semana: 7 dias em agenda vertical, cada um levando pro Dia ──
+function changePlannerWeek(delta) {
+  const d = new Date(`${plannerWeekAnchor}T12:00:00`);
+  d.setDate(d.getDate() + delta * 7);
+  plannerWeekAnchor = toLocalIso(d);
+  renderPlannerWeek();
+}
+
+function goToPlannerThisWeek() {
+  plannerWeekAnchor = todayIso;
+  renderPlannerWeek();
+}
+
+function renderPlannerWeek() {
+  const anchorDate = new Date(`${plannerWeekAnchor}T12:00:00`);
+  const days = getWeekDays(anchorDate);
+
+  const label = document.querySelector("#plannerWeekLabel");
+  if (label) {
+    const first = new Date(`${days[0]}T12:00:00`);
+    const last = new Date(`${days[6]}T12:00:00`);
+    const sameMonth = first.getMonth() === last.getMonth();
+    const fmtDay = (d) => safeFormatDate(d, { day: "2-digit" }, "--");
+    const fmtMonthFull = safeFormatDate(last, { month: "long", year: "numeric" }, "");
+    label.textContent = sameMonth ? `${fmtDay(first)} – ${fmtDay(last)} de ${fmtMonthFull}` : `${fmtDay(first)} – ${fmtDay(last)} de ${fmtMonthFull}`;
+  }
+
+  const root = document.querySelector("#plannerWeekBody");
+  if (!root) return;
+  root.innerHTML = days
+    .map((date) => {
+      const dayTasks = state.tasks.filter((t) => t.dueDate === date && t.status !== "Cancelada" && t.status !== "Concluida");
+      const dayEvents = state.events.filter((e) => e.date === date).sort(sortEvent);
+      const isToday = date === todayIso;
+      const d = new Date(`${date}T12:00:00`);
+      let weekdayLabel = safeFormatDate(d, { weekday: "short" }, "-").replace(".", "");
+      weekdayLabel = weekdayLabel.charAt(0).toUpperCase() + weekdayLabel.slice(1);
+      const items = [...dayTasks.map((t) => ({ kind: "task", data: t })), ...dayEvents.map((e) => ({ kind: "event", data: e }))];
+      return `
+        <div class="planner-week-day ${isToday ? "is-today" : ""}">
+          <button class="planner-week-day-header" type="button" onclick="jumpPlannerToDay('${date}')">
+            <span class="planner-week-day-name">${weekdayLabel}</span>
+            <span class="planner-week-day-num">${d.getDate()}</span>
+            ${items.length ? `<span class="pill">${items.length}</span>` : ""}
+            ${icon("chevronRight", 15, "planner-week-day-chevron")}
+          </button>
+          <div class="planner-week-day-body">
+            ${
+              items.length
+                ? items.map((item) => (item.kind === "task" ? renderPlannerTaskRow(item.data) : renderPlannerEventRow(item.data))).join("")
+                : emptyStateCompactHtml({ iconName: "sparkle", text: "Nada por aqui." })
+            }
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+}
+
+// ── Mês: compromissos e tarefas visíveis, com excesso resumido ──
+function changePlannerMonth(delta) {
+  const d = new Date(`${plannerMonthAnchor}T12:00:00`);
+  d.setDate(1);
+  d.setMonth(d.getMonth() + delta);
+  plannerMonthAnchor = toLocalIso(d);
+  renderPlannerMonth();
+}
+
+function goToPlannerThisMonth() {
+  plannerMonthAnchor = todayIso;
+  renderPlannerMonth();
+}
+
+function renderPlannerMonth() {
+  const anchor = new Date(`${plannerMonthAnchor}T12:00:00`);
+  const label = document.querySelector("#plannerMonthLabel");
+  if (label) {
+    let text = safeFormatDate(anchor, { month: "long", year: "numeric" }, plannerMonthAnchor || "");
+    label.textContent = text.charAt(0).toUpperCase() + text.slice(1);
+  }
+
+  const year = anchor.getFullYear();
+  const month = anchor.getMonth();
+  const leadingBlanks = new Date(year, month, 1).getDay();
+  const days = getMonthDays(anchor);
+
+  const root = document.querySelector("#plannerMonthGrid");
+  if (!root) return;
+
+  const cells = [];
+  for (let i = 0; i < leadingBlanks; i++) cells.push(`<div class="planner-month-cell is-blank"></div>`);
+  days.forEach((date) => {
+    const dayTasks = state.tasks.filter((t) => t.dueDate === date && t.status !== "Cancelada" && t.status !== "Concluida");
+    const dayEvents = state.events.filter((e) => e.date === date);
+    const total = dayTasks.length + dayEvents.length;
+    const isToday = date === todayIso;
+    const items = [
+      ...dayEvents.map((event) => ({ label: event.title, kind: "event" })),
+      ...dayTasks.map((task) => ({ label: task.title, kind: "task" })),
+    ];
+    const visibleItems = items.slice(0, 2)
+      .map((item) => `<span class="planner-month-item is-${item.kind}" title="${escapeHtml(item.label)}">${escapeHtml(item.label)}</span>`)
+      .join("");
+    const remaining = items.length - 2;
+    const dateLabel = safeFormatDate(new Date(`${date}T12:00:00`), { day: "numeric", month: "long" }, date);
+    const ariaLabel = total ? `${dateLabel}: ${total} ${total === 1 ? "item" : "itens"}` : dateLabel;
+    cells.push(`
+      <button class="planner-month-cell ${isToday ? "is-today" : ""} ${total ? "has-items" : ""}" type="button" aria-label="${escapeHtml(ariaLabel)}" onclick="jumpPlannerToDay('${date}')">
+        <span class="planner-month-cell-head">
+          <span class="planner-month-daynum">${new Date(`${date}T12:00:00`).getDate()}</span>
+          ${total ? `<span class="planner-month-count">${total}</span>` : ""}
+        </span>
+        ${total ? `<span class="planner-month-items">${visibleItems}${remaining > 0 ? `<span class="planner-month-more">+${remaining} ${remaining === 1 ? "item" : "itens"}</span>` : ""}</span>` : ""}
+      </button>
+    `);
+  });
+
+  root.innerHTML = cells.join("");
+}
+
+// ── Adicionar rápido (Tarefa / Compromisso / Meta) num único modal ──
+function openPlannerQuickAdd(type) {
+  const modal = document.querySelector("#plannerQuickAddModal");
+  if (!modal) return;
+  plannerEditingEventId = null;
+  document.querySelector("#plannerQuickAddModal h2").textContent = "Adicionar ao planner";
+  document.querySelector("#plannerQuickAddForm [type='submit'] span").textContent = "Salvar";
+  modal.hidden = false;
+  setPlannerQuickAddType(type || (plannerActiveTab === "day" ? "event" : "task"));
+  setTimeout(() => document.querySelector("#pqaTitle")?.focus(), 50);
+}
+
+function closePlannerQuickAdd() {
+  const modal = document.querySelector("#plannerQuickAddModal");
+  if (!modal) return;
+  modal.hidden = true;
+  document.querySelector("#plannerQuickAddForm")?.reset();
+  plannerEditingEventId = null;
+}
+
+function openPlannerEventEditor(id) {
+  const ev = state.events.find((event) => event.id === id);
+  if (!ev) return;
+  const modal = document.querySelector("#plannerQuickAddModal");
+  if (!modal) return;
+  plannerEditingEventId = id;
+  modal.hidden = false;
+  document.querySelector("#plannerQuickAddModal h2").textContent = "Editar compromisso";
+  document.querySelector("#plannerQuickAddForm [type='submit'] span").textContent = "Salvar alterações";
+  document.querySelector("#pqaTitle").value = ev.title || "";
+  document.querySelector("#pqaEventDate").value = ev.date || todayIso;
+  document.querySelector("#pqaEventTime").value = ev.time || "";
+  document.querySelector("#pqaEventLocation").value = ev.location === "Sem local" ? "" : (ev.location || "");
+  document.querySelector("#pqaEventNotes").value = ev.notes || "";
+  const reminder = Number(ev.reminder || 15);
+  const select = document.querySelector("#pqaEventReminder");
+  const preset = [5, 15, 30, 60, 1440].includes(reminder);
+  select.value = preset ? String(reminder) : "custom";
+  document.querySelector("#pqaEventReminderMinutes").value = preset ? "" : reminder;
+  document.querySelector("#pqaEventReminderCustom").hidden = preset;
+  setPlannerQuickAddType("event");
+  setTimeout(() => document.querySelector("#pqaTitle")?.focus(), 50);
+}
+
+function setPlannerQuickAddType(type) {
+  document.querySelectorAll("#plannerQuickAddType button").forEach((b) => b.classList.toggle("active", b.dataset.quickType === type));
+  document.querySelector("#pqaTaskFields").style.display = type === "task" ? "grid" : "none";
+  document.querySelector("#pqaEventFields").style.display = type === "event" ? "block" : "none";
+  document.querySelector("#pqaGoalFields").style.display = type === "goal" ? "block" : "none";
+  const form = document.querySelector("#plannerQuickAddForm");
+  form.dataset.type = type;
+  const referenceDate = plannerActiveTab === "day" ? plannerDayDate : todayIso;
+  if (type === "task") {
+    document.querySelector("#pqaTaskDue").value ||= referenceDate;
+    document.querySelector("#pqaTaskTime").value ||= "09:00";
+  }
+  if (type === "event") {
+    document.querySelector("#pqaEventDate").value ||= referenceDate;
+    document.querySelector("#pqaEventTime").value ||= "09:00";
+  }
+}
+
+function bindPlannerQuickAdd() {
+  document.querySelector("#closePlannerQuickAdd")?.addEventListener("click", closePlannerQuickAdd);
+  document.querySelector("#plannerQuickAddModal")?.addEventListener("click", (e) => {
+    if (e.target.id === "plannerQuickAddModal") closePlannerQuickAdd();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && document.querySelector("#plannerQuickAddModal")?.hidden === false) closePlannerQuickAdd();
+  });
+  document.querySelectorAll("#plannerQuickAddType button").forEach((btn) => {
+    btn.addEventListener("click", () => setPlannerQuickAddType(btn.dataset.quickType));
+  });
+  const bindReminderField = (selectSelector, customSelector, inputSelector) => {
+    const reminderSelect = document.querySelector(selectSelector);
+    const reminderCustom = document.querySelector(customSelector);
+    const syncReminderField = () => {
+      if (!reminderSelect || !reminderCustom) return;
+      reminderCustom.hidden = reminderSelect.value !== "custom";
+      if (!reminderCustom.hidden) document.querySelector(inputSelector)?.focus();
+    };
+    reminderSelect?.addEventListener("change", syncReminderField);
+    syncReminderField();
+  };
+  bindReminderField("#pqaTaskReminder", "#pqaTaskReminderCustom", "#pqaTaskReminderMinutes");
+  bindReminderField("#pqaEventReminder", "#pqaEventReminderCustom", "#pqaEventReminderMinutes");
+  document.querySelector("#plannerQuickAddForm")?.addEventListener("submit", submitPlannerQuickAdd);
+}
+
+function submitPlannerQuickAdd(event) {
+  event.preventDefault();
+  const type = event.target.dataset.type || "task";
+  const title = valueOf("#pqaTitle");
+  if (!title) return;
+
+  if (type === "task") {
+    const priority = document.querySelector("#pqaTaskPriority").value;
+    const due = document.querySelector("#pqaTaskDue").value || todayIso;
+    const dueTime = document.querySelector("#pqaTaskTime").value || "";
+    const selectedReminder = document.querySelector("#pqaTaskReminder").value;
+    const customReminder = Number(document.querySelector("#pqaTaskReminderMinutes").value);
+    const reminder = selectedReminder === "custom"
+      ? Math.min(10080, Math.max(5, Number.isFinite(customReminder) ? customReminder : 15))
+      : Number(selectedReminder || 15);
+    state.tasks.unshift(createTask(title, "Pendente", priority, due, "", dueTime, reminder));
+    showToast("Tarefa adicionada.");
+  } else if (type === "event") {
+    const date = document.querySelector("#pqaEventDate").value || todayIso;
+    const time = document.querySelector("#pqaEventTime").value || "09:00";
+    const location = valueOf("#pqaEventLocation") || "Sem local";
+    const selectedReminder = document.querySelector("#pqaEventReminder").value;
+    const customReminder = Number(document.querySelector("#pqaEventReminderMinutes").value);
+    const reminder = selectedReminder === "custom"
+      ? Math.min(10080, Math.max(5, Number.isFinite(customReminder) ? customReminder : 15))
+      : Number(selectedReminder || 15);
+    const notes = valueOf("#pqaEventNotes") || "";
+    const eventRecord = { id: plannerEditingEventId || crypto.randomUUID(), title, date, time, location, reminder, notes };
+    if (plannerEditingEventId) {
+      state.events = state.events.map((item) => item.id === plannerEditingEventId ? eventRecord : item);
+      showToast("Compromisso atualizado.");
+    } else {
+      state.events.push(eventRecord);
+      showToast("Compromisso salvo.");
+    }
+  } else if (type === "goal") {
+    const target = Number(document.querySelector("#pqaGoalTarget").value || 1);
+    state.goals.unshift({ id: crypto.randomUUID(), title, target, current: 0, milestones: [] });
+    showToast("Meta criada.");
+  }
+
+  saveState();
+  closePlannerQuickAdd();
+  renderAll();
+}
+
+function renderNotes() {
+  const filter = document.querySelector("#noteFilter").value;
+  const searchQuery = elements.globalSearch.value.trim();
+  let notes = queryFilter(state.notes, ["title", "description", "category", "folder", "goal"]);
+  if (filter === "favorite") notes = notes.filter((note) => note.favorite);
+  if (["Alta", "Urgente"].includes(filter)) notes = notes.filter((note) => note.priority === filter);
+  if (notesFolderFilter !== "all") notes = notes.filter((note) => ((note.folder || "").trim() || "Sem pasta") === notesFolderFilter);
+
+  renderNoteFolders();
+
+  const isFiltering = Boolean(searchQuery) || filter !== "all" || notesFolderFilter !== "all";
+  renderList(
+    "#notesList",
+    notes,
+    (note) => renderNoteCard(note, searchQuery),
+    emptyStateHtml(
+      isFiltering
+        ? {
+            iconName: "inbox",
+            title: "Nada por aqui com esse filtro",
+            desc: "Tente limpar a busca, trocar a pasta ou o filtro de prioridade.",
+          }
+        : {
+            iconName: "notebook",
+            title: "Sua primeira nota está a um toque",
+            desc: "Ideias, lembretes e recados soltos — tudo cabe aqui, sem formulário complicado.",
+            ctaLabel: "Nova nota",
+            ctaOnClick: "document.querySelector('#noteTitle').focus()",
+            mascot: true,
+            mascotBadgeIcon: "notebook",
+          }
+    ),
+    ""
+  );
+}
+
+// ── Pastas: derivadas dos próprios valores de "folder" das notas —
+// sem precisar de uma estrutura de dados nova. Toque numa pasta pra
+// filtrar a biblioteca por ela. ──
+function renderNoteFolders() {
+  const wrap = document.querySelector("#noteFoldersWrap");
+  const root = document.querySelector("#noteFolders");
+  if (!root || !wrap) return;
+  const counts = {};
+  state.notes.forEach((n) => {
+    const key = (n.folder || "").trim() || "Sem pasta";
+    counts[key] = (counts[key] || 0) + 1;
+  });
+  const folders = Object.keys(counts).sort((a, b) => a.localeCompare(b, "pt-BR"));
+  if (!folders.length) {
+    wrap.hidden = true;
+    root.innerHTML = "";
+    return;
+  }
+  wrap.hidden = false;
+  const allChip = `<button class="folder-chip ${notesFolderFilter === "all" ? "active" : ""}" type="button" onclick="setNotesFolderFilter('all')">${icon("notebook", 13)}<span>Todas as pastas</span><span class="pill">${state.notes.length}</span></button>`;
+  const chips = folders.map((f) => {
+    const safe = f.replace(/'/g, "\\'");
+    return `<button class="folder-chip ${notesFolderFilter === f ? "active" : ""}" type="button" onclick="setNotesFolderFilter('${safe}')">${icon("folder", 13)}<span>${escapeHtml(f)}</span><span class="pill">${counts[f]}</span></button>`;
+  });
+  root.innerHTML = [allChip, ...chips].join("");
+}
+
+function setNotesFolderFilter(folder) {
+  notesFolderFilter = folder;
+  renderNotes();
+}
+
+// Checklists criados nas versões antigas eram arrays de texto. As funções
+// abaixo leem os dois formatos para que nenhuma nota existente desapareça
+// quando o item passa a poder ser marcado dentro do detalhe.
+function noteChecklistItemText(item) {
+  return typeof item === "string" ? item : String(item?.text || "");
+}
+
+function noteChecklistItemDone(item) {
+  return typeof item === "object" && !!item?.done;
+}
+
+function renderNoteCard(note, searchQuery) {
+  const tone = noteColorTone(note); // cor escolhida pela pessoa; notas antigas mantêm a cor determinística anterior
+  const checklistHtml =
+    note.checklist && note.checklist.length
+      ? `<div class="checklist-preview">${note.checklist
+          .map((item, i) => {
+            const done = noteChecklistItemDone(item);
+            return `<div class="cl-item${done ? " is-done" : ""}${i >= 3 ? " cl-item-extra" : ""}"><span class="cl-check">${icon("check", 11)}</span><span class="cl-text">${escapeHtml(noteChecklistItemText(item))}</span></div>`;
+          })
+          .join("")}${
+          note.checklist.length > 3
+            ? `<button type="button" class="cl-toggle-btn" onclick="event.stopPropagation(); toggleNoteChecklistPreview(this)">+${note.checklist.length - 3} mais itens</button>`
+            : ""
+        }</div>`
+      : "";
+
+  const tagsHtml =
+    note.tags && note.tags.length ? `<div class="tag-list">${note.tags.slice(0, 3).map((t) => `<span class="pill">#${escapeHtml(t)}</span>`).join("")}</div>` : "";
+
+  const words = (note.description || "").trim().split(/\s+/).filter(Boolean).length;
+  const readingMin = Math.max(1, Math.round(words / 200));
+  const wordCountHtml = words > 0 ? `<small class="task-meta note-wordcount">${words} palavras · ${readingMin} min de leitura</small>` : "";
+
+  const titleHtml = highlightMatch(escapeHtml(note.title), searchQuery);
+  const formattedDescription = note.descriptionHtml
+    ? sanitizeNoteHtml(note.descriptionHtml)
+    : highlightMatch(escapeHtml(note.description || ""), searchQuery).replace(/\n/g, "<br>");
+  const descHtml = formattedDescription ? `<div class="note-card-preview">${formattedDescription}</div>` : "";
+  const folderName = (note.folder || "").trim();
+  const folderHtml = folderName ? `<span class="note-folder-badge">${icon("folder", 11)}${escapeHtml(folderName)}</span>` : "";
+
+  return `
+    <article class="note-card" style="--note-card-bg:${tone.bg};--note-card-ink:${tone.border};border-left-color:${tone.border}" onclick="openNoteDetail('${note.id}')">
+      <header>
+        <div>
+          <h3>${titleHtml}</h3>
+          <div class="note-meta">${escapeHtml(note.category || "Geral")} · ${formatDate(note.createdAt)}${folderHtml}</div>
+        </div>
+        <button class="note-fav-btn ${note.favorite ? "is-active" : ""}" onclick="event.stopPropagation(); toggleFavorite('${note.id}')" title="Favoritar">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="${note.favorite ? "currentColor" : "none"}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></svg>
+        </button>
+      </header>
+      ${descHtml}
+      ${wordCountHtml}
+      ${checklistHtml}
+      ${tagsHtml}
+      <div class="tag-list note-priority-row">
+        <span class="priority-pill priority-${note.priority}">${escapeHtml(note.priority)}</span>
+      </div>
+      <div class="card-actions note-card-actions">
+        <button onclick="event.stopPropagation(); editNote('${note.id}')" title="Mais campos (categoria, pasta, tags...)">${icon("pencil", 14)}<span>Editar</span></button>
+        ${note.convertedToTaskId
+          ? `<button class="is-done-action" onclick="event.stopPropagation(); convertNoteToTask('${note.id}')" title="Já virou tarefa — toque pra ver no Planner">${icon("check", 14)}<span>Virou tarefa</span></button>`
+          : `<button onclick="event.stopPropagation(); convertNoteToTask('${note.id}')" title="Virar tarefa">${icon("arrowRight", 14)}<span>Tarefa</span></button>`}
+        <button class="danger-action" onclick="event.stopPropagation(); deleteNote('${note.id}')" title="Excluir" aria-label="Excluir">${icon("trash", 14)}</button>
+      </div>
+    </article>
+  `;
+}
+
+// Envolve trechos que batem com a busca em <mark>, pra destacar visualmente
+// onde o termo pesquisado aparece (só quando há uma busca ativa).
+function highlightMatch(safeHtml, query) {
+  const q = query.trim();
+  if (!q) return safeHtml;
+  const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return safeHtml.replace(new RegExp(`(${escaped})`, "ig"), "<mark class=\"pn-highlight\">$1</mark>");
+}
+
+// Exporta uma nota como arquivo Markdown (.md) pra guardar fora do app
+function exportNoteMarkdown(id) {
+  const note = state.notes.find((n) => n.id === id);
+  if (!note) return;
+  let md = `# ${note.title}\n\n`;
+  if (note.tags?.length) md += note.tags.map((t) => `#${t}`).join(" ") + "\n\n";
+  if (note.description) md += `${note.description}\n\n`;
+  if (note.checklist?.length) md += note.checklist.map((item) => `- [${noteChecklistItemDone(item) ? "x" : " "}] ${noteChecklistItemText(item)}`).join("\n") + "\n\n";
+  if (note.observations) md += `> ${note.observations}\n`;
+
+  const blob = new Blob([md], { type: "text/markdown" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${note.title.replace(/[^\w\-]+/g, "_") || "nota"}.md`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
+function editNote(id) {
+  const note = state.notes.find((item) => item.id === id);
+  if (!note) return;
+  document.querySelector("#noteId").value = note.id;
+  document.querySelector("#noteTitle").value = note.title;
+  document.querySelector("#noteDescription").value = note.description;
+  document.querySelector("#noteCategory").value = note.category;
+  document.querySelector("#noteFolder").value = note.folder;
+  document.querySelector("#noteTags").value = note.tags.join(", ");
+  document.querySelector("#notePriority").value = note.priority;
+  document.querySelector("#noteColor").value = note.color || "blue";
+  setNoteDraftTextColor(note.textColor || "");
+  document.querySelectorAll("#noteColorPicker .note-color-dot").forEach((dot) =>
+    dot.classList.toggle("active", dot.dataset.noteColor === (note.color || "blue"))
+  );
+  document.querySelectorAll("#notePriorityPicker .note-priority-dot").forEach((d) =>
+    d.classList.toggle("active", d.dataset.priority === note.priority)
+  );
+  document.querySelector("#noteChecklist").value = (note.checklist || []).map(noteChecklistItemText).join("\n");
+  document.querySelector("#noteAttachments").value = note.attachments.join(", ");
+  document.querySelector("#noteGoal").value = note.goal;
+  document.querySelector("#noteObservations").value = note.observations;
+
+  // Mostra a checklist se a nota já tiver itens
+  const hasChecklist = note.checklist && note.checklist.length > 0;
+  document.querySelector("#noteChecklistField").hidden = !hasChecklist;
+  document.querySelector("#noteChecklistToggle").classList.toggle("active", hasChecklist);
+
+  // Abre "Mais detalhes" automaticamente se algum campo opcional já tiver valor
+  const hasExtra = note.category
+    || note.folder
+    || (note.tags && note.tags.length)
+    || note.goal
+    || (note.attachments && note.attachments.length)
+    || note.observations
+    || normalizeNoteTextColor(note.textColor)
+    || (note.color && note.color !== "blue");
+  document.querySelector(".note-more-details").open = Boolean(hasExtra);
+
+  // Deixa claro que agora é edição, não criação — antes o formulário ficava
+  // idêntico nos dois casos, sem nenhum aviso.
+  document.querySelector("#noteEditingBanner").hidden = false;
+  document.querySelector("#noteEditingTitle").textContent = note.title;
+  document.querySelector("#noteSaveBtnLabel").textContent = "Salvar alterações";
+
+  enableAutogrowTextareas();
+  setView("notes");
+  document.querySelector("#noteTitle").focus();
+}
+
+function toggleFavorite(id) {
+  state.notes = state.notes.map((note) => (note.id === id ? { ...note, favorite: !note.favorite } : note));
+  saveState();
+  renderAll();
+}
+
+// Vira uma nota em tarefa — some não tinha nenhum retorno visível na
+// tela de notas (só um toast rápido que passava despercebido, e a nota
+// continuava idêntica na lista, dando a impressão de "não fez nada").
+// Agora: marca a nota como já convertida (o cartão passa a mostrar
+// "Virou tarefa ✓" em vez do botão, pra não converter de novo por
+// engano e deixar claro que já aconteceu) e leva direto pro Planner,
+// onde a tarefa nova já aparece.
+function convertNoteToTask(id) {
+  const note = state.notes.find((item) => item.id === id);
+  if (!note) return;
+  if (note.convertedToTaskId) {
+    showToast("Essa nota já virou tarefa — abrindo o Planner.");
+    setView("planner");
+    return;
+  }
+  const task = { ...createTask(note.title, "Pendente", note.priority, todayIso), sourceNoteId: note.id };
+  state.tasks.unshift(task);
+  note.convertedToTaskId = task.id;
+  saveState();
+  renderAll();
+  celebrate("Tarefa criada a partir da nota!");
+  setView("planner");
+}
+
+function deleteNote(id) {
+  state.notes = state.notes.filter((note) => note.id !== id);
+  saveState();
+  renderAll();
+  showToast("Anotacao excluida.");
+}
+
+// ══════════════════════════════════════════════════════════════════
+// Nota em tela cheia (estilo iPhone Notes) — título + corpo com
+// formatação de verdade (negrito, destaque colorido), aberta ao
+// tocar num cartão da lista. `note.descriptionHtml` guarda o corpo
+// formatado; `note.description` continua sendo o texto puro (dele
+// derivado), pra busca/preview e pra notas antigas ou criadas pelo
+// WhatsApp continuarem funcionando sem precisar de migração.
+// ══════════════════════════════════════════════════════════════════
+let ndCurrentNoteId = null;
+
+// Só passamos pro contenteditable o que a gente mesmo gerou (negrito,
+// itálico e destaque de cor) — filtra qualquer outra tag/atributo que
+// apareça (colar de outro app, por exemplo), pra nunca guardar HTML
+// arbitrário no Firestore. Preserva font-weight/font-style além de
+// background-color no style: com "styleWithCSS" ligado (ver
+// bindNoteDetail), alguns navegadores representam negrito/itálico
+// como `<span style="font-weight/font-style:...">` em vez de
+// `<b>`/`<i>` — sem isso aqui, o sanitizador jogaria essa formatação
+// fora sem querer.
+function sanitizeNoteHtml(html) {
+  const allowedTags = new Set(["B", "STRONG", "I", "EM", "BR", "DIV", "SPAN", "MARK", "P", "FONT"]);
+  const allowedStyles = ["color", "backgroundColor", "fontWeight", "fontStyle"];
+  const template = document.createElement("template");
+  template.innerHTML = String(html || "");
+
+  const clean = (root) => {
+    [...root.childNodes].forEach((node) => {
+      if (node.nodeType === Node.TEXT_NODE) return;
+      if (node.nodeType !== Node.ELEMENT_NODE) {
+        node.remove();
+        return;
+      }
+      if (!allowedTags.has(node.tagName)) {
+        node.replaceWith(document.createTextNode(node.textContent));
+        return;
+      }
+      if (node.tagName === "FONT" && node.getAttribute("color")) node.style.color = node.getAttribute("color");
+      const keptStyles = node.style
+        ? allowedStyles.map((prop) => [prop, node.style[prop]]).filter(([, value]) => value)
+        : [];
+      [...node.attributes].forEach((attr) => node.removeAttribute(attr.name));
+      keptStyles.forEach(([prop, value]) => { node.style[prop] = value; });
+      clean(node);
+    });
+  };
+  clean(template.content);
+  return template.innerHTML;
+}
+
+// Corpo formatado -> texto puro (pra description/preview/busca), com
+// quebras de linha preservadas — percorre a árvore em vez de regex
+// nas tags (regex só trocando a tag de abertura por "\n" perdia a
+// quebra entre um <div> e o elemento seguinte, grudando linhas).
+function noteHtmlToPlainText(html) {
+  const template = document.createElement("template");
+  template.innerHTML = String(html || "");
+  const BLOCK_TAGS = new Set(["DIV", "P"]);
+  let text = "";
+  const walk = (root) => {
+    root.childNodes.forEach((child) => {
+      if (child.nodeType === Node.TEXT_NODE) {
+        text += child.textContent;
+      } else if (child.nodeType === Node.ELEMENT_NODE) {
+        if (child.tagName === "BR") {
+          text += "\n";
+        } else {
+          walk(child);
+          if (BLOCK_TAGS.has(child.tagName)) text += "\n";
+        }
+      }
+    });
+  };
+  walk(template.content);
+  return text.replace(/\n{3,}/g, "\n\n").trim();
+}
+
+function hexToRgba(hex, alpha) {
+  const clean = hex.replace("#", "");
+  const r = parseInt(clean.substring(0, 2), 16);
+  const g = parseInt(clean.substring(2, 4), 16);
+  const b = parseInt(clean.substring(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+// Trava o scroll do fundo enquanto a nota em tela cheia está aberta.
+// `overflow:hidden` no body sozinho NÃO é confiável em PWA instalado
+// no iOS (a página por trás ainda "arrasta"/balança) — a técnica que
+// funciona de verdade em todo lugar é fixar o body na posição atual.
+let ndScrollY = 0;
+function lockBackgroundScroll() {
+  ndScrollY = window.scrollY || window.pageYOffset || 0;
+  document.body.classList.add("note-detail-open");
+  document.body.style.position = "fixed";
+  document.body.style.top = `-${ndScrollY}px`;
+  document.body.style.left = "0";
+  document.body.style.right = "0";
+}
+function unlockBackgroundScroll() {
+  document.body.classList.remove("note-detail-open");
+  document.body.style.position = "";
+  document.body.style.top = "";
+  document.body.style.left = "";
+  document.body.style.right = "";
+  window.scrollTo(0, ndScrollY);
+}
+
+// Salva o estado atual do título/corpo — devolve true se algo
+// realmente mudou desde o último save (evita escrever/re-renderizar à
+// toa quando não há nada novo). Extraída como sua própria função
+// porque agora é chamada de VÁRIOS lugares: autosave enquanto a
+// pessoa digita, e antes de fechar por QUALQUER caminho (botão
+// Salvar, X, toque fora do cartão, gesto de voltar do celular) — a
+// tela de nota não tem mais nenhum jeito de fechar que jogue fora o
+// que foi escrito, do mesmo jeito que o Notes do iPhone nunca pede
+// pra você "salvar" antes de sair.
+function flushNoteDetailSave() {
+  if (!ndCurrentNoteId) return false;
+  const title = document.querySelector("#ndTitle").value.trim() || "Sem título";
+  const cleanHtml = sanitizeNoteHtml(document.querySelector("#ndBody").innerHTML);
+  const plainText = noteHtmlToPlainText(cleanHtml);
+
+  const existing = state.notes.find((n) => n.id === ndCurrentNoteId);
+  if (!existing) return false;
+  if (existing.title === title && existing.description === plainText && (existing.descriptionHtml || "") === cleanHtml) {
+    return false;
+  }
+
+  state.notes = state.notes.map((note) =>
+    note.id === ndCurrentNoteId
+      ? { ...note, title, description: plainText, descriptionHtml: cleanHtml }
+      : note
+  );
+  saveState();
+  return true;
+}
+
+function openNoteDetail(id) {
+  const note = state.notes.find((item) => item.id === id);
+  if (!note) return;
+  ndCurrentNoteId = id;
+
+  document.querySelector("#ndTitle").value = note.title || "";
+  const body = document.querySelector("#ndBody");
+  body.innerHTML = note.descriptionHtml
+    ? sanitizeNoteHtml(note.descriptionHtml)
+    : escapeHtml(note.description || "").replace(/\n/g, "<br>");
+
+  renderNoteDetailChecklist(note);
+
+  document.querySelector("#ndMeta").textContent =
+    `${note.category || "Geral"} · criada em ${formatDate(note.createdAt)}`;
+  document.querySelector("#ndFavBtn").classList.toggle("is-fav", !!note.favorite);
+  document.querySelector("#ndFavBtn svg").setAttribute("fill", note.favorite ? "currentColor" : "none");
+
+  document.querySelector("#noteDetailModal").hidden = false;
+  lockBackgroundScroll();
+  // Empurra um estado de histórico só pra isso — assim o gesto de
+  // "voltar" do celular (ou o botão físico/gesto de voltar do
+  // Android) também fecha a nota, em vez de sair do app inteiro ou
+  // deixar a pessoa sem uma saída óbvia se algum toque não registrar.
+  history.pushState({ ...(history.state || {}), pnView: activeView, noteDetail: true }, "");
+}
+
+function renderNoteDetailChecklist(note) {
+  const section = document.querySelector("#ndChecklistSection");
+  const list = document.querySelector("#ndChecklistItems");
+  const summary = document.querySelector("#ndChecklistSummary");
+  const progress = document.querySelector("#ndChecklistProgress");
+  const progressBar = document.querySelector("#ndChecklistProgressBar");
+  if (!section || !list || !summary || !progress || !progressBar) return;
+  const items = note?.checklist || [];
+  const completed = items.filter(noteChecklistItemDone).length;
+  section.hidden = items.length === 0;
+  section.classList.toggle("is-complete", items.length > 0 && completed === items.length);
+  summary.textContent = completed === items.length
+    ? "Tudo concluído"
+    : `${items.length - completed} ${items.length - completed === 1 ? "item pendente" : "itens pendentes"}`;
+  progress.textContent = `${completed}/${items.length}`;
+  progressBar.style.width = `${items.length ? Math.round((completed / items.length) * 100) : 0}%`;
+  list.innerHTML = items.map((item, index) => {
+    const done = noteChecklistItemDone(item);
+    return `<button type="button" class="note-detail-check-item${done ? " is-done" : ""}" onclick="toggleNoteChecklistItem('${note.id}', ${index})" aria-pressed="${done}">
+      <span class="note-detail-check-box">${done ? icon("check", 13) : ""}</span>
+      <span>${escapeHtml(noteChecklistItemText(item))}</span>
+    </button>`;
+  }).join("");
+}
+
+function toggleNoteChecklistItem(noteId, index) {
+  const note = state.notes.find((item) => item.id === noteId);
+  if (!note || !note.checklist?.[index]) return;
+  const current = note.checklist[index];
+  note.checklist[index] = {
+    id: typeof current === "object" && current.id ? current.id : crypto.randomUUID(),
+    text: noteChecklistItemText(current),
+    done: !noteChecklistItemDone(current),
+  };
+  saveState();
+  renderNoteDetailChecklist(note);
+  renderNotes();
+}
+
+// Só cuida da parte visual (esconder modal, destravar scroll) — não
+// mexe no histórico nem salva nada (isso é feito por quem chama esta
+// função, ver comentário no listener de "popstate" mais abaixo sobre
+// por que precisa ficar separado). Separado de closeNoteDetail() de
+// propósito: essa função também é chamada pelo listener de
+// "popstate" (botão/gesto de voltar do celular), e SE closeNoteDetail
+// também chamasse history.back(), voltar pelo celular disparava um
+// novo popstate, que chamava ela de novo, que chamava history.back()
+// de novo — um loop.
+function closeNoteDetailUI() {
+  document.querySelector("#noteDetailModal").hidden = true;
+  unlockBackgroundScroll();
+  ndCurrentNoteId = null;
+}
+
+// Fecha a nota — SEMPRE salva antes, não importa por onde a pessoa
+// saiu (botão Salvar, X, toque fora do cartão). Sem isso, fechar sem
+// ter apertado "Salvar" explicitamente jogava fora tudo que tinha
+// sido digitado — o oposto de "prático e fácil".
+function closeNoteDetail({ updateHistory = true } = {}) {
+  if (!ndCurrentNoteId) return;
+  flushNoteDetailSave();
+  closeNoteDetailUI();
+  renderAll();
+  if (updateHistory && history.state && history.state.noteDetail) history.back();
+  else if (!updateHistory) history.replaceState({ ...(history.state || {}), pnView: activeView, noteDetail: false }, "");
+}
+
+function saveNoteDetail() {
+  if (!ndCurrentNoteId) return;
+  closeNoteDetail();
+}
+
+function bindNoteDetail() {
+  const modal = document.querySelector("#noteDetailModal");
+  const body = document.querySelector("#ndBody");
+  if (!modal || !body) return;
+
+  document.querySelector("#closeNoteDetail").addEventListener("click", closeNoteDetail);
+  // Fecha ao tocar/clicar no fundo, mas não quando uma seleção de texto
+  // começa no editor e termina fora do cartão. O clique sintetizado depois
+  // de um drag também chegava ao backdrop e desmontava o editor.
+  let backdropPointerId = null;
+  modal.addEventListener("pointerdown", (event) => {
+    backdropPointerId = event.target === modal && event.isPrimary && event.button === 0
+      ? event.pointerId
+      : null;
+  });
+  modal.addEventListener("pointerup", (event) => {
+    const closeFromBackdrop = backdropPointerId === event.pointerId && event.target === modal;
+    backdropPointerId = null;
+    if (closeFromBackdrop) closeNoteDetail();
+  });
+  modal.addEventListener("pointercancel", () => { backdropPointerId = null; });
+
+  document.querySelector("#ndSaveBtn").addEventListener("click", saveNoteDetail);
+
+  // Autosave enquanto digita (debounced) — camada extra de segurança
+  // além do "salva sempre ao fechar": se o navegador travar, a aba
+  // fechar sozinha ou o celular desligar no meio da digitação, o que
+  // já foi escrito até ali não se perde. Não precisa redesenhar a
+  // lista de notas a cada save (ela fica escondida atrás do modal
+  // mesmo); só grava o estado — a lista atualiza quando a nota fecha.
+  const autosaveNoteDetail = debounce(() => flushNoteDetailSave(), 800);
+  document.querySelector("#ndTitle").addEventListener("input", autosaveNoteDetail);
+  body.addEventListener("input", autosaveNoteDetail);
+
+  document.querySelector("#ndDeleteBtn").addEventListener("click", () => {
+    if (!ndCurrentNoteId) return;
+    if (!confirm("Excluir essa anotação? Não dá pra desfazer.")) return;
+    const id = ndCurrentNoteId;
+    closeNoteDetail();
+    deleteNote(id);
+  });
+
+  document.querySelector("#ndFavBtn").addEventListener("click", () => {
+    if (!ndCurrentNoteId) return;
+    toggleFavorite(ndCurrentNoteId);
+    const note = state.notes.find((n) => n.id === ndCurrentNoteId);
+    document.querySelector("#ndFavBtn").classList.toggle("is-fav", !!note?.favorite);
+    document.querySelector("#ndFavBtn svg").setAttribute("fill", note?.favorite ? "currentColor" : "none");
+  });
+
+  document.querySelector("#ndConvertTaskBtn").addEventListener("click", () => {
+    if (!ndCurrentNoteId) return;
+    const id = ndCurrentNoteId;
+    closeNoteDetail();
+    convertNoteToTask(id);
+  });
+
+  document.querySelector("#ndMoreFieldsBtn").addEventListener("click", () => {
+    if (!ndCurrentNoteId) return;
+    const id = ndCurrentNoteId;
+    closeNoteDetail();
+    editNote(id);
+  });
+
+  // ── Formatação (negrito/itálico/destaque) ──────────────────────
+  // BUG relatado: marcar um trecho e tocar numa cor não deixava nada
+  // marcado. Causa raiz confirmada: tocar num BOTÃO fora do
+  // contenteditable dispara "mousedown" -> o navegador tira o foco
+  // do texto selecionado ANTES do "click" chegar a rodar o
+  // execCommand — ou seja, quando o comando executa, a seleção já
+  // tinha sido perdida (virou só um cursor, sem texto nenhum
+  // marcado), então "aplicar cor de fundo" não tinha em quê aplicar.
+  // Duas camadas de correção (padrão usado por editores de texto
+  // rico de verdade, não é workaround improvisado):
+  //   1) `preventDefault()` no mousedown dos botões da barra — isso
+  //      IMPEDE o navegador de tirar o foco/a seleção em primeiro
+  //      lugar, então normalmente nem precisa da camada 2.
+  //   2) Como reforço pra qualquer navegador/gesto que ainda assim
+  //      perca a seleção, guardamos o último Range válido a cada
+  //      mudança de seleção que cruza o corpo do editor, limitando o
+  //      trecho aos limites da nota antes de restaurar e formatar.
+  let ndSavedRange = null;
+  const saveNdSelection = () => {
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return;
+    const range = sel.getRangeAt(0);
+    const anchorInside = sel.anchorNode === body || body.contains(sel.anchorNode);
+    const focusInside = sel.focusNode === body || body.contains(sel.focusNode);
+    if (anchorInside && focusInside) {
+      ndSavedRange = range.cloneRange();
+      return;
+    }
+    try {
+      if (!range.intersectsNode(body)) return;
+      const clipped = range.cloneRange();
+      const bodyBounds = document.createRange();
+      bodyBounds.selectNodeContents(body);
+      if (clipped.compareBoundaryPoints(Range.START_TO_START, bodyBounds) < 0) clipped.setStart(body, 0);
+      if (clipped.compareBoundaryPoints(Range.END_TO_END, bodyBounds) > 0) clipped.setEnd(body, body.childNodes.length);
+      ndSavedRange = clipped;
+    } catch { /* conserva a última seleção válida */ }
+  };
+  body.addEventListener("mouseup", saveNdSelection);
+  body.addEventListener("keyup", saveNdSelection);
+  body.addEventListener("touchend", saveNdSelection);
+  document.addEventListener("selectionchange", saveNdSelection);
+  body.addEventListener("focus", () => {
+    if (ndSavedRange && !body.contains(ndSavedRange.commonAncestorContainer)) ndSavedRange = null;
+  });
+
+  const toolbar = document.querySelector("#noteDetailToolbar");
+  toolbar.addEventListener("mousedown", (e) => {
+    if (e.target.closest("[data-nd-color], [data-nd-cmd]")) e.preventDefault();
+  });
+  toolbar.addEventListener("click", (e) => {
+    const swatch = e.target.closest("[data-nd-color]");
+    const toolBtn = e.target.closest("[data-nd-cmd]");
+    if (!swatch && !toolBtn) return;
+
+    const savedRange = ndSavedRange;
+    body.focus();
+    const sel = window.getSelection();
+    if (sel && savedRange && body.contains(savedRange.commonAncestorContainer)) {
+      sel.removeAllRanges();
+      sel.addRange(savedRange);
+    }
+
+    // styleWithCSS garante que backColor produza mesmo um
+    // background-color de CSS de verdade (sem isso, alguns navegadores
+    // ficam inconsistentes sobre como aplicam a cor de destaque).
+    document.execCommand("styleWithCSS", false, true);
+    if (swatch) {
+      document.execCommand("foreColor", false, swatch.dataset.ndColor);
+      toolbar.querySelectorAll("[data-nd-color]").forEach((button) => {
+        const selected = button === swatch;
+        button.setAttribute("aria-pressed", String(selected));
+        button.classList.toggle("is-selected", selected);
+      });
+    } else if (toolBtn.dataset.ndCmd === "bold") {
+      document.execCommand("bold");
+    } else if (toolBtn.dataset.ndCmd === "italic") {
+      document.execCommand("italic");
+    } else if (toolBtn.dataset.ndCmd === "clear") {
+      document.execCommand("backColor", false, "transparent");
+      document.execCommand("foreColor", false, getComputedStyle(body).color);
+      toolbar.querySelectorAll("[data-nd-color]").forEach((button) => {
+        button.setAttribute("aria-pressed", "false");
+        button.classList.remove("is-selected");
+      });
+    }
+    saveNdSelection();
+    flushNoteDetailSave();
+  });
+
+  // Gesto/botão físico de "voltar" do celular fecha a nota em vez de
+  // sair do app — ver comentário em closeNoteDetailUI() sobre por que
+  // isso chama a versão SEM history.back() (evita loop). Salva antes
+  // de fechar pelo mesmo motivo de todo outro caminho de saída: voltar
+  // pelo celular não pode jogar fora o que foi escrito.
+  window.addEventListener("popstate", (event) => {
+    if (!modal.hidden) {
+      flushNoteDetailSave();
+      closeNoteDetailUI();
+      renderAll();
+    }
+    const view = event.state?.pnView;
+    if (view && view !== activeView) setView(view, { fromHistory: true });
+  });
+}
+
+function renderTasks() {
+  const board = document.querySelector("#taskBoard");
+  if (!board) return; // tela antiga de Tarefas removida — o Planner cobre tudo isso agora
+  const tasks = queryFilter(state.tasks, ["title", "status", "priority", "dueDate"]);
+  const activeTasks = state.tasks.filter((task) => task.status !== "Cancelada");
+  const completed = activeTasks.filter((task) => task.status === "Concluida").length;
+  const progress = activeTasks.length ? Math.round((completed / activeTasks.length) * 100) : 0;
+  document.querySelector("#taskProgressBar").style.width = `${progress}%`;
+  document.querySelector("#taskProgressLabel").textContent = `${progress}%`;
+
+  // No mobile, a aba ativa determina qual coluna fica visível
+  const activeTab = document.querySelector(".status-tab.active")?.dataset.statusTab || "Pendente";
+
+  board.innerHTML = statusList
+    .map((status) => {
+      const columnTasks = tasks.filter((task) => task.status === status);
+      const isActiveTab = status === activeTab ? "tab-active" : "";
+      return `
+        <section class="task-column ${isActiveTab}" data-status="${status}">
+          <div class="column-title"><h2>${status}</h2><span class="pill">${columnTasks.length}</span></div>
+          ${columnTasks.map(renderTaskRow).join("") || '<div class="empty-state">Sem itens.</div>'}
+        </section>
+      `;
+    })
+    .join("");
+
+  document.querySelectorAll(".task-column").forEach((column) => {
+    column.addEventListener("dragover", (event) => {
+      event.preventDefault();
+      column.classList.add("drag-over");
+    });
+    column.addEventListener("dragleave", () => column.classList.remove("drag-over"));
+    column.addEventListener("drop", () => {
+      column.classList.remove("drag-over");
+      updateTaskStatus(draggedTaskId, column.dataset.status);
+    });
+  });
+}
+
+function renderTaskRow(task) {
+  const isDone = task.status === "Concluida";
+  const subtasks = task.subtasks || [];
+  const doneCount = subtasks.filter((s) => s.done).length;
+  return `
+    <article class="task-row" data-task-id="${task.id}">
+      <div class="task-row-top">
+        <button class="task-check ${isDone ? "is-done" : ""}" onclick="toggleTask('${task.id}')" title="Concluir">${isDone ? icon("check", 15) : ""}</button>
+        <div class="task-title" style="${isDone ? "text-decoration:line-through;opacity:0.5;" : ""}" onclick="toggleTaskDetails('${task.id}', event)">${escapeHtml(task.title)}</div>
+        <div class="task-row-actions">
+          <button class="mini-button" onclick="openPlannerTaskActions('${task.id}', event)" title="Mais opções">${icon("moreVertical", 16)}</button>
+        </div>
+      </div>
+      <div class="task-row-bottom">
+        <span class="task-meta">${icon("calendarWeek", 12)}${formatDate(task.dueDate)}</span>
+        <span class="priority-pill priority-${task.priority}">${escapeHtml(task.priority)}</span>
+        <span class="status-pill status-${task.status.replace(" ", "-")}">${task.status}</span>
+        <button class="mini-button task-subtasks-toggle" onclick="toggleTaskDetails('${task.id}', event)" style="margin-left:auto;padding:2px 8px;font-size:0.7rem">${icon("checkCircle", 12)} ${doneCount}/${subtasks.length}</button>
+      </div>
+      <div class="task-subtasks">
+        ${subtasks.map((s) => `
+          <div class="task-subtask-row">
+            <button class="task-subtask-check ${s.done ? "done" : ""}" onclick="toggleSubtask('${task.id}','${s.id}', event)">${s.done ? icon("check", 11) : ""}</button>
+            <span class="${s.done ? "done" : ""}">${escapeHtml(s.title)}</span>
+            <button class="mini-button" onclick="deleteSubtask('${task.id}','${s.id}', event)" style="padding:0;width:22px;height:22px;margin-left:auto">${icon("x", 11)}</button>
+          </div>`).join("") || `<div class="empty-state" style="padding:8px 0">Sem itens na checklist.</div>`}
+        <button class="mini-button" onclick="addSubtask('${task.id}', event)" style="width:100%;margin-top:4px">${icon("plus", 13)} Item da checklist</button>
+      </div>
+    </article>
+  `;
+}
+
+// Menu rápido para mudar o status de uma tarefa sem precisar arrastar
+// (arrastar/soltar não funciona em telas de toque) — essencial no mobile.
+function openTaskMoveMenu(taskId, event) {
+  event?.stopPropagation();
+  document.getElementById("taskMoveMenu")?.remove();
+
+  const task = state.tasks.find((t) => t.id === taskId);
+  if (!task) return;
+
+  const menu = document.createElement("div");
+  menu.id = "taskMoveMenu";
+  menu.style.cssText = `position:fixed;inset:0;z-index:550;background:rgba(0,0,0,0.4);
+    backdrop-filter:blur(4px);display:grid;place-items:center;padding:20px`;
+
+  menu.innerHTML = `
+    <div style="background:var(--surface);border-radius:22px;padding:22px;width:100%;max-width:340px;
+      box-shadow:0 20px 60px rgba(0,0,0,0.25);animation:fadeUp 180ms ease;
+      max-height:90dvh;overflow-y:auto">
+      <p style="font-size:0.8rem;font-weight:700;color:var(--muted);margin-bottom:4px">Mover tarefa</p>
+      <h3 style="font-size:1rem;font-weight:800;color:var(--text);margin-bottom:16px">${escapeHtml(task.title)}</h3>
+      <div style="display:grid;gap:8px">
+        ${statusList.map((status) => `
+          <button class="task-move-option" data-move-status="${status}"
+            style="display:flex;align-items:center;justify-content:space-between;
+            padding:12px 14px;border-radius:14px;border:1.5px solid ${status === task.status ? "var(--accent)" : "var(--line)"};
+            background:${status === task.status ? "var(--accent-soft)" : "var(--surface2)"};
+            color:${status === task.status ? "var(--accent)" : "var(--text)"};
+            font-weight:700;font-size:0.9rem;cursor:pointer;width:100%">
+            <span>${status}</span>
+            ${status === task.status ? icon("check", 14) : ""}
+          </button>
+        `).join("")}
+      </div>
+      <button id="closeMoveMenu" style="width:100%;height:42px;margin-top:14px;border-radius:12px;
+        background:var(--surface2);border:none;color:var(--text2);font-weight:600;cursor:pointer">Cancelar</button>
+    </div>
+  `;
+
+  document.body.appendChild(menu);
+
+  menu.addEventListener("click", (e) => { if (e.target === menu) menu.remove(); });
+  document.getElementById("closeMoveMenu").addEventListener("click", () => menu.remove());
+
+  menu.querySelectorAll(".task-move-option").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      updateTaskStatus(taskId, btn.dataset.moveStatus);
+      menu.remove();
+    });
+  });
+}
+
+function dragTask(id) {
+  draggedTaskId = id;
+}
+
+function toggleTask(id) {
+  const task = state.tasks.find((item) => item.id === id);
+  const nextStatus = task.status === "Concluida" ? "Pendente" : "Concluida";
+  updateTaskStatus(id, nextStatus);
+}
+
+function updateTaskStatus(id, status) {
+  const previous = state.tasks.find((task) => task.id === id)?.status;
+  state.tasks = state.tasks.map((task) =>
+    task.id === id
+      ? {
+          ...task,
+          status,
+          completedAt: status === "Concluida" ? todayIso : "",
+        }
+      : task
+  );
+  saveState();
+  renderAll();
+  if (status === "Concluida" && previous !== "Concluida") {
+    celebrate("Tarefa concluida. XP ganho.");
+    const task = state.tasks.find((t) => t.id === id);
+    if (task?.recurrence) spawnNextRecurringTask(task);
+  }
+}
+
+// Cria automaticamente a próxima ocorrência de uma tarefa recorrente quando
+// a atual é concluída — igual já acontece com lançamentos financeiros.
+function spawnNextRecurringTask(task) {
+  const base = task.dueDate ? new Date(task.dueDate + "T00:00:00") : new Date();
+  const next = new Date(base);
+  if (task.recurrence === "diaria") next.setDate(next.getDate() + 1);
+  else if (task.recurrence === "semanal") next.setDate(next.getDate() + 7);
+  else if (task.recurrence === "mensal") next.setMonth(next.getMonth() + 1);
+  else return;
+
+  const newTask = createTask(task.title, "Pendente", task.priority, toLocalIso(next));
+  newTask.recurrence = task.recurrence;
+  newTask.subtasks = (task.subtasks || []).map((s) => ({ ...s, id: crypto.randomUUID(), done: false }));
+  state.tasks.unshift(newTask);
+  saveState();
+  renderAll();
+}
+
+// Alterna a recorrência de uma tarefa entre nenhuma → diária → semanal →
+// mensal → nenhuma, num único botão (sem precisar de um modal extra).
+function cycleTaskRecurrence(id, event) {
+  event?.stopPropagation();
+  const order = [null, "diaria", "semanal", "mensal"];
+  const task = state.tasks.find((t) => t.id === id);
+  if (!task) return;
+  const idx = order.indexOf(task.recurrence || null);
+  task.recurrence = order[(idx + 1) % order.length];
+  saveState();
+  renderTasks();
+  renderPlanner();
+  const labels = { diaria: "Repete diariamente", semanal: "Repete semanalmente", mensal: "Repete mensalmente" };
+  showToast(task.recurrence ? labels[task.recurrence] : "Repetição desativada.");
+}
+
+// ── Subtarefas (checklist dentro da tarefa) ────────────────────
+// O seletor não fica mais preso a ".task-row" — assim funciona tanto na
+// tela antiga de Tarefas quanto nas linhas de tarefa do Planner, que
+// usam o mesmo data-task-id.
+// ── Preview de checklist na nota (Biblioteca de Anotações) ──
+// O cartão da nota só mostra os 3 primeiros itens por padrão pra não
+// ficar gigante — antes disso, os itens extras ("+N mais itens") eram só
+// um texto estático, sem nenhum jeito de vê-los sem abrir "Editar". Agora
+// é um botão de verdade que revela o resto ali mesmo, no cartão.
+function toggleNoteChecklistPreview(btn) {
+  const wrap = btn.closest(".checklist-preview");
+  if (!wrap) return;
+  const expanded = wrap.classList.toggle("expanded");
+  const extraCount = wrap.querySelectorAll(".cl-item-extra").length;
+  btn.textContent = expanded ? "Mostrar menos" : `+${extraCount} mais itens`;
+}
+
+function toggleTaskDetails(id, event) {
+  event?.stopPropagation();
+  if (plannerExpandedTaskDetails.has(id)) plannerExpandedTaskDetails.delete(id);
+  else plannerExpandedTaskDetails.add(id);
+  document.querySelector(`[data-task-id="${id}"] .task-subtasks`)?.classList.toggle("open", plannerExpandedTaskDetails.has(id));
+}
+
+function addSubtask(id, event) {
+  event?.stopPropagation();
+  const title = prompt("Nome do item da checklist:");
+  if (!title || !title.trim()) return;
+  const task = state.tasks.find((t) => t.id === id);
+  if (!task) return;
+  if (!task.subtasks) task.subtasks = [];
+  task.subtasks.push({ id: crypto.randomUUID(), title: title.trim(), done: false });
+  saveState();
+  renderTasks();
+  renderPlanner();
+}
+
+function toggleSubtask(taskId, subId, event) {
+  event?.stopPropagation();
+  const task = state.tasks.find((t) => t.id === taskId);
+  if (!task) return;
+  task.subtasks = (task.subtasks || []).map((s) => (s.id === subId ? { ...s, done: !s.done } : s));
+  saveState();
+  renderTasks();
+  renderPlanner();
+}
+
+function deleteSubtask(taskId, subId, event) {
+  event?.stopPropagation();
+  const task = state.tasks.find((t) => t.id === taskId);
+  if (!task) return;
+  task.subtasks = (task.subtasks || []).filter((s) => s.id !== subId);
+  saveState();
+  renderTasks();
+  renderPlanner();
+}
+
+// Substitui addSubtask (prompt() nativo) por um formulário inline que já
+// fica dentro do próprio painel de checklist — funciona igual em qualquer
+// navegador e também dentro do PWA instalado no iOS. Mantém a checklist
+// aberta e devolve o foco ao campo pra permitir adicionar vários itens
+// em sequência.
+function submitSubtaskForm(id, event) {
+  event.preventDefault();
+  const input = event.target.querySelector("input");
+  const title = (input?.value || "").trim();
+  if (!title) return false;
+  const task = state.tasks.find((t) => t.id === id);
+  if (!task) return false;
+  if (!task.subtasks) task.subtasks = [];
+  task.subtasks.push({ id: crypto.randomUUID(), title, done: false });
+  saveState();
+  renderTasks();
+  renderPlanner();
+  const freshInput = document.querySelector(`[data-task-id="${id}"] .planner-inline-add-form input`);
+  freshInput?.focus();
+  return false;
+}
+
+function deleteTask(id) {
+  state.tasks = state.tasks.filter((task) => task.id !== id);
+  saveState();
+  renderAll();
+}
+
+// Menu único de ações de uma tarefa no Planner: status + repetição +
+// excluir num só lugar. Substitui os 3 botões separados que existiam
+// antes na linha (repetir / mover / excluir) por um único botão "⋮" —
+// mesma capacidade, um terço da poluição visual.
+const RECURRENCE_OPTIONS = [
+  { value: "", label: "Não repete" },
+  { value: "diaria", label: "Diariamente" },
+  { value: "semanal", label: "Semanalmente" },
+  { value: "mensal", label: "Mensalmente" },
+];
+
+function closePlannerTaskActions() {
+  document.querySelector("#plannerTaskActionsSheet")?.remove();
+  document.removeEventListener("keydown", handlePlannerTaskActionsEscape);
+}
+
+function handlePlannerTaskActionsEscape(event) {
+  if (event.key === "Escape") closePlannerTaskActions();
+}
+
+function openPlannerTaskActions(taskId, event) {
+  event?.stopPropagation();
+  closePlannerTaskActions();
+  const task = state.tasks.find((t) => t.id === taskId);
+  if (!task) return;
+
+  const sheet = document.createElement("div");
+  sheet.id = "plannerTaskActionsSheet";
+  sheet.className = "modal-backdrop";
+  sheet.innerHTML = `
+    <div class="modal-card planner-action-sheet">
+      <div class="modal-header">
+        <h2>${escapeHtml(task.title)}</h2>
+        <button class="icon-button" id="plannerTaskActionsClose">${icon("x", 18)}</button>
+      </div>
+      <div class="modal-body planner-action-sheet-body">
+        <div>
+          <p class="planner-action-sheet-label">Status</p>
+          <div class="planner-action-sheet-options">
+            ${statusList
+              .map(
+                (status) => `
+              <button type="button" class="planner-action-option ${status === task.status ? "is-active" : ""}" data-status="${status}">
+                <span>${status}</span>${status === task.status ? icon("check", 14) : ""}
+              </button>`
+              )
+              .join("")}
+          </div>
+        </div>
+        <div>
+          <p class="planner-action-sheet-label">Repetição</p>
+          <div class="planner-action-sheet-options">
+            ${RECURRENCE_OPTIONS.map(
+              (opt) => `
+              <button type="button" class="planner-action-option ${(task.recurrence || "") === opt.value ? "is-active" : ""}" data-recurrence="${opt.value}">
+                <span>${opt.label}</span>${(task.recurrence || "") === opt.value ? icon("check", 14) : ""}
+              </button>`
+            ).join("")}
+          </div>
+        </div>
+        <button type="button" class="planner-action-danger" id="plannerTaskActionsDelete">${icon("trash", 15)}<span>Excluir tarefa</span></button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(sheet);
+  document.addEventListener("keydown", handlePlannerTaskActionsEscape);
+
+  sheet.addEventListener("click", (e) => { if (e.target === sheet) closePlannerTaskActions(); });
+  sheet.querySelector("#plannerTaskActionsClose").addEventListener("click", closePlannerTaskActions);
+
+  sheet.querySelectorAll("[data-status]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      updateTaskStatus(taskId, btn.dataset.status);
+      closePlannerTaskActions();
+    });
+  });
+
+  sheet.querySelectorAll("[data-recurrence]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const current = state.tasks.find((t) => t.id === taskId);
+      if (!current) return closePlannerTaskActions();
+      current.recurrence = btn.dataset.recurrence || null;
+      saveState();
+      renderTasks();
+      renderPlanner();
+      const labels = { diaria: "Repete diariamente", semanal: "Repete semanalmente", mensal: "Repete mensalmente" };
+      showToast(current.recurrence ? labels[current.recurrence] : "Repetição desativada.");
+      closePlannerTaskActions();
+    });
+  });
+
+  sheet.querySelector("#plannerTaskActionsDelete").addEventListener("click", () => {
+    deleteTask(taskId);
+    closePlannerTaskActions();
+  });
+}
+
+function renderCalendar() {
+  const grid = document.querySelector("#calendarGrid");
+  if (!grid) return; // tela antiga de Agenda removida — o Planner (Semana/Mês) cobre isso agora
+  const current = new Date();
+  document.querySelector("#monthLabel").textContent = new Intl.DateTimeFormat("pt-BR", {
+    month: "long",
+    year: "numeric",
+  }).format(current);
+
+  const days = calendarMode === "month" ? getMonthDays(current) : calendarMode === "week" ? getWeekDays(current) : [todayIso];
+  grid.innerHTML = days
+    .map((date) => {
+      const events = state.events.filter((event) => event.date === date);
+      return `<button class="calendar-day ${date === todayIso ? "today" : ""} ${events.length ? "has-event" : ""}" onclick="filterEventsByDate('${date}')"><strong>${new Date(`${date}T12:00:00`).getDate()}</strong><span class="task-meta">${events.length || ""}</span></button>`;
+    })
+    .join("");
+
+  const events = queryFilter(state.events, ["title", "location", "notes"]).sort(sortEvent);
+  renderList("#calendarEvents", events, renderEventRow, "Nenhum compromisso cadastrado.");
+}
+
+function getMonthDays(date) {
+  const year = date.getFullYear();
+  const month = date.getMonth();
+  const total = new Date(year, month + 1, 0).getDate();
+  return [...Array(total)].map((_, index) => toLocalIso(new Date(year, month, index + 1)));
+}
+
+function getWeekDays(date) {
+  const start = new Date(date);
+  start.setDate(date.getDate() - date.getDay());
+  return [...Array(7)].map((_, index) => {
+    const day = new Date(start);
+    day.setDate(start.getDate() + index);
+    return toLocalIso(day);
+  });
+}
+
+function filterEventsByDate(date) {
+  const events = state.events.filter((event) => event.date === date).sort(sortEvent);
+  renderList("#calendarEvents", events, renderEventRow, "Sem compromissos nesse dia.");
+}
+
+function renderEventRow(event) {
+  const cd = countdownLabel(event.date, event.time);
+  return `
+    <article class="event-row" data-event-id="${event.id}">
+      <div style="flex:1;min-width:0">
+        <strong style="font-size:0.9rem">${escapeHtml(event.title)}</strong>
+        <div class="event-meta">${icon("calendar", 12)}${formatDate(event.date)} às ${event.time} <span class="event-meta-dot">·</span> ${icon("mapPin", 12)}${escapeHtml(event.location)}</div>
+      </div>
+      <div class="tag-list" style="flex-shrink:0">
+        <span class="event-countdown tone-${cd.tone}" data-event-date="${event.date}" data-event-time="${event.time}">
+          <span class="event-countdown-dot"></span><span class="event-countdown-text">${escapeHtml(cd.text)}</span>
+        </span>
+        <button class="mini-button" onclick="deleteEvent('${event.id}')" title="Excluir" style="padding:0;width:28px;height:28px">${icon("trash", 14)}</button>
+      </div>
+    </article>
+  `;
+}
+
+// Calcula quanto tempo falta (ou já passou) para um compromisso, em texto
+// amigável. Retorna { text, tone } em vez de já embutir emoji/cor no texto,
+// pra quem consome poder estilizar (ponto colorido + CSS) em vez de
+// depender de emoji — que rendeririam diferente (ou feio, tipo o 📅 que
+// alguns sistemas mostram como um ícone genérico de "dia 17") em cada
+// aparelho/fonte.
+function countdownLabel(date, time) {
+  if (!date || !time) return { text: "", tone: "ok" };
+  const target = new Date(`${date}T${time}`);
+  const diffMs = target - new Date();
+  const diffMin = Math.round(diffMs / 60000);
+
+  if (diffMin <= 0 && diffMin > -30) return { text: "Agora", tone: "now" };
+  if (diffMin <= -30) {
+    const hoursAgo = Math.round(Math.abs(diffMin) / 60);
+    return { text: hoursAgo >= 1 ? `Atrasado ${hoursAgo}h` : `Atrasado ${Math.abs(diffMin)}min`, tone: "late" };
+  }
+  if (diffMin < 60) return { text: `Faltam ${diffMin}min`, tone: "soon" };
+  const hours = Math.floor(diffMin / 60);
+  const minutes = diffMin % 60;
+  if (hours < 24) return { text: `Faltam ${hours}h${minutes ? ` ${minutes}min` : ""}`, tone: "ok" };
+  const days = Math.floor(hours / 24);
+  return { text: `Faltam ${days} dia${days > 1 ? "s" : ""}`, tone: "ok" };
+}
+
+// Atualiza só o texto/cor dos contadores já na tela, sem re-renderizar a
+// lista inteira (evita perder scroll/seleção e é muito mais leve do que
+// chamar renderCalendar a cada minuto).
+function updateEventCountdowns() {
+  document.querySelectorAll(".event-countdown").forEach((el) => {
+    const cd = countdownLabel(el.dataset.eventDate, el.dataset.eventTime);
+    el.className = `event-countdown tone-${cd.tone}`;
+    const textEl = el.querySelector(".event-countdown-text");
+    if (textEl) textEl.textContent = cd.text;
+  });
+}
+
+function sortEvent(first, second) {
+  return `${first.date}${first.time}`.localeCompare(`${second.date}${second.time}`);
+}
+
+function deleteEvent(id) {
+  state.events = state.events.filter((event) => event.id !== id);
+  saveState();
+  renderAll();
+}
+
+function renderGoals() {
+  if (!document.querySelector("#goalsList")) return; // tela antiga de Metas removida — Planner + Perfil cobrem isso agora
+  const goals = queryFilter(state.goals, ["title"]);
+  renderList(
+    "#goalsList",
+    goals,
+    (goal) => {
+      const percent = Math.min(100, Math.round((goal.current / goal.target) * 100));
+      const isComplete = goal.current >= goal.target;
+      const milestones = goal.milestones || [];
+      const msDone = milestones.filter((m) => m.done).length;
+      const milestonesHtml = milestones.length
+        ? `<div class="goal-milestones">
+            ${milestones.map((m) => `
+              <div class="goal-milestone-row">
+                <button class="goal-milestone-check ${m.done ? "done" : ""}" onclick="toggleGoalMilestone('${goal.id}','${m.id}', event)">${m.done ? "✓" : ""}</button>
+                <span class="${m.done ? "done" : ""}">${escapeHtml(m.title)}</span>
+                <button class="mini-button" onclick="deleteGoalMilestone('${goal.id}','${m.id}', event)" style="padding:0;width:20px;height:20px;margin-left:auto">✕</button>
+              </div>`).join("")}
+          </div>`
+        : "";
+      return `
+        <article class="goal-card" data-goal-id="${goal.id}" style="${isComplete ? "border-color:var(--green);background:var(--green-soft);" : ""}">
+          <div>
+            <h2>${escapeHtml(goal.title)}</h2>
+            <div class="task-meta">${goal.current}/${goal.target} etapas ${isComplete ? "🎉" : ""}${milestones.length ? ` · ${msDone}/${milestones.length} marcos` : ""}</div>
+          </div>
+          <div class="progress-track"><div style="width:${percent}%;background:${isComplete ? "var(--green)" : "linear-gradient(90deg,var(--accent),var(--purple))"}"></div></div>
+          ${milestonesHtml}
+          <div class="goal-controls">
+            <button class="mini-button" onclick="changeGoal('${goal.id}', -1)">−</button>
+            <span class="pill" style="${isComplete ? "background:var(--green);color:#fff;border-color:var(--green);" : ""}">${percent}%</span>
+            <button class="mini-button" onclick="changeGoal('${goal.id}', 1)">+</button>
+            <button class="mini-button" onclick="addGoalMilestone('${goal.id}', event)" title="Adicionar marco">🚩</button>
+            <button class="mini-button" onclick="deleteGoal('${goal.id}')" style="margin-left:auto">🗑️</button>
+          </div>
+        </article>
+      `;
+    },
+    elements.globalSearch.value.trim() ? "Nenhuma meta encontrada para essa busca." : "Nenhuma meta criada. Defina seu foco! 🎯"
+  );
+  renderAchievements();
+}
+
+function changeGoal(id, delta) {
+  const previous = state.goals.find((goal) => goal.id === id);
+  state.goals = state.goals.map((goal) =>
+    goal.id === id ? { ...goal, current: Math.max(0, Math.min(goal.target, goal.current + delta)) } : goal
+  );
+  saveState();
+  renderAll();
+  const updated = state.goals.find((goal) => goal.id === id);
+  if (delta > 0 && previous && updated && previous.current < previous.target && updated.current >= updated.target) {
+    celebrate("Meta concluida. Medalha desbloqueada.");
+  }
+}
+
+function deleteGoal(id) {
+  state.goals = state.goals.filter((goal) => goal.id !== id);
+  saveState();
+  renderAll();
+}
+
+function renderAchievements() {
+  const achievements = getAchievementsList();
+  document.querySelector("#achievementCount").textContent = `${achievements.filter((item) => item.unlocked).length}/${achievements.length}`;
+  document.querySelector("#achievements").innerHTML = achievements
+    .map(
+      (item) => `
+        <article class="achievement ${item.unlocked ? "unlocked" : ""}">
+          <strong style="display:flex;align-items:center;gap:6px">${icon(item.iconName, 14)}${item.title}${item.unlocked ? icon("check", 12) : ""}</strong>
+          <span class="task-meta">${item.detail}</span>
+        </article>
+      `
+    )
+    .join("");
+}
+
+function renderList(selector, items, renderer, emptyText, emptyClass = "empty-state") {
+  const element = document.querySelector(selector);
+  element.innerHTML = items.length ? items.map(renderer).join("") : `<div class="${emptyClass}">${emptyText}</div>`;
+}
+
+// Formata uma data (string "YYYY-MM-DD", Date já pronto, ou qualquer
+// outro valor) sem derrubar a tela quando vier ausente/malformada — dado
+// corrompido, campo vazio, ou uma data inválida que escapou de alguma
+// validação (ex.: "2026-13-40"). ANTES, isso derrubava a tela INTEIRA
+// com "date value is not finite in DateTimeFormat format()", travando
+// telas sem nenhuma relação com o dado quebrado (o Início inteiro parava
+// de renderizar por causa de UM compromisso com data ruim). Usado por
+// todo formatador de data do app que recebe um valor vindo de
+// tarefa/compromisso/lançamento salvo (não por `new Date()` fresco, que
+// nunca é inválido).
+function safeFormatDate(dateInput, options, fallback = "Data inválida") {
+  const date = dateInput instanceof Date ? dateInput : new Date(dateInput);
+  if (!Number.isFinite(date.getTime())) return fallback;
+  try {
+    return new Intl.DateTimeFormat("pt-BR", options).format(date);
+  } catch (err) {
+    return fallback;
+  }
+}
+
+function formatDate(value) {
+  return safeFormatDate(`${value}T12:00:00`, { day: "2-digit", month: "short" }, "--/--");
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+// Espera "delay" ms de silêncio antes de rodar "fn" — cada nova
+// chamada cancela a anterior que ainda não rodou. Usado na busca
+// global pra não redesenhar o app inteiro a cada tecla digitada.
+function debounce(fn, delay) {
+  let timer;
+  return (...args) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn(...args), delay);
+  };
+}
+
+function showToast(message) {
+  const textEl = document.getElementById("toastText") || elements.toast;
+  textEl.textContent = message;
+  elements.toast.classList.add("show");
+  window.clearTimeout(showToast.timer);
+  showToast.timer = window.setTimeout(() => elements.toast.classList.remove("show"), 2200);
+}
+window.PulseNoteShowToast = showToast; // ponte para notifications.js (script externo ao módulo)
+
+function celebrate(message) {
+  showToast(message);
+  const burst = document.createElement("div");
+  burst.className = "celebration-burst";
+  burst.innerHTML = `
+    <span></span><span></span><span></span><span></span><span></span><span></span>
+    <div class="pulsinho">
+      <div class="pulsinho__face">
+        <div class="pulsinho__eyes"><span class="pulsinho__eye"></span><span class="pulsinho__eye"></span></div>
+        <svg class="pulsinho__pulse" viewBox="0 0 120 26"><path d="M0,13 L28,13 L36,3 L44,23 L52,13 L64,13 L70,6 L76,20 L82,13 L120,13"/></svg>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(burst);
+  window.setTimeout(() => burst.remove(), 900);
+}
+
+// ============================================================
+//  FINANCES MODULE
+// ============================================================
+
+function getActiveFinMonth() {
+  return finActiveMonth; // formato "YYYY-MM"
+}
+
+// Retorna o label localizado do mês (ex.: "Junho 2026")
+function finMonthLabel(monthKey) {
+  const [year, month] = String(monthKey || "").split("-").map(Number);
+  return safeFormatDate(new Date(year, (month || 1) - 1, 1), { month: "long", year: "numeric" }, monthKey || "--");
+}
+
+// Retorna true se o mês está marcado como "fechado" pelo usuário
+function isMonthClosed(monthKey) {
+  return (state.monthClosures || []).some((c) => c.monthKey === monthKey);
+}
+
+// Garante que lançamentos num mês fechado sejam bloqueados (UI)
+function assertMonthNotClosed(monthKey) {
+  if (!isMonthClosed(monthKey)) return true;
+  showToast("⚠️ Este mês está fechado. Reabra-o para editar.");
+  return false;
+}
+
+// Retorna a chave (AAAA-MM) do mês imediatamente anterior ao informado
+function getPreviousMonthKey(monthKey) {
+  const [y, m] = monthKey.split("-").map(Number);
+  const d = new Date(y, m - 2, 1); // m-1 = mês atual (índice 0), -1 = mês anterior
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+// Saldo que "sobrou" do mês imediatamente anterior, para entrar automaticamente
+// no mês seguinte — só entra 1x (no mês seguinte), e só se aquele mês anterior
+// estiver fechado. Se não houver fechamento anterior, não soma nada.
+function getCarryOverBalance(monthKey) {
+  const prevKey = getPreviousMonthKey(monthKey);
+  const prevClosure = (state.monthClosures || []).find((c) => c.monthKey === prevKey);
+  return prevClosure ? prevClosure.saldo : 0;
+}
+
+// Registra o fechamento do mês ativo com um snapshot completo do período
+function closeMonth(monthKey) {
+  if (!state.monthClosures) state.monthClosures = [];
+  if (isMonthClosed(monthKey)) { showToast("✓ Mês já fechado."); return; }
+
+  const entries = (state.finances || []).filter((f) => f.date.startsWith(monthKey));
+  const receitas = entries.filter((f) => f.type === "receita").reduce((s, f) => s + f.amount, 0);
+  const despesas = entries.filter((f) => f.type === "despesa").reduce((s, f) => s + f.amount, 0);
+
+  if (!entries.length) {
+    showToast("Nenhum lançamento no período para fechar.");
+    return;
+  }
+
+  // Saldo que já vinha do mês anterior (se ele estiver fechado) + o resultado
+  // deste mês. É esse total acumulado que fica salvo e vai "carregar" para o
+  // mês seguinte quando ele for fechado.
+  const saldoAnterior = getCarryOverBalance(monthKey);
+  const saldoProprio  = receitas - despesas;
+  const saldoFinal    = saldoAnterior + saldoProprio;
+
+  const detalheSaldo = saldoAnterior !== 0
+    ? `Saldo do mês: ${formatCurrency(saldoProprio)}\nSaldo acumulado (com o mês anterior): ${formatCurrency(saldoFinal)}`
+    : `Saldo: ${formatCurrency(saldoProprio)}`;
+
+  if (!confirm(`Fechar ${finMonthLabel(monthKey)}?\nReceitas: ${formatCurrency(receitas)}\nDespesas: ${formatCurrency(despesas)}\n${detalheSaldo}\n\nEsse saldo será somado automaticamente ao mês seguinte. Depois de fechar, não será possível adicionar ou editar lançamentos neste mês sem reabri-lo.`)) return;
+
+  state.monthClosures.push({
+    monthKey,
+    closedAt: new Date().toISOString(),
+    receitas,
+    despesas,
+    saldo: saldoFinal, // acumulado — é o que entra no mês seguinte
+    entriesCount: entries.length,
+  });
+  saveState();
+  renderFinances();
+  showMonthCloseRecap(monthKey, receitas, despesas, saldoFinal);
+}
+
+// Fechar o mês é um momento natural de parar e olhar pro resultado —
+// em vez de só um toast, o Pulsinho reage ao saldo final (o mesmo dado
+// que já vira o card "Saldo" e a barra de orçamento), dando um resumo
+// rápido antes de seguir pro próximo mês.
+function showMonthCloseRecap(monthKey, receitas, despesas, saldoFinal) {
+  document.querySelector("#monthCloseRecap")?.remove();
+  const isPositive = saldoFinal >= 0;
+  const mood = isPositive ? "happy" : "worried";
+  const message = isPositive
+    ? `Fechou no azul! O saldo de ${formatCurrency(saldoFinal)} segue automaticamente pro próximo mês.`
+    : `Fechou no vermelho — o saldo de ${formatCurrency(saldoFinal)} vai começar o próximo mês já negativo.`;
+
+  const overlay = document.createElement("div");
+  overlay.id = "monthCloseRecap";
+  overlay.className = "modal-backdrop";
+  overlay.innerHTML = `
+    <div class="modal-card month-close-recap">
+      <div class="modal-header">
+        <h2>${finMonthLabel(monthKey)} fechado 🔒</h2>
+        <button class="icon-button" id="closeMonthRecap">${icon("x", 18)}</button>
+      </div>
+      <div class="modal-body month-close-recap-body">
+        <div class="pulsinho month-close-mascot mood-${mood}">
+          <div class="pulsinho__face">
+            <div class="pulsinho__eyes"><span class="pulsinho__eye"></span><span class="pulsinho__eye"></span></div>
+            <svg class="pulsinho__pulse" viewBox="0 0 120 26"><path d="M0,13 L28,13 L36,3 L44,23 L52,13 L64,13 L70,6 L76,20 L82,13 L120,13"/></svg>
+          </div>
+        </div>
+        <p class="month-close-recap-message">${message}</p>
+        <div class="month-close-recap-stats">
+          <div><span>Receitas</span><strong class="pos">${formatCurrency(receitas)}</strong></div>
+          <div><span>Despesas</span><strong class="neg">${formatCurrency(despesas)}</strong></div>
+          <div><span>Saldo final</span><strong class="${isPositive ? "pos" : "neg"}">${formatCurrency(saldoFinal)}</strong></div>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
+  overlay.querySelector("#closeMonthRecap").addEventListener("click", () => overlay.remove());
+}
+
+// Remove o fechamento do mês (reabre para edições)
+function reopenMonth(monthKey) {
+  if (!isMonthClosed(monthKey)) return;
+  if (!confirm(`Reabrir ${finMonthLabel(monthKey)} para edição?`)) return;
+  state.monthClosures = (state.monthClosures || []).filter((c) => c.monthKey !== monthKey);
+  saveState();
+  renderFinances();
+  showToast(`🔓 ${finMonthLabel(monthKey)} reaberto.`);
+}
+
+// ============================================================
+// EXPORTAÇÃO — XLSX nativo (sem bibliotecas externas)
+//
+// O XLSX é um arquivo ZIP contendo XMLs no padrão OOXML. Geramos
+// toda a estrutura aqui no navegador usando apenas APIs nativas
+// (TextEncoder + Uint8Array) — sem SheetJS, sem CDN, sem servidor.
+//
+// Estrutura gerada:
+//   [Content_Types].xml
+//   _rels/.rels
+//   xl/workbook.xml          (lista as 3 abas)
+//   xl/_rels/workbook.xml.rels
+//   xl/styles.xml            (7 estilos: header, receita, despesa,
+//                             total, número, bold, default)
+//   xl/sharedStrings.xml     (todas as strings únicas → índice)
+//   xl/worksheets/sheet1.xml (Resumo)
+//   xl/worksheets/sheet2.xml (Lançamentos)
+//   xl/worksheets/sheet3.xml (Por Categoria)
+// ============================================================
+
+function buildXlsxBlob(monthKey) {
+  const entries = (state.finances || [])
+    .filter((f) => f.date.startsWith(monthKey))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const label    = finMonthLabel(monthKey);
+  const isClosed = isMonthClosed(monthKey);
+  const receitas = entries.filter((f) => f.type === "receita").reduce((s, f) => s + f.amount, 0);
+  const despesas = entries.filter((f) => f.type === "despesa").reduce((s, f) => s + f.amount, 0);
+  const saldo    = receitas - despesas;
+  const geradoEm = new Intl.DateTimeFormat("pt-BR", { dateStyle: "long" }).format(new Date());
+
+  // Distribuição por categoria (despesas)
+  const byCat = {};
+  entries.filter((f) => f.type === "despesa").forEach((f) => {
+    const cat = findCategory(f.category);
+    if (!byCat[f.category]) byCat[f.category] = { label: cat.label.replace(/^\S+\s*/, ""), total: 0 };
+    byCat[f.category].total += f.amount;
+  });
+  const catList = Object.values(byCat).sort((a, b) => b.total - a.total);
+
+  // ── Shared strings (todas as strings são centralizadas aqui) ──
+  const strIndex = new Map();
+  const strings  = [];
+  function s(str) {
+    const k = String(str ?? "");
+    if (!strIndex.has(k)) { strIndex.set(k, strings.length); strings.push(k); }
+    return strIndex.get(k);
+  }
+
+  // Pre-warm strings usadas em múltiplos lugares
+  s(""); s("Relatório Financeiro"); s(label); s("Status"); s("Fechado"); s("Aberto");
+  s("Receitas"); s("Despesas"); s("Saldo"); s("Total de lançamentos"); s("Gerado em"); s(geradoEm);
+  s("Data"); s("Descrição"); s("Categoria"); s("Tipo"); s("Valor (R$)");
+  s("Receita"); s("Despesa");
+  catList.forEach((c) => s(c.label));
+  entries.forEach((f) => {
+    s(formatDate(f.date));
+    s(f.description || "");
+    s(findCategory(f.category).label.replace(/^\S+\s*/, ""));
+  });
+
+  // ── Helpers para gerar o XML das células ──────────────────────
+  // Índices de estilo (xl/styles.xml define nessa ordem exata):
+  // 0 = default, 1 = header (bold, fundo azul), 2 = receita (verde),
+  // 3 = despesa (vermelho), 4 = saldo (azul bold), 5 = número padrão,
+  // 6 = número moeda BR
+  const ST = { def: 0, hdr: 1, rec: 2, desp: 3, saldo: 4, num: 5, brl: 6, bold: 7 };
+
+  function colRef(c) {
+    // c = índice de coluna 0-based → letra(s) A, B, …, Z, AA, …
+    let s2 = "";
+    let n = c + 1;
+    while (n > 0) { s2 = String.fromCharCode(64 + (n - 1) % 26 + 1) + s2; n = Math.floor((n - 1) / 26); }
+    return s2;
+  }
+
+  // Célula de string compartilhada (tipo="s")
+  function cs(col, row, strIdx, style = ST.def) {
+    return `<c r="${colRef(col)}${row}" t="s" s="${style}"><v>${strIdx}</v></c>`;
+  }
+  // Célula de número
+  function cn(col, row, value, style = ST.num) {
+    return `<c r="${colRef(col)}${row}" s="${style}"><v>${value}</v></c>`;
+  }
+  // Célula de moeda (BRL)
+  function cbrl(col, row, value, style = ST.brl) {
+    return cn(col, row, value, style);
+  }
+
+  // ── Aba 1: Resumo ──────────────────────────────────────────────
+  const sheet1Rows = [
+    // Linha 1: Título
+    `<row r="1">${cs(0,1,s("Relatório Financeiro"),ST.hdr)}${cs(1,1,s(label),ST.hdr)}</row>`,
+    // Linha 2: Status
+    `<row r="2">${cs(0,2,s("Status"),ST.bold)}${cs(1,2,s(isClosed ? "Fechado" : "Aberto"),isClosed ? ST.rec : ST.def)}</row>`,
+    // Linha 3: Gerado em
+    `<row r="3">${cs(0,3,s("Gerado em"),ST.bold)}${cs(1,3,s(geradoEm))}</row>`,
+    // Linha 5: Totais
+    `<row r="5">${cs(0,5,s("Receitas"),ST.hdr)}${cbrl(1,5,receitas,ST.rec)}</row>`,
+    `<row r="6">${cs(0,6,s("Despesas"),ST.hdr)}${cbrl(1,6,despesas,ST.desp)}</row>`,
+    `<row r="7">${cs(0,7,s("Saldo"),ST.hdr)}${cbrl(1,7,saldo,saldo >= 0 ? ST.rec : ST.desp)}</row>`,
+    `<row r="8">${cs(0,8,s("Total de lançamentos"),ST.bold)}${cn(1,8,entries.length,ST.num)}</row>`,
+  ];
+
+  // ── Aba 2: Lançamentos ─────────────────────────────────────────
+  const sheet2Rows = [
+    `<row r="1">${cs(0,1,s("Data"),ST.hdr)}${cs(1,1,s("Descrição"),ST.hdr)}${cs(2,1,s("Categoria"),ST.hdr)}${cs(3,1,s("Tipo"),ST.hdr)}${cs(4,1,s("Valor (R$)"),ST.hdr)}</row>`,
+    ...entries.map((f, i) => {
+      const r = i + 2;
+      const isRec = f.type === "receita";
+      const valStyle = isRec ? ST.rec : ST.desp;
+      const signedAmt = isRec ? f.amount : -f.amount;
+      return `<row r="${r}">${cs(0,r,s(formatDate(f.date)))}${cs(1,r,s(f.description||""))}${cs(2,r,s(findCategory(f.category).label.replace(/^\S+\s*/, "")))}${cs(3,r,s(isRec ? "Receita" : "Despesa"),isRec ? ST.rec : ST.desp)}${cbrl(4,r,signedAmt,valStyle)}</row>`;
+    }),
+    // Linha de total
+    (() => {
+      const r = entries.length + 3;
+      return `<row r="${r}">${cs(0,r,s("TOTAL"),ST.hdr)}${cs(1,r,s(""))}${cs(2,r,s(""))}${cs(3,r,s(""))}${cbrl(4,r,receitas-despesas,saldo>=0 ? ST.rec : ST.desp)}</row>`;
+    })(),
+  ];
+
+  // ── Aba 3: Por Categoria ───────────────────────────────────────
+  const sheet3Rows = [
+    `<row r="1">${cs(0,1,s("Categoria"),ST.hdr)}${cs(1,1,s("Valor (R$)"),ST.hdr)}${cs(2,1,s("% das Despesas"),ST.hdr)}</row>`,
+    ...catList.map((c, i) => {
+      const r = i + 2;
+      const pct = despesas > 0 ? Math.round((c.total / despesas) * 1000) / 10 : 0;
+      return `<row r="${r}">${cs(0,r,s(c.label))}${cbrl(1,r,c.total,ST.desp)}${cn(2,r,pct,ST.num)}</row>`;
+    }),
+  ];
+
+  // ── Shared strings XML ────────────────────────────────────────
+  const ssXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="${strings.length}" uniqueCount="${strings.length}">
+${strings.map((str) => `<si><t xml:space="preserve">${str.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}</t></si>`).join("")}
+</sst>`;
+
+  // ── Styles ────────────────────────────────────────────────────
+  // numFmtId 164 = "#,##0.00" (BR: precisamos substituir pontos/vírgulas
+  // depois, mas no XLSX o separador depende das configurações locais do
+  // Excel, então definimos o formato ISO como reserva e o Excel adapta)
+  const stylesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<numFmts count="1"><numFmt numFmtId="164" formatCode="#,##0.00"/></numFmts>
+<fonts count="3">
+  <font><sz val="11"/><name val="Calibri"/><color rgb="FF1A1F2E"/></font>
+  <font><sz val="11"/><b/><name val="Calibri"/><color rgb="FFFFFFFF"/></font>
+  <font><sz val="11"/><b/><name val="Calibri"/><color rgb="FF1A1F2E"/></font>
+</fonts>
+<fills count="7">
+  <fill><patternFill patternType="none"/></fill>
+  <fill><patternFill patternType="gray125"/></fill>
+  <fill><patternFill patternType="solid"><fgColor rgb="FF2C5282"/></patternFill></fill>
+  <fill><patternFill patternType="solid"><fgColor rgb="FF1A4731"/></patternFill></fill>
+  <fill><patternFill patternType="solid"><fgColor rgb="FF7B1D16"/></patternFill></fill>
+  <fill><patternFill patternType="solid"><fgColor rgb="FF1E3A5F"/></patternFill></fill>
+  <fill><patternFill patternType="none"/></fill>
+</fills>
+<borders count="2">
+  <border/>
+  <border><left style="thin"><color rgb="FFE2E8F0"/></left><right style="thin"><color rgb="FFE2E8F0"/></right><top style="thin"><color rgb="FFE2E8F0"/></top><bottom style="thin"><color rgb="FFE2E8F0"/></bottom></border>
+</borders>
+<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+<cellXfs count="8">
+  <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/>
+  <xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/>
+  <xf numFmtId="164" fontId="0" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyNumberFormat="1"/>
+  <xf numFmtId="164" fontId="0" fillId="4" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyNumberFormat="1"/>
+  <xf numFmtId="164" fontId="1" fillId="5" borderId="0" xfId="0" applyFont="1" applyFill="1" applyNumberFormat="1"/>
+  <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/>
+  <xf numFmtId="164" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyNumberFormat="1"/>
+  <xf numFmtId="0" fontId="2" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1"/>
+</cellXfs>
+<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
+</styleSheet>`;
+
+  function makeSheetXml(rows) {
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<sheetData>${rows.join("")}</sheetData>
+</worksheet>`;
+  }
+
+  // ── Montar o ZIP (OOXML = ZIP de XMLs) ───────────────────────
+  const files = {
+    "[Content_Types].xml": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+<Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+<Override PartName="/xl/worksheets/sheet3.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+<Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>
+</Types>`,
+    "_rels/.rels": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>`,
+    "xl/workbook.xml": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+<sheets>
+<sheet name="Resumo" sheetId="1" r:id="rId1"/>
+<sheet name="Lançamentos" sheetId="2" r:id="rId2"/>
+<sheet name="Por Categoria" sheetId="3" r:id="rId3"/>
+</sheets>
+</workbook>`,
+    "xl/_rels/workbook.xml.rels": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/>
+<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet3.xml"/>
+<Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+<Relationship Id="rId5" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/>
+</Relationships>`,
+    "xl/styles.xml": stylesXml,
+    "xl/sharedStrings.xml": ssXml,
+    "xl/worksheets/sheet1.xml": makeSheetXml(sheet1Rows),
+    "xl/worksheets/sheet2.xml": makeSheetXml(sheet2Rows),
+    "xl/worksheets/sheet3.xml": makeSheetXml(sheet3Rows),
+  };
+
+  return zipFiles(files);
+}
+
+// Baixa o .xlsx gerado por buildXlsxBlob() — a função em si já existia
+// (montava o arquivo certinho), só faltava um botão chamando ela e
+// disparando o download de verdade no navegador.
+function downloadXlsxReport(monthKey) {
+  const blob = buildXlsxBlob(monthKey);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `relatorio-${monthKey}.xlsx`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+  showToast("📊 Excel baixado!");
+}
+
+// ── Gerador de ZIP puro em JS (sem pako/JSZip) ───────────────
+// Implementação mínima do formato ZIP (RFC 1952 / PKZIP) suficiente
+// para gerar OOXML válido: compressão STORED (método 0, sem deflate)
+// — o Excel aceita ZIPs sem compressão perfeitamente e não precisamos
+// de uma lib externa para deflate.
+function zipFiles(filesObj) {
+  const enc = new TextEncoder();
+
+  function u32le(n) { return [(n)&0xff,(n>>8)&0xff,(n>>16)&0xff,(n>>24)&0xff]; }
+  function u16le(n) { return [(n)&0xff,(n>>8)&0xff]; }
+
+  function crc32(data) {
+    let crc = 0xffffffff;
+    const table = crc32.table || (crc32.table = (() => {
+      const t = new Uint32Array(256);
+      for (let i = 0; i < 256; i++) {
+        let c = i;
+        for (let j = 0; j < 8; j++) c = (c & 1) ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+        t[i] = c;
+      }
+      return t;
+    })());
+    for (let i = 0; i < data.length; i++) crc = table[(crc ^ data[i]) & 0xff] ^ (crc >>> 8);
+    return (crc ^ 0xffffffff) >>> 0;
+  }
+
+  const parts    = [];
+  const central  = [];
+  let   offset   = 0;
+
+  for (const [name, content] of Object.entries(filesObj)) {
+    const nameBytes = enc.encode(name);
+    const dataBytes = typeof content === "string" ? enc.encode(content) : content;
+    const crc       = crc32(dataBytes);
+    const size      = dataBytes.length;
+
+    const lhdr = [
+      0x50,0x4b,0x03,0x04,  // Local file header signature
+      ...u16le(20),          // Version needed (2.0)
+      ...u16le(0),           // Flags
+      ...u16le(0),           // Compression method: STORED
+      ...u16le(0),           // Last mod time
+      ...u16le(0),           // Last mod date
+      ...u32le(crc),
+      ...u32le(size),        // Compressed size
+      ...u32le(size),        // Uncompressed size
+      ...u16le(nameBytes.length),
+      ...u16le(0),           // Extra field length
+      ...nameBytes,
+    ];
+
+    parts.push(new Uint8Array(lhdr));
+    parts.push(dataBytes);
+
+    central.push({ nameBytes, crc, size, offset });
+    offset += lhdr.length + size;
+  }
+
+  const cdStart = offset;
+  for (const e of central) {
+    const cd = [
+      0x50,0x4b,0x01,0x02, // Central dir signature
+      ...u16le(20),         // Version made by
+      ...u16le(20),         // Version needed
+      ...u16le(0),          // Flags
+      ...u16le(0),          // Compression: STORED
+      ...u16le(0),          // Mod time
+      ...u16le(0),          // Mod date
+      ...u32le(e.crc),
+      ...u32le(e.size),
+      ...u32le(e.size),
+      ...u16le(e.nameBytes.length),
+      ...u16le(0),          // Extra
+      ...u16le(0),          // Comment
+      ...u16le(0),          // Disk start
+      ...u16le(0),          // Internal attrs
+      ...u32le(0),          // External attrs
+      ...u32le(e.offset),
+      ...e.nameBytes,
+    ];
+    parts.push(new Uint8Array(cd));
+    offset += cd.length;
+  }
+
+  const cdSize = offset - cdStart;
+  const eocd = [
+    0x50,0x4b,0x05,0x06,  // End of central dir
+    ...u16le(0),           // Disk number
+    ...u16le(0),           // Disk w/ central dir
+    ...u16le(central.length),
+    ...u16le(central.length),
+    ...u32le(cdSize),
+    ...u32le(cdStart),
+    ...u16le(0),           // Comment length
+  ];
+  parts.push(new Uint8Array(eocd));
+
+  const total = parts.reduce((s, p) => s + p.length, 0);
+  const buf   = new Uint8Array(total);
+  let pos = 0;
+  for (const p of parts) { buf.set(p, pos); pos += p.length; }
+  return new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+}
+
+// ── Ponto de entrada do botão Exportar ───────────────────────
+function exportMonthReport(monthKey) {
+  const entries = (state.finances || []).filter((f) => f.date.startsWith(monthKey))
+    .sort((a, b) => a.date.localeCompare(b.date));
+  if (!entries.length) {
+    showToast("Nenhum lançamento no período para exportar.");
+    return;
+  }
+
+  const label    = finMonthLabel(monthKey);
+  const isClosed = isMonthClosed(monthKey);
+  const userName = (getUser()?.name || "Usuário").split(" ").slice(0, 2).join(" ");
+  const geradoEm = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "long", year: "numeric" }).format(new Date());
+
+  const receitas = entries.filter((f) => f.type === "receita").reduce((s, f) => s + f.amount, 0);
+  const despesas = entries.filter((f) => f.type === "despesa").reduce((s, f) => s + f.amount, 0);
+  const saldo    = receitas - despesas;
+  const savings  = receitas > 0 ? ((saldo / receitas) * 100).toFixed(1) : "0";
+  const usedPct  = receitas > 0 ? Math.min(100, Math.round((despesas / receitas) * 100)) : 0;
+
+  // Agrupamento por categoria (despesas)
+  const byCat = {};
+  entries.filter((f) => f.type === "despesa").forEach((f) => {
+    const cat = findCategory(f.category);
+    if (!byCat[f.category]) byCat[f.category] = { label: cat.label.replace(/^\S+\s*/, ""), icon: cat.label.split(" ")[0], color: cat.color, total: 0, count: 0 };
+    byCat[f.category].total += f.amount;
+    byCat[f.category].count++;
+  });
+  const catList = Object.values(byCat).sort((a, b) => b.total - a.total);
+
+  // Top 5 maiores transações
+  const topTx = [...entries].sort((a, b) => b.amount - a.amount).slice(0, 5);
+
+  // Histórico 6 meses (para o gráfico de barras SVG)
+  const months6 = [];
+  const [ay, am] = monthKey.split("-").map(Number);
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(ay, am - 1 - i, 1);
+    const mk = toLocalIso(d).slice(0, 7);
+    const me = (state.finances || []).filter((f) => f.date.startsWith(mk));
+    const mr = me.filter((f) => f.type === "receita").reduce((s, f) => s + f.amount, 0);
+    const md = me.filter((f) => f.type === "despesa").reduce((s, f) => s + f.amount, 0);
+    const lbl = safeFormatDate(d, { month: "short" }, "-");
+    months6.push({ mk, lbl, r: mr, d: md });
+  }
+  const maxVal = Math.max(...months6.flatMap((m) => [m.r, m.d]), 1);
+
+  // SVG do gráfico de barras
+  const barW = 28; const gap = 4; const gW = barW * 2 + gap; const pH = 120; const pPad = 16;
+  const svgBars = months6.map((m, i) => {
+    const x     = pPad + i * (gW + 14);
+    const rH    = Math.max(3, (m.r / maxVal) * pH);
+    const dH    = Math.max(3, (m.d / maxVal) * pH);
+    const isAct = m.mk === monthKey;
+    return `<rect x="${x}" y="${pH + pPad - rH}" width="${barW}" height="${rH}" rx="3" fill="${isAct ? "#34c759" : "#d1fae5"}"/>
+      <rect x="${x + barW + gap}" y="${pH + pPad - dH}" width="${barW}" height="${dH}" rx="3" fill="${isAct ? "#ff3b30" : "#fee2e2"}"/>
+      <text x="${x + barW}" y="${pH + pPad + 14}" text-anchor="middle" font-size="9" fill="#8a9bb0">${m.lbl}</text>`;
+  }).join("");
+  const chartSvg = `<svg viewBox="0 0 ${pPad*2 + months6.length*(gW+14)} ${pH+pPad+20}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto">${svgBars}</svg>`;
+
+  // Donut SVG (categorias)
+  let donutSvg = "";
+  if (catList.length && despesas > 0) {
+    const cx = 70; const cy = 70; const r = 55; const iR = 35;
+    let angle = -Math.PI / 2;
+    const segments = catList.slice(0, 6).map((c) => {
+      const slice = (c.total / despesas) * Math.PI * 2;
+      const x1 = cx + r * Math.cos(angle); const y1 = cy + r * Math.sin(angle);
+      const x2 = cx + r * Math.cos(angle + slice); const y2 = cy + r * Math.sin(angle + slice);
+      const xi1 = cx + iR * Math.cos(angle + slice); const yi1 = cy + iR * Math.sin(angle + slice);
+      const xi2 = cx + iR * Math.cos(angle); const yi2 = cy + iR * Math.sin(angle);
+      const large = slice > Math.PI ? 1 : 0;
+      const path = `M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2} L ${xi1} ${yi1} A ${iR} ${iR} 0 ${large} 0 ${xi2} ${yi2} Z`;
+      angle += slice;
+      return `<path d="${path}" fill="${c.color}"/>`;
+    }).join("");
+    donutSvg = `<svg viewBox="0 0 140 140" xmlns="http://www.w3.org/2000/svg" style="width:140px;height:140px">${segments}<text x="70" y="66" text-anchor="middle" font-size="10" fill="#8a9bb0">Total</text><text x="70" y="80" text-anchor="middle" font-size="12" font-weight="700" fill="#1a1f2e">${formatCurrency(despesas).replace("R$","")}</text></svg>`;
+  }
+
+  // Recorrentes do usuário para a seção de assinaturas
+  const recurrents = (state.finRecurrents || []).filter((r) => r.type === "despesa");
+
+  // Metas e quanto foi usado
+  const goals = (state.finGoals || []).map((g) => {
+    const cat = findCategory(g.categoryId);
+    const spent = byCat[g.categoryId]?.total || 0;
+    const pct = g.limit > 0 ? Math.min(150, Math.round((spent / g.limit) * 100)) : 0;
+    return { ...g, cat, spent, pct };
+  });
+
+  const htmlContent = `<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<title>Relatório PulseNote — ${label}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif;background:#fff;color:#1a1f2e;font-size:13px;line-height:1.5}
+  .page{max-width:900px;margin:0 auto;padding:40px 40px 60px}
+  /* Header */
+  .rpt-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px;padding-bottom:20px;border-bottom:3px solid #6c5ce7}
+  .rpt-brand{display:flex;align-items:center;gap:12px}
+  .rpt-brand-mark{width:44px;height:44px;border-radius:12px;background:linear-gradient(145deg,#6c5ce7,#af52de);display:grid;place-items:center;font-size:1.4rem}
+  .rpt-brand-name{font-size:1.2rem;font-weight:800;color:#1a1f2e}
+  .rpt-brand-sub{font-size:0.72rem;color:#8a9bb0;font-weight:600;text-transform:uppercase;letter-spacing:.05em}
+  .rpt-header-right{text-align:right}
+  .rpt-month{font-size:1.4rem;font-weight:800;color:#6c5ce7}
+  .rpt-meta{font-size:0.72rem;color:#8a9bb0;line-height:1.8}
+  /* Secção */
+  .section{margin-bottom:28px}
+  .section-title{font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#8a9bb0;margin-bottom:12px}
+  /* Resumo: 4 cards */
+  .summary-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:28px}
+  .summary-card{border:1.5px solid #e8ecf2;border-radius:14px;padding:14px 16px}
+  .summary-card .lbl{font-size:0.7rem;text-transform:uppercase;letter-spacing:.06em;font-weight:700;color:#8a9bb0;margin-bottom:4px}
+  .summary-card .val{font-size:1.35rem;font-weight:800;letter-spacing:-0.03em}
+  .green{color:#34c759}.red{color:#ff3b30}.blue{color:#6c5ce7}
+  /* Barra */
+  .bar-wrap{background:#f0f4f8;border-radius:999px;height:8px;overflow:hidden;margin:4px 0}
+  .bar-fill{height:100%;border-radius:inherit;transition:width .3s}
+  /* Gráfico 6 meses */
+  .chart-section{display:grid;grid-template-columns:1fr auto;gap:24px;align-items:center;margin-bottom:28px;border:1.5px solid #e8ecf2;border-radius:16px;padding:20px}
+  /* Categorias */
+  .cat-section{display:grid;grid-template-columns:140px 1fr;gap:20px;align-items:center;margin-bottom:28px;border:1.5px solid #e8ecf2;border-radius:16px;padding:20px}
+  .cat-list{display:grid;gap:8px}
+  .cat-row{display:flex;align-items:center;gap:8px}
+  .cat-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+  .cat-name{flex:1;font-size:0.82rem;font-weight:600}
+  .cat-pct{font-size:0.75rem;color:#8a9bb0;width:38px;text-align:right;flex-shrink:0}
+  .cat-val{font-size:0.82rem;font-weight:700;color:#ff3b30;width:78px;text-align:right;flex-shrink:0}
+  /* Tabela de lançamentos: o wrapper (.tbl-scroll) rola na horizontal em
+     telas estreitas em vez de deixar a tabela espremer/cortar conteúdo —
+     min-width garante que colunas não fiquem ilegíveis nem quebrem linha
+     no meio de um valor, mas a descrição trunca com "..." se for longa. */
+  .tbl-scroll{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  table{width:100%;min-width:520px;border-collapse:collapse;font-size:0.8rem}
+  thead tr{background:#f0f4f8}
+  th{padding:8px 10px;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#8a9bb0;white-space:nowrap}
+  td{padding:9px 10px;border-top:1px solid #f0f4f8}
+  td:nth-child(2){max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  td:last-child, th:last-child{white-space:nowrap}
+  .badge{display:inline-block;border-radius:999px;padding:2px 8px;font-size:0.68rem;font-weight:700;white-space:nowrap}
+  .badge-r{background:#e5f9ec;color:#34c759}
+  .badge-d{background:#ffeeed;color:#ff3b30}
+  /* Metas */
+  .goal-row{margin-bottom:10px}
+  .goal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;gap:10px}
+  .goal-name{font-size:0.82rem;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .goal-val{font-size:0.78rem;color:#8a9bb0;white-space:nowrap;flex-shrink:0}
+  .goal-val.over{color:#ff3b30;font-weight:700}
+  /* Recorrentes */
+  .recur-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+  .recur-card{border:1.5px solid #e8ecf2;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:4px;min-width:0}
+  .recur-card strong{font-size:0.88rem;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .recur-card span{font-size:0.72rem;color:#8a9bb0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .recur-card .rv{font-size:1rem;font-weight:800;color:#ff3b30}
+  /* Footer */
+  .rpt-footer{margin-top:36px;padding-top:16px;border-top:1px solid #e8ecf2;display:flex;justify-content:space-between;align-items:center;font-size:0.7rem;color:#8a9bb0;flex-wrap:wrap;gap:8px}
+
+  /* ---- Responsivo: relatório aberto/impresso a partir do celular ---- */
+  @media (max-width: 680px) {
+    .page{padding:24px 16px 40px}
+    .rpt-header{flex-direction:column;gap:14px}
+    .rpt-header-right{text-align:left}
+    .summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .chart-section{grid-template-columns:1fr}
+    .cat-section{grid-template-columns:1fr}
+    .recur-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+    td:nth-child(2){max-width:140px}
+  }
+  @media (max-width: 420px) {
+    .summary-grid{grid-template-columns:1fr}
+    .recur-grid{grid-template-columns:1fr}
+  }
+  /* Print */
+  @media print{
+    body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .page{padding:20px 24px 40px}
+    .summary-grid{grid-template-columns:repeat(4,1fr)}
+  }
+  @page{margin:15mm;size:A4}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- CABEÇALHO -->
+  <div class="rpt-header">
+    <div class="rpt-brand">
+      <div class="rpt-brand-mark">⚡</div>
+      <div>
+        <div class="rpt-brand-name">PulseNote</div>
+        <div class="rpt-brand-sub">Relatório Financeiro Mensal</div>
+      </div>
+    </div>
+    <div class="rpt-header-right">
+      <div class="rpt-month">${label}</div>
+      <div class="rpt-meta">
+        Titular <strong>${escapeHtml(userName)}</strong><br>
+        ${isClosed ? "✓ Mês fechado" : "Em aberto"} · Gerado em ${geradoEm}
+      </div>
+    </div>
+  </div>
+
+  <!-- RESUMO: 4 CARDS -->
+  <div class="summary-grid">
+    <div class="summary-card">
+      <div class="lbl">Saldo do mês</div>
+      <div class="val ${saldo >= 0 ? "green" : "red"}">${formatCurrency(saldo)}</div>
+    </div>
+    <div class="summary-card">
+      <div class="lbl">Receitas</div>
+      <div class="val green">${formatCurrency(receitas)}</div>
+    </div>
+    <div class="summary-card">
+      <div class="lbl">Despesas</div>
+      <div class="val red">${formatCurrency(despesas)}</div>
+    </div>
+    <div class="summary-card">
+      <div class="lbl">Taxa de poupança</div>
+      <div class="val blue">${savings}%</div>
+    </div>
+  </div>
+
+  <!-- GRÁFICO 6 MESES -->
+  <div class="section">
+    <div class="section-title">Receitas × Despesas — Últimos 6 meses</div>
+    <div class="chart-section">
+      <div style="flex:1">${chartSvg}</div>
+      <div style="display:grid;gap:8px">
+        <div style="display:flex;align-items:center;gap:6px;font-size:0.78rem">
+          <span style="width:12px;height:12px;border-radius:3px;background:#34c759;display:inline-block"></span> Receitas
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;font-size:0.78rem">
+          <span style="width:12px;height:12px;border-radius:3px;background:#ff3b30;display:inline-block"></span> Despesas
+        </div>
+        <div style="margin-top:8px;font-size:0.72rem;color:#8a9bb0">Mês atual destacado</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DISTRIBUIÇÃO POR CATEGORIA -->
+  ${catList.length ? `
+  <div class="section">
+    <div class="section-title">Para onde foi o dinheiro — R$ ${formatCurrency(despesas).replace("R$ ","")} em despesas</div>
+    <div class="cat-section">
+      <div>${donutSvg}</div>
+      <div class="cat-list">
+        ${catList.slice(0, 8).map((c) => {
+          const pct = despesas > 0 ? ((c.total / despesas) * 100).toFixed(1) : 0;
+          const barPct = Math.min(100, Math.round(c.total / despesas * 100));
+          return `<div class="cat-row">
+            <span class="cat-dot" style="background:${c.color}"></span>
+            <span class="cat-name">${c.icon} ${escapeHtml(c.label)}</span>
+            <span class="cat-pct">${pct}%</span>
+            <div style="flex:1;min-width:60px"><div class="bar-wrap"><div class="bar-fill" style="width:${barPct}%;background:${c.color}"></div></div></div>
+            <span class="cat-val">${formatCurrency(c.total)}</span>
+          </div>`;
+        }).join("")}
+      </div>
+    </div>
+  </div>` : ""}
+
+  <!-- METAS POR CATEGORIA -->
+  ${goals.length ? `
+  <div class="section">
+    <div class="section-title">Metas de gasto por categoria</div>
+    <div style="border:1.5px solid #e8ecf2;border-radius:16px;padding:20px">
+      ${goals.map((g) => {
+        const barColor = g.pct > 100 ? "#ff3b30" : g.pct > 80 ? "#8b5cf6" : "#34c759";
+        return `<div class="goal-row">
+          <div class="goal-header">
+            <span class="goal-name">${escapeHtml(g.cat.label)}</span>
+            <span class="goal-val ${g.pct > 100 ? "over" : ""}">${formatCurrency(g.spent)} / ${formatCurrency(g.limit)} (${g.pct}%)</span>
+          </div>
+          <div class="bar-wrap"><div class="bar-fill" style="width:${Math.min(100,g.pct)}%;background:${barColor}"></div></div>
+        </div>`;
+      }).join("")}
+    </div>
+  </div>` : ""}
+
+  <!-- TOP TRANSAÇÕES -->
+  <div class="section">
+    <div class="section-title">Maiores transações do mês</div>
+    <div style="border:1.5px solid #e8ecf2;border-radius:16px;overflow:hidden">
+      <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Tipo</th><th style="text-align:right">Valor</th></tr></thead>
+        <tbody>
+          ${topTx.map((f) => {
+            const cat = findCategory(f.category);
+            const isRec = f.type === "receita";
+            return `<tr>
+              <td>${formatDate(f.date)}</td>
+              <td style="font-weight:600">${escapeHtml(f.description || "")}</td>
+              <td>${escapeHtml(cat.label)}</td>
+              <td><span class="badge ${isRec ? "badge-r" : "badge-d"}">${isRec ? "Receita" : "Despesa"}</span></td>
+              <td style="text-align:right;font-weight:700;color:${isRec ? "#34c759" : "#ff3b30"}">${isRec ? "+" : "-"}${formatCurrency(f.amount)}</td>
+            </tr>`;
+          }).join("")}
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- TODOS OS LANÇAMENTOS -->
+  <div class="section">
+    <div class="section-title">Todos os lançamentos (${entries.length})</div>
+    <div style="border:1.5px solid #e8ecf2;border-radius:16px;overflow:hidden">
+      <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Tipo</th><th style="text-align:right">Valor</th></tr></thead>
+        <tbody>
+          ${entries.map((f) => {
+            const cat = findCategory(f.category);
+            const isRec = f.type === "receita";
+            return `<tr>
+              <td>${formatDate(f.date)}</td>
+              <td>${escapeHtml(f.description || "")}</td>
+              <td>${cat.label.replace(/^\S+\s*/, "")}</td>
+              <td><span class="badge ${isRec ? "badge-r" : "badge-d"}">${isRec ? "R" : "D"}</span></td>
+              <td style="text-align:right;font-weight:700;color:${isRec ? "#34c759" : "#ff3b30"}">${isRec ? "+" : "-"}${formatCurrency(f.amount)}</td>
+            </tr>`;
+          }).join("")}
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- RECORRENTES -->
+  ${recurrents.length ? `
+  <div class="section">
+    <div class="section-title">Lançamentos recorrentes cadastrados</div>
+    <div class="recur-grid">
+      ${recurrents.map((r) => {
+        const cat = findCategory(r.categoryId);
+        return `<div class="recur-card">
+          <strong>${escapeHtml(r.description)}</strong>
+          <span>${escapeHtml(cat.label)} · Dia ${r.day}</span>
+          <span class="rv">-${formatCurrency(r.amount)}/mês</span>
+        </div>`;
+      }).join("")}
+    </div>
+  </div>` : ""}
+
+  <!-- FOOTER -->
+  <div class="rpt-footer">
+    <span>PulseNote · pulsenote.app</span>
+    <span>Gerado em ${geradoEm}</span>
+  </div>
+
+</div>
+<script>window.onload = () => window.print();</script>
+</body>
+</html>`;
+
+  const blob = new Blob([htmlContent], { type: "text/html" });
+  const url  = URL.createObjectURL(blob);
+  window.open(url, "_blank");
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+  showToast("📄 Relatório gerado! Use Ctrl+P / salvar como PDF.");
+}
+
+// ============================================================
+// CONTROLES DO NAVEGADOR DE MÊS EM FINANÇAS
+// ============================================================
+function bindFinanceMonthControls() {
+  document.getElementById("finMonthPrev")?.addEventListener("click", () => {
+    const [y, m] = finActiveMonth.split("-").map(Number);
+    const d = new Date(y, m - 2, 1); // m-2 porque mês em JS é 0-based
+    finActiveMonth = toLocalIso(d).slice(0, 7);
+    renderFinances();
+  });
+
+  document.getElementById("finMonthNext")?.addEventListener("click", () => {
+    const [y, m] = finActiveMonth.split("-").map(Number);
+    const d = new Date(y, m, 1);
+    finActiveMonth = toLocalIso(d).slice(0, 7);
+    renderFinances();
+  });
+
+  document.getElementById("finCloseMonth")?.addEventListener("click", () => {
+    closeMonth(finActiveMonth);
+  });
+
+  document.getElementById("finReopenMonth")?.addEventListener("click", () => {
+    reopenMonth(finActiveMonth);
+  });
+
+  document.getElementById("finExportReport")?.addEventListener("click", () => {
+    exportMonthReport(finActiveMonth);
+  });
+
+}
+
+function updateGoalProgress(id, value, event) {
+  event?.stopPropagation();
+  const goal = state.goals.find((item) => item.id === id);
+  if (!goal) return;
+  const next = Math.max(0, Math.min(Number(goal.target) || 1, Number(value) || 0));
+  const wasComplete = goal.current >= goal.target;
   goal.current = next;
   saveState();
   const percent = Math.min(100, Math.round((next / Math.max(1, Number(goal.target) || 1)) * 100));
@@ -4145,3 +7619,4 @@ window.updateGoalProgress = updateGoalProgress;
 // silenciosamente não faziam nada.
 window.setView = setView;
 window.setNotesFolderFilter = setNotesFolderFilter;
+
