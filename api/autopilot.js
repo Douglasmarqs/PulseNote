@@ -1,18 +1,6 @@
-const admin = require("firebase-admin");
+const { getFirebaseAdmin } = require("./_lib/firebaseAdmin");
 const { listAutopilotSuggestions, executeAutopilotSuggestion } = require("./_lib/autopilotService");
 const { checkAutopilotAccess } = require("./_lib/autopilotAccess");
-
-function getFirebaseAdmin() {
-  if (admin.apps.length) return admin;
-  admin.initializeApp({
-    credential: admin.credential.cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: (process.env.FIREBASE_PRIVATE_KEY || "").replace(/\\n/g, "\n"),
-    }),
-  });
-  return admin;
-}
 
 function requestBody(req) {
   if (typeof req.body === "string") {

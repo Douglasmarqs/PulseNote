@@ -3,25 +3,22 @@
   "private": true,
   "version": "1.0.0",
   "type": "commonjs",
-
   "scripts": {
     "dev": "vite",
     "build": "node --test test/*.test.js",
     "preview": "vite preview"
   },
-
   "engines": {
     "node": "24.x"
   },
-
+  "overrides": {
+    "@grpc/grpc-js": "1.14.6"
+  },
   "dependencies": {
     "@upstash/qstash": "^2.11.3",
-    "@vitejs/plugin-react": "^4.3.1",
-    "firebase": "^11.0.0",
-    "firebase-admin": "^12.7.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "vite": "^5.4.0",
-    "vite-plugin-pwa": "^0.20.5"
+    "firebase-admin": "^14.5.0"
+  },
+  "devDependencies": {
+    "vite": "^8.3.5"
   }
 }
