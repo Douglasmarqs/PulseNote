@@ -10,20 +10,8 @@
 // parse-transaction.js e whatsapp-webhook.js.
 // ============================================================
 
-const admin = require("firebase-admin");
+const { getFirebaseAdmin } = require("./_lib/firebaseAdmin");
 const { normalizeRuntimeConfig } = require("./_lib/adminConfig");
-
-function getFirebaseAdmin() {
-  if (admin.apps.length) return admin;
-  admin.initializeApp({
-    credential: admin.credential.cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: (process.env.FIREBASE_PRIVATE_KEY || "").replace(/\\n/g, "\n"),
-    }),
-  });
-  return admin;
-}
 
 async function verifyUser(req, fb) {
   const authHeader = req.headers.authorization || "";

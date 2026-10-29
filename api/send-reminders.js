@@ -47,7 +47,7 @@
 //       continua funcionando de forma independente.
 // ============================================================
 
-const admin = require("firebase-admin");
+const { FieldValue, getFirebaseAdmin } = require("./_lib/firebaseAdmin");
 const crypto = require("node:crypto");
 const { Receiver } = require("@upstash/qstash");
 const { getRuntimeConfig } = require("./_lib/adminConfig");
@@ -94,18 +94,6 @@ function cooldownHoursFor(key) {
   if (key.startsWith("event_")) return COOLDOWN_HOURS.event;
   if (key.startsWith("goal_")) return COOLDOWN_HOURS.goalAlmost;
   return COOLDOWN_HOURS[key] ?? 24;
-}
-
-function getFirebaseAdmin() {
-  if (admin.apps.length) return admin;
-  admin.initializeApp({
-    credential: admin.credential.cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: (process.env.FIREBASE_PRIVATE_KEY || "").replace(/\\n/g, "\n"),
-    }),
-  });
-  return admin;
 }
 
 // Datas de tarefas e compromissos são criadas no fuso local da pessoa.
@@ -541,7 +529,7 @@ module.exports = async (req, res) => {
         if (anyAccepted) notified++;
       }
       if (invalidTokens.length > 0) {
-        await docSnap.ref.update({ "data.fcmTokens": admin.firestore.FieldValue.arrayRemove(...invalidTokens) });
+        await docSnap.ref.update({ "data.fcmTokens": FieldValue.arrayRemove(...invalidTokens) });
       }
     }
 

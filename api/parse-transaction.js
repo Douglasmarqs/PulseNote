@@ -31,24 +31,9 @@
 //   FIREBASE_PRIVATE_KEY
 // ============================================================
 
-const admin = require("firebase-admin");
+const { getFirebaseAdmin } = require("./_lib/firebaseAdmin");
 const { parseTransactionText } = require("./_lib/parseTransactionAI");
 const { checkUserFeature } = require("./_lib/admin");
-
-function getFirebaseAdmin() {
-  if (admin.apps.length) return admin;
-  admin.initializeApp({
-    credential: admin.credential.cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      // No painel da Vercel as quebras de linha da chave privada chegam
-      // como "\n" literal — precisamos converter de volta para quebras
-      // de linha reais, senão a assinatura da credencial fica inválida.
-      privateKey: (process.env.FIREBASE_PRIVATE_KEY || "").replace(/\\n/g, "\n"),
-    }),
-  });
-  return admin;
-}
 
 async function verifyUser(req) {
   const authHeader = req.headers.authorization || "";

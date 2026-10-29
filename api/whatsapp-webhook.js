@@ -57,7 +57,7 @@
 
 const crypto = require("node:crypto");
 const { AsyncLocalStorage } = require("node:async_hooks");
-const admin = require("firebase-admin");
+const { getFirebaseAdmin } = require("./_lib/firebaseAdmin");
 const { parseTransactionImage, parseNoteImage, transcribeAudio } = require("./_lib/parseTransactionAI");
 const { parseTextIntent, findBestMatch, findBestMatches } = require("./_lib/parseCommandIntent");
 const { buildPdfReportBuffer } = require("./_lib/buildPdfReport");
@@ -125,18 +125,6 @@ const DEFAULT_INCOME_CATEGORIES = [
   { id: "presente", label: "🎁 Presente/Bônus" },
   { id: "outros_receita", label: "📦 Outros" },
 ];
-
-function getFirebaseAdmin() {
-  if (admin.apps.length) return admin;
-  admin.initializeApp({
-    credential: admin.credential.cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: (process.env.FIREBASE_PRIVATE_KEY || "").replace(/\\n/g, "\n"),
-    }),
-  });
-  return admin;
-}
 
 // ── Segurança: verificação de assinatura da Meta ───────────────────
 // A Cloud API assina todo POST com HMAC-SHA256 do corpo bruto (raw
