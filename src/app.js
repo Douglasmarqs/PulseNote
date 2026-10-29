@@ -1132,7 +1132,30 @@ function renderWhatsAppSettings() {
   // ao ligá-lo, o fluxo abaixo pede a permissão e registra/renova o token.
   if (appReminderCheckbox) {
     appReminderCheckbox.checked = state.appReminderOptIn !== false
-      && window.notificationsAreEnabled?.() === true;
+      && window.pushNotificationsAreRegistered?.() === true;
+  }
+  const appReminderStatus = document.getElementById("appReminderStatus");
+  if (appReminderStatus) {
+    const hasToken = Array.isArray(state.fcmTokens) && state.fcmTokens.some(Boolean);
+    const pushStatus = window.PulseNotePushSetupStatus
+      || window.PulseNotePush?.getRegistrationStatus?.()
+      || { code: "not-attempted" };
+    const failureLabels = {
+      "auth-required": "Entre novamente na conta e tente ativar o push.",
+      "messaging-unsupported": "Este navegador não oferece push em segundo plano.",
+      "push-manager-unsupported": "Este dispositivo não oferece push em segundo plano.",
+      "service-worker-unsupported": "Este navegador não oferece notificações com o app fechado.",
+      "messaging/permission-blocked": "O navegador bloqueou notificações para este site.",
+      "messaging/failed-service-worker-registration": "O serviço de notificações não conseguiu iniciar neste navegador.",
+      "messaging/token-subscribe-failed": "O Firebase recusou o registro deste aparelho. Tente novamente.",
+      "vapid-key-missing": "A chave Web Push do projeto ainda não está configurada.",
+    };
+    appReminderStatus.textContent = hasToken && state.appReminderOptIn !== false
+      ? "Push em segundo plano ativo. Os avisos podem chegar com o app fechado."
+      : failureLabels[pushStatus.code]
+        || (("Notification" in window) && Notification.permission === "denied"
+          ? "Notificações estão bloqueadas nas configurações deste navegador."
+          : "Push em segundo plano ainda não foi registrado neste aparelho.");
   }
 
   if (state.whatsappLinkedPhone) {
@@ -1413,11 +1436,13 @@ function bindSettingsView() {
         state.appReminderOptIn = false;
         e.target.checked = false;
         saveState();
+        renderWhatsAppSettings();
         return;
       }
     }
     state.appReminderOptIn = e.target.checked;
     saveState();
+    renderWhatsAppSettings();
     showToast(e.target.checked ? "Lembretes no aplicativo ativados." : "Lembretes no aplicativo desativados.");
   });
 
@@ -7629,5 +7654,4 @@ window.updateGoalProgress = updateGoalProgress;
 // silenciosamente não faziam nada.
 window.setView = setView;
 window.setNotesFolderFilter = setNotesFolderFilter;
-
 

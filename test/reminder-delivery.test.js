@@ -48,6 +48,9 @@ test('falha no WhatsApp permite retry e não repete push já aceito', async () =
   assert.equal(await deliverChannel(db, 'u1', n, 'push', now, async () => { throw Error('duplicado'); }), false);
   assert.equal(await deliverChannel(db, 'u1', n, 'whatsapp', now, async () => {}), true);
   assert.equal(await deliverChannel(db, 'u1', { ...n, occurrence: '2026-09-24T09:00_15' }, 'push', now, async () => {}), true);
+  const records = [...db.docs.values()];
+  assert.ok(records.some(record => record.uid === 'u1' && record.channel === 'whatsapp' && record.notificationKey === 'event_consulta' && record.status === 'accepted'));
+  assert.ok(records.every(record => !Object.hasOwn(record, 'phone') && !Object.hasOwn(record, 'body')));
 });
 
 test('cron atrasado recupera compromisso recente e zero significa na hora', () => {

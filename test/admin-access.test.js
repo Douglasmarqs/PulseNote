@@ -173,16 +173,26 @@ test("administrador não pode remover plano e restaurar acesso legado sem querer
 });
 
 test("monitoramento mostra sinais reais e não confunde credenciais com entrega", async () => {
-  const db = { collection: (name) => name === "whatsappProcessedMessages"
-    ? { orderBy: () => ({ limit: () => ({ get: async () => ({ docs: [
+  const db = { collection: (name) => {
+    if (name === "whatsappProcessedMessages") return { orderBy: () => ({ limit: () => ({ get: async () => ({ docs: [
       { data: () => ({ status: "failed", updatedAt: "2026-10-13T18:00:00.000Z" }) },
-    ] }) }) }) }
-    : { doc: () => ({ get: async () => ({ data: () => ({ lastRunAt: "2026-10-13T18:05:00.000Z", status: "ok" }) }) }) } };
+    ] }) }) }) };
+    if (name === "reminderDeliveries") return { orderBy: () => ({ limit: () => ({ get: async () => ({ docs: [
+      { id: "receipt-123456789", data: () => ({ uid: "u1", channel: "whatsapp", notificationKey: "event_consulta", status: "failed", updatedAt: "2026-10-13T18:04:00.000Z", lastError: "whatsapp_400_132001", phone: "5531999999999", body: "não expor" }) },
+    ] }) }) }) };
+    return { doc: () => ({ get: async () => ({ data: () => ({ lastRunAt: "2026-10-13T18:05:00.000Z", status: "ok" }) }) }) };
+  } };
   const result = await integrationStatus(db);
   const whatsapp = result.integrations.find((item) => item.id === "whatsapp");
   const qstash = result.integrations.find((item) => item.id === "qstash");
   assert.equal(whatsapp.recentFailures, 1);
   assert.equal(qstash.runStatus, "ok");
+  assert.deepEqual(result.reminderDeliveries[0], {
+    id: "receipt-12", uid: "u1", channel: "whatsapp", notificationKey: "event_consulta", status: "failed",
+    attemptedAt: "2026-10-13T18:04:00.000Z", acceptedAt: null, error: "whatsapp_400_132001",
+  });
+  assert.equal(JSON.stringify(result.reminderDeliveries).includes("5531999999999"), false);
+  assert.equal(JSON.stringify(result.reminderDeliveries).includes("não expor"), false);
   assert.match(result.note, /presença de credenciais/);
 });
 

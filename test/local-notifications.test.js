@@ -8,7 +8,7 @@ const source = fs.readFileSync(path.join(__dirname, "../src/notifications.js"), 
 const appSource = fs.readFileSync(path.join(__dirname, "../src/app.js"), "utf8");
 const dueAt = new Date("2026-09-10T09:00:00").getTime();
 
-function loadNotifications({ permission = "granted", now = dueAt, state, localToday } = {}) {
+function loadNotifications({ permission = "granted", now = dueAt, state, localToday, pushResult = true } = {}) {
   const shown = [];
   const stored = new Map();
   let pushRegistrations = 0;
@@ -33,6 +33,7 @@ function loadNotifications({ permission = "granted", now = dueAt, state, localTo
     localStorage: {
       getItem: (key) => stored.get(key) || null,
       setItem: (key, value) => stored.set(key, value),
+      removeItem: (key) => stored.delete(key),
     },
     setInterval: () => 1,
     console,
@@ -40,7 +41,7 @@ function loadNotifications({ permission = "granted", now = dueAt, state, localTo
       Notification: NotificationStub,
       PulseNoteState: state,
       PulseNoteShowToast: () => {},
-      PulseNotePush: { enablePushNotifications: async () => { pushRegistrations++; return true; } },
+      PulseNotePush: { enablePushNotifications: async () => { pushRegistrations++; return pushResult; } },
     },
   };
   vm.runInNewContext(source, context);
@@ -56,9 +57,16 @@ test("permissão previamente concedida ainda registra o token de push", async ()
 });
 
 test("o toggle de push reflete a permissão real deste aparelho", () => {
-  assert.match(appSource, /appReminderCheckbox\.checked = state\.appReminderOptIn !== false\s*&& window\.notificationsAreEnabled\?\.\(\) === true/);
+  assert.match(appSource, /appReminderCheckbox\.checked = state\.appReminderOptIn !== false\s*&& window\.pushNotificationsAreRegistered\?\.\(\) === true/);
   assert.match(appSource, /parsed\.appReminderOptIn = parsed\.fcmTokens\.length > 0/);
   assert.match(appSource, /appReminderOptIn: false/);
+});
+
+test("falha ao registrar FCM não deixa o aparelho marcado como ativo", async () => {
+  const app = loadNotifications({ pushResult: { ok: false, code: "messaging/token-subscribe-failed" } });
+  assert.equal(await app.window.requestNotificationPermission(), false);
+  assert.equal(app.stored.get("pn_notifications_enabled"), undefined);
+  assert.equal(app.window.PulseNotePushSetupStatus.code, "messaging/token-subscribe-failed");
 });
 
 test("lembrete zero dispara na hora e usa a mesma tag do push remoto", async () => {
@@ -126,4 +134,3 @@ test("resumo de tarefas usa o dia local, não a data UTC", async () => {
   await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual(app.shown.map((item) => item.tag), ["tasks-today"]);
 });
-

@@ -229,6 +229,12 @@ function renderIntegrationRows(data, selector, compact = false) {
     return `<div class="ad-integration"><span class="ad-integration-icon" aria-hidden="true">${symbols[item.id] || "◇"}</span><span class="ad-integration-content"><strong>${escapeHtml(item.label)}</strong><small>${escapeHtml(detail)}</small></span><span class="ad-pill ${item.configured ? "" : "is-warn"}">${item.configured ? "Configurado" : "Pendente"}</span></div>`;
   }).join("");
   if (!compact) $("#adIntegrationNote").textContent = data.note || "";
+  if (!compact && $("#adReminderDeliveries")) {
+    const deliveries = Array.isArray(data.reminderDeliveries) ? data.reminderDeliveries : [];
+    const channelLabel = { whatsapp: "WhatsApp", push: "Push", unknown: "Canal antigo" };
+    const statusLabel = { accepted: "Aceito pelo provedor", failed: "Falhou", processing: "Processando", unknown: "Sem estado" };
+    $("#adReminderDeliveries").innerHTML = deliveries.length ? deliveries.map((delivery) => `<div class="ad-delivery"><span class="ad-delivery-channel">${escapeHtml(channelLabel[delivery.channel] || delivery.channel)}</span><span class="ad-delivery-copy"><strong>${escapeHtml(delivery.notificationKey || "Lembrete")}</strong><small>${escapeHtml(delivery.uid ? `Usuário ${delivery.uid}` : "Registro anterior à identificação do canal")} · ${escapeHtml(readableTimestamp(delivery.attemptedAt))}${delivery.error ? ` · ${escapeHtml(delivery.error)}` : ""}</small></span><span class="ad-pill ${delivery.status === "failed" ? "is-danger" : delivery.status === "accepted" ? "" : "is-warn"}">${escapeHtml(statusLabel[delivery.status] || delivery.status)}</span></div>`).join("") : `<div class="ad-empty">Nenhuma tentativa de lembrete registrada ainda.</div>`;
+  }
   const stripe = data.integrations.find((item) => item.id === "stripe");
   if (stripe && $("#adBillingStatus")) {
     $("#adBillingStatus").innerHTML = `<span class="ad-provider-logo">S</span><div><strong>Stripe Billing</strong><small>${escapeHtml(stripe.detail)}</small></div><span class="ad-pill ${stripe.configured ? "" : "is-warn"}">${stripe.configured ? "Conectado" : "Configuração pendente"}</span>`;

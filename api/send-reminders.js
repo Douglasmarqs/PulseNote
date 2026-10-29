@@ -366,13 +366,21 @@ async function deliverChannel(db, uid, notification, channel, now, send) {
     if (previous.acceptedAt && (cooldown === 0 || now - new Date(previous.acceptedAt) < cooldown * 3600000)) return false;
     if (previous.retryAfter > now.getTime()) return false;
     if (previous.leaseUntil > now.getTime()) return false;
-    tx.set(ref, { leaseId, leaseUntil: now.getTime() + 300000, updatedAt: now.toISOString() }, { merge: true });
+    tx.set(ref, {
+      leaseId,
+      leaseUntil: now.getTime() + 300000,
+      updatedAt: now.toISOString(),
+      uid,
+      channel,
+      notificationKey: String(notification.key || "unknown").slice(0, 120),
+      status: "processing",
+    }, { merge: true });
     return true;
   });
   if (!claimed) return false;
   try {
     await send();
-    await ref.set({ acceptedAt: now.toISOString(), leaseUntil: 0, retryAfter: 0, lastError: null }, { merge: true });
+    await ref.set({ acceptedAt: now.toISOString(), updatedAt: new Date().toISOString(), status: "accepted", leaseUntil: 0, retryAfter: 0, lastError: null }, { merge: true });
     return true;
   } catch (error) {
     const retryDelayMs = error.message === "whatsapp_configuration_missing"
@@ -381,6 +389,7 @@ async function deliverChannel(db, uid, notification, channel, now, send) {
       : 0;
     await ref.set({
       leaseUntil: 0,
+      status: "failed",
       lastError: error.message,
       retryAfter: retryDelayMs ? now.getTime() + retryDelayMs : 0,
       updatedAt: now.toISOString(),

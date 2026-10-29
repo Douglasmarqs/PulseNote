@@ -69,17 +69,24 @@ async function requestNotificationPermission() {
     ? "granted"
     : await Notification.requestPermission();
   if (result === "granted") {
-    (window.PulseNoteShowToast || console.log)("🔔 Notificações ativadas!");
     localStorage.setItem("pn_notifications_enabled", "1");
     // Registra também o push do FCM (ver push-notifications.js) — é isso
     // que permite a notificação chegar mesmo com o app/aba fechados, via
     // um servidor externo (api/send-reminders.js). Não bloqueia o fluxo
     // se falhar (ex.: navegador sem suporte): as notificações locais
     // (enquanto o app está aberto) continuam funcionando normalmente.
-    const backgroundPushReady = await window.PulseNotePush?.enablePushNotifications?.().catch(() => false);
-    if (!backgroundPushReady) {
-      (window.PulseNoteShowToast || console.log)("Notificações locais ativadas. O push com o app fechado ainda precisa da configuração Web Push deste projeto.");
+    const rawPushResult = await window.PulseNotePush?.enablePushNotifications?.()
+      .catch(() => ({ ok: false, code: "registration-failed" }));
+    const pushResult = rawPushResult === true
+      ? { ok: true, code: "registered" }
+      : rawPushResult || { ok: false, code: "module-unavailable" };
+    window.PulseNotePushSetupStatus = pushResult;
+    if (!pushResult.ok) {
+      localStorage.removeItem("pn_notifications_enabled");
+      (window.PulseNoteShowToast || console.log)("Não foi possível registrar o push neste aparelho. Veja o motivo em Configurações e tente novamente.");
+      return false;
     }
+    (window.PulseNoteShowToast || console.log)("🔔 Notificações ativadas neste aparelho!");
     runAllNotificationChecks(); // checa imediatamente após ativar
     return true;
   }
@@ -92,6 +99,12 @@ function notificationsAreEnabled() {
     && Notification.permission === "granted"
     && localStorage.getItem("pn_notifications_enabled") === "1"
     && window.PulseNoteState?.appReminderOptIn !== false;
+}
+
+function pushNotificationsAreRegistered() {
+  return notificationsAreEnabled()
+    && Array.isArray(window.PulseNoteState?.fcmTokens)
+    && window.PulseNoteState.fcmTokens.some(Boolean);
 }
 
 // ── Verificações específicas por área do app ──────────────────
@@ -256,5 +269,6 @@ function startNotificationScheduler() {
 
 window.requestNotificationPermission = requestNotificationPermission;
 window.notificationsAreEnabled = notificationsAreEnabled;
+window.pushNotificationsAreRegistered = pushNotificationsAreRegistered;
 window.startNotificationScheduler = startNotificationScheduler;
 window.runAllNotificationChecks = runAllNotificationChecks;

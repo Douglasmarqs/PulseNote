@@ -278,14 +278,32 @@ async function setAdminRole(firebase, db, actor, body) {
 
 async function integrationStatus(db) {
   const configured = (names) => names.every((name) => Boolean(process.env[name]));
-  const [webhookEvents, reminderHealth] = await Promise.all([
+  const [webhookEvents, reminderHealth, reminderDeliverySnapshot] = await Promise.all([
     db.collection("whatsappProcessedMessages").orderBy("updatedAt", "desc").limit(25).get(),
     db.collection("systemHealth").doc("reminders").get(),
+    db.collection("reminderDeliveries").orderBy("updatedAt", "desc").limit(25).get(),
   ]);
   const events = webhookEvents.docs.map((entry) => entry.data());
   const failedEvents = events.filter((entry) => entry.status === "failed").length;
   const lastInboundAt = events[0]?.updatedAt || null;
   const reminders = reminderHealth.data() || {};
+  const reminderDeliveries = reminderDeliverySnapshot.docs.map((entry) => {
+    const delivery = entry.data() || {};
+    const channel = ["push", "whatsapp"].includes(delivery.channel) ? delivery.channel : "unknown";
+    const status = ["processing", "accepted", "failed"].includes(delivery.status)
+      ? delivery.status
+      : delivery.acceptedAt ? "accepted" : delivery.lastError ? "failed" : "unknown";
+    return {
+      id: String(entry.id || "").slice(0, 10),
+      uid: text(delivery.uid, 128),
+      channel,
+      notificationKey: text(delivery.notificationKey, 120) || "legacy",
+      status,
+      attemptedAt: timestampValue(delivery.updatedAt || delivery.acceptedAt),
+      acceptedAt: timestampValue(delivery.acceptedAt),
+      error: status === "failed" ? text(delivery.lastError, 160) || "provider_error" : null,
+    };
+  });
   return {
     integrations: [
       { id: "firebase", label: "Firebase", configured: configured(["FIREBASE_PROJECT_ID", "FIREBASE_CLIENT_EMAIL", "FIREBASE_PRIVATE_KEY"]), detail: "Credenciais do servidor" },
@@ -301,6 +319,7 @@ async function integrationStatus(db) {
           ? "Credenciais e assinatura de webhook presentes no servidor"
           : "Defina STRIPE_SECRET_KEY e STRIPE_WEBHOOK_SECRET na Vercel para ativar cobranças automáticas" },
     ],
+    reminderDeliveries,
     note: "Os eventos e a execução são registros reais do servidor. 'Configurado' confirma só a presença de credenciais; a entrega final depende do provedor.",
   };
 }

@@ -28,6 +28,20 @@ const VAPID_KEY = String(firebaseConfig.messagingVapidKey || "").trim();
 
 let messagingInstance = null;
 let foregroundListenerAttached = false;
+let lastRegistrationStatus = { ok: false, code: "not-attempted" };
+
+function registrationResult(ok, code) {
+  lastRegistrationStatus = { ok, code, at: new Date().toISOString() };
+  window.dispatchEvent?.(new CustomEvent("pulsenote:push-status", { detail: lastRegistrationStatus }));
+  return lastRegistrationStatus;
+}
+
+function safeErrorCode(error) {
+  const code = String(error?.code || "");
+  if (/^messaging\/[a-z0-9-]+$/.test(code)) return code;
+  if (error?.message === "push_auth_required") return "auth-required";
+  return "registration-failed";
+}
 
 async function ensureMessaging() {
   if (messagingInstance) return messagingInstance;
@@ -63,7 +77,7 @@ function attachForegroundListener() {
 
 async function saveTokenToFirestore(token) {
   const uid = auth.currentUser?.uid;
-  if (!uid || !token) throw new Error("Faça login para registrar este aparelho.");
+  if (!uid || !token) throw new Error("push_auth_required");
   // updateDoc com caminho "data.fcmTokens" mexe SÓ nesse campo aninhado —
   // não sobrescreve o resto de userData/{uid}.data (tarefas, eventos etc.),
   // e continua batendo com a regra do firestore.rules (que só olha as
@@ -75,26 +89,29 @@ async function saveTokenToFirestore(token) {
 }
 
 // Chamado pelo notifications.js logo depois que a pessoa concede a
-// permissão de notificação do navegador. Retorna true/false (sucesso).
+// permissão de notificação do navegador. Retorna um resultado explícito
+// para a interface nunca confundir permissão local com token FCM salvo.
 async function enablePushNotifications() {
   try {
     if (!VAPID_KEY) {
       console.warn("Push em segundo plano indisponível: configure firebaseConfig.messagingVapidKey.");
-      return false;
+      return registrationResult(false, "vapid-key-missing");
     }
+    if (!("serviceWorker" in navigator)) return registrationResult(false, "service-worker-unsupported");
+    if (!("PushManager" in window)) return registrationResult(false, "push-manager-unsupported");
     const messaging = await ensureMessaging();
-    if (!messaging) return false;
+    if (!messaging) return registrationResult(false, "messaging-unsupported");
     const registration = await navigator.serviceWorker.ready;
     const token = await getToken(messaging, {
       vapidKey: VAPID_KEY,
       serviceWorkerRegistration: registration,
     });
-    if (!token) return false;
+    if (!token) return registrationResult(false, "token-empty");
     await saveTokenToFirestore(token);
-    return true;
+    return registrationResult(true, "registered");
   } catch (err) {
     console.warn("Não foi possível ativar notificações push:", err);
-    return false;
+    return registrationResult(false, safeErrorCode(err));
   }
 }
 
@@ -134,4 +151,8 @@ auth.onAuthStateChanged((user) => {
   if (alreadyEnabled) enablePushNotifications();
 });
 
-window.PulseNotePush = { enablePushNotifications, disablePushNotifications };
+window.PulseNotePush = {
+  enablePushNotifications,
+  disablePushNotifications,
+  getRegistrationStatus: () => ({ ...lastRegistrationStatus }),
+};
