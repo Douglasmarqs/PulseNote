@@ -1125,7 +1125,15 @@ function renderWhatsAppSettings() {
   if (!linkedBlock || !unlinkedBlock || !state) return;
 
   const appReminderCheckbox = document.getElementById("appReminderOptIn");
-  if (appReminderCheckbox) appReminderCheckbox.checked = state.appReminderOptIn !== false;
+  // A preferência da conta, sozinha, não prova que ESTE aparelho registrou
+  // a permissão do navegador. Exibir o controle como ligado sem essa
+  // permissão fazia a pessoa acreditar que receberia push com o app fechado,
+  // mesmo sem token FCM. O toggle agora representa o estado real do aparelho;
+  // ao ligá-lo, o fluxo abaixo pede a permissão e registra/renova o token.
+  if (appReminderCheckbox) {
+    appReminderCheckbox.checked = state.appReminderOptIn !== false
+      && window.notificationsAreEnabled?.() === true;
+  }
 
   if (state.whatsappLinkedPhone) {
     linkedBlock.hidden   = false;
@@ -1679,7 +1687,9 @@ function normalizeState(parsed) {
   if (parsed.whatsappReminderOptIn === undefined) parsed.whatsappReminderOptIn = false;
   // A pessoa pode desligar notificações no aplicativo sem precisar
   // desligar os lembretes do WhatsApp (e vice-versa).
-  if (parsed.appReminderOptIn === undefined) parsed.appReminderOptIn = true;
+  if (parsed.appReminderOptIn === undefined) {
+    parsed.appReminderOptIn = parsed.fcmTokens.length > 0;
+  }
   // Retrocompatibilidade: lançamentos, tarefas e metas antigos não tinham
   // esses campos — garantimos que existam pra não quebrar o restante do app.
   parsed.tasks.forEach((t) => {
@@ -1712,7 +1722,7 @@ function loadDefaultState() {
     whatsappLinkedPhone: null,
     fcmTokens: [],
     whatsappReminderOptIn: false,
-    appReminderOptIn: true,
+    appReminderOptIn: false,
   };
 }
 
@@ -7619,4 +7629,5 @@ window.updateGoalProgress = updateGoalProgress;
 // silenciosamente não faziam nada.
 window.setView = setView;
 window.setNotesFolderFilter = setNotesFolderFilter;
+
 
