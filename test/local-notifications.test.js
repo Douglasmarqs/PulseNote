@@ -5,6 +5,7 @@ const path = require("node:path");
 const vm = require("node:vm");
 
 const source = fs.readFileSync(path.join(__dirname, "../src/notifications.js"), "utf8");
+const appSource = fs.readFileSync(path.join(__dirname, "../src/app.js"), "utf8");
 const dueAt = new Date("2026-09-10T09:00:00").getTime();
 
 function loadNotifications({ permission = "granted", now = dueAt, state, localToday } = {}) {
@@ -52,6 +53,12 @@ test("permissão previamente concedida ainda registra o token de push", async ()
   assert.equal(app.permissionRequests, 0);
   assert.equal(app.pushRegistrations, 1);
   assert.equal(app.stored.get("pn_notifications_enabled"), "1");
+});
+
+test("o toggle de push reflete a permissão real deste aparelho", () => {
+  assert.match(appSource, /appReminderCheckbox\.checked = state\.appReminderOptIn !== false\s*&& window\.notificationsAreEnabled\?\.\(\) === true/);
+  assert.match(appSource, /parsed\.appReminderOptIn = parsed\.fcmTokens\.length > 0/);
+  assert.match(appSource, /appReminderOptIn: false/);
 });
 
 test("lembrete zero dispara na hora e usa a mesma tag do push remoto", async () => {
@@ -119,3 +126,4 @@ test("resumo de tarefas usa o dia local, não a data UTC", async () => {
   await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual(app.shown.map((item) => item.tag), ["tasks-today"]);
 });
+
