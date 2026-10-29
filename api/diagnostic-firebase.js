@@ -55,7 +55,7 @@ module.exports = async function diagnosticFirebase(req, res) {
 
     return res.status(200).json({ ok: true, stage: "complete", ...result });
   } catch (error) {
-    return res.status(500).json({ ok: false, stage, error: safeError(error) });
+    return res.status(500).json({ ok: false, stage, node: process.version, error: safeError(error) });
   }
 };
 
