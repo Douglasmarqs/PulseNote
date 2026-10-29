@@ -46,3 +46,10 @@ test("the same signed-in account can switch between the personal app and adminis
   assert.match(appJs, /douglas1201\.santos@gmail\.com/);
   assert.match(appJs, /dropdownEntry\.hidden = !\(allowed \|\| isPrimaryOwner\)/);
 });
+
+test("admin identifies production, preview and local environments without a misleading static label", () => {
+  assert.match(html, /id="adEnvironment">Ambiente de prévia<\/span>/);
+  assert.match(js, /hostname === "pulse-note-5erj\.vercel\.app"/);
+  assert.match(js, /"Ambiente de produção"/);
+  assert.match(js, /"Ambiente local" : "Ambiente de prévia"/);
+});

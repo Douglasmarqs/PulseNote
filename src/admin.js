@@ -45,6 +45,18 @@ function applyTheme(choice = globalThis.localStorage?.getItem("pulsenote-theme")
 
 applyTheme();
 
+function renderEnvironmentLabel(hostname = globalThis.location?.hostname || "") {
+  const label = $("#adEnvironment");
+  if (!label) return;
+  if (hostname === "pulse-note-5erj.vercel.app") {
+    label.textContent = "Ambiente de produção";
+    return;
+  }
+  label.textContent = /^(?:localhost|127\.0\.0\.1)$/.test(hostname) ? "Ambiente local" : "Ambiente de prévia";
+}
+
+renderEnvironmentLabel();
+
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (character) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
