@@ -293,6 +293,8 @@ async function integrationStatus(db) {
     const status = ["processing", "accepted", "failed"].includes(delivery.status)
       ? delivery.status
       : delivery.acceptedAt ? "accepted" : delivery.lastError ? "failed" : "unknown";
+    const providerStatus = ["sent", "delivered", "read", "failed"].includes(delivery.providerStatus)
+      ? delivery.providerStatus : null;
     return {
       id: String(entry.id || "").slice(0, 10),
       uid: text(delivery.uid, 128),
@@ -301,6 +303,8 @@ async function integrationStatus(db) {
       status,
       attemptedAt: timestampValue(delivery.updatedAt || delivery.acceptedAt),
       acceptedAt: timestampValue(delivery.acceptedAt),
+      providerStatus,
+      providerUpdatedAt: timestampValue(delivery.providerUpdatedAt),
       error: status === "failed" ? text(delivery.lastError, 160) || "provider_error" : null,
     };
   });

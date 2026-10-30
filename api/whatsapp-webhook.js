@@ -80,6 +80,60 @@ async function timeStage(stage, messageId, work) {
   finally { logStage(stage, startedAt, messageId); }
 }
 
+const DELIVERY_STATUS_RANK = Object.freeze({ sent: 1, delivered: 2, read: 3, failed: 4 });
+
+function normalizeMetaDeliveryStatus(status) {
+  const providerStatus = String(status?.status || "").toLowerCase();
+  const providerMessageId = String(status?.id || "");
+  if (!DELIVERY_STATUS_RANK[providerStatus] || !providerMessageId) return null;
+  const providerMessageIdHash = crypto.createHash("sha256").update(providerMessageId).digest("hex");
+  const seconds = Number(status?.timestamp);
+  const providerUpdatedAt = Number.isFinite(seconds) && seconds > 0
+    ? new Date(seconds * 1000).toISOString()
+    : new Date().toISOString();
+  const metaCode = String(status?.errors?.[0]?.code || "").replace(/[^0-9A-Za-z_-]/g, "").slice(0, 40);
+  return {
+    providerMessageIdHash,
+    providerStatus,
+    providerUpdatedAt,
+    providerError: providerStatus === "failed" ? `meta_${metaCode || "delivery_failed"}` : null,
+  };
+}
+
+function shouldApplyProviderStatus(current, incoming) {
+  return (DELIVERY_STATUS_RANK[incoming] || 0) >= (DELIVERY_STATUS_RANK[current] || 0);
+}
+
+async function recordMetaDeliveryStatuses(fb, statuses) {
+  const db = fb.firestore();
+  for (const rawStatus of Array.isArray(statuses) ? statuses : []) {
+    const update = normalizeMetaDeliveryStatus(rawStatus);
+    if (!update) continue;
+    const statusRef = db.collection("whatsappDeliveryStatuses").doc(update.providerMessageIdHash);
+    await db.runTransaction(async (tx) => {
+      const previous = (await tx.get(statusRef)).data() || {};
+      if (shouldApplyProviderStatus(previous.providerStatus, update.providerStatus)) {
+        tx.set(statusRef, update, { merge: true });
+      }
+    });
+    const receipts = await db.collection("reminderDeliveries")
+      .where("providerMessageIdHash", "==", update.providerMessageIdHash).limit(10).get();
+    for (const receipt of receipts.docs) {
+      await db.runTransaction(async (tx) => {
+        const previous = (await tx.get(receipt.ref)).data() || {};
+        if (!shouldApplyProviderStatus(previous.providerStatus, update.providerStatus)) return;
+        tx.set(receipt.ref, {
+          providerStatus: update.providerStatus,
+          providerUpdatedAt: update.providerUpdatedAt,
+          ...(update.providerStatus === "failed"
+            ? { status: "failed", lastError: update.providerError }
+            : {}),
+        }, { merge: true });
+      });
+    }
+  }
+}
+
 // Espelha as categorias padrão de src/app.js (expenseCategories /
 // incomeCategories) — precisam bater com as do app para os ids que a IA
 // escolhe fazerem sentido no Firestore. Se você editar as categorias
@@ -1562,14 +1616,12 @@ module.exports = async (req, res) => {
   try {
     const message = body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
     if (!message) {
-      // Não é mensagem recebida — é status de entrega (enviado/entregue/
-      // lido/FALHOU) de uma mensagem que O PRÓPRIO webhook mandou. Só
-      // logamos quando falha de verdade, pra não poluir os logs com
-      // "sent"/"delivered"/"read" de cada mensagem enviada.
       const statuses = body?.entry?.[0]?.changes?.[0]?.value?.statuses;
-      const failed = statuses?.find((s) => s.status === "failed");
-      if (failed) {
-        console.error("Entrega de mensagem falhou:", JSON.stringify(failed.errors));
+      if (Array.isArray(statuses) && statuses.length) {
+        const fb = getFirebaseAdmin();
+        await recordMetaDeliveryStatuses(fb, statuses);
+        const failed = statuses.find((s) => s.status === "failed");
+        if (failed) console.error("Entrega de mensagem falhou:", normalizeMetaDeliveryStatus(failed)?.providerError || "meta_delivery_failed");
       }
       return respondOk();
     }
@@ -2100,4 +2152,5 @@ module.exports._test = {
   parseFinanceReferenceCommand, sendWhatsAppDocument, findUidForPhone, confirmWhatsAppLink,
   deleteTaskByQuery, deleteNoteByQuery, selectPendingDelete, clearPendingDelete, formatDeleteChoices,
   financeDeletionTarget, deleteLastWhatsAppEntry,
+  normalizeMetaDeliveryStatus, shouldApplyProviderStatus, recordMetaDeliveryStatuses,
 };

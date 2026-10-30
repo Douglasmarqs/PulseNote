@@ -30,6 +30,7 @@ function memoryDb() {
     docs,
     collection: () => ({ doc: id => ({
       id,
+      get: async () => ({ exists: docs.has(id), data: () => docs.get(id) }),
       set: async value => docs.set(id, { ...docs.get(id), ...value }),
     }) }),
     runTransaction: async fn => fn({
@@ -51,6 +52,15 @@ test('falha no WhatsApp permite retry e não repete push já aceito', async () =
   const records = [...db.docs.values()];
   assert.ok(records.some(record => record.uid === 'u1' && record.channel === 'whatsapp' && record.notificationKey === 'event_consulta' && record.status === 'accepted'));
   assert.ok(records.every(record => !Object.hasOwn(record, 'phone') && !Object.hasOwn(record, 'body')));
+});
+
+test('lembrete WhatsApp guarda somente hash do identificador da Meta', async () => {
+  const db = memoryDb();
+  const n = { key: 'event_consulta', occurrence: '2026-09-23T09:00_15' };
+  await deliverChannel(db, 'u1', n, 'whatsapp', new Date('2026-09-23T11:45:00Z'), async () => 'wamid.secreto');
+  const record = [...db.docs.values()].find(value => value.channel === 'whatsapp');
+  assert.match(record.providerMessageIdHash, /^[a-f0-9]{64}$/);
+  assert.equal(JSON.stringify(record).includes('wamid.secreto'), false);
 });
 
 test('cron atrasado recupera compromisso recente e zero significa na hora', () => {

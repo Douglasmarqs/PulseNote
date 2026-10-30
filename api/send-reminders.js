@@ -379,8 +379,27 @@ async function deliverChannel(db, uid, notification, channel, now, send) {
   });
   if (!claimed) return false;
   try {
-    await send();
-    await ref.set({ acceptedAt: now.toISOString(), updatedAt: new Date().toISOString(), status: "accepted", leaseUntil: 0, retryAfter: 0, lastError: null }, { merge: true });
+    const providerMessageId = await send();
+    const acceptedUpdate = { acceptedAt: now.toISOString(), updatedAt: new Date().toISOString(), status: "accepted", leaseUntil: 0, retryAfter: 0, lastError: null };
+    if (channel === "whatsapp" && typeof providerMessageId === "string" && providerMessageId) {
+      const providerMessageIdHash = crypto.createHash("sha256").update(providerMessageId).digest("hex");
+      acceptedUpdate.providerMessageIdHash = providerMessageIdHash;
+      // A confirmação da Meta pode chegar ao webhook antes de esta função
+      // terminar de persistir o ID. Reconciliar o evento elimina essa corrida.
+      const statusSnapshot = await db.collection("whatsappDeliveryStatuses").doc(providerMessageIdHash).get();
+      if (statusSnapshot.exists) {
+        const provider = statusSnapshot.data() || {};
+        if (["sent", "delivered", "read", "failed"].includes(provider.providerStatus)) {
+          acceptedUpdate.providerStatus = provider.providerStatus;
+          acceptedUpdate.providerUpdatedAt = provider.providerUpdatedAt || acceptedUpdate.updatedAt;
+          if (provider.providerStatus === "failed") {
+            acceptedUpdate.status = "failed";
+            acceptedUpdate.lastError = provider.providerError || "meta_delivery_failed";
+          }
+        }
+      }
+    }
+    await ref.set(acceptedUpdate, { merge: true });
     return true;
   } catch (error) {
     const retryDelayMs = error.message === "whatsapp_configuration_missing"

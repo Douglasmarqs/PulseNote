@@ -232,8 +232,13 @@ function renderIntegrationRows(data, selector, compact = false) {
   if (!compact && $("#adReminderDeliveries")) {
     const deliveries = Array.isArray(data.reminderDeliveries) ? data.reminderDeliveries : [];
     const channelLabel = { whatsapp: "WhatsApp", push: "Push", unknown: "Canal antigo" };
-    const statusLabel = { accepted: "Aceito pelo provedor", failed: "Falhou", processing: "Processando", unknown: "Sem estado" };
-    $("#adReminderDeliveries").innerHTML = deliveries.length ? deliveries.map((delivery) => `<div class="ad-delivery"><span class="ad-delivery-channel">${escapeHtml(channelLabel[delivery.channel] || delivery.channel)}</span><span class="ad-delivery-copy"><strong>${escapeHtml(delivery.notificationKey || "Lembrete")}</strong><small>${escapeHtml(delivery.uid ? `Usuário ${delivery.uid}` : "Registro anterior à identificação do canal")} · ${escapeHtml(readableTimestamp(delivery.attemptedAt))}${delivery.error ? ` · ${escapeHtml(delivery.error)}` : ""}</small></span><span class="ad-pill ${delivery.status === "failed" ? "is-danger" : delivery.status === "accepted" ? "" : "is-warn"}">${escapeHtml(statusLabel[delivery.status] || delivery.status)}</span></div>`).join("") : `<div class="ad-empty">Nenhuma tentativa de lembrete registrada ainda.</div>`;
+    const statusLabel = { accepted: "Aceito pela API", failed: "Falhou", processing: "Processando", unknown: "Sem estado" };
+    const providerLabel = { sent: "Enviado pela Meta", delivered: "Entregue no aparelho", read: "Lido", failed: "Recusado pela Meta" };
+    $("#adReminderDeliveries").innerHTML = deliveries.length ? deliveries.map((delivery) => {
+      const visibleStatus = delivery.providerStatus || delivery.status;
+      const label = providerLabel[delivery.providerStatus] || statusLabel[delivery.status] || visibleStatus;
+      return `<div class="ad-delivery"><span class="ad-delivery-channel">${escapeHtml(channelLabel[delivery.channel] || delivery.channel)}</span><span class="ad-delivery-copy"><strong>${escapeHtml(delivery.notificationKey || "Lembrete")}</strong><small>${escapeHtml(delivery.uid ? `Usuário ${delivery.uid}` : "Registro anterior à identificação do canal")} · ${escapeHtml(readableTimestamp(delivery.providerUpdatedAt || delivery.attemptedAt))}${delivery.error ? ` · ${escapeHtml(delivery.error)}` : ""}</small></span><span class="ad-pill ${visibleStatus === "failed" ? "is-danger" : ["accepted", "sent"].includes(visibleStatus) ? "is-warn" : ""}">${escapeHtml(label)}</span></div>`;
+    }).join("") : `<div class="ad-empty">Nenhuma tentativa de lembrete registrada ainda.</div>`;
   }
   const stripe = data.integrations.find((item) => item.id === "stripe");
   if (stripe && $("#adBillingStatus")) {

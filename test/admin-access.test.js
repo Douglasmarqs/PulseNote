@@ -189,7 +189,8 @@ test("monitoramento mostra sinais reais e não confunde credenciais com entrega"
   assert.equal(qstash.runStatus, "ok");
   assert.deepEqual(result.reminderDeliveries[0], {
     id: "receipt-12", uid: "u1", channel: "whatsapp", notificationKey: "event_consulta", status: "failed",
-    attemptedAt: "2026-10-13T18:04:00.000Z", acceptedAt: null, error: "whatsapp_400_132001",
+    attemptedAt: "2026-10-13T18:04:00.000Z", acceptedAt: null,
+    providerStatus: null, providerUpdatedAt: null, error: "whatsapp_400_132001",
   });
   assert.equal(JSON.stringify(result.reminderDeliveries).includes("5531999999999"), false);
   assert.equal(JSON.stringify(result.reminderDeliveries).includes("não expor"), false);
