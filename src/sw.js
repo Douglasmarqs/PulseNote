@@ -27,7 +27,13 @@
 // v15: alinha o tema Eclipse à paleta violeta/ciano da atualização.
 // v16: entrega a saudação, o Planner mensal e o editor de notas revisados.
 // v21: entrega a consolidação responsiva de Notas e Planner em mobile.css.
-const CACHE_NAME = "pulsenote-v21";
+// v22: invalida o CSS antigo do painel administrativo após a correção responsiva.
+// v23: atualiza o fluxo de retorno à administração após o login.
+// v24: entrega o Dashboard com painéis sempre visíveis no PWA instalado.
+// v25: entrega o novo painel administrativo e a área de assinatura.
+// v27: invalida os recursos antigos após corrigir a navegação do painel
+// que alguns bloqueadores de conteúdo ocultavam como se fosse publicidade.
+const CACHE_NAME = "pulsenote-v35";
 
 // ── Firebase Cloud Messaging (push em segundo plano) ──────────────
 // Isso é o que permite uma notificação aparecer mesmo com o PulseNote

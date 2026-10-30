@@ -1,6 +1,28 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildNotifications, deliverChannel, sendWhatsAppReminder, sendPush } = require('../api/send-reminders')._test;
+const { buildNotifications, verifiedReminderWhatsAppPhone, deliverChannel, sendWhatsAppReminder, sendPush } = require('../api/send-reminders')._test;
+
+test('WhatsApp reminder only uses the server-owned phone link for the same UID', async () => {
+  const phone = '5531999999999';
+  const links = new Map([[phone, { uid: 'u1' }]]);
+  let reads = 0;
+  const db = { collection: (name) => {
+    assert.equal(name, 'whatsappLinks');
+    return { doc: (id) => ({ get: async () => {
+      reads++;
+      const link = links.get(id);
+      return { exists: Boolean(link), data: () => link };
+    } }) };
+  } };
+
+  assert.equal(await verifiedReminderWhatsAppPhone(db, 'u1', phone), phone);
+  assert.equal(await verifiedReminderWhatsAppPhone(db, 'u2', phone), null);
+  links.delete(phone);
+  assert.equal(await verifiedReminderWhatsAppPhone(db, 'u1', phone), null);
+  assert.equal(await verifiedReminderWhatsAppPhone(db, 'u1', '../outro'), null);
+  assert.equal(await verifiedReminderWhatsAppPhone(db, 'u1', null), null);
+  assert.equal(reads, 3, 'invalid phone numbers must not become Firestore document paths');
+});
 
 function memoryDb() {
   const docs = new Map();
@@ -8,6 +30,7 @@ function memoryDb() {
     docs,
     collection: () => ({ doc: id => ({
       id,
+      get: async () => ({ exists: docs.has(id), data: () => docs.get(id) }),
       set: async value => docs.set(id, { ...docs.get(id), ...value }),
     }) }),
     runTransaction: async fn => fn({
@@ -26,6 +49,18 @@ test('falha no WhatsApp permite retry e não repete push já aceito', async () =
   assert.equal(await deliverChannel(db, 'u1', n, 'push', now, async () => { throw Error('duplicado'); }), false);
   assert.equal(await deliverChannel(db, 'u1', n, 'whatsapp', now, async () => {}), true);
   assert.equal(await deliverChannel(db, 'u1', { ...n, occurrence: '2026-09-24T09:00_15' }, 'push', now, async () => {}), true);
+  const records = [...db.docs.values()];
+  assert.ok(records.some(record => record.uid === 'u1' && record.channel === 'whatsapp' && record.notificationKey === 'event_consulta' && record.status === 'accepted'));
+  assert.ok(records.every(record => !Object.hasOwn(record, 'phone') && !Object.hasOwn(record, 'body')));
+});
+
+test('lembrete WhatsApp guarda somente hash do identificador da Meta', async () => {
+  const db = memoryDb();
+  const n = { key: 'event_consulta', occurrence: '2026-09-23T09:00_15' };
+  await deliverChannel(db, 'u1', n, 'whatsapp', new Date('2026-09-23T11:45:00Z'), async () => 'wamid.secreto');
+  const record = [...db.docs.values()].find(value => value.channel === 'whatsapp');
+  assert.match(record.providerMessageIdHash, /^[a-f0-9]{64}$/);
+  assert.equal(JSON.stringify(record).includes('wamid.secreto'), false);
 });
 
 test('cron atrasado recupera compromisso recente e zero significa na hora', () => {

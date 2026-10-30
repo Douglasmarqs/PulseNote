@@ -14,6 +14,19 @@
 
 const NOTIFIED_KEY_PREFIX = "pn_notified_";
 
+function recordPushSetupStatus(code) {
+  const status = { ok: false, code, at: new Date().toISOString() };
+  window.PulseNotePushSetupStatus = status;
+  localStorage.setItem("pn_push_setup_status", JSON.stringify(status));
+  try {
+    window.dispatchEvent?.(new CustomEvent("pulsenote:push-status", { detail: status }));
+  } catch (_) {
+    // O estado global acima continua sendo a fonte de verdade em navegadores
+    // antigos que não oferecem CustomEvent.
+  }
+  return status;
+}
+
 // Evita notificar a mesma coisa duas vezes no mesmo dia
 function alreadyNotifiedToday(uniqueId) {
   const key = `${NOTIFIED_KEY_PREFIX}${uniqueId}`;
@@ -55,30 +68,46 @@ function fireNotification(title, body, tag, onClickView, itemId) {
 // nunca automaticamente ao carregar a página — navegadores bloqueiam isso)
 async function requestNotificationPermission() {
   if (!("Notification" in window)) {
+    recordPushSetupStatus("notification-unsupported");
     (window.PulseNoteShowToast || console.log)("Seu navegador não suporta notificações.");
     return false;
   }
-  if (Notification.permission === "granted") return true;
   if (Notification.permission === "denied") {
+    recordPushSetupStatus("permission-denied");
     (window.PulseNoteShowToast || console.log)("Notificações bloqueadas. Ative nas configurações do navegador.");
     return false;
   }
-  const result = await Notification.requestPermission();
+  // A permissão pode já ter sido concedida nas configurações do navegador
+  // ou numa instalação anterior. Mesmo assim precisamos registrar o token
+  // FCM deste aparelho: só a permissão não habilita push com o app fechado.
+  const result = Notification.permission === "granted"
+    ? "granted"
+    : await Notification.requestPermission();
   if (result === "granted") {
-    (window.PulseNoteShowToast || console.log)("🔔 Notificações ativadas!");
     localStorage.setItem("pn_notifications_enabled", "1");
     // Registra também o push do FCM (ver push-notifications.js) — é isso
     // que permite a notificação chegar mesmo com o app/aba fechados, via
     // um servidor externo (api/send-reminders.js). Não bloqueia o fluxo
     // se falhar (ex.: navegador sem suporte): as notificações locais
     // (enquanto o app está aberto) continuam funcionando normalmente.
-    const backgroundPushReady = await window.PulseNotePush?.enablePushNotifications?.().catch(() => false);
-    if (!backgroundPushReady) {
-      (window.PulseNoteShowToast || console.log)("Notificações locais ativadas. O push com o app fechado ainda precisa da configuração Web Push deste projeto.");
+    const rawPushResult = await window.PulseNotePush?.enablePushNotifications?.()
+      .catch(() => ({ ok: false, code: "registration-failed" }));
+    const pushResult = rawPushResult === true
+      ? { ok: true, code: "registered" }
+      : rawPushResult || { ok: false, code: "module-unavailable" };
+    window.PulseNotePushSetupStatus = pushResult;
+    if (!pushResult.ok) {
+      localStorage.setItem("pn_push_setup_status", JSON.stringify(pushResult));
+      localStorage.removeItem("pn_notifications_enabled");
+      (window.PulseNoteShowToast || console.log)("Não foi possível registrar o push neste aparelho. Veja o motivo em Configurações e tente novamente.");
+      return false;
     }
+    localStorage.removeItem("pn_push_setup_status");
+    (window.PulseNoteShowToast || console.log)("🔔 Notificações ativadas neste aparelho!");
     runAllNotificationChecks(); // checa imediatamente após ativar
     return true;
   }
+  recordPushSetupStatus("permission-not-granted");
   (window.PulseNoteShowToast || console.log)("Notificações não foram ativadas.");
   return false;
 }
@@ -86,7 +115,14 @@ async function requestNotificationPermission() {
 function notificationsAreEnabled() {
   return "Notification" in window
     && Notification.permission === "granted"
-    && localStorage.getItem("pn_notifications_enabled") === "1";
+    && localStorage.getItem("pn_notifications_enabled") === "1"
+    && window.PulseNoteState?.appReminderOptIn !== false;
+}
+
+function pushNotificationsAreRegistered() {
+  return notificationsAreEnabled()
+    && Array.isArray(window.PulseNoteState?.fcmTokens)
+    && window.PulseNoteState.fcmTokens.some(Boolean);
 }
 
 // ── Verificações específicas por área do app ──────────────────
@@ -94,22 +130,24 @@ function notificationsAreEnabled() {
 // Tarefas com vencimento hoje ou atrasadas
 function checkTaskNotifications() {
   if (!window.PulseNoteState.tasks) return;
-  const today = new Date().toISOString().slice(0, 10);
   const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 
   // Tarefas com horário recebem alerta no minuto definido pela pessoa. As
   // tarefas antigas, sem horário, continuam no resumo diário logo abaixo.
   window.PulseNoteState.tasks.forEach((task) => {
     if (task.status === "Concluida" || task.status === "Cancelada" || !task.dueDate || !task.dueTime) return;
+    if (task.reminder === false || task.reminder === "none") return;
     const dueAt = new Date(`${task.dueDate}T${task.dueTime}`);
     const minutesUntil = (dueAt - now) / 60000;
-    const reminderMinutes = Number(task.reminder) || 15;
+    const reminderMinutes = Number(task.reminder ?? 15);
+    if (!Number.isFinite(reminderMinutes) || reminderMinutes < 0) return;
     const notifyKey = `task_${task.id}`;
-    if (minutesUntil > 0 && minutesUntil <= reminderMinutes && !alreadyNotifiedToday(notifyKey)) {
+    if (minutesUntil > -1 && minutesUntil <= reminderMinutes && !alreadyNotifiedToday(notifyKey)) {
       fireNotification(
         "Tarefa em breve",
         `“${task.title}” vence às ${task.dueTime}.`,
-        notifyKey,
+        `task-${task.id}`,
         "planner",
         task.id
       );
@@ -117,10 +155,12 @@ function checkTaskNotifications() {
   });
 
   const overdue = window.PulseNoteState.tasks.filter(
-    (t) => t.status !== "Concluida" && t.status !== "Cancelada" && t.dueDate && t.dueDate < today
+    (t) => t.status !== "Concluida" && t.status !== "Cancelada"
+      && t.reminder !== false && t.reminder !== "none" && t.dueDate && t.dueDate < today
   );
   const dueToday = window.PulseNoteState.tasks.filter(
-    (t) => t.status !== "Concluida" && t.status !== "Cancelada" && t.dueDate === today && !t.dueTime
+    (t) => t.status !== "Concluida" && t.status !== "Cancelada"
+      && t.reminder !== false && t.reminder !== "none" && t.dueDate === today && !t.dueTime
   );
 
   if (overdue.length > 0 && !alreadyNotifiedToday("tasks_overdue")) {
@@ -152,14 +192,16 @@ function checkEventNotifications() {
   const now = new Date();
 
   window.PulseNoteState.events.forEach((event) => {
-    if (!event.date || !event.time) return;
+    if (!event.date || !event.time || event.status === "Concluida" || event.status === "Cancelada") return;
+    if (event.reminder === false || event.reminder === "none") return;
     const eventDateTime = new Date(`${event.date}T${event.time}`);
     const minutesUntil = (eventDateTime - now) / 60000;
-    const reminderMinutes = Number(event.reminder) || 15;
+    const reminderMinutes = Number(event.reminder ?? 15);
+    if (!Number.isFinite(reminderMinutes) || reminderMinutes < 0) return;
 
     // Dispara quando o evento está dentro da janela de lembrete
     // (ex: lembrete de 15min, e faltam entre 0 e 15 minutos)
-    if (minutesUntil > 0 && minutesUntil <= reminderMinutes) {
+    if (minutesUntil > -1 && minutesUntil <= reminderMinutes) {
       const notifyKey = `event_${event.id}`;
       if (!alreadyNotifiedToday(notifyKey)) {
         fireNotification(
@@ -245,5 +287,6 @@ function startNotificationScheduler() {
 
 window.requestNotificationPermission = requestNotificationPermission;
 window.notificationsAreEnabled = notificationsAreEnabled;
+window.pushNotificationsAreRegistered = pushNotificationsAreRegistered;
 window.startNotificationScheduler = startNotificationScheduler;
 window.runAllNotificationChecks = runAllNotificationChecks;

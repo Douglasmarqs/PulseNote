@@ -71,6 +71,7 @@
          único arquivo, carregado depois da base para evitar regras dispersas
          competindo entre si. -->
     <link rel="stylesheet" href="/src/mobile.css" />
+    <link rel="stylesheet" href="/src/autopilot.css" />
   </head>
   <body>
     <div class="app-shell">
@@ -106,6 +107,10 @@
           <button class="nav-item" data-view="finances">
             <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8a2 2 0 012-2h11a2 2 0 012 2"/><rect x="3" y="8" width="18" height="11" rx="2"/><path d="M16.3 13.2h1.7"/></svg></span>
             <span>Finanças</span>
+          </button>
+          <button class="nav-item" data-view="autopilot">
+            <span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3m0 12v3M3 12h3m12 0h3M5.6 5.6l2.1 2.1m8.6 8.6 2.1 2.1M18.4 5.6l-2.1 2.1m-8.6 8.6-2.1 2.1"/><circle cx="12" cy="12" r="4"/></svg></span>
+            <span>Autopilot</span>
           </button>
           <button class="nav-item" data-view="profile">
             <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8.5" r="3.5"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></svg></span>
@@ -198,6 +203,16 @@
             </div>
           </section>
 
+          <section class="autopilot-entry" aria-labelledby="autopilotEntryTitle">
+            <span class="autopilot-entry-icon" aria-hidden="true">✦</span>
+            <div class="autopilot-entry-copy">
+              <span class="autopilot-eyebrow">Pulse Autopilot</span>
+              <h2 id="autopilotEntryTitle">Próxima ação, sem adivinhação</h2>
+              <p id="autopilotPreview">Analisando suas prioridades com segurança…</p>
+            </div>
+            <button type="button" class="autopilot-entry-button" data-view-shortcut="autopilot">Ver sugestões <span aria-hidden="true">→</span></button>
+          </section>
+
           <!-- Visão geral do dia: um único grid coeso. Antes eram dois grids
                empilhados com cartões parecidos e informação repetida
                ("Compromissos" e "Próximo evento" diziam quase a mesma
@@ -266,11 +281,8 @@
             </button>
           </div>
 
-          <!-- Dashboard panels — cada um pode ser minimizado (estado fica
-               salvo, então continua do jeito que a pessoa deixou da
-               próxima vez que abrir o app). O botão "→" continua levando
-               pra tela cheia daquele assunto; o chevron só encolhe/expande
-               o cartão aqui no início. -->
+          <!-- Painéis do Dashboard ficam sempre visíveis. Os botões "→"
+               continuam abrindo a área correspondente. -->
           <!-- Coluna principal + barra lateral, como qualquer dashboard
                profissional: a ordem visual sempre bate com a ordem aqui
                no HTML (nada de grid "dense" reordenando cartões sozinho). -->
@@ -284,7 +296,6 @@
                   </div>
                   <div class="dash-panel-actions">
                     <button class="icon-button" data-view-shortcut="planner" data-planner-focus="tasks" title="Ver tarefas">→</button>
-                    <button class="icon-button dash-panel-collapse-btn" type="button" data-collapse-toggle aria-expanded="true" title="Minimizar">⌄</button>
                   </div>
                 </div>
                 <div class="dash-panel-body">
@@ -317,7 +328,6 @@
                   </div>
                   <div class="dash-panel-actions">
                     <button class="icon-button" data-view-shortcut="planner" data-planner-focus="agenda" title="Ver agenda">→</button>
-                    <button class="icon-button dash-panel-collapse-btn" type="button" data-collapse-toggle aria-expanded="true" title="Minimizar">⌄</button>
                   </div>
                 </div>
                 <div class="dash-panel-body">
@@ -333,7 +343,6 @@
                   </div>
                   <div class="dash-panel-actions">
                     <button class="icon-button" data-view-shortcut="planner" data-planner-focus="goals" title="Ver metas">→</button>
-                    <button class="icon-button dash-panel-collapse-btn" type="button" data-collapse-toggle aria-expanded="true" title="Minimizar">⌄</button>
                   </div>
                 </div>
                 <div class="dash-panel-body">
@@ -349,7 +358,6 @@
                   </div>
                   <div class="dash-panel-actions">
                     <button class="icon-button" data-view-shortcut="finances" title="Ver finanças">→</button>
-                    <button class="icon-button dash-panel-collapse-btn" type="button" data-collapse-toggle aria-expanded="true" title="Minimizar">⌄</button>
                   </div>
                 </div>
                 <div class="dash-panel-body">
@@ -373,6 +381,35 @@
             </div>
           </div>
         </section>
+
+        <!-- Sugestões reais do backend; nenhuma ação é executada sem confirmação. -->
+        <section id="autopilotView" class="view" aria-labelledby="autopilotTitle">
+          <div class="autopilot-header">
+            <div>
+              <p class="autopilot-eyebrow">Pulse Autopilot</p>
+              <h2 id="autopilotTitle">Seu próximo passo, com clareza</h2>
+              <p>Prioridades de finanças, planner e notas. Você decide o que executar.</p>
+            </div>
+            <button type="button" id="autopilotRefresh" class="ghost-button">Atualizar sugestões</button>
+          </div>
+          <p id="autopilotStatus" class="autopilot-status" role="status" aria-live="polite">Carregando sugestões…</p>
+          <div id="autopilotList" class="autopilot-list"></div>
+          <p class="autopilot-privacy">Nada é alterado automaticamente. Cada ação exige sua confirmação.</p>
+        </section>
+
+        <div id="autopilotConfirmModal" class="modal-backdrop" hidden>
+          <div class="modal-card autopilot-confirm-card" role="dialog" aria-modal="true" aria-labelledby="autopilotConfirmTitle" aria-describedby="autopilotConfirmDescription">
+            <div class="modal-header">
+              <h2 id="autopilotConfirmTitle">Confirmar ação</h2>
+              <button type="button" id="autopilotConfirmClose" class="icon-button" aria-label="Fechar">✕</button>
+            </div>
+            <p id="autopilotConfirmDescription"></p>
+            <div class="autopilot-confirm-actions">
+              <button type="button" id="autopilotConfirmCancel" class="ghost-button">Cancelar</button>
+              <button type="button" id="autopilotConfirmApply" class="primary-button">Confirmar</button>
+            </div>
+          </div>
+        </div>
 
         <!-- Folha de criação rápida do Planner — Tarefa / Compromisso / Meta
              num único lugar, no lugar dos 3 formulários espalhados pelas
@@ -412,11 +449,13 @@
                   <label class="pqa-icon-row">
                     <span class="pqa-row-icon" style="color:var(--teal)">◷</span>
                     <span class="pqa-row-label">Horário</span>
-                    <input id="pqaTaskTime" type="time" class="pqa-row-control" value="09:00" />
+                    <input id="pqaTaskTime" type="time" class="pqa-row-control" />
                   </label>
                   <select id="pqaTaskReminder" aria-label="Antecedência do lembrete da tarefa">
+                    <option value="none" selected>Sem lembrete</option>
+                    <option value="0">Lembrar na hora</option>
                     <option value="5">Lembrar 5 min antes</option>
-                    <option value="15" selected>Lembrar 15 min antes</option>
+                    <option value="15">Lembrar 15 min antes</option>
                     <option value="30">Lembrar 30 min antes</option>
                     <option value="60">Lembrar 1 hora antes</option>
                     <option value="1440">Lembrar 1 dia antes</option>
@@ -424,7 +463,7 @@
                   </select>
                   <label id="pqaTaskReminderCustom" class="reminder-custom-field" hidden>
                     <span>Lembrar com</span>
-                    <input id="pqaTaskReminderMinutes" type="number" min="5" max="10080" step="5" inputmode="numeric" placeholder="ex.: 90" />
+                    <input id="pqaTaskReminderMinutes" type="number" min="1" max="10080" step="1" inputmode="numeric" placeholder="ex.: 90" />
                     <span>minutos de antecedência</span>
                   </label>
                 </div>
@@ -436,8 +475,10 @@
                   </div>
                   <input id="pqaEventLocation" placeholder="Local ou link" style="margin-top:10px" />
                   <select id="pqaEventReminder" style="margin-top:10px">
+                    <option value="none" selected>Sem lembrete</option>
+                    <option value="0">Lembrar na hora</option>
                     <option value="5">Lembrar 5 min antes</option>
-                    <option value="15" selected>Lembrar 15 min antes</option>
+                    <option value="15">Lembrar 15 min antes</option>
                     <option value="30">Lembrar 30 min antes</option>
                       <option value="60">Lembrar 1 hora antes</option>
                       <option value="1440">Lembrar 1 dia antes</option>
@@ -445,7 +486,7 @@
                     </select>
                     <label id="pqaEventReminderCustom" class="reminder-custom-field" hidden>
                       <span>Lembrar com</span>
-                      <input id="pqaEventReminderMinutes" type="number" min="5" max="10080" step="5" inputmode="numeric" placeholder="ex.: 90" />
+                      <input id="pqaEventReminderMinutes" type="number" min="1" max="10080" step="1" inputmode="numeric" placeholder="ex.: 90" />
                       <span>minutos de antecedência</span>
                     </label>
                   <textarea id="pqaEventNotes" rows="2" placeholder="Notas do compromisso (opcional)" style="margin-top:10px"></textarea>
@@ -1168,6 +1209,23 @@
               </div>
             </section>
 
+            <p class="settings-section-label">Plano e cobrança</p>
+
+            <section class="panel billing-settings-card" id="billingSettingsCard">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Assinatura</p>
+                  <h2>Seu plano PulseNote</h2>
+                </div>
+                <span class="billing-status-badge" id="billingStatusBadge">Carregando…</span>
+              </div>
+              <p class="task-meta" id="billingStatusText">Consultando os planos disponíveis e o estado da sua assinatura.</p>
+              <div class="billing-plan-grid" id="billingPlanGrid" aria-live="polite"></div>
+              <div class="form-actions billing-actions" id="billingActions" hidden>
+                <button id="billingPortalButton" type="button" class="ghost-button">Gerenciar pagamento e assinatura</button>
+              </div>
+            </section>
+
             <p class="settings-section-label">Integrações</p>
 
             <section class="panel">
@@ -1180,7 +1238,7 @@
 
               <div id="whatsappLinkedBlock" hidden>
                 <p class="task-meta" style="margin-bottom:10px">
-                  <span style="display:inline-flex;align-items:center;gap:4px;color:var(--green)">${""}<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Assistente ativo</span> no número <strong id="whatsappLinkedPhoneLabel"></strong>. Mande uma mensagem tipo
+                  <span style="display:inline-flex;align-items:center;gap:4px;color:var(--green)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Assistente ativo</span> no número <strong id="whatsappLinkedPhoneLabel"></strong>. Mande uma mensagem tipo
                   <em>"gastei 45 no mercado"</em> ou <em>"me lembra de pagar o boleto sexta"</em> que o Pulsinho cuida do resto.
                 </p>
                 <label style="display:flex;align-items:center;gap:8px;margin-bottom:14px;cursor:pointer">
@@ -1214,8 +1272,9 @@
               <p class="task-meta" style="margin-bottom:12px">Defina o horário e a antecedência em cada tarefa ou compromisso. Os avisos chegam no navegador/PWA e, se você habilitar acima, também no WhatsApp.</p>
               <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
                 <input type="checkbox" id="appReminderOptIn" style="width:16px;height:16px" />
-                <span class="task-meta" style="margin:0">Receber lembretes no aplicativo</span>
+                <span class="task-meta" style="margin:0">Receber lembretes neste aparelho</span>
               </label>
+              <p class="task-meta" id="appReminderStatus" role="status" style="margin-top:8px"></p>
             </section>
 
             <p class="settings-section-label">Segurança e dados</p>
@@ -1271,6 +1330,17 @@
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.3-6.4L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.3 6.4L3 16"/><path d="M3 21v-5h5"/></svg>
                 <span>Buscar versão mais recente</span>
               </button>
+            </section>
+
+            <section id="adminAccessCard" class="panel" hidden>
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Sua conta administrativa</p>
+                  <h2>Central de gestão do PulseNote</h2>
+                </div>
+              </div>
+              <p class="task-meta">Acesse usuários, planos, cobranças, recursos e integrações sem sair da sua conta principal.</p>
+              <a href="/admin" class="primary-button">Abrir administração →</a>
             </section>
 
             <p class="settings-section-label">Sessão</p>
@@ -1404,8 +1474,8 @@
     </div>
 
     <script src="/src/pwa-install.js" defer></script>
-    <script src="/src/notifications.js" defer></script>
-    <script type="module" src="/src/app.js"></script>
-    <script type="module" src="/src/push-notifications.js"></script>
+    <script src="/src/notifications.js?v=35" defer></script>
+    <script type="module" src="/src/app.js?v=35"></script>
+    <script type="module" src="/src/push-notifications.js?v=35"></script>
   </body>
 </html>
