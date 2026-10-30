@@ -8,7 +8,7 @@ const source = fs.readFileSync(path.join(__dirname, "../src/notifications.js"), 
 const appSource = fs.readFileSync(path.join(__dirname, "../src/app.js"), "utf8");
 const dueAt = new Date("2026-09-10T09:00:00").getTime();
 
-function loadNotifications({ permission = "granted", now = dueAt, state, localToday, pushResult = true } = {}) {
+function loadNotifications({ permission = "granted", notificationSupported = true, now = dueAt, state, localToday, pushResult = true } = {}) {
   const shown = [];
   const stored = new Map();
   let pushRegistrations = 0;
@@ -24,6 +24,12 @@ function loadNotifications({ permission = "granted", now = dueAt, state, localTo
     static permission = permission;
     static async requestPermission() { permissionRequests++; return "granted"; }
   }
+  const windowStub = {
+    PulseNoteState: state,
+    PulseNoteShowToast: () => {},
+    PulseNotePush: { enablePushNotifications: async () => { pushRegistrations++; return pushResult; } },
+  };
+  if (notificationSupported) windowStub.Notification = NotificationStub;
   const context = {
     Date: FixedDate,
     Notification: NotificationStub,
@@ -37,12 +43,7 @@ function loadNotifications({ permission = "granted", now = dueAt, state, localTo
     },
     setInterval: () => 1,
     console,
-    window: {
-      Notification: NotificationStub,
-      PulseNoteState: state,
-      PulseNoteShowToast: () => {},
-      PulseNotePush: { enablePushNotifications: async () => { pushRegistrations++; return pushResult; } },
-    },
+    window: windowStub,
   };
   vm.runInNewContext(source, context);
   return { window: context.window, shown, stored, get pushRegistrations() { return pushRegistrations; }, get permissionRequests() { return permissionRequests; } };
@@ -67,6 +68,20 @@ test("falha ao registrar FCM não deixa o aparelho marcado como ativo", async ()
   assert.equal(await app.window.requestNotificationPermission(), false);
   assert.equal(app.stored.get("pn_notifications_enabled"), undefined);
   assert.equal(app.window.PulseNotePushSetupStatus.code, "messaging/token-subscribe-failed");
+});
+
+test("navegador sem Notification registra diagnóstico explícito", async () => {
+  const app = loadNotifications({ notificationSupported: false });
+  assert.equal(await app.window.requestNotificationPermission(), false);
+  assert.equal(app.pushRegistrations, 0);
+  assert.equal(app.window.PulseNotePushSetupStatus.code, "notification-unsupported");
+});
+
+test("permissão bloqueada registra diagnóstico explícito", async () => {
+  const app = loadNotifications({ permission: "denied" });
+  assert.equal(await app.window.requestNotificationPermission(), false);
+  assert.equal(app.pushRegistrations, 0);
+  assert.equal(app.window.PulseNotePushSetupStatus.code, "permission-denied");
 });
 
 test("lembrete zero dispara na hora e usa a mesma tag do push remoto", async () => {

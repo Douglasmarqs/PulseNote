@@ -1142,6 +1142,11 @@ function renderWhatsAppSettings() {
       || { code: "not-attempted" };
     const failureLabels = {
       "auth-required": "Entre novamente na conta e tente ativar o push.",
+      "notification-unsupported": "Este navegador não oferece notificações. Use um navegador compatível ou instale o PulseNote como aplicativo.",
+      "permission-denied": "Notificações estão bloqueadas para este site. Libere-as nas configurações do navegador.",
+      "permission-not-granted": "A permissão de notificações não foi concedida neste aparelho.",
+      "module-unavailable": "O módulo de push não terminou de carregar. Atualize a página e tente novamente.",
+      "registration-failed": "Não foi possível registrar este aparelho para push. Atualize a página e tente novamente.",
       "messaging-unsupported": "Este navegador não oferece push em segundo plano.",
       "push-manager-unsupported": "Este dispositivo não oferece push em segundo plano.",
       "service-worker-unsupported": "Este navegador não oferece notificações com o app fechado.",
