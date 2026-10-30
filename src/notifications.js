@@ -17,6 +17,7 @@ const NOTIFIED_KEY_PREFIX = "pn_notified_";
 function recordPushSetupStatus(code) {
   const status = { ok: false, code, at: new Date().toISOString() };
   window.PulseNotePushSetupStatus = status;
+  localStorage.setItem("pn_push_setup_status", JSON.stringify(status));
   try {
     window.dispatchEvent?.(new CustomEvent("pulsenote:push-status", { detail: status }));
   } catch (_) {
@@ -96,10 +97,12 @@ async function requestNotificationPermission() {
       : rawPushResult || { ok: false, code: "module-unavailable" };
     window.PulseNotePushSetupStatus = pushResult;
     if (!pushResult.ok) {
+      localStorage.setItem("pn_push_setup_status", JSON.stringify(pushResult));
       localStorage.removeItem("pn_notifications_enabled");
       (window.PulseNoteShowToast || console.log)("Não foi possível registrar o push neste aparelho. Veja o motivo em Configurações e tente novamente.");
       return false;
     }
+    localStorage.removeItem("pn_push_setup_status");
     (window.PulseNoteShowToast || console.log)("🔔 Notificações ativadas neste aparelho!");
     runAllNotificationChecks(); // checa imediatamente após ativar
     return true;

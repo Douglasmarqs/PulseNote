@@ -1137,7 +1137,14 @@ function renderWhatsAppSettings() {
   const appReminderStatus = document.getElementById("appReminderStatus");
   if (appReminderStatus) {
     const hasToken = Array.isArray(state.fcmTokens) && state.fcmTokens.some(Boolean);
+    let persistedPushStatus = null;
+    try {
+      persistedPushStatus = JSON.parse(localStorage.getItem("pn_push_setup_status") || "null");
+    } catch (_) {
+      localStorage.removeItem("pn_push_setup_status");
+    }
     const pushStatus = window.PulseNotePushSetupStatus
+      || persistedPushStatus
       || window.PulseNotePush?.getRegistrationStatus?.()
       || { code: "not-attempted" };
     const failureLabels = {

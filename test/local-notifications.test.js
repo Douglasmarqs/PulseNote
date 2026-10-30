@@ -75,6 +75,7 @@ test("navegador sem Notification registra diagnóstico explícito", async () => 
   assert.equal(await app.window.requestNotificationPermission(), false);
   assert.equal(app.pushRegistrations, 0);
   assert.equal(app.window.PulseNotePushSetupStatus.code, "notification-unsupported");
+  assert.match(app.stored.get("pn_push_setup_status"), /notification-unsupported/);
 });
 
 test("permissão bloqueada registra diagnóstico explícito", async () => {
@@ -82,6 +83,12 @@ test("permissão bloqueada registra diagnóstico explícito", async () => {
   assert.equal(await app.window.requestNotificationPermission(), false);
   assert.equal(app.pushRegistrations, 0);
   assert.equal(app.window.PulseNotePushSetupStatus.code, "permission-denied");
+  assert.match(app.stored.get("pn_push_setup_status"), /permission-denied/);
+});
+
+test("a tela reaproveita o diagnóstico persistido após renderização", () => {
+  assert.match(appSource, /localStorage\.getItem\("pn_push_setup_status"\)/);
+  assert.match(appSource, /window\.PulseNotePushSetupStatus\s*\|\|\s*persistedPushStatus/);
 });
 
 test("lembrete zero dispara na hora e usa a mesma tag do push remoto", async () => {
