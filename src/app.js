@@ -11,7 +11,9 @@ import {
   updateProfile,
   updatePassword,
   reauthenticateWithCredential,
+  reauthenticateWithPopup,
   EmailAuthProvider,
+  GoogleAuthProvider,
   sendEmailVerification,
   deleteUser,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
@@ -1550,14 +1552,22 @@ function bindSettingsView() {
     }
     if (!confirm("Tem certeza que quer excluir sua conta? Todos os seus dados (notas, tarefas, agenda, metas e finanças) serão apagados PERMANENTEMENTE. Essa ação não pode ser desfeita.")) return;
 
-    const pw = prompt("Por segurança, digite sua senha atual para confirmar a exclusão:");
-    if (!pw) return;
-
     accountDeletionRequested = true;
     let whatsappUnlinked = false;
     try {
-      const credential = EmailAuthProvider.credential(account.email, pw);
-      await reauthenticateWithCredential(account, credential);
+      const providers = new Set((account.providerData || []).map((provider) => provider?.providerId));
+      if (providers.has(GoogleAuthProvider.PROVIDER_ID)) {
+        await reauthenticateWithPopup(account, new GoogleAuthProvider());
+      } else if (providers.has(EmailAuthProvider.PROVIDER_ID)) {
+        const pw = prompt("Por segurança, digite sua senha atual para confirmar a exclusão:");
+        if (!pw) return;
+        const credential = EmailAuthProvider.credential(account.email, pw);
+        await reauthenticateWithCredential(account, credential);
+      } else {
+        const providerError = new Error("Não foi possível identificar o método de acesso desta conta.");
+        providerError.code = "auth/provider-not-supported";
+        throw providerError;
+      }
 
       // O vínculo é protegido pelo servidor e precisa sair antes da
       // identidade. Se falhar, mantemos a conta para não deixar um
@@ -1634,6 +1644,8 @@ function bindSettingsView() {
       const messages = {
         "auth/wrong-password":        "Senha incorreta.",
         "auth/invalid-credential":    "Senha incorreta.",
+        "auth/popup-closed-by-user": "A confirmação com o Google foi cancelada.",
+        "auth/provider-not-supported": "Este método de acesso não permite confirmar a exclusão. Entre novamente e tente de novo.",
         "auth/requires-recent-login": "Por segurança, saia e entre na conta novamente antes de excluí-la.",
         "data/unlink-failed":       "Não foi possível desvincular o WhatsApp. Sua conta foi mantida; tente novamente mais tarde.",
         "data/cleanup-failed":      "Não foi possível remover os dados operacionais agora. Sua conta foi mantida; tente novamente mais tarde.",
