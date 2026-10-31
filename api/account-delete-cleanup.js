@@ -6,12 +6,31 @@ const SERVER_OWNED_USER_COLLECTIONS = [
   "adminUsage",
 ];
 
+const SERVER_OWNED_USER_QUERY_COLLECTIONS = [
+  "autopilotExecutions",
+  "reminderDeliveries",
+  "whatsappAppliedOperations",
+];
+
+async function deleteUserQueryDocuments(db, collection, uid) {
+  while (true) {
+    const snapshot = await db.collection(collection).where("uid", "==", uid).limit(400).get();
+    if (snapshot.empty || snapshot.docs.length === 0) return;
+    const batch = db.batch();
+    for (const entry of snapshot.docs) batch.delete(entry.ref);
+    await batch.commit();
+  }
+}
+
 async function deleteServerOwnedUserData(db, uid) {
   const batch = db.batch();
   for (const collection of SERVER_OWNED_USER_COLLECTIONS) {
     batch.delete(db.collection(collection).doc(uid));
   }
   await batch.commit();
+  for (const collection of SERVER_OWNED_USER_QUERY_COLLECTIONS) {
+    await deleteUserQueryDocuments(db, collection, uid);
+  }
 }
 
 module.exports = async function accountDeleteCleanup(req, res) {
@@ -33,4 +52,8 @@ module.exports = async function accountDeleteCleanup(req, res) {
   }
 };
 
-module.exports._test = { SERVER_OWNED_USER_COLLECTIONS, deleteServerOwnedUserData };
+module.exports._test = {
+  SERVER_OWNED_USER_COLLECTIONS,
+  SERVER_OWNED_USER_QUERY_COLLECTIONS,
+  deleteServerOwnedUserData,
+};
