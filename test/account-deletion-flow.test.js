@@ -93,3 +93,17 @@ test("app impede recriação do documento durante exclusão e só limpa cache ap
   assert.ok(flow.indexOf("deleteAccountDataAndIdentity") < flow.indexOf("localStorage.removeItem"));
   assert.match(flow, /accountDeletionInProgress = false;/);
 });
+
+test("exclusão reautentica contas Google sem pedir uma senha inexistente", () => {
+  const source = fs.readFileSync(path.join(__dirname, "..", "src", "app.js"), "utf8");
+  const start = source.indexOf("// ── Excluir conta permanentemente");
+  const end = source.indexOf("// Atualiza todos os pontos da UI", start);
+  const flow = source.slice(start, end);
+
+  assert.match(source, /reauthenticateWithPopup/);
+  assert.match(source, /GoogleAuthProvider/);
+  assert.match(flow, /providers\.has\(GoogleAuthProvider\.PROVIDER_ID\)/);
+  assert.match(flow, /reauthenticateWithPopup\(account, new GoogleAuthProvider\(\)\)/);
+  assert.match(flow, /providers\.has\(EmailAuthProvider\.PROVIDER_ID\)/);
+  assert.ok(flow.indexOf("reauthenticateWithPopup") < flow.indexOf("prompt(\"Por segurança"));
+});
