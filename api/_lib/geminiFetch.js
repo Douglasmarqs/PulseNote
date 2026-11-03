@@ -63,11 +63,13 @@ async function fetchGeminiJson({ model, apiKey, systemPrompt, contents, generati
       );
 
       if (!aiRes.ok) {
-        console.error("gemini_request", { label, attempt, status: aiRes.status, durationMs: Date.now() - startedAt });
+        const retryable = aiRes.status === 429 || aiRes.status >= 500;
+        const log = attempt < attempts && retryable ? console.warn : console.error;
+        log("gemini_request", { label, attempt, status: aiRes.status, durationMs: Date.now() - startedAt });
         lastFailure = aiRes.status === 429
           ? { ok: false, status: 429, error: "ai_rate_limited" }
           : { ok: false, status: 502, error: "ai_request_failed" };
-        if (attempt < attempts && (aiRes.status === 429 || aiRes.status >= 500)) {
+        if (attempt < attempts && retryable) {
           await sleep(350 * attempt);
           continue;
         }
@@ -78,7 +80,8 @@ async function fetchGeminiJson({ model, apiKey, systemPrompt, contents, generati
       raw = (data.candidates?.[0]?.content?.parts || []).map((p) => p.text || "").join("");
       console.info("gemini_request", { label, attempt, status: aiRes.status, durationMs: Date.now() - startedAt });
     } catch (err) {
-      console.error("gemini_request", { label, attempt, error: err?.name || "network_error", durationMs: Date.now() - startedAt });
+      const log = attempt < attempts ? console.warn : console.error;
+      log("gemini_request", { label, attempt, error: err?.name || "network_error", durationMs: Date.now() - startedAt });
       lastFailure = { ok: false, status: 502, error: "ai_request_failed" };
       if (attempt < attempts) {
         await sleep(350 * attempt);
