@@ -1162,6 +1162,7 @@ function renderWhatsAppSettings() {
       "messaging/permission-blocked": "O navegador bloqueou notificações para este site.",
       "messaging/failed-service-worker-registration": "O serviço de notificações não conseguiu iniciar neste navegador.",
       "messaging/token-subscribe-failed": "O Firebase recusou o registro deste aparelho. Tente novamente.",
+      "invalid-vapid-key": "A chave pública Web Push configurada no PulseNote é inválida.",
       "vapid-key-missing": "A chave Web Push do projeto ainda não está configurada.",
     };
     appReminderStatus.textContent = hasToken && state.appReminderOptIn !== false
