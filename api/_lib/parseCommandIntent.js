@@ -452,14 +452,13 @@ async function parseTextIntent({ text, categories, today, lastFinanceEntry, aiEn
     systemPrompt,
     contents: [{ text: rawMessage }],
     label: "intent",
-    // "high": mensagem de WhatsApp aqui cobre 11 intenções diferentes,
-    // pode ter correção implícita via CONTEXTO acima, categoria por
-    // sentido (não só palavra-chave) e referência de data ambígua — vale
-    // mais raciocínio que o padrão "medium" do modelo pra acertar isso
-    // de primeira, e o custo extra de tokens de "pensamento" é
-    // insignificante perto de gastar uma segunda mensagem pedindo pra
-    // pessoa reformular.
-    thinkingLevel: "medium",
+    // Os comandos frequentes já são resolvidos localmente acima. Para o
+    // restante, limitamos a chamada remota a uma tentativa curta: quando o
+    // provedor está sobrecarregado, é melhor responder pelo fallback em até
+    // poucos segundos do que manter o usuário esperando dois timeouts.
+    attempts: 1,
+    timeoutMs: 4500,
+    thinkingLevel: "low",
     generationConfig: {
       maxOutputTokens: 400,
       responseMimeType: "application/json",
