@@ -1,87 +1,36 @@
-# PulseNote Admin — Design QA
+# Pulse Command — relatório de QA visual
 
-**Source visual truth paths**
+Data: 4 de novembro de 2026  
+Preview validado: `pulse-command-preview-20261103`  
+URL estável: `https://pulse-note-5erj-git-pulse-comm-fc87e7-douglas-projects-c831a9fc.vercel.app`
 
-- `C:\Users\Douglas\.codex\generated_images\01a08e2a-5ce9-7a13-a9df-58ebf780a596\exec-a1f07b58-558c-4eb7-a1b8-6408f268630b.png` — visão geral.
-- `C:\Users\Douglas\.codex\generated_images\01a08e2a-5ce9-7a13-a9df-58ebf780a596\exec-ba5dda1d-7fe9-4bad-a590-19571403e7de.png` — usuários e detalhe.
-- `C:\Users\Douglas\.codex\generated_images\01a08e2a-5ce9-7a13-a9df-58ebf780a596\exec-9ece4bb1-ab29-4608-8cf5-e10720ace3a8.png` — planos e cobrança.
+## Escopo
 
-**Implementation screenshot paths**
+- Direção visual: Pulse Command, com superfícies escuras translúcidas, hierarquia compacta e acentos violeta/ciano.
+- Áreas verificadas: Dashboard, Planner (lista e mês), Notas (criação, cartão e detalhe), Finanças (lançamentos e análise) e Autopilot.
+- Referência visual: `C:\Users\Douglas\.codex\generated_images\01a08e2a-5ce9-7a13-a9df-58ebf780a596\exec-6cc40272-8a9d-4f29-a485-9277ff8f909e.png`.
 
-- `C:\Users\Douglas\.codex\visualizations\2026\09\11\01a08e2a-5ce9-7a13-a9df-58ebf780a596\pulsenote-admin-qa\admin-preview-desktop.png`
-- `C:\Users\Douglas\.codex\visualizations\2026\09\11\01a08e2a-5ce9-7a13-a9df-58ebf780a596\pulsenote-admin-qa\admin-preview-desktop-users.png`
-- `C:\Users\Douglas\.codex\visualizations\2026\09\11\01a08e2a-5ce9-7a13-a9df-58ebf780a596\pulsenote-admin-qa\admin-preview-mobile.png`
-- `C:\Users\Douglas\.codex\visualizations\2026\09\11\01a08e2a-5ce9-7a13-a9df-58ebf780a596\pulsenote-admin-qa\admin-preview-mobile-users.png`
-- `C:\Users\Douglas\.codex\visualizations\2026\09\11\01a08e2a-5ce9-7a13-a9df-58ebf780a596\pulsenote-admin-qa\admin-preview-mobile-plans.png`
+## Verificações concluídas
 
-**Comparison evidence**
+- Desktop: grade principal, sidebar, previsão financeira, agenda, Autopilot e comando rápido sem cortes ou sobreposição.
+- Mobile 390×844: Dashboard, Planner, Notas e Finanças sem rolagem horizontal.
+- Planner mensal: compromissos compactados em contadores no mobile, evitando cards amontoados.
+- Notas: formulário principal limpo, prioridades distintas, checklist e ações do detalhe sem colisão com a navegação inferior.
+- Finanças: Excel removido; PDF mantido; abas compactas; gráficos dos últimos seis meses e saldo acumulado contidos em 321 px dentro de cards de 321 px.
+- Análise financeira: `clientWidth = 375`, `scrollWidth = 375`, nenhum elemento fora da viewport e rótulos de junho a novembro visíveis.
+- Comando rápido: intenções de Finanças, Planner e Notas abrem diretamente a área solicitada; pedidos genéricos seguem para o Autopilot.
+- Autopilot no preview: exige confirmação e exibe explicitamente que nenhum dado real foi alterado.
+- Preview seguro: dados fictícios apenas em localhost ou domínio de preview; o domínio oficial não aceita `designPreview=1`.
+- Cobrança no preview: consulta autenticada desativada; checkout e assinatura não são simulados.
+- Integridade: `src/app.js` publicado com 385.122 caracteres e 7.942 quebras de linha, sem truncamento.
+- Regressão: 138 de 138 testes automatizados aprovados.
+- Vercel: deployment `dpl_AaYJnaHdfLDTJ6fC6WgWwDeXYdou` em estado READY.
 
-- `C:\Users\Douglas\.codex\visualizations\2026\09\11\01a08e2a-5ce9-7a13-a9df-58ebf780a596\pulsenote-admin-qa\design-qa-overview-comparison.png`
-- `C:\Users\Douglas\.codex\visualizations\2026\09\11\01a08e2a-5ce9-7a13-a9df-58ebf780a596\pulsenote-admin-qa\design-qa-users-comparison.png`
+## Observações
 
-**Viewport and normalization**
-
-- Desktop override: `1440 × 900` CSS px; browser capture: `1425 × 891` px; `deviceScaleFactor: 1`.
-- Mobile override: `390 × 844` CSS px; browser capture: `375 × 812` px; `deviceScaleFactor: 1`.
-- Source images: `1488 × 1058` px. Source and implementation were proportionally downsampled into `700 px`-wide panels on a single `1480 × 570` comparison canvas. No crop or synthetic device frame was used.
-
-**State**
-
-- Tema escuro Aurora.
-- Administrador principal autenticado no preview público da PR.
-- Dados reais do Firebase carregados.
-- Visão geral, usuários com drawer aberto e planos testados; nenhuma escrita administrativa foi executada.
-
-**Full-view comparison evidence**
-
-- A composição publicada preserva o shell profissional do alvo: rail lateral estável, barra superior, hierarquia de título, faixa de métricas e cards operacionais.
-- A visão geral prioriza os sinais reais solicitados (último acesso Firebase, jornada de adoção e fluxo por área) no lugar de atividade fictícia ou valores ilustrativos do conceito.
-- Em mobile, o rail vira menu, as métricas passam para duas colunas e os controles persistentes continuam visíveis sem vazamento horizontal da página.
-
-**Focused region comparison evidence**
-
-- Usuários: a tabela compacta, estados, plano e drawer operacional foram comparados no mesmo canvas. O drawer mostra último uso do app, último login Firebase, sincronização, fuso, totais agregados e canais sem revelar conteúdo privado.
-- Planos: o formulário publicado empilha corretamente no mobile e mantém preço, ciclo, Stripe Price ID e grupos de recursos com enforcement real no backend.
-- Tipografia: família do sistema, pesos e hierarquia acompanham o PulseNote; títulos não cortam e textos auxiliares mantêm contraste.
-- Espaçamento e ritmo: grade, gutters, cartões, raios e alinhamentos permanecem coerentes entre desktop e mobile.
-- Cores e tokens: Aurora escuro, ciano, violeta e estados semânticos seguem a linguagem do app principal.
-- Imagem e marca: não há fotografia ou ilustração decorativa a validar; o brand mark é o mesmo componente vetorial/CSS usado pelo PulseNote.
-- Copy: rótulos descrevem ações e dados reais; planos e cobranças deixam explícito quando dependem do Stripe ou são registros manuais.
-
-**Findings**
-
-- Nenhum P0, P1 ou P2 permaneceu após a publicação e a comparação.
-- [P3] A navegação móvel usa rolagem horizontal para nove seções. Ela é funcional e não cria overflow da página, mas poderia ganhar um indicador de continuidade em uma rodada futura.
-- [P3] O conceito previa busca global; a implementação usa busca contextual na área de usuários para evitar sugerir uma busca que ainda não existe no backend.
-
-**Primary interactions tested**
-
-- Troca entre Visão geral, Usuários e Planos.
-- Abertura do detalhe operacional de um usuário.
-- Renderização dos filtros, busca, seletor de plano e estados da conta.
-- Retorno “Meu aplicativo” presente no mesmo domínio.
-- Tema e navegação disponíveis em desktop e mobile.
-- Console verificado: nenhum erro ou warning.
-
-**Comparison history**
-
-- Iteração 1: a versão antiga exibida pelo usuário comprimida o conteúdo numa coluna estreita e deixava grande área vazia. A grade foi reestruturada e a navegação deixou de usar identificadores confundidos por bloqueadores.
-- Iteração 2: a visão geral foi substituída por métricas, acesso, jornada e fluxo reais; usuários ganharam tabela e drawer; planos ganharam catálogo e matriz de capacidades.
-- Iteração 3: o preview do commit `728c5850` foi capturado em desktop/mobile, comparado em canvases combinados e testado sem erros de console. Nenhum P0/P1/P2 foi encontrado.
-
-**Implementation Checklist**
-
-- [x] Preview publicado e autenticado.
-- [x] Desktop e mobile capturados.
-- [x] Navegação, usuários/drawer e planos verificados.
-- [x] Console verificado.
-- [x] Alvo e implementação comparados juntos.
-- [x] Segurança e privacidade dos dados administrativos revisadas.
-
-**Follow-up Polish**
-
-- Indicador visual de rolagem nos tabs mobile.
-- Busca global somente quando houver endpoint único e escopo claro.
+- A produção não foi promovida durante esta rodada de QA.
+- O teste real de push com o app fechado permanece separado e será executado por último, conforme solicitado.
+- Após a última correção não foi possível abrir uma nova sessão de automação visual porque o controle local do navegador foi desativado nas configurações do Work. A mudança final não afeta layout e foi coberta pelos testes; a inspeção visual anterior foi concluída no mesmo deployment de estilos.
 
 final result: passed
 
