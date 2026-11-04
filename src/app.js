@@ -1089,9 +1089,21 @@ async function billingApi(action, method = "GET", body) {
 async function loadBillingSettings(force = false) {
   const grid = document.getElementById("billingPlanGrid");
   if (!grid || !currentUser) return;
-  if (billingRequest && !force) return billingRequest;
   const statusBadge = document.getElementById("billingStatusBadge");
   const statusText = document.getElementById("billingStatusText");
+  // A prévia visual usa uma identidade fictícia e nunca deve consultar APIs
+  // autenticadas. Além de evitar ruído no console, isto reforça que o QA não
+  // cria assinatura, checkout ou qualquer alteração financeira real.
+  if (isLocalDesignPreview) {
+    statusBadge.textContent = "Prévia visual";
+    statusBadge.className = "billing-status-badge";
+    statusText.textContent = "Planos e pagamentos não são simulados neste preview seguro.";
+    grid.innerHTML = '<div class="empty-state">Entre com uma conta real para consultar assinatura e cobrança.</div>';
+    const actions = document.getElementById("billingActions");
+    if (actions) actions.hidden = true;
+    return null;
+  }
+  if (billingRequest && !force) return billingRequest;
   billingRequest = billingApi("status").then((data) => {
     const current = data.subscription || {};
     const active = current.status === "active";
