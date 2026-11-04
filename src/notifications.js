@@ -14,6 +14,19 @@
 
 const NOTIFIED_KEY_PREFIX = "pn_notified_";
 
+function recordPushSetupStatus(code) {
+  const status = { ok: false, code, at: new Date().toISOString() };
+  window.PulseNotePushSetupStatus = status;
+  localStorage.setItem("pn_push_setup_status", JSON.stringify(status));
+  try {
+    window.dispatchEvent?.(new CustomEvent("pulsenote:push-status", { detail: status }));
+  } catch (_) {
+    // O estado global acima continua sendo a fonte de verdade em navegadores
+    // antigos que não oferecem CustomEvent.
+  }
+  return status;
+}
+
 // Evita notificar a mesma coisa duas vezes no mesmo dia
 function alreadyNotifiedToday(uniqueId) {
   const key = `${NOTIFIED_KEY_PREFIX}${uniqueId}`;
@@ -55,10 +68,12 @@ function fireNotification(title, body, tag, onClickView, itemId) {
 // nunca automaticamente ao carregar a página — navegadores bloqueiam isso)
 async function requestNotificationPermission() {
   if (!("Notification" in window)) {
+    recordPushSetupStatus("notification-unsupported");
     (window.PulseNoteShowToast || console.log)("Seu navegador não suporta notificações.");
     return false;
   }
   if (Notification.permission === "denied") {
+    recordPushSetupStatus("permission-denied");
     (window.PulseNoteShowToast || console.log)("Notificações bloqueadas. Ative nas configurações do navegador.");
     return false;
   }
@@ -82,14 +97,17 @@ async function requestNotificationPermission() {
       : rawPushResult || { ok: false, code: "module-unavailable" };
     window.PulseNotePushSetupStatus = pushResult;
     if (!pushResult.ok) {
+      localStorage.setItem("pn_push_setup_status", JSON.stringify(pushResult));
       localStorage.removeItem("pn_notifications_enabled");
       (window.PulseNoteShowToast || console.log)("Não foi possível registrar o push neste aparelho. Veja o motivo em Configurações e tente novamente.");
       return false;
     }
+    localStorage.removeItem("pn_push_setup_status");
     (window.PulseNoteShowToast || console.log)("🔔 Notificações ativadas neste aparelho!");
     runAllNotificationChecks(); // checa imediatamente após ativar
     return true;
   }
+  recordPushSetupStatus("permission-not-granted");
   (window.PulseNoteShowToast || console.log)("Notificações não foram ativadas.");
   return false;
 }

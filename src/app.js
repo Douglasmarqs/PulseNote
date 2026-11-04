@@ -11,7 +11,9 @@ import {
   updateProfile,
   updatePassword,
   reauthenticateWithCredential,
+  reauthenticateWithPopup,
   EmailAuthProvider,
+  GoogleAuthProvider,
   sendEmailVerification,
   deleteUser,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
@@ -335,11 +337,26 @@ async function logout() {
 // ── Guarda de autenticação + carregamento em tempo real ───────
 // Esta é a peça central: o app só é exibido depois de confirmar
 // que existe um usuário logado, e os dados vêm sempre do Firestore.
+const isLocalDesignPreview = ["localhost", "127.0.0.1"].includes(window.location.hostname)
+  && new URLSearchParams(window.location.search).get("designPreview") === "1";
 const appReady = new Promise((resolve) => {
   let resolved = false; // garante que resolve() é chamado apenas uma vez
 
   onAuthStateChanged(auth, async (user) => {
     if (!user) {
+      if (isLocalDesignPreview) {
+        currentUser = {
+          uid: "local-design-preview",
+          displayName: "Douglas Marques",
+          email: "preview@pulsenote.local",
+          emailVerified: true,
+          getIdToken: async () => null,
+        };
+        state = createDesignPreviewState();
+        observedState = cloneState(state);
+        if (!resolved) { resolved = true; resolve(); }
+        return;
+      }
       // Durante a exclusão, o handler abaixo limpa o cache local antes
       // de navegar. O evento de Auth pode chegar antes de deleteUser
       // resolver; não redirecione cedo demais deixando dados no aparelho.
@@ -715,6 +732,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   setInterval(updateEventCountdowns, 30000);
 
   bindNavigation();
+  bindPremiumDashboard();
   autopilotUi.bind();
   bindPlannerNav();
   bindPlannerQuickAdd();
@@ -1137,17 +1155,30 @@ function renderWhatsAppSettings() {
   const appReminderStatus = document.getElementById("appReminderStatus");
   if (appReminderStatus) {
     const hasToken = Array.isArray(state.fcmTokens) && state.fcmTokens.some(Boolean);
+    let persistedPushStatus = null;
+    try {
+      persistedPushStatus = JSON.parse(localStorage.getItem("pn_push_setup_status") || "null");
+    } catch (_) {
+      localStorage.removeItem("pn_push_setup_status");
+    }
     const pushStatus = window.PulseNotePushSetupStatus
+      || persistedPushStatus
       || window.PulseNotePush?.getRegistrationStatus?.()
       || { code: "not-attempted" };
     const failureLabels = {
       "auth-required": "Entre novamente na conta e tente ativar o push.",
+      "notification-unsupported": "Este navegador não oferece notificações. Use um navegador compatível ou instale o PulseNote como aplicativo.",
+      "permission-denied": "Notificações estão bloqueadas para este site. Libere-as nas configurações do navegador.",
+      "permission-not-granted": "A permissão de notificações não foi concedida neste aparelho.",
+      "module-unavailable": "O módulo de push não terminou de carregar. Atualize a página e tente novamente.",
+      "registration-failed": "Não foi possível registrar este aparelho para push. Atualize a página e tente novamente.",
       "messaging-unsupported": "Este navegador não oferece push em segundo plano.",
       "push-manager-unsupported": "Este dispositivo não oferece push em segundo plano.",
       "service-worker-unsupported": "Este navegador não oferece notificações com o app fechado.",
       "messaging/permission-blocked": "O navegador bloqueou notificações para este site.",
       "messaging/failed-service-worker-registration": "O serviço de notificações não conseguiu iniciar neste navegador.",
       "messaging/token-subscribe-failed": "O Firebase recusou o registro deste aparelho. Tente novamente.",
+      "invalid-vapid-key": "A chave pública Web Push configurada no PulseNote é inválida.",
       "vapid-key-missing": "A chave Web Push do projeto ainda não está configurada.",
     };
     appReminderStatus.textContent = hasToken && state.appReminderOptIn !== false
@@ -1538,14 +1569,22 @@ function bindSettingsView() {
     }
     if (!confirm("Tem certeza que quer excluir sua conta? Todos os seus dados (notas, tarefas, agenda, metas e finanças) serão apagados PERMANENTEMENTE. Essa ação não pode ser desfeita.")) return;
 
-    const pw = prompt("Por segurança, digite sua senha atual para confirmar a exclusão:");
-    if (!pw) return;
-
     accountDeletionRequested = true;
     let whatsappUnlinked = false;
     try {
-      const credential = EmailAuthProvider.credential(account.email, pw);
-      await reauthenticateWithCredential(account, credential);
+      const providers = new Set((account.providerData || []).map((provider) => provider?.providerId));
+      if (providers.has(GoogleAuthProvider.PROVIDER_ID)) {
+        await reauthenticateWithPopup(account, new GoogleAuthProvider());
+      } else if (providers.has(EmailAuthProvider.PROVIDER_ID)) {
+        const pw = prompt("Por segurança, digite sua senha atual para confirmar a exclusão:");
+        if (!pw) return;
+        const credential = EmailAuthProvider.credential(account.email, pw);
+        await reauthenticateWithCredential(account, credential);
+      } else {
+        const providerError = new Error("Não foi possível identificar o método de acesso desta conta.");
+        providerError.code = "auth/provider-not-supported";
+        throw providerError;
+      }
 
       // O vínculo é protegido pelo servidor e precisa sair antes da
       // identidade. Se falhar, mantemos a conta para não deixar um
@@ -1622,6 +1661,8 @@ function bindSettingsView() {
       const messages = {
         "auth/wrong-password":        "Senha incorreta.",
         "auth/invalid-credential":    "Senha incorreta.",
+        "auth/popup-closed-by-user": "A confirmação com o Google foi cancelada.",
+        "auth/provider-not-supported": "Este método de acesso não permite confirmar a exclusão. Entre novamente e tente de novo.",
         "auth/requires-recent-login": "Por segurança, saia e entre na conta novamente antes de excluí-la.",
         "data/unlink-failed":       "Não foi possível desvincular o WhatsApp. Sua conta foi mantida; tente novamente mais tarde.",
         "data/cleanup-failed":      "Não foi possível remover os dados operacionais agora. Sua conta foi mantida; tente novamente mais tarde.",
@@ -1751,6 +1792,34 @@ function loadDefaultState() {
   };
 }
 
+function createDesignPreviewState() {
+  const monthKey = todayIso.slice(0, 7);
+  const day = Number(todayIso.slice(8, 10));
+  const dateForDay = (value) => `${monthKey}-${String(Math.max(1, Math.min(28, value))).padStart(2, "0")}`;
+  return normalizeState({
+    ...loadDefaultState(),
+    tasks: [
+      { id: "preview-task-1", title: "Finalizar relatório mensal", status: "Pendente", priority: "Alta", dueDate: todayIso, time: "09:30", subtasks: [], recurrence: null },
+      { id: "preview-task-2", title: "Revisar orçamento de novembro", status: "Pendente", priority: "Media", dueDate: offsetDate(1), time: "11:00", subtasks: [], recurrence: null },
+    ],
+    events: [
+      { id: "preview-event-1", title: "Consulta no dentista", date: todayIso, time: "14:00", location: "Clínica OdontoPlus", notes: "", reminderMinutes: 30 },
+      { id: "preview-event-2", title: "Planejamento da semana", date: offsetDate(2), time: "10:00", location: "", notes: "", reminderMinutes: 60 },
+    ],
+    goals: [{ id: "preview-goal-1", title: "Reserva de emergência", current: 68, target: 100, milestones: [] }],
+    finances: [
+      { id: "preview-fin-1", type: "receita", amount: 7200, category: "salario", description: "Salário", date: dateForDay(5) },
+      { id: "preview-fin-2", type: "despesa", amount: 2100, category: "moradia", description: "Aluguel", date: dateForDay(7) },
+      { id: "preview-fin-3", type: "despesa", amount: 486.40, category: "mercado", description: "Mercado Boa Compra", date: dateForDay(Math.max(8, day - 3)) },
+      { id: "preview-fin-4", type: "despesa", amount: 287.90, category: "contas", description: "Energia e internet", date: dateForDay(Math.max(9, day - 2)) },
+    ],
+    finRecurrents: [
+      { id: "preview-rec-1", description: "Fatura do cartão", amount: 1490, type: "despesa", categoryId: "outros", day: Math.min(28, day + 4), skippedMonths: [] },
+      { id: "preview-rec-2", description: "Streaming", amount: 59.90, type: "despesa", categoryId: "assinaturas", day: Math.min(28, day + 7), skippedMonths: [] },
+    ],
+  });
+}
+
 // Salva mudanças localmente de imediato e agenda o envio para o Firestore
 // (debounce de 1.2s — evita gravar a cada tecla digitada, por exemplo)
 function saveState() {
@@ -1820,6 +1889,50 @@ function bindNavigation() {
         : document.querySelector("#plannerView");
       requestAnimationFrame(() => target?.scrollIntoView({ behavior: "smooth", block: "start" }));
     });
+  });
+}
+
+function bindPremiumDashboard() {
+  document.querySelectorAll("[data-workspace]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (button.dataset.workspace !== "personal") {
+        showToast("Os espaços Casal, Família e Empresa serão liberados com convites e permissões na próxima etapa.");
+        return;
+      }
+      document.querySelectorAll("[data-workspace]").forEach((item) => {
+        const active = item === button;
+        item.classList.toggle("active", active);
+        item.setAttribute("aria-pressed", String(active));
+      });
+    });
+  });
+
+  const commandForm = document.querySelector("#pulseCommandForm");
+  const commandInput = document.querySelector("#pulseCommandInput");
+  commandForm?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const command = commandInput?.value.trim() || "";
+    if (command.length < 3) {
+      showToast("Escreva um pedido curto para o Pulsinho entender.");
+      return;
+    }
+    if (/\d/.test(command)) {
+      setView("finances");
+      const financeInput = document.querySelector("#aiQuickText");
+      if (financeInput) {
+        financeInput.value = command;
+        requestAnimationFrame(() => {
+          financeInput.scrollIntoView({ behavior: "smooth", block: "center" });
+          financeInput.focus();
+        });
+      }
+      if (commandInput) commandInput.value = "";
+      showToast("Pedido levado para Finanças. Revise e use “Preencher”.");
+      return;
+    }
+    setView("autopilot");
+    if (commandInput) commandInput.value = "";
+    showToast("Abri o Autopilot para você revisar as ações disponíveis.");
   });
 }
 
@@ -2526,6 +2639,151 @@ function renderDashboard() {
   renderChart();
   renderGoalSummary();
   renderDashFinance();
+  renderPremiumDashboard({
+    monthKey,
+    monthEntries,
+    monthReceitas,
+    monthDespesas,
+    monthSaldo,
+  });
+}
+
+function renderPremiumDashboard({ monthKey, monthEntries, monthReceitas, monthDespesas, monthSaldo }) {
+  const currentBalance = document.querySelector("#pulseCurrentBalance");
+  if (!currentBalance) return;
+
+  const now = new Date();
+  const currentDay = now.getDate();
+  const [year, month] = monthKey.split("-").map(Number);
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const recurring = Array.isArray(state.finRecurrents) ? state.finRecurrents : [];
+  const futureRecurring = recurring.filter((item) => {
+    if (isRecurrentSkipped(item, monthKey)) return false;
+    const dueDay = Math.min(Number(item.day) || 1, daysInMonth);
+    if (dueDay <= currentDay) return false;
+    return !(state.finances || []).some((entry) =>
+      entry.date?.startsWith(monthKey)
+      && entry.description === item.description
+      && Number(entry.amount) === Number(item.amount)
+    );
+  });
+  const futureIncome = futureRecurring.filter((item) => item.type === "receita").reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const futureExpense = futureRecurring.filter((item) => item.type !== "receita").reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const projectedBalance = monthSaldo + futureIncome - futureExpense;
+  const safetyReserve = Math.max(500, monthReceitas * 0.18);
+  const safeSpend = Math.max(0, projectedBalance - safetyReserve);
+
+  currentBalance.textContent = formatCurrency(monthSaldo);
+  const projectedEl = document.querySelector("#pulseProjectedBalance");
+  const safeSpendEl = document.querySelector("#pulseSafeSpend");
+  if (projectedEl) {
+    projectedEl.textContent = formatCurrency(projectedBalance);
+    projectedEl.dataset.tone = projectedBalance >= 0 ? "positive" : "negative";
+  }
+  if (safeSpendEl) safeSpendEl.textContent = formatCurrency(safeSpend);
+
+  const contextEl = document.querySelector("#pulseBalanceContext");
+  if (contextEl) {
+    const count = monthEntries.length;
+    contextEl.textContent = `${count} ${count === 1 ? "lançamento" : "lançamentos"} considerado${count === 1 ? "" : "s"} neste mês`;
+  }
+
+  const futureSorted = [...futureRecurring].sort((a, b) => Number(a.day || 0) - Number(b.day || 0));
+  const nextRecurring = futureSorted[0];
+  const commitmentEl = document.querySelector("#pulseNextCommitment");
+  if (commitmentEl) {
+    commitmentEl.textContent = nextRecurring
+      ? `Próximo compromisso: ${nextRecurring.description} · ${formatCurrency(Number(nextRecurring.amount || 0))} · dia ${Math.min(Number(nextRecurring.day) || 1, daysInMonth)}`
+      : "Nenhum compromisso financeiro recorrente pendente neste mês.";
+  }
+
+  const recurringInsight = document.querySelector("#pulseRecurringInsight");
+  const recurringDetail = document.querySelector("#pulseRecurringInsightDetail");
+  if (recurringInsight) recurringInsight.textContent = futureRecurring.length
+    ? `${futureRecurring.length} ${futureRecurring.length === 1 ? "recorrência prevista" : "recorrências previstas"}`
+    : "Mês sem recorrências pendentes";
+  if (recurringDetail) recurringDetail.textContent = futureRecurring.length
+    ? `${formatCurrency(futureExpense)} em despesas e ${formatCurrency(futureIncome)} em receitas até o fechamento.`
+    : "Cadastre contas recorrentes para tornar a projeção mais precisa.";
+
+  renderPremiumForecast(monthKey, monthSaldo, futureRecurring);
+  renderPremiumTodayAgenda();
+}
+
+function renderPremiumForecast(monthKey, startingBalance, futureRecurring) {
+  const line = document.querySelector("#pulseForecastLine");
+  const area = document.querySelector("#pulseForecastArea");
+  const point = document.querySelector("#pulseForecastPoint");
+  if (!line || !area || !point) return;
+
+  const [, monthNumber] = monthKey.split("-").map(Number);
+  const daysInMonth = new Date(Number(monthKey.slice(0, 4)), monthNumber, 0).getDate();
+  const today = Math.min(new Date().getDate(), daysInMonth);
+  const eventsByDay = new Map();
+  for (const item of futureRecurring) {
+    const day = Math.min(Number(item.day) || 1, daysInMonth);
+    const signedAmount = Number(item.amount || 0) * (item.type === "receita" ? 1 : -1);
+    eventsByDay.set(day, (eventsByDay.get(day) || 0) + signedAmount);
+  }
+
+  const points = [{ day: today, balance: startingBalance }];
+  let running = startingBalance;
+  for (let day = today + 1; day <= daysInMonth; day += 1) {
+    running += eventsByDay.get(day) || 0;
+    if (eventsByDay.has(day) || day === daysInMonth) points.push({ day, balance: running });
+  }
+  if (points.length === 1) points.push({ day: daysInMonth, balance: startingBalance });
+
+  const balances = points.map((item) => item.balance);
+  const minBalance = Math.min(...balances, 0);
+  const maxBalance = Math.max(...balances, 1);
+  const range = Math.max(1, maxBalance - minBalance);
+  const xFor = (day) => 22 + ((day - today) / Math.max(1, daysInMonth - today)) * 596;
+  const yFor = (balance) => 198 - ((balance - minBalance) / range) * 146;
+  const coords = points.map((item) => [xFor(item.day), yFor(item.balance)]);
+  const path = coords.map(([x, y], index) => `${index ? "L" : "M"}${x.toFixed(1)} ${y.toFixed(1)}`).join(" ");
+  const last = coords[coords.length - 1];
+  line.setAttribute("d", path);
+  area.setAttribute("d", `${path} L${last[0].toFixed(1)} 218 L22 218 Z`);
+  point.setAttribute("cx", last[0].toFixed(1));
+  point.setAttribute("cy", last[1].toFixed(1));
+}
+
+function renderPremiumTodayAgenda() {
+  const container = document.querySelector("#pulseTodayAgenda");
+  if (!container) return;
+  const todayTasks = (state.tasks || []).filter((task) =>
+    task.dueDate === todayIso && task.status !== "Concluida" && task.status !== "Cancelada"
+  ).map((task) => ({
+    time: task.time || "Hoje",
+    title: task.title,
+    detail: `Tarefa · ${task.priority || "prioridade normal"}`,
+  }));
+  const todayEvents = (state.events || []).filter((event) => event.date === todayIso).map((event) => ({
+    time: event.time || "Hoje",
+    title: event.title,
+    detail: event.location ? `Compromisso · ${event.location}` : "Compromisso",
+  }));
+  let items = [...todayEvents, ...todayTasks];
+  if (!items.length) {
+    items = (state.events || []).filter((event) => event.date > todayIso).sort(sortEvent).slice(0, 3).map((event) => ({
+      time: formatDate(event.date),
+      title: event.title,
+      detail: event.location ? `Próximo · ${event.location}` : "Próximo compromisso",
+    }));
+  }
+  items = items.sort((a, b) => String(a.time).localeCompare(String(b.time))).slice(0, 4);
+  if (!items.length) {
+    container.innerHTML = `<div class="pulse-empty">Seu dia está livre. Use “Adicionar” para planejar a próxima ação.</div>`;
+    return;
+  }
+  container.innerHTML = items.map((item) => `
+    <div class="pulse-timeline-item">
+      <span class="pulse-timeline-time">${escapeHtml(item.time)}</span>
+      <span class="pulse-timeline-node" aria-hidden="true"></span>
+      <span class="pulse-timeline-copy"><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.detail)}</span></span>
+    </div>
+  `).join("");
 }
 
 function renderDashFinance() {

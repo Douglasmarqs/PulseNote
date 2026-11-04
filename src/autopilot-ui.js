@@ -22,6 +22,8 @@ export function createAutopilotUI({ getToken, openArea, notify }) {
   const list = document.getElementById("autopilotList");
   const status = document.getElementById("autopilotStatus");
   const preview = document.getElementById("autopilotPreview");
+  const dashboardPreview = document.getElementById("pulseAutopilotPreview");
+  const dashboardCard = document.getElementById("pulseAutopilotDashboardCard");
   const modal = document.getElementById("autopilotConfirmModal");
   const modalDescription = document.getElementById("autopilotConfirmDescription");
   const applyButton = document.getElementById("autopilotConfirmApply");
@@ -47,6 +49,42 @@ export function createAutopilotUI({ getToken, openArea, notify }) {
 
   function setPreview(message) {
     if (preview) preview.textContent = message;
+    if (dashboardPreview) dashboardPreview.textContent = message;
+  }
+
+  function renderDashboardSuggestion() {
+    if (!dashboardCard) return;
+    dashboardCard.replaceChildren();
+    const suggestion = suggestions[0];
+    if (!suggestion) {
+      const empty = makeTextElement("div", "pulse-dashboard-suggestion", "");
+      empty.append(
+        makeTextElement("h3", "", "Tudo em ordem por enquanto"),
+        makeTextElement("p", "", "Quando surgir uma prioridade verificável, ela aparecerá aqui para você decidir."),
+      );
+      dashboardCard.append(empty);
+      return;
+    }
+
+    const content = makeTextElement("div", "pulse-dashboard-suggestion", "");
+    content.append(
+      makeTextElement("h3", "", suggestion.title),
+      makeTextElement("p", "", suggestion.description || suggestion.reason),
+    );
+    const actions = makeTextElement("div", "pulse-dashboard-suggestion-actions", "");
+    for (const [index, option] of (suggestion.actionOptions || []).slice(0, 2).entries()) {
+      if (!option?.action) continue;
+      const button = makeTextElement("button", index === 0 ? "primary" : "secondary", option.label || "Revisar");
+      button.type = "button";
+      button.addEventListener("click", () => confirmAction(suggestion, option));
+      actions.append(button);
+    }
+    const open = makeTextElement("button", "secondary", `Abrir ${AREA_LABELS[suggestion.source] || AREA_LABELS[suggestion.area] || "área"}`);
+    open.type = "button";
+    open.addEventListener("click", () => openArea(suggestion.source || suggestion.area));
+    actions.append(open);
+    content.append(actions);
+    dashboardCard.append(content);
   }
 
   function renderEmpty(title, description) {
@@ -84,6 +122,7 @@ export function createAutopilotUI({ getToken, openArea, notify }) {
       renderEmpty("Tudo em ordem por enquanto", "Quando houver algo útil e verificável para fazer, o Pulsinho mostra aqui.");
       setStatus("Nenhuma prioridade pendente agora.");
       setPreview("Nenhuma ação pendente por enquanto.");
+      renderDashboardSuggestion();
       return;
     }
 
@@ -116,6 +155,7 @@ export function createAutopilotUI({ getToken, openArea, notify }) {
       card.append(actions);
       list.append(card);
     }
+    renderDashboardSuggestion();
   }
 
   async function readJson(response) {
@@ -168,6 +208,15 @@ export function createAutopilotUI({ getToken, openArea, notify }) {
         if (serial !== requestSerial) return;
         setStatus("Não foi possível carregar as sugestões agora.");
         setPreview("Sugestões indisponíveis neste momento.");
+        if (dashboardCard) {
+          dashboardCard.replaceChildren();
+          const errorState = makeTextElement("div", "pulse-dashboard-suggestion", "");
+          errorState.append(
+            makeTextElement("h3", "", "Autopilot temporariamente indisponível"),
+            makeTextElement("p", "", "Seus dados continuam seguros. Tente atualizar as sugestões em instantes."),
+          );
+          dashboardCard.append(errorState);
+        }
         if (!suggestions.length) renderEmpty("Sugestões indisponíveis", "Tente atualizar quando a conexão estiver estável.");
         console.warn("Pulse Autopilot indisponível:", error);
       } finally {
