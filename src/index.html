@@ -65,13 +65,14 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="PulseNote" />
 
-    <link rel="stylesheet" href="/src/styles.css" />
-    <link rel="stylesheet" href="/src/auth.css" />
+    <link rel="stylesheet" href="/src/styles.css?v=36" />
+    <link rel="stylesheet" href="/src/auth.css?v=36" />
     <!-- Camada responsiva final: concentra os ajustes mobile do app em um
          único arquivo, carregado depois da base para evitar regras dispersas
          competindo entre si. -->
-    <link rel="stylesheet" href="/src/mobile.css" />
-    <link rel="stylesheet" href="/src/autopilot.css" />
+    <link rel="stylesheet" href="/src/mobile.css?v=36" />
+    <link rel="stylesheet" href="/src/autopilot.css?v=36" />
+    <link rel="stylesheet" href="/src/premium.css?v=37" />
   </head>
   <body>
     <div class="app-shell">
@@ -82,7 +83,7 @@
           <div class="brand-mark"><span></span></div>
           <div>
             <strong>PulseNote</strong>
-            <span>Produtividade divertida</span>
+            <span>Seu dia, sob controle</span>
           </div>
         </div>
 
@@ -123,10 +124,11 @@
         </nav>
 
         <div class="sidebar-footer">
-          <div class="streak-box">
-            <span class="muted">🔥 Sequência</span>
-            <strong id="streakCount">0 dias</strong>
-          </div>
+          <button type="button" class="sidebar-autopilot-status" data-view-shortcut="autopilot">
+            <span class="sidebar-autopilot-dot" aria-hidden="true"></span>
+            <span><strong>Autopilot ativo</strong><small>Prioridades sob controle</small></span>
+          </button>
+          <strong id="streakCount" class="sr-only">0 dias</strong>
         </div>
       </aside>
 
@@ -178,6 +180,130 @@
 
         <!-- ===== DASHBOARD VIEW ===== -->
         <section id="dashboardView" class="view active-view">
+
+          <div class="pulse-dashboard" aria-label="Visão geral do PulseNote">
+            <div class="pulse-workspace-bar" aria-label="Espaço ativo">
+              <div class="pulse-workspace-switcher" role="group" aria-label="Alternar espaço">
+                <button type="button" class="pulse-workspace-option active" data-workspace="personal" aria-pressed="true">Pessoal</button>
+                <button type="button" class="pulse-workspace-option" data-workspace="couple" aria-pressed="false">Casal</button>
+                <button type="button" class="pulse-workspace-option" data-workspace="family" aria-pressed="false">Família</button>
+                <button type="button" class="pulse-workspace-option" data-workspace="business" aria-pressed="false">Empresa</button>
+              </div>
+              <button type="button" class="pulse-add-button" onclick="openPlannerQuickAdd()">
+                <span aria-hidden="true">＋</span><span>Adicionar</span>
+              </button>
+            </div>
+
+            <div class="pulse-dashboard-grid pulse-dashboard-grid--top">
+              <section class="pulse-glass pulse-glass--elevated pulse-forecast" aria-labelledby="pulseForecastTitle">
+                <div class="pulse-section-heading">
+                  <div>
+                    <p class="pulse-kicker">Visão financeira</p>
+                    <h2 id="pulseForecastTitle">Seu mês, antes de gastar</h2>
+                    <p>Projeção baseada no que já entrou e nos seus compromissos recorrentes.</p>
+                  </div>
+                  <button type="button" class="pulse-icon-button" data-view-shortcut="finances" aria-label="Abrir finanças">→</button>
+                </div>
+
+                <div class="pulse-forecast-content">
+                  <div class="pulse-forecast-summary">
+                    <span>Saldo atual</span>
+                    <strong id="pulseCurrentBalance">R$ 0,00</strong>
+                    <small id="pulseBalanceContext">Atualizado com seus lançamentos deste mês</small>
+
+                    <span class="pulse-projection-label">Projeção de fechamento</span>
+                    <strong id="pulseProjectedBalance" class="pulse-projected-value">R$ 0,00</strong>
+
+                    <div class="pulse-safe-spend">
+                      <span>Disponível com segurança hoje</span>
+                      <strong id="pulseSafeSpend">R$ 0,00</strong>
+                    </div>
+                  </div>
+
+                  <div class="pulse-forecast-visual" aria-label="Evolução projetada do saldo no mês">
+                    <div class="pulse-chart-legend"><span><i></i> Saldo real</span><span><i></i> Projeção</span></div>
+                    <svg class="pulse-forecast-chart" viewBox="0 0 640 240" role="img" aria-labelledby="pulseForecastChartTitle">
+                      <title id="pulseForecastChartTitle">Projeção do saldo até o fim do mês</title>
+                      <defs>
+                        <linearGradient id="pulseForecastFill" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stop-color="currentColor" stop-opacity=".34" />
+                          <stop offset="100%" stop-color="currentColor" stop-opacity="0" />
+                        </linearGradient>
+                      </defs>
+                      <g class="pulse-chart-grid" aria-hidden="true">
+                        <path d="M22 36H618M22 92H618M22 148H618M22 204H618" />
+                      </g>
+                      <path id="pulseForecastArea" class="pulse-forecast-area" d="M22 118 C110 108 170 134 246 125 S382 162 448 146 S548 112 618 106 L618 218 L22 218 Z" />
+                      <path id="pulseForecastLine" class="pulse-forecast-line" d="M22 118 C110 108 170 134 246 125 S382 162 448 146 S548 112 618 106" />
+                      <circle id="pulseForecastPoint" class="pulse-forecast-point" cx="448" cy="146" r="7" />
+                    </svg>
+                    <div class="pulse-chart-axis" aria-hidden="true"><span>Hoje</span><span>Fim do mês</span></div>
+                    <div id="pulseNextCommitment" class="pulse-next-commitment">Nenhum compromisso financeiro próximo.</div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="pulse-glass pulse-today" aria-labelledby="pulseTodayTitle">
+                <div class="pulse-section-heading">
+                  <div>
+                    <p class="pulse-kicker">Agenda</p>
+                    <h2 id="pulseTodayTitle">Hoje</h2>
+                    <p>O que merece sua atenção agora.</p>
+                  </div>
+                  <button type="button" class="pulse-icon-button" data-view-shortcut="planner" data-planner-focus="agenda" aria-label="Abrir agenda">→</button>
+                </div>
+                <div id="pulseTodayAgenda" class="pulse-timeline" aria-live="polite"></div>
+              </section>
+            </div>
+
+            <div class="pulse-dashboard-grid pulse-dashboard-grid--bottom">
+              <section class="pulse-glass pulse-glass--focus pulse-autopilot-proposal" aria-labelledby="pulseAutopilotTitle">
+                <div class="pulse-autopilot-header">
+                  <span class="pulse-autopilot-mark" aria-hidden="true">✦</span>
+                  <div>
+                    <p class="pulse-kicker">Pulse Autopilot</p>
+                    <h2 id="pulseAutopilotTitle">Próxima ação, com sua aprovação</h2>
+                  </div>
+                  <span class="pulse-beta-badge">Sugestão segura</span>
+                </div>
+                <div id="pulseAutopilotDashboardCard" class="pulse-autopilot-body">
+                  <h3>Organizando suas prioridades</h3>
+                  <p id="pulseAutopilotPreview">Analisando dados reais do Planner, Notas e Finanças…</p>
+                  <div class="pulse-autopilot-skeleton" aria-hidden="true"><span></span><span></span><span></span></div>
+                </div>
+                <div class="pulse-autopilot-trust">
+                  <span>Nada será alterado sem sua confirmação.</span>
+                  <button type="button" class="pulse-link-button" data-view-shortcut="autopilot">Ver todas as sugestões</button>
+                </div>
+              </section>
+
+              <aside class="pulse-dashboard-rail" aria-label="Acesso rápido">
+                <section class="pulse-glass pulse-insight-card">
+                  <p class="pulse-kicker">Automação</p>
+                  <strong id="pulseRecurringInsight">Nenhuma recorrência pendente</strong>
+                  <span id="pulseRecurringInsightDetail">Cadastre contas recorrentes para antecipar o mês.</span>
+                  <button type="button" class="pulse-link-button" data-view-shortcut="finances">Ver automações</button>
+                </section>
+
+                <section class="pulse-glass pulse-command-card">
+                  <form id="pulseCommandForm" class="pulse-command-form">
+                    <label for="pulseCommandInput">Pergunte ou peça uma ação</label>
+                    <div class="pulse-command-control">
+                      <input id="pulseCommandInput" type="text" maxlength="180" autocomplete="off" placeholder="Ex.: mercado 86 reais ontem" />
+                      <button type="submit" aria-label="Continuar">→</button>
+                    </div>
+                  </form>
+                  <p>Use texto aqui; áudio, foto e documentos continuam disponíveis pelo WhatsApp.</p>
+                  <div class="pulse-connector-list">
+                    <button type="button" data-view-shortcut="settings" data-settings-focus="whatsapp"><span class="pulse-status-dot"></span>WhatsApp conectado <b>Configurar</b></button>
+                    <button type="button" data-view-shortcut="autopilot">ChatGPT e Claude <span class="pulse-optional-badge">Planejado</span></button>
+                  </div>
+                </section>
+              </aside>
+            </div>
+          </div>
+
+          <div class="legacy-dashboard" hidden aria-hidden="true">
 
           <!-- Hero -->
           <section class="daily-hero">
@@ -379,6 +505,7 @@
                 </div>
               </section>
             </div>
+          </div>
           </div>
         </section>
 
@@ -1475,7 +1602,8 @@
 
     <script src="/src/pwa-install.js" defer></script>
     <script src="/src/notifications.js?v=35" defer></script>
-    <script type="module" src="/src/app.js?v=35"></script>
+    <script type="module" src="/src/app.js?v=37"></script>
     <script type="module" src="/src/push-notifications.js?v=35"></script>
   </body>
 </html>
+

@@ -22,6 +22,8 @@ export function createAutopilotUI({ getToken, openArea, notify }) {
   const list = document.getElementById("autopilotList");
   const status = document.getElementById("autopilotStatus");
   const preview = document.getElementById("autopilotPreview");
+  const dashboardPreview = document.getElementById("pulseAutopilotPreview");
+  const dashboardCard = document.getElementById("pulseAutopilotDashboardCard");
   const modal = document.getElementById("autopilotConfirmModal");
   const modalDescription = document.getElementById("autopilotConfirmDescription");
   const applyButton = document.getElementById("autopilotConfirmApply");
@@ -36,6 +38,28 @@ export function createAutopilotUI({ getToken, openArea, notify }) {
   let refreshTimer = null;
   let bound = false;
 
+  function isDesignPreview() {
+    return getToken()?.uid === "local-design-preview";
+  }
+
+  function loadDesignPreviewSuggestion() {
+    suggestions = [{
+      id: "design-preview-review-invoice",
+      source: "finances",
+      priority: "high",
+      title: "Antecipar revisão da fatura",
+      description: "A fatura vence em 4 dias e o saldo projetado continua positivo. Revise agora para evitar uma saída inesperada.",
+      actionOptions: [{
+        label: "Criar tarefa de revisão",
+        action: { type: "preview", target: "invoice-review" },
+      }],
+    }];
+    fetchedAt = Date.now();
+    render();
+    setStatus("Simulação do preview — nenhuma alteração será salva.");
+    setPreview("1 prioridade simulada para validar a experiência.");
+  }
+
   function isVisible() {
     return ["autopilotView", "dashboardView"].some((id) =>
       document.getElementById(id)?.classList.contains("active-view"));
@@ -47,6 +71,42 @@ export function createAutopilotUI({ getToken, openArea, notify }) {
 
   function setPreview(message) {
     if (preview) preview.textContent = message;
+    if (dashboardPreview) dashboardPreview.textContent = message;
+  }
+
+  function renderDashboardSuggestion() {
+    if (!dashboardCard) return;
+    dashboardCard.replaceChildren();
+    const suggestion = suggestions[0];
+    if (!suggestion) {
+      const empty = makeTextElement("div", "pulse-dashboard-suggestion", "");
+      empty.append(
+        makeTextElement("h3", "", "Tudo em ordem por enquanto"),
+        makeTextElement("p", "", "Quando surgir uma prioridade verificável, ela aparecerá aqui para você decidir."),
+      );
+      dashboardCard.append(empty);
+      return;
+    }
+
+    const content = makeTextElement("div", "pulse-dashboard-suggestion", "");
+    content.append(
+      makeTextElement("h3", "", suggestion.title),
+      makeTextElement("p", "", suggestion.description || suggestion.reason),
+    );
+    const actions = makeTextElement("div", "pulse-dashboard-suggestion-actions", "");
+    for (const [index, option] of (suggestion.actionOptions || []).slice(0, 2).entries()) {
+      if (!option?.action) continue;
+      const button = makeTextElement("button", index === 0 ? "primary" : "secondary", option.label || "Revisar");
+      button.type = "button";
+      button.addEventListener("click", () => confirmAction(suggestion, option));
+      actions.append(button);
+    }
+    const open = makeTextElement("button", "secondary", `Abrir ${AREA_LABELS[suggestion.source] || AREA_LABELS[suggestion.area] || "área"}`);
+    open.type = "button";
+    open.addEventListener("click", () => openArea(suggestion.source || suggestion.area));
+    actions.append(open);
+    content.append(actions);
+    dashboardCard.append(content);
   }
 
   function renderEmpty(title, description) {
@@ -84,6 +144,7 @@ export function createAutopilotUI({ getToken, openArea, notify }) {
       renderEmpty("Tudo em ordem por enquanto", "Quando houver algo útil e verificável para fazer, o Pulsinho mostra aqui.");
       setStatus("Nenhuma prioridade pendente agora.");
       setPreview("Nenhuma ação pendente por enquanto.");
+      renderDashboardSuggestion();
       return;
     }
 
@@ -116,6 +177,7 @@ export function createAutopilotUI({ getToken, openArea, notify }) {
       card.append(actions);
       list.append(card);
     }
+    renderDashboardSuggestion();
   }
 
   async function readJson(response) {
@@ -124,6 +186,10 @@ export function createAutopilotUI({ getToken, openArea, notify }) {
 
   async function load({ force = false } = {}) {
     if (!getToken()) return;
+    if (isDesignPreview()) {
+      loadDesignPreviewSuggestion();
+      return;
+    }
     if (!force && fetchedAt && Date.now() - fetchedAt < 60_000) return;
     // A leitura em andamento pode ter começado antes de uma mudança vinda do
     // WhatsApp. Depois dela terminar, uma atualização forçada precisa fazer
@@ -168,6 +234,15 @@ export function createAutopilotUI({ getToken, openArea, notify }) {
         if (serial !== requestSerial) return;
         setStatus("Não foi possível carregar as sugestões agora.");
         setPreview("Sugestões indisponíveis neste momento.");
+        if (dashboardCard) {
+          dashboardCard.replaceChildren();
+          const errorState = makeTextElement("div", "pulse-dashboard-suggestion", "");
+          errorState.append(
+            makeTextElement("h3", "", "Autopilot temporariamente indisponível"),
+            makeTextElement("p", "", "Seus dados continuam seguros. Tente atualizar as sugestões em instantes."),
+          );
+          dashboardCard.append(errorState);
+        }
         if (!suggestions.length) renderEmpty("Sugestões indisponíveis", "Tente atualizar quando a conexão estiver estável.");
         console.warn("Pulse Autopilot indisponível:", error);
       } finally {
@@ -180,6 +255,11 @@ export function createAutopilotUI({ getToken, openArea, notify }) {
 
   async function executeConfirmed() {
     if (!pendingAction || !applyButton) return;
+    if (isDesignPreview()) {
+      closeConfirm();
+      notify("Simulação concluída no preview. Nenhum dado real foi alterado.");
+      return;
+    }
     const action = pendingAction;
     applyButton.disabled = true;
     try {
@@ -232,3 +312,4 @@ export function createAutopilotUI({ getToken, openArea, notify }) {
   function show() { return load({ force: Boolean(pendingLoad && pendingSerial !== requestSerial) }); }
   return { bind, load, invalidate, show };
 }
+
