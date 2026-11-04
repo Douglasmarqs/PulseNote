@@ -337,8 +337,13 @@ async function logout() {
 // ── Guarda de autenticação + carregamento em tempo real ───────
 // Esta é a peça central: o app só é exibido depois de confirmar
 // que existe um usuário logado, e os dados vêm sempre do Firestore.
-const isLocalDesignPreview = ["localhost", "127.0.0.1"].includes(window.location.hostname)
-  && new URLSearchParams(window.location.search).get("designPreview") === "1";
+const designPreviewRequested = new URLSearchParams(window.location.search).get("designPreview") === "1";
+const designPreviewHostAllowed = ["localhost", "127.0.0.1"].includes(window.location.hostname)
+  || /^pulse-note-5erj-[a-z0-9-]+-douglas-projects-c831a9fc\.vercel\.app$/i.test(window.location.hostname);
+// O modo de demonstração usa somente dados fictícios e existe para QA visual.
+// O domínio oficial não corresponde ao padrão acima, então esta rota jamais
+// ignora a autenticação em produção — mesmo que alguém copie o parâmetro.
+const isLocalDesignPreview = designPreviewRequested && designPreviewHostAllowed;
 const appReady = new Promise((resolve) => {
   let resolved = false; // garante que resolve() é chamado apenas uma vez
 
@@ -7912,4 +7917,5 @@ window.updateGoalProgress = updateGoalProgress;
 // silenciosamente não faziam nada.
 window.setView = setView;
 window.setNotesFolderFilter = setNotesFolderFilter;
+
 
