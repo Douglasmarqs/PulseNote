@@ -38,6 +38,28 @@ export function createAutopilotUI({ getToken, openArea, notify }) {
   let refreshTimer = null;
   let bound = false;
 
+  function isDesignPreview() {
+    return getToken()?.uid === "local-design-preview";
+  }
+
+  function loadDesignPreviewSuggestion() {
+    suggestions = [{
+      id: "design-preview-review-invoice",
+      source: "finances",
+      priority: "high",
+      title: "Antecipar revisão da fatura",
+      description: "A fatura vence em 4 dias e o saldo projetado continua positivo. Revise agora para evitar uma saída inesperada.",
+      actionOptions: [{
+        label: "Criar tarefa de revisão",
+        action: { type: "preview", target: "invoice-review" },
+      }],
+    }];
+    fetchedAt = Date.now();
+    render();
+    setStatus("Simulação do preview — nenhuma alteração será salva.");
+    setPreview("1 prioridade simulada para validar a experiência.");
+  }
+
   function isVisible() {
     return ["autopilotView", "dashboardView"].some((id) =>
       document.getElementById(id)?.classList.contains("active-view"));
@@ -164,6 +186,10 @@ export function createAutopilotUI({ getToken, openArea, notify }) {
 
   async function load({ force = false } = {}) {
     if (!getToken()) return;
+    if (isDesignPreview()) {
+      loadDesignPreviewSuggestion();
+      return;
+    }
     if (!force && fetchedAt && Date.now() - fetchedAt < 60_000) return;
     // A leitura em andamento pode ter começado antes de uma mudança vinda do
     // WhatsApp. Depois dela terminar, uma atualização forçada precisa fazer
@@ -229,6 +255,11 @@ export function createAutopilotUI({ getToken, openArea, notify }) {
 
   async function executeConfirmed() {
     if (!pendingAction || !applyButton) return;
+    if (isDesignPreview()) {
+      closeConfirm();
+      notify("Simulação concluída no preview. Nenhum dado real foi alterado.");
+      return;
+    }
     const action = pendingAction;
     applyButton.disabled = true;
     try {
@@ -281,3 +312,4 @@ export function createAutopilotUI({ getToken, openArea, notify }) {
   function show() { return load({ force: Boolean(pendingLoad && pendingSerial !== requestSerial) }); }
   return { bind, load, invalidate, show };
 }
+
