@@ -2,7 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 test("endpoint de previsão exige autenticação e não aceita escrita", async () => {
-  const handler = require("../api/finance-forecast");
+  const handler = require("../api/pulsinho");
   const response = () => ({
     code: 200,
     headers: {},
@@ -12,11 +12,11 @@ test("endpoint de previsão exige autenticação e não aceita escrita", async (
   });
 
   const unauthenticated = response();
-  await handler({ method: "GET", headers: {}, query: {} }, unauthenticated);
+  await handler({ method: "GET", headers: {}, query: { mode: "forecast" } }, unauthenticated);
   assert.equal(unauthenticated.code, 401);
 
   const write = response();
-  await handler({ method: "POST", headers: {}, query: {} }, write);
+  await handler({ method: "DELETE", headers: {}, query: { mode: "forecast" } }, write);
   assert.equal(write.code, 405);
-  assert.equal(write.headers.Allow, "GET");
+  assert.equal(write.headers.Allow, "GET, POST");
 });

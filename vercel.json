@@ -85,6 +85,10 @@
 
   "rewrites": [
     {
+      "source": "/api/finance-forecast",
+      "destination": "/api/pulsinho?mode=forecast"
+    },
+    {
       "source": "/login",
       "destination": "/src/login.html"
     },
