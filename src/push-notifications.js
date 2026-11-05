@@ -40,6 +40,9 @@ function safeErrorCode(error) {
   const code = String(error?.code || "");
   if (/^messaging\/[a-z0-9-]+$/.test(code)) return code;
   if (error?.message === "push_auth_required") return "auth-required";
+  if (error?.name === "InvalidAccessError" && /applicationServerKey/i.test(String(error?.message || ""))) {
+    return "invalid-vapid-key";
+  }
   return "registration-failed";
 }
 

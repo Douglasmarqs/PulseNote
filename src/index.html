@@ -65,13 +65,17 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="PulseNote" />
 
-    <link rel="stylesheet" href="/src/styles.css" />
-    <link rel="stylesheet" href="/src/auth.css" />
+    <link rel="stylesheet" href="/src/styles.css?v=36" />
+    <link rel="stylesheet" href="/src/auth.css?v=36" />
     <!-- Camada responsiva final: concentra os ajustes mobile do app em um
          único arquivo, carregado depois da base para evitar regras dispersas
          competindo entre si. -->
-    <link rel="stylesheet" href="/src/mobile.css" />
-    <link rel="stylesheet" href="/src/autopilot.css" />
+    <link rel="stylesheet" href="/src/mobile.css?v=36" />
+    <link rel="stylesheet" href="/src/autopilot.css?v=36" />
+    <link rel="stylesheet" href="/src/premium.css?v=37" />
+    <!-- Sistema visual definitivo. Carrega por ultimo para unificar as
+         camadas historicas sem alterar a logica ou os dados do produto. -->
+    <link rel="stylesheet" href="/src/product-system.css?v=1" />
   </head>
   <body>
     <div class="app-shell">
@@ -82,7 +86,7 @@
           <div class="brand-mark"><span></span></div>
           <div>
             <strong>PulseNote</strong>
-            <span>Produtividade divertida</span>
+            <span>Seu dia, sob controle</span>
           </div>
         </div>
 
@@ -123,10 +127,11 @@
         </nav>
 
         <div class="sidebar-footer">
-          <div class="streak-box">
-            <span class="muted">🔥 Sequência</span>
-            <strong id="streakCount">0 dias</strong>
-          </div>
+          <button type="button" class="sidebar-autopilot-status" data-view-shortcut="autopilot">
+            <span class="sidebar-autopilot-dot" aria-hidden="true"></span>
+            <span><strong>Autopilot ativo</strong><small>Prioridades sob controle</small></span>
+          </button>
+          <strong id="streakCount" class="sr-only">0 dias</strong>
         </div>
       </aside>
 
@@ -178,6 +183,132 @@
 
         <!-- ===== DASHBOARD VIEW ===== -->
         <section id="dashboardView" class="view active-view">
+
+          <div class="pulse-dashboard" aria-label="Visão geral do PulseNote">
+            <div class="pulse-workspace-bar" aria-label="Espaço ativo">
+              <div class="pulse-workspace-switcher" role="group" aria-label="Alternar espaço">
+                <button type="button" class="pulse-workspace-option active" data-workspace="personal" aria-pressed="true">Pessoal</button>
+                <button type="button" class="pulse-workspace-option" data-workspace="couple" aria-pressed="false">Casal</button>
+                <button type="button" class="pulse-workspace-option" data-workspace="family" aria-pressed="false">Família</button>
+                <button type="button" class="pulse-workspace-option" data-workspace="business" aria-pressed="false">Empresa</button>
+              </div>
+              <button type="button" class="pulse-add-button" onclick="openPlannerQuickAdd()">
+                <span aria-hidden="true">＋</span><span>Adicionar</span>
+              </button>
+            </div>
+
+            <div class="pulse-dashboard-grid pulse-dashboard-grid--top">
+              <section class="pulse-glass pulse-glass--elevated pulse-forecast" aria-labelledby="pulseForecastTitle">
+                <div class="pulse-section-heading">
+                  <div>
+                    <p class="pulse-kicker">Visão financeira</p>
+                    <h2 id="pulseForecastTitle">Seu mês, antes de gastar</h2>
+                    <p>Projeção baseada no que já entrou e nos seus compromissos recorrentes.</p>
+                  </div>
+                  <button type="button" class="pulse-icon-button" data-view-shortcut="finances" aria-label="Abrir finanças">→</button>
+                </div>
+
+                <div class="pulse-forecast-content">
+                  <div class="pulse-forecast-summary">
+                    <span>Saldo atual</span>
+                    <strong id="pulseCurrentBalance">R$ 0,00</strong>
+                    <small id="pulseBalanceContext">Atualizado com seus lançamentos deste mês</small>
+
+                    <span class="pulse-projection-label">Projeção de fechamento</span>
+                    <strong id="pulseProjectedBalance" class="pulse-projected-value">R$ 0,00</strong>
+
+                    <div class="pulse-safe-spend">
+                      <span>Disponível com segurança hoje</span>
+                      <strong id="pulseSafeSpend">R$ 0,00</strong>
+                      <button type="button" id="pulseOpenSimulator" class="pulse-safe-spend-action">Simular uma compra <span aria-hidden="true">→</span></button>
+                    </div>
+                  </div>
+
+                  <div class="pulse-forecast-visual" aria-label="Evolução projetada do saldo no mês">
+                    <div class="pulse-chart-legend"><span><i></i> Saldo real</span><span><i></i> Projeção</span></div>
+                    <svg class="pulse-forecast-chart" viewBox="0 0 640 240" role="img" aria-labelledby="pulseForecastChartTitle">
+                      <title id="pulseForecastChartTitle">Projeção do saldo até o fim do mês</title>
+                      <defs>
+                        <linearGradient id="pulseForecastFill" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stop-color="currentColor" stop-opacity=".34" />
+                          <stop offset="100%" stop-color="currentColor" stop-opacity="0" />
+                        </linearGradient>
+                      </defs>
+                      <g class="pulse-chart-grid" aria-hidden="true">
+                        <path d="M22 36H618M22 92H618M22 148H618M22 204H618" />
+                      </g>
+                      <path id="pulseForecastArea" class="pulse-forecast-area" d="M22 118 C110 108 170 134 246 125 S382 162 448 146 S548 112 618 106 L618 218 L22 218 Z" />
+                      <path id="pulseForecastLine" class="pulse-forecast-line" d="M22 118 C110 108 170 134 246 125 S382 162 448 146 S548 112 618 106" />
+                      <circle id="pulseForecastPoint" class="pulse-forecast-point" cx="448" cy="146" r="7" />
+                    </svg>
+                    <div class="pulse-chart-axis" aria-hidden="true"><span>Hoje</span><span>Fim do mês</span></div>
+                    <div id="pulseNextCommitment" class="pulse-next-commitment">Nenhum compromisso financeiro próximo.</div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="pulse-glass pulse-today" aria-labelledby="pulseTodayTitle">
+                <div class="pulse-section-heading">
+                  <div>
+                    <p class="pulse-kicker">Agenda</p>
+                    <h2 id="pulseTodayTitle">Hoje</h2>
+                    <p>O que merece sua atenção agora.</p>
+                  </div>
+                  <button type="button" class="pulse-icon-button" data-view-shortcut="planner" data-planner-focus="agenda" aria-label="Abrir agenda">→</button>
+                </div>
+                <div id="pulseTodayAgenda" class="pulse-timeline" aria-live="polite"></div>
+              </section>
+            </div>
+
+            <div class="pulse-dashboard-grid pulse-dashboard-grid--bottom">
+              <section class="pulse-glass pulse-glass--focus pulse-autopilot-proposal" aria-labelledby="pulseAutopilotTitle">
+                <div class="pulse-autopilot-header">
+                  <span class="pulse-autopilot-mark" aria-hidden="true">✦</span>
+                  <div>
+                    <p class="pulse-kicker">Pulse Autopilot</p>
+                    <h2 id="pulseAutopilotTitle">Próxima ação, com sua aprovação</h2>
+                  </div>
+                  <span class="pulse-beta-badge">Sugestão segura</span>
+                </div>
+                <div id="pulseAutopilotDashboardCard" class="pulse-autopilot-body">
+                  <h3>Organizando suas prioridades</h3>
+                  <p id="pulseAutopilotPreview">Analisando dados reais do Planner, Notas e Finanças…</p>
+                  <div class="pulse-autopilot-skeleton" aria-hidden="true"><span></span><span></span><span></span></div>
+                </div>
+                <div class="pulse-autopilot-trust">
+                  <span>Nada será alterado sem sua confirmação.</span>
+                  <button type="button" class="pulse-link-button" data-view-shortcut="autopilot">Ver todas as sugestões</button>
+                </div>
+              </section>
+
+              <aside class="pulse-dashboard-rail" aria-label="Acesso rápido">
+                <section class="pulse-glass pulse-insight-card">
+                  <p class="pulse-kicker">Automação</p>
+                  <strong id="pulseRecurringInsight">Nenhuma recorrência pendente</strong>
+                  <span id="pulseRecurringInsightDetail">Cadastre contas recorrentes para antecipar o mês.</span>
+                  <button type="button" class="pulse-link-button" data-view-shortcut="finances">Ver automações</button>
+                </section>
+
+                <section class="pulse-glass pulse-command-card">
+                  <form id="pulseCommandForm" class="pulse-command-form">
+                    <label for="pulseCommandInput">Pergunte ou peça uma ação</label>
+                    <div class="pulse-command-control">
+                      <input id="pulseCommandInput" type="text" maxlength="180" autocomplete="off" placeholder="Ex.: mercado 86 reais ontem" />
+                      <button type="submit" aria-label="Continuar">→</button>
+                    </div>
+                  </form>
+                  <p>Converse normalmente. O Pulsinho usa seus dados reais para responder e pede confirmação antes de alterar qualquer coisa.</p>
+                  <div id="pulseCommandResponse" class="pulse-command-response" role="status" aria-live="polite" hidden></div>
+                  <div class="pulse-connector-list">
+                    <button type="button" data-view-shortcut="settings" data-settings-focus="whatsapp"><span class="pulse-status-dot"></span>WhatsApp conectado <b>Configurar</b></button>
+                    <button type="button" data-view-shortcut="autopilot">IA conversacional <span class="pulse-optional-badge">Com confirmação</span></button>
+                  </div>
+                </section>
+              </aside>
+            </div>
+          </div>
+
+          <div class="legacy-dashboard" hidden aria-hidden="true">
 
           <!-- Hero -->
           <section class="daily-hero">
@@ -379,6 +510,7 @@
                 </div>
               </section>
             </div>
+          </div>
           </div>
         </section>
 
@@ -858,6 +990,8 @@
               <button class="fin-month-arrow" id="finMonthPrev">‹</button>
               <div class="fin-month-center">
                 <span id="finMonthLabel" class="fin-month-label">Julho 2026</span>
+                <label class="sr-only" for="finWorkspaceSelect">Espaço financeiro</label>
+                <select id="finWorkspaceSelect" class="fin-workspace-label" aria-label="Espaço financeiro ativo"><option value="personal">Pessoal</option><option value="couple">Casal</option><option value="family">Família</option><option value="business">Empresa</option></select>
                 <span id="finClosedBadge" class="fin-closed-badge" hidden><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Fechado</span>
               </div>
               <button class="fin-month-arrow" id="finMonthNext">›</button>
@@ -967,6 +1101,8 @@
                       <select id="expenseCategory" hidden aria-hidden="true" tabindex="-1"><option value="alimentacao">🍔 Alimentação</option></select>
                       <button type="button" id="newCategoryBtn" class="fin-cat-add-btn" title="Nova categoria">＋</button>
                     </div>
+                    <label class="fin-account-select-label" for="expenseAccount">Conta</label>
+                    <select id="expenseAccount" class="fin-account-select"><option value="">Sem conta específica</option></select>
                     <button type="submit" class="primary-button" style="width:100%;justify-content:center;height:44px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg><span>Registrar</span></button>
                     <button type="button" id="cancelEditExpense" hidden style="width:100%;height:36px;border-radius:10px;border:1.5px solid var(--line);background:var(--surface2);color:var(--text2);cursor:pointer;font-weight:600;font-family:inherit;margin-top:6px">Cancelar edição</button>
                   </form>
@@ -989,6 +1125,7 @@
                   <div class="panel-header">
                     <div><p class="eyebrow">Histórico</p><h2>Transações</h2></div>
                   </div>
+                  <div id="finTransactionFilter" class="fin-transaction-filter" hidden></div>
                   <div id="finTransactions" class="fin-tx-list"></div>
                 </div>
               </div><!-- /fin-right -->
@@ -1005,6 +1142,22 @@
               <p>Compare seu ritmo de gastos, identifique a principal categoria e acompanhe a evolução do saldo.</p>
             </div>
             <div id="finInsights" class="fin-insights-grid" aria-live="polite"></div>
+            <section class="panel fin-simulator" aria-labelledby="finSimulatorTitle">
+              <div class="fin-simulator-copy">
+                <p class="eyebrow">Planejamento inteligente</p>
+                <h2 id="finSimulatorTitle">Posso gastar isso?</h2>
+                <p>Teste uma compra antes de fazê-la. A projeção considera saldo, contas recorrentes, faturas e sua reserva de segurança.</p>
+              </div>
+              <form id="finSimulatorForm" class="fin-simulator-form">
+                <label for="finSimulatorAmount">Valor da compra</label>
+                <div class="fin-simulator-control">
+                  <span>R$</span>
+                  <input id="finSimulatorAmount" name="amount" inputmode="decimal" autocomplete="off" placeholder="0,00" required />
+                  <button type="submit">Simular</button>
+                </div>
+              </form>
+              <div id="finSimulatorResult" class="fin-simulator-result" role="status" aria-live="polite" hidden></div>
+            </section>
             <div class="fin-analise-grid">
               <div class="panel wide">
                 <div class="panel-header">
@@ -1031,6 +1184,38 @@
 
           <!-- ABA: CONTROLE — metas de gasto por categoria -->
           <div class="fin-tab-panel" data-fin-panel="controle" role="tabpanel" hidden>
+            <section class="panel fin-shared-spaces-panel" aria-labelledby="finSharedSpacesTitle">
+              <div class="panel-header">
+                <div><p class="eyebrow">Conta conjunta</p><h2 id="finSharedSpacesTitle">Espaços compartilhados</h2></div>
+                <button class="mini-button" id="finCreateSpaceToggle">+ Criar espaço</button>
+              </div>
+              <p class="fin-accounts-help">Compartilhe apenas as finanças deste espaço com seu parceiro ou família. Notas, tarefas e dados pessoais continuam privados.</p>
+              <form id="finCreateSpaceForm" class="fin-shared-create" hidden>
+                <label>Nome<input id="finSharedSpaceName" maxlength="70" placeholder="Ex.: Casa Douglas e Ana" required /></label>
+                <label>Tipo<select id="finSharedSpaceType"><option value="couple">Casal</option><option value="family">Família</option><option value="group">Grupo</option></select></label>
+                <div><button type="button" id="finCreateSpaceCancel">Cancelar</button><button type="submit">Criar e usar</button></div>
+              </form>
+              <div id="finSharedInvites" class="fin-shared-invites" hidden></div>
+              <div id="finSharedSpacesList" class="fin-shared-spaces-list"><div class="empty-state">Carregando espaços compartilhados…</div></div>
+            </section>
+            <div class="panel fin-accounts-panel">
+              <div class="panel-header">
+                <div><p class="eyebrow">Patrimônio</p><h2>Contas e saldos</h2></div>
+                <button class="mini-button" id="finAddAccount">+ Conta</button>
+              </div>
+              <p class="fin-accounts-help">Organize conta corrente, carteira, poupança e investimentos por espaço. Os saldos alimentam o simulador financeiro.</p>
+              <div id="finAccountFormWrap" class="fin-account-form-wrap" hidden>
+                <form id="finAccountForm" class="fin-account-form">
+                  <input id="finAccountId" type="hidden" />
+                  <label>Nome<input id="finAccountName" maxlength="50" placeholder="Ex.: Nubank principal" required /></label>
+                  <label>Tipo<select id="finAccountType"><option value="checking">Conta corrente</option><option value="savings">Poupança</option><option value="cash">Carteira</option><option value="investment">Investimentos</option><option value="other">Outra conta</option></select></label>
+                  <label>Espaço<select id="finAccountWorkspace"><option value="personal">Pessoal</option><option value="couple">Casal</option><option value="family">Família</option><option value="business">Empresa</option></select></label>
+                  <label>Saldo atual<input id="finAccountBalance" inputmode="decimal" placeholder="0,00" /></label>
+                  <div class="fin-account-form-actions"><button type="button" id="finAccountCancel">Cancelar</button><button type="submit">Salvar conta</button></div>
+                </form>
+              </div>
+              <div id="finAccountsList" class="fin-accounts-list"></div>
+            </div>
             <div class="panel">
               <div class="panel-header">
                 <div><p class="eyebrow">Controle</p><h2>Metas de gasto</h2></div>
@@ -1267,6 +1452,20 @@
               </div>
             </section>
 
+            <section class="panel" id="pulsinhoAiCard">
+              <div class="panel-header"><div><p class="eyebrow">Inteligência</p><h2>Modelo do Pulsinho</h2></div><span class="billing-status-badge is-active">Conversação livre</span></div>
+              <p class="task-meta" style="margin-bottom:14px">O Pulsinho entende frases naturais no aplicativo e no WhatsApp. Escolha sua preferência; se o provedor principal estiver indisponível, o PulseNote usa o modelo seguro configurado como reserva.</p>
+              <label class="settings-ai-model">
+                <span>Preferência de IA</span>
+                <select id="pulsinhoAiPreference">
+                  <option value="auto">Automático (recomendado)</option>
+                  <option value="openai">GPT / OpenAI</option>
+                  <option value="anthropic">Claude / Anthropic</option>
+                </select>
+              </label>
+              <p class="task-meta">A IA recebe apenas um resumo necessário dos seus dados. Mudanças em tarefas, notas ou finanças continuam exigindo confirmação.</p>
+            </section>
+
             <section class="panel" id="whatsappIntegrationCard">
               <div class="panel-header"><div><p class="eyebrow">Notificações</p><h2>Lembretes do aplicativo</h2></div></div>
               <p class="task-meta" style="margin-bottom:12px">Defina o horário e a antecedência em cada tarefa ou compromisso. Os avisos chegam no navegador/PWA e, se você habilitar acima, também no WhatsApp.</p>
@@ -1475,7 +1674,7 @@
 
     <script src="/src/pwa-install.js" defer></script>
     <script src="/src/notifications.js?v=35" defer></script>
-    <script type="module" src="/src/app.js?v=35"></script>
+    <script type="module" src="/src/app.js?v=37"></script>
     <script type="module" src="/src/push-notifications.js?v=35"></script>
   </body>
 </html>

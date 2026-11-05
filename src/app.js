@@ -11,7 +11,9 @@ import {
   updateProfile,
   updatePassword,
   reauthenticateWithCredential,
+  reauthenticateWithPopup,
   EmailAuthProvider,
+  GoogleAuthProvider,
   sendEmailVerification,
   deleteUser,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
@@ -335,11 +337,31 @@ async function logout() {
 // ── Guarda de autenticação + carregamento em tempo real ───────
 // Esta é a peça central: o app só é exibido depois de confirmar
 // que existe um usuário logado, e os dados vêm sempre do Firestore.
+const designPreviewRequested = new URLSearchParams(window.location.search).get("designPreview") === "1";
+const designPreviewHostAllowed = ["localhost", "127.0.0.1"].includes(window.location.hostname)
+  || /^pulse-note-5erj-[a-z0-9-]+-douglas-projects-c831a9fc\.vercel\.app$/i.test(window.location.hostname);
+// O modo de demonstração usa somente dados fictícios e existe para QA visual.
+// O domínio oficial não corresponde ao padrão acima, então esta rota jamais
+// ignora a autenticação em produção — mesmo que alguém copie o parâmetro.
+const isLocalDesignPreview = designPreviewRequested && designPreviewHostAllowed;
 const appReady = new Promise((resolve) => {
   let resolved = false; // garante que resolve() é chamado apenas uma vez
 
   onAuthStateChanged(auth, async (user) => {
     if (!user) {
+      if (isLocalDesignPreview) {
+        currentUser = {
+          uid: "local-design-preview",
+          displayName: "Douglas Marques",
+          email: "preview@pulsenote.local",
+          emailVerified: true,
+          getIdToken: async () => null,
+        };
+        state = createDesignPreviewState();
+        observedState = cloneState(state);
+        if (!resolved) { resolved = true; resolve(); }
+        return;
+      }
       // Durante a exclusão, o handler abaixo limpa o cache local antes
       // de navegar. O evento de Auth pode chegar antes de deleteUser
       // resolver; não redirecione cedo demais deixando dados no aparelho.
@@ -629,6 +651,12 @@ let plannerEditingEventId = null;
 let notesFolderFilter = "all"; // filtro de pasta ativo na biblioteca de Notas
 // Mês ativo na view de Finanças. Formato "YYYY-MM". Começa no mês atual.
 let finActiveMonth = todayIso.slice(0, 7);
+let activeWorkspaceId = "personal";
+let sharedFinanceSpaces = [];
+let sharedFinanceInvites = [];
+const sharedSpaceSyncTimers = new Map();
+let finCategoryDrilldown = null;
+let lastForecastFetchAt = 0;
 
 const elements = {
   viewTitle: document.querySelector("#viewTitle"),
@@ -715,6 +743,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   setInterval(updateEventCountdowns, 30000);
 
   bindNavigation();
+  bindPremiumDashboard();
+  await loadFinanceSpaces({ silent: true });
   autopilotUi.bind();
   bindPlannerNav();
   bindPlannerQuickAdd();
@@ -1041,6 +1071,8 @@ function renderSettings() {
     : initial;
 
   renderWhatsAppSettings();
+  const aiPreference = document.getElementById("pulsinhoAiPreference");
+  if (aiPreference && document.activeElement !== aiPreference) aiPreference.value = state.aiProviderPreference || "auto";
   loadBillingSettings();
 }
 
@@ -1065,9 +1097,21 @@ async function billingApi(action, method = "GET", body) {
 async function loadBillingSettings(force = false) {
   const grid = document.getElementById("billingPlanGrid");
   if (!grid || !currentUser) return;
-  if (billingRequest && !force) return billingRequest;
   const statusBadge = document.getElementById("billingStatusBadge");
   const statusText = document.getElementById("billingStatusText");
+  // A prévia visual usa uma identidade fictícia e nunca deve consultar APIs
+  // autenticadas. Além de evitar ruído no console, isto reforça que o QA não
+  // cria assinatura, checkout ou qualquer alteração financeira real.
+  if (isLocalDesignPreview) {
+    statusBadge.textContent = "Prévia visual";
+    statusBadge.className = "billing-status-badge";
+    statusText.textContent = "Planos e pagamentos não são simulados neste preview seguro.";
+    grid.innerHTML = '<div class="empty-state">Entre com uma conta real para consultar assinatura e cobrança.</div>';
+    const actions = document.getElementById("billingActions");
+    if (actions) actions.hidden = true;
+    return null;
+  }
+  if (billingRequest && !force) return billingRequest;
   billingRequest = billingApi("status").then((data) => {
     const current = data.subscription || {};
     const active = current.status === "active";
@@ -1160,6 +1204,7 @@ function renderWhatsAppSettings() {
       "messaging/permission-blocked": "O navegador bloqueou notificações para este site.",
       "messaging/failed-service-worker-registration": "O serviço de notificações não conseguiu iniciar neste navegador.",
       "messaging/token-subscribe-failed": "O Firebase recusou o registro deste aparelho. Tente novamente.",
+      "invalid-vapid-key": "A chave pública Web Push configurada no PulseNote é inválida.",
       "vapid-key-missing": "A chave Web Push do projeto ainda não está configurada.",
     };
     appReminderStatus.textContent = hasToken && state.appReminderOptIn !== false
@@ -1438,6 +1483,12 @@ function bindSettingsView() {
     showToast(e.target.checked ? "🔔 Lembretes por WhatsApp ativados!" : "Lembretes por WhatsApp desativados.");
   });
 
+  document.getElementById("pulsinhoAiPreference")?.addEventListener("change", (event) => {
+    state.aiProviderPreference = ["openai", "anthropic"].includes(event.target.value) ? event.target.value : "auto";
+    saveState();
+    showToast("Preferência do Pulsinho atualizada.");
+  });
+
   // Este listener pertence à inicialização da tela, não à normalização de
   // dados. Normalizar ocorre a cada snapshot; colocá-lo lá duplicava o
   // handler e repetia pedidos de permissão e gravações.
@@ -1550,14 +1601,22 @@ function bindSettingsView() {
     }
     if (!confirm("Tem certeza que quer excluir sua conta? Todos os seus dados (notas, tarefas, agenda, metas e finanças) serão apagados PERMANENTEMENTE. Essa ação não pode ser desfeita.")) return;
 
-    const pw = prompt("Por segurança, digite sua senha atual para confirmar a exclusão:");
-    if (!pw) return;
-
     accountDeletionRequested = true;
     let whatsappUnlinked = false;
     try {
-      const credential = EmailAuthProvider.credential(account.email, pw);
-      await reauthenticateWithCredential(account, credential);
+      const providers = new Set((account.providerData || []).map((provider) => provider?.providerId));
+      if (providers.has(GoogleAuthProvider.PROVIDER_ID)) {
+        await reauthenticateWithPopup(account, new GoogleAuthProvider());
+      } else if (providers.has(EmailAuthProvider.PROVIDER_ID)) {
+        const pw = prompt("Por segurança, digite sua senha atual para confirmar a exclusão:");
+        if (!pw) return;
+        const credential = EmailAuthProvider.credential(account.email, pw);
+        await reauthenticateWithCredential(account, credential);
+      } else {
+        const providerError = new Error("Não foi possível identificar o método de acesso desta conta.");
+        providerError.code = "auth/provider-not-supported";
+        throw providerError;
+      }
 
       // O vínculo é protegido pelo servidor e precisa sair antes da
       // identidade. Se falhar, mantemos a conta para não deixar um
@@ -1634,6 +1693,8 @@ function bindSettingsView() {
       const messages = {
         "auth/wrong-password":        "Senha incorreta.",
         "auth/invalid-credential":    "Senha incorreta.",
+        "auth/popup-closed-by-user": "A confirmação com o Google foi cancelada.",
+        "auth/provider-not-supported": "Este método de acesso não permite confirmar a exclusão. Entre novamente e tente de novo.",
         "auth/requires-recent-login": "Por segurança, saia e entre na conta novamente antes de excluí-la.",
         "data/unlink-failed":       "Não foi possível desvincular o WhatsApp. Sua conta foi mantida; tente novamente mais tarde.",
         "data/cleanup-failed":      "Não foi possível remover os dados operacionais agora. Sua conta foi mantida; tente novamente mais tarde.",
@@ -1727,6 +1788,7 @@ function normalizeState(parsed) {
   if (parsed.appReminderOptIn === undefined) {
     parsed.appReminderOptIn = parsed.fcmTokens.length > 0;
   }
+  if (!["auto", "openai", "anthropic"].includes(parsed.aiProviderPreference)) parsed.aiProviderPreference = "auto";
   // Retrocompatibilidade: lançamentos, tarefas e metas antigos não tinham
   // esses campos — garantimos que existam pra não quebrar o restante do app.
   parsed.tasks.forEach((t) => {
@@ -1753,6 +1815,8 @@ function loadDefaultState() {
     monthClosures: [],
     finGoals: [],
     finRecurrents: [],
+    financeAccounts: [],
+    financialSettings: { safetyReserve: 0 },
     timeZone: appTimeZone,
     whatsappLinkCode: null,
     whatsappLinkCodeExpiresAt: null,
@@ -1760,7 +1824,36 @@ function loadDefaultState() {
     fcmTokens: [],
     whatsappReminderOptIn: false,
     appReminderOptIn: false,
+    aiProviderPreference: "auto",
   };
+}
+
+function createDesignPreviewState() {
+  const monthKey = todayIso.slice(0, 7);
+  const day = Number(todayIso.slice(8, 10));
+  const dateForDay = (value) => `${monthKey}-${String(Math.max(1, Math.min(28, value))).padStart(2, "0")}`;
+  return normalizeState({
+    ...loadDefaultState(),
+    tasks: [
+      { id: "preview-task-1", title: "Finalizar relatório mensal", status: "Pendente", priority: "Alta", dueDate: todayIso, time: "09:30", subtasks: [], recurrence: null },
+      { id: "preview-task-2", title: "Revisar orçamento de novembro", status: "Pendente", priority: "Media", dueDate: offsetDate(1), time: "11:00", subtasks: [], recurrence: null },
+    ],
+    events: [
+      { id: "preview-event-1", title: "Consulta no dentista", date: todayIso, time: "14:00", location: "Clínica OdontoPlus", notes: "", reminderMinutes: 30 },
+      { id: "preview-event-2", title: "Planejamento da semana", date: offsetDate(2), time: "10:00", location: "", notes: "", reminderMinutes: 60 },
+    ],
+    goals: [{ id: "preview-goal-1", title: "Reserva de emergência", current: 68, target: 100, milestones: [] }],
+    finances: [
+      { id: "preview-fin-1", type: "receita", amount: 7200, category: "salario", description: "Salário", date: dateForDay(5) },
+      { id: "preview-fin-2", type: "despesa", amount: 2100, category: "moradia", description: "Aluguel", date: dateForDay(7) },
+      { id: "preview-fin-3", type: "despesa", amount: 486.40, category: "mercado", description: "Mercado Boa Compra", date: dateForDay(Math.max(8, day - 3)) },
+      { id: "preview-fin-4", type: "despesa", amount: 287.90, category: "contas", description: "Energia e internet", date: dateForDay(Math.max(9, day - 2)) },
+    ],
+    finRecurrents: [
+      { id: "preview-rec-1", description: "Fatura do cartão", amount: 1490, type: "despesa", categoryId: "outros", day: Math.min(28, day + 4), skippedMonths: [] },
+      { id: "preview-rec-2", description: "Streaming", amount: 59.90, type: "despesa", categoryId: "assinaturas", day: Math.min(28, day + 7), skippedMonths: [] },
+    ],
+  });
 }
 
 // Salva mudanças localmente de imediato e agenda o envio para o Firestore
@@ -1779,6 +1872,7 @@ function saveState() {
   // disparavam tentativas inválidas de sync antes da sessão estar pronta.
   if (currentUser && currentUser.emailVerified) {
     scheduleSyncToServer();
+    if (isSharedFinanceWorkspace(activeWorkspaceId)) scheduleSharedSpaceSync(activeWorkspaceId);
   }
 }
 
@@ -1834,6 +1928,500 @@ function bindNavigation() {
     });
   });
 }
+
+function bindPremiumDashboard() {
+  document.querySelector(".pulse-workspace-switcher")?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-workspace]");
+    if (button) setActiveFinanceWorkspace(button.dataset.workspace);
+  });
+  document.querySelector("#finWorkspaceSelect")?.addEventListener("change", (event) => setActiveFinanceWorkspace(event.target.value));
+
+  const commandForm = document.querySelector("#pulseCommandForm");
+  const commandInput = document.querySelector("#pulseCommandInput");
+  commandForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const command = commandInput?.value.trim() || "";
+    if (command.length < 3) {
+      showToast("Escreva um pedido curto para o Pulsinho entender.");
+      return;
+    }
+    await askPulsinhoFromDashboard(command);
+  });
+
+  document.querySelector("#pulseOpenSimulator")?.addEventListener("click", openFinanceSimulator);
+  document.querySelector("#finSimulatorForm")?.addEventListener("submit", runFinanceSimulation);
+  document.querySelector("#finAddAccount")?.addEventListener("click", () => toggleFinanceAccountForm(true));
+  document.querySelector("#finAccountCancel")?.addEventListener("click", () => toggleFinanceAccountForm(false));
+  document.querySelector("#finAccountForm")?.addEventListener("submit", saveFinanceAccount);
+  document.querySelector("#finCreateSpaceToggle")?.addEventListener("click", () => {
+    const form = document.querySelector("#finCreateSpaceForm");
+    if (form) form.hidden = false;
+    document.querySelector("#finSharedSpaceName")?.focus();
+  });
+  document.querySelector("#finCreateSpaceCancel")?.addEventListener("click", () => {
+    const form = document.querySelector("#finCreateSpaceForm");
+    if (form) form.hidden = true;
+  });
+  document.querySelector("#finCreateSpaceForm")?.addEventListener("submit", createFinanceSpace);
+  document.querySelector("#finSharedSpacesList")?.addEventListener("submit", inviteToFinanceSpace);
+  document.querySelector("#finSharedSpacesList")?.addEventListener("click", handleSharedSpaceAction);
+  document.querySelector("#finSharedInvites")?.addEventListener("click", handleSharedSpaceAction);
+
+  const response = document.querySelector("#pulseCommandResponse");
+  response?.addEventListener("click", (event) => {
+    const followUp = event.target.closest("[data-pulsinho-followup]");
+    if (!followUp || !commandInput) return;
+    commandInput.value = followUp.dataset.pulsinhoFollowup || "";
+    commandInput.focus();
+    commandForm?.requestSubmit();
+  });
+
+  document.querySelector("#finCategories")?.addEventListener("click", (event) => {
+    const row = event.target.closest("[data-fin-category]");
+    if (row) openFinanceCategory(row.dataset.finCategory);
+  });
+  document.querySelector("#finCategories")?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    const row = event.target.closest("[data-fin-category]");
+    if (!row) return;
+    event.preventDefault();
+    openFinanceCategory(row.dataset.finCategory);
+  });
+  document.querySelector("#finChart6m")?.addEventListener("click", (event) => {
+    const target = event.target.closest("[data-fin-month]");
+    if (target) goToFinMonth(target.dataset.finMonth);
+  });
+  document.querySelector("#finChart6m")?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    const target = event.target.closest("[data-fin-month]");
+    if (!target) return;
+    event.preventDefault();
+    goToFinMonth(target.dataset.finMonth);
+  });
+}
+
+async function pulseApi(path, options = {}) {
+  if (!currentUser) throw new Error("unauthorized");
+  const token = await currentUser.getIdToken();
+  const response = await fetch(path, {
+    ...options,
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      ...(options.body ? { "Content-Type": "application/json" } : {}),
+      ...(options.headers || {}),
+    },
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw Object.assign(new Error(payload.error || "request_failed"), { code: payload.error, status: response.status });
+  return payload;
+}
+
+function renderPulsinhoAnswer(payload) {
+  const root = document.querySelector("#pulseCommandResponse");
+  if (!root) return;
+  root.classList.remove("is-loading");
+  root.hidden = false;
+  const followUps = Array.isArray(payload.followUps) ? payload.followUps : [];
+  root.innerHTML = `<strong>Pulsinho</strong><span>${escapeHtml(payload.reply || "Não encontrei uma resposta segura com os dados disponíveis.")}</span>${followUps.length ? `<div class="pulse-command-followups">${followUps.map((item) => `<button type="button" data-pulsinho-followup="${escapeHtml(item)}">${escapeHtml(item)}</button>`).join("")}</div>` : ""}`;
+}
+
+async function askPulsinhoFromDashboard(question) {
+  const root = document.querySelector("#pulseCommandResponse");
+  const input = document.querySelector("#pulseCommandInput");
+  if (root) {
+    root.hidden = false;
+    root.classList.add("is-loading");
+    root.textContent = "Analisando seus dados com segurança…";
+  }
+  try {
+    const payload = await pulseApi("/api/pulsinho", {
+      method: "POST",
+      body: JSON.stringify({ question, workspaceId: activeWorkspaceId, providerPreference: state.aiProviderPreference || "auto" }),
+    });
+    renderPulsinhoAnswer(payload);
+    if (input) input.value = "";
+  } catch (error) {
+    if (root) {
+      root.classList.remove("is-loading");
+      root.innerHTML = `<strong>Não consegui responder agora</strong><span>${error?.code === "ai_not_configured" || error?.code === "assistant_unavailable" ? "A IA conversacional ainda não está disponível neste ambiente. O simulador financeiro continua funcionando com seus dados reais." : "A conexão falhou. Seus dados não foram alterados; tente novamente em instantes."}</span>`;
+    }
+  }
+}
+
+function parseMoneyInput(value) {
+  const raw = String(value || "").trim().replace(/\s/g, "");
+  const normalized = raw.includes(",") ? raw.replace(/\./g, "").replace(",", ".") : raw;
+  const amount = Number(normalized);
+  return Number.isFinite(amount) && amount > 0 ? Math.round(amount * 100) / 100 : 0;
+}
+
+function parseSignedMoneyInput(value) {
+  const raw = String(value || "").trim().replace(/\s/g, "");
+  const normalized = raw.includes(",") ? raw.replace(/\./g, "").replace(",", ".") : raw;
+  const amount = Number(normalized);
+  return Number.isFinite(amount) ? Math.round(amount * 100) / 100 : 0;
+}
+
+function openFinanceSimulator() {
+  setView("finances");
+  document.querySelector('[data-fin-tab="analise"]')?.click();
+  requestAnimationFrame(() => {
+    document.querySelector("#finSimulatorForm")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    document.querySelector("#finSimulatorAmount")?.focus();
+  });
+}
+
+async function runFinanceSimulation(event) {
+  event?.preventDefault();
+  const input = document.querySelector("#finSimulatorAmount");
+  const result = document.querySelector("#finSimulatorResult");
+  const amount = parseMoneyInput(input?.value);
+  if (!amount) {
+    showToast("Informe um valor válido para simular.");
+    input?.focus();
+    return;
+  }
+  if (result) {
+    result.hidden = false;
+    result.classList.remove("is-risk");
+    result.innerHTML = '<div class="fin-simulator-answer"><strong>Calculando projeção…</strong><p>Considerando suas contas e compromissos registrados.</p></div>';
+  }
+  try {
+    const params = new URLSearchParams({ amount: String(amount), workspaceId: activeWorkspaceId });
+    const payload = await pulseApi(`/api/finance-forecast?${params}`);
+    const forecast = payload.forecast || {};
+    if (result) {
+      result.classList.toggle("is-risk", forecast.canAfford === false);
+      result.innerHTML = `
+        <div class="fin-simulator-answer"><strong>${forecast.canAfford ? "Cabe na sua projeção" : "Melhor rever esta compra"}</strong><p>${escapeHtml(forecast.summary || "")}</p></div>
+        <div class="fin-simulator-metric"><strong>${formatCurrency(forecast.projectedBalanceAfterPurchase)}</strong><span>saldo projetado após a compra</span></div>
+        <div class="fin-simulator-metric"><strong>${formatCurrency(forecast.lowestBalance)}</strong><span>menor saldo até o fim do mês</span></div>
+        <div class="fin-simulator-metric"><strong>${formatCurrency(forecast.reserve)}</strong><span>reserva preservada na análise</span></div>`;
+    }
+  } catch {
+    if (result) result.innerHTML = '<div class="fin-simulator-answer"><strong>Não foi possível simular</strong><p>Nenhum dado foi alterado. Atualize a página e tente novamente.</p></div>';
+  }
+}
+
+function openFinanceCategory(categoryId) {
+  finCategoryDrilldown = categoryId || null;
+  document.querySelector('[data-fin-tab="lancamentos"]')?.click();
+  renderFinances();
+  requestAnimationFrame(() => document.querySelector("#finTransactions")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+}
+
+function isSharedFinanceWorkspace(workspaceId) {
+  return sharedFinanceSpaces.some((space) => space.id === workspaceId);
+}
+
+function sharedFinanceSpace(workspaceId) {
+  return sharedFinanceSpaces.find((space) => space.id === workspaceId) || null;
+}
+
+function canEditFinanceWorkspace(workspaceId = activeWorkspaceId) {
+  const space = sharedFinanceSpace(workspaceId);
+  return !space || Boolean(space.canEdit);
+}
+
+function requireFinanceWorkspaceEdit(workspaceId = activeWorkspaceId) {
+  if (canEditFinanceWorkspace(workspaceId)) return true;
+  showToast("Este espaço foi compartilhado com você em modo somente leitura.");
+  return false;
+}
+
+function workspaceLabel(workspaceId) {
+  const shared = sharedFinanceSpace(workspaceId);
+  if (shared) return shared.name;
+  return ({ personal: "Pessoal", couple: "Casal privado", family: "Família privada", business: "Empresa" })[workspaceId] || "Pessoal";
+}
+
+function financeSpaceDataFromState(workspaceId) {
+  const inSpace = (item) => (item?.workspaceId || "personal") === workspaceId;
+  return {
+    finances: (state.finances || []).filter(inSpace),
+    financeAccounts: (state.financeAccounts || []).filter(inSpace),
+    finGoals: (state.finGoals || []).filter(inSpace),
+    finRecurrents: (state.finRecurrents || []).filter(inSpace),
+    monthClosures: (state.monthClosures || []).filter(inSpace),
+    financialSettings: { safetyReserve: Number(state.financialSettings?.safetyReserve) || 0 },
+  };
+}
+
+function mergeFinanceSpaceData(space) {
+  if (!space?.id || !space.data) return;
+  const fields = ["finances", "financeAccounts", "finGoals", "finRecurrents", "monthClosures"];
+  for (const field of fields) {
+    const local = Array.isArray(state[field]) ? state[field] : [];
+    const personal = local.filter((item) => (item?.workspaceId || "personal") !== space.id);
+    const remote = Array.isArray(space.data[field]) ? space.data[field].map((item) => ({ ...item, workspaceId: space.id })) : [];
+    state[field] = [...personal, ...remote];
+  }
+}
+
+function renderFinanceWorkspaceOptions() {
+  const fixed = [
+    { id: "personal", label: "Pessoal" },
+    { id: "couple", label: "Casal privado" },
+    { id: "family", label: "Família privada" },
+    { id: "business", label: "Empresa" },
+  ];
+  const options = [...fixed, ...sharedFinanceSpaces.map((space) => ({ id: space.id, label: `Compartilhado · ${space.name}` }))];
+  for (const selector of ["#finWorkspaceSelect", "#finAccountWorkspace"]) {
+    const select = document.querySelector(selector);
+    if (!select) continue;
+    const previous = select.value || activeWorkspaceId;
+    select.innerHTML = options.map((option) => `<option value="${escapeHtml(option.id)}">${escapeHtml(option.label)}</option>`).join("");
+    select.value = options.some((option) => option.id === previous) ? previous : activeWorkspaceId;
+  }
+  const switcher = document.querySelector(".pulse-workspace-switcher");
+  if (switcher) {
+    switcher.innerHTML = options.map((option) => `<button type="button" class="pulse-workspace-option${option.id === activeWorkspaceId ? " active" : ""}" data-workspace="${escapeHtml(option.id)}" aria-pressed="${option.id === activeWorkspaceId}">${escapeHtml(option.id.length > 20 ? option.label.replace("Compartilhado · ", "") : option.label)}</button>`).join("");
+  }
+}
+
+function renderSharedFinanceSpaces() {
+  const root = document.querySelector("#finSharedSpacesList");
+  const invitesRoot = document.querySelector("#finSharedInvites");
+  if (!root || !invitesRoot) return;
+  invitesRoot.hidden = !sharedFinanceInvites.length;
+  invitesRoot.innerHTML = sharedFinanceInvites.map((invite) => `
+    <article class="fin-shared-invite">
+      <div><strong>Convite para ${escapeHtml(invite.spaceName || "um espaço")}</strong><span>${escapeHtml(invite.inviterName || "Um usuário")} convidou você para colaborar.</span></div>
+      <button type="button" data-shared-action="accept" data-invite-id="${escapeHtml(invite.id)}">Aceitar convite</button>
+    </article>`).join("");
+  if (!sharedFinanceSpaces.length) {
+    root.innerHTML = '<div class="empty-state">Nenhum espaço compartilhado. Crie um para organizar as finanças com seu parceiro ou família.</div>';
+    return;
+  }
+  root.innerHTML = sharedFinanceSpaces.map((space) => {
+    const owner = space.role === "owner";
+    const memberNames = (space.members || []).map((member) => member.name || member.email).filter(Boolean).join(", ");
+    return `<article class="fin-shared-space-card${space.id === activeWorkspaceId ? " is-active" : ""}">
+      <div class="fin-shared-space-icon" aria-hidden="true">${space.type === "couple" ? "♡" : space.type === "family" ? "⌂" : "◎"}</div>
+      <div class="fin-shared-space-copy"><strong>${escapeHtml(space.name)}</strong><span>${escapeHtml(memberNames || "Somente você")} · ${space.canEdit ? "Pode editar" : "Somente leitura"}</span></div>
+      <button type="button" class="fin-shared-open" data-shared-action="open" data-space-id="${escapeHtml(space.id)}">${space.id === activeWorkspaceId ? "Em uso" : "Abrir"}</button>
+      ${owner ? `<form class="fin-shared-invite-form" data-space-id="${escapeHtml(space.id)}"><input type="email" name="email" autocomplete="email" placeholder="E-mail para convidar" aria-label="E-mail para convidar" required><select name="role" aria-label="Permissão"><option value="editor">Pode editar</option><option value="viewer">Somente leitura</option></select><button type="submit">Convidar</button></form>` : `<button type="button" class="fin-shared-leave" data-shared-action="leave" data-space-id="${escapeHtml(space.id)}">Sair do espaço</button>`}
+    </article>`;
+  }).join("");
+}
+
+function applyFinanceSpacePermissions() {
+  const space = sharedFinanceSpace(activeWorkspaceId);
+  const readOnly = Boolean(space && !space.canEdit);
+  document.querySelector("#financesView")?.classList.toggle("is-readonly-space", readOnly);
+  for (const selector of ["#expenseForm input", "#expenseForm select", "#expenseForm button", "#aiQuickSubmit", "#finCloseMonth", "#finReopenMonth", "#finAddAccount", "#finOpenGoalsModal", "#finOpenRecurModal"]) {
+    document.querySelectorAll(selector).forEach((element) => { element.disabled = readOnly; });
+  }
+}
+
+async function loadFinanceSpaces({ silent = false } = {}) {
+  if (!currentUser || isLocalDesignPreview) {
+    renderFinanceWorkspaceOptions();
+    renderSharedFinanceSpaces();
+    return;
+  }
+  try {
+    const payload = await pulseApi("/api/finance-spaces");
+    sharedFinanceSpaces = Array.isArray(payload.spaces) ? payload.spaces : [];
+    sharedFinanceInvites = Array.isArray(payload.invites) ? payload.invites : [];
+    sharedFinanceSpaces.forEach(mergeFinanceSpaceData);
+    // A leitura do servidor é a nova base, não uma edição local. Assim o
+    // próximo salvamento de uma nota pessoal não tenta copiar os dados do
+    // espaço compartilhado para o documento privado do usuário.
+    observedState = cloneState(state);
+    if (isSharedFinanceWorkspace(activeWorkspaceId) === false && !["personal", "couple", "family", "business"].includes(activeWorkspaceId)) activeWorkspaceId = "personal";
+    renderFinanceWorkspaceOptions();
+    renderSharedFinanceSpaces();
+    applyFinanceSpacePermissions();
+  } catch (error) {
+    if (!silent) showToast("Não foi possível atualizar os espaços compartilhados agora.");
+    const root = document.querySelector("#finSharedSpacesList");
+    if (root) root.innerHTML = '<div class="empty-state">Os espaços compartilhados não puderam ser carregados. Seus dados pessoais continuam disponíveis.</div>';
+  }
+}
+
+async function createFinanceSpace(event) {
+  event.preventDefault();
+  const name = valueOf("#finSharedSpaceName").trim();
+  const type = valueOf("#finSharedSpaceType") || "group";
+  if (name.length < 2) return showToast("Dê um nome ao espaço compartilhado.");
+  const submit = event.currentTarget.querySelector('[type="submit"]');
+  if (submit) submit.disabled = true;
+  try {
+    const payload = await pulseApi("/api/finance-spaces", { method: "POST", body: JSON.stringify({ action: "create", name, type }) });
+    if (payload.space) sharedFinanceSpaces.push(payload.space);
+    event.currentTarget.reset();
+    event.currentTarget.hidden = true;
+    renderFinanceWorkspaceOptions();
+    renderSharedFinanceSpaces();
+    if (payload.space?.id) setActiveFinanceWorkspace(payload.space.id);
+    showToast("Espaço compartilhado criado.");
+  } catch { showToast("Não foi possível criar o espaço agora."); }
+  finally { if (submit) submit.disabled = false; }
+}
+
+async function inviteToFinanceSpace(event) {
+  const form = event.target.closest(".fin-shared-invite-form");
+  if (!form) return;
+  event.preventDefault();
+  const email = String(new FormData(form).get("email") || "").trim();
+  const role = String(new FormData(form).get("role") || "editor");
+  const submit = form.querySelector('[type="submit"]');
+  if (submit) submit.disabled = true;
+  try {
+    await pulseApi("/api/finance-spaces", { method: "POST", body: JSON.stringify({ action: "invite", spaceId: form.dataset.spaceId, email, role }) });
+    form.reset();
+    showToast("Convite criado. Ele aparecerá na conta desse e-mail.");
+  } catch (error) {
+    showToast(error.code === "already_member" ? "Essa pessoa já participa do espaço." : "Não foi possível criar o convite.");
+  } finally { if (submit) submit.disabled = false; }
+}
+
+async function handleSharedSpaceAction(event) {
+  const button = event.target.closest("[data-shared-action]");
+  if (!button) return;
+  const action = button.dataset.sharedAction;
+  if (action === "open") return setActiveFinanceWorkspace(button.dataset.spaceId);
+  button.disabled = true;
+  try {
+    if (action === "accept") {
+      await pulseApi("/api/finance-spaces", { method: "POST", body: JSON.stringify({ action: "accept", inviteId: button.dataset.inviteId }) });
+      await loadFinanceSpaces();
+      showToast("Convite aceito. O espaço já está disponível.");
+    }
+    if (action === "leave") {
+      if (!confirm("Sair deste espaço compartilhado? Seus dados pessoais não serão alterados.")) return;
+      await pulseApi("/api/finance-spaces", { method: "POST", body: JSON.stringify({ action: "leave", spaceId: button.dataset.spaceId }) });
+      if (activeWorkspaceId === button.dataset.spaceId) activeWorkspaceId = "personal";
+      await loadFinanceSpaces();
+      renderAll();
+      showToast("Você saiu do espaço compartilhado.");
+    }
+  } catch { showToast("Não foi possível concluir essa ação."); }
+  finally { button.disabled = false; }
+}
+
+function scheduleSharedSpaceSync(workspaceId) {
+  const space = sharedFinanceSpace(workspaceId);
+  if (!space?.canEdit) return;
+  clearTimeout(sharedSpaceSyncTimers.get(workspaceId));
+  sharedSpaceSyncTimers.set(workspaceId, setTimeout(() => syncSharedFinanceSpace(workspaceId), 900));
+}
+
+async function syncSharedFinanceSpace(workspaceId) {
+  const space = sharedFinanceSpace(workspaceId);
+  if (!space?.canEdit || !currentUser) return;
+  try {
+    const payload = await pulseApi("/api/finance-spaces", {
+      method: "POST",
+      body: JSON.stringify({ action: "save", spaceId: workspaceId, revision: space.revision, data: financeSpaceDataFromState(workspaceId) }),
+    });
+    space.revision = payload.revision;
+    space.data = financeSpaceDataFromState(workspaceId);
+  } catch (error) {
+    if (error.code === "space_conflict") {
+      await loadFinanceSpaces({ silent: true });
+      renderAll();
+      showToast("Este espaço mudou em outro aparelho. Atualizamos os dados para evitar sobrescrever alterações.");
+    } else {
+      showToast("A alteração ficou salva neste aparelho, mas o espaço compartilhado ainda não sincronizou.");
+    }
+  } finally {
+    sharedSpaceSyncTimers.delete(workspaceId);
+  }
+}
+
+function setActiveFinanceWorkspace(workspaceId) {
+  const allowed = new Set(["personal", "couple", "family", "business", ...sharedFinanceSpaces.map((space) => space.id)]);
+  activeWorkspaceId = allowed.has(workspaceId) ? workspaceId : "personal";
+  document.querySelectorAll("[data-workspace]").forEach((item) => {
+    const active = item.dataset.workspace === activeWorkspaceId;
+    item.classList.toggle("active", active);
+    item.setAttribute("aria-pressed", String(active));
+  });
+  const select = document.querySelector("#finWorkspaceSelect");
+  if (select) select.value = activeWorkspaceId;
+  const accountSelect = document.querySelector("#finAccountWorkspace");
+  if (accountSelect && [...accountSelect.options].some((option) => option.value === activeWorkspaceId)) accountSelect.value = activeWorkspaceId;
+  finCategoryDrilldown = null;
+  lastForecastFetchAt = 0;
+  renderSharedFinanceSpaces();
+  applyFinanceSpacePermissions();
+  renderDashboard();
+  renderFinances();
+}
+
+function toggleFinanceAccountForm(open, account = null) {
+  const wrap = document.querySelector("#finAccountFormWrap");
+  const form = document.querySelector("#finAccountForm");
+  if (!wrap || !form) return;
+  wrap.hidden = !open;
+  if (!open) {
+    form.reset();
+    document.querySelector("#finAccountId").value = "";
+    return;
+  }
+  document.querySelector("#finAccountId").value = account?.id || "";
+  document.querySelector("#finAccountName").value = account?.name || "";
+  document.querySelector("#finAccountType").value = account?.type || "checking";
+  document.querySelector("#finAccountWorkspace").value = account?.workspaceId || activeWorkspaceId;
+  document.querySelector("#finAccountBalance").value = account ? String(account.balance || 0).replace(".", ",") : "";
+  requestAnimationFrame(() => document.querySelector("#finAccountName")?.focus());
+}
+
+function saveFinanceAccount(event) {
+  event.preventDefault();
+  const id = valueOf("#finAccountId");
+  const name = valueOf("#finAccountName").trim();
+  const balance = parseSignedMoneyInput(valueOf("#finAccountBalance"));
+  const type = valueOf("#finAccountType") || "checking";
+  const workspaceId = valueOf("#finAccountWorkspace") || "personal";
+  if (!requireFinanceWorkspaceEdit(workspaceId)) return;
+  if (name.length < 2) {
+    showToast("Informe um nome para a conta.");
+    return;
+  }
+  state.financeAccounts ||= [];
+  if (id) {
+    state.financeAccounts = state.financeAccounts.map((account) => account.id === id
+      ? { ...account, name, balance, type, workspaceId, updatedAt: new Date().toISOString() }
+      : account);
+  } else {
+    state.financeAccounts.push({
+      id: crypto.randomUUID(), name, balance, type, workspaceId,
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), archived: false,
+    });
+  }
+  saveState();
+  toggleFinanceAccountForm(false);
+  renderFinances();
+  lastForecastFetchAt = 0;
+  refreshDashboardForecast(true);
+}
+
+function editFinanceAccount(id) {
+  const account = (state.financeAccounts || []).find((item) => item.id === id);
+  if (account && !requireFinanceWorkspaceEdit(account.workspaceId || "personal")) return;
+  if (account) toggleFinanceAccountForm(true, account);
+}
+
+function archiveFinanceAccount(id) {
+  const account = (state.financeAccounts || []).find((item) => item.id === id);
+  if (account && !requireFinanceWorkspaceEdit(account.workspaceId || "personal")) return;
+  if (!account || !confirm(`Arquivar a conta “${account.name}”? Os lançamentos existentes serão preservados.`)) return;
+  account.archived = true;
+  account.updatedAt = new Date().toISOString();
+  saveState();
+  renderFinances();
+}
+window.editFinanceAccount = editFinanceAccount;
+window.archiveFinanceAccount = archiveFinanceAccount;
+
+function clearFinanceCategory() {
+  finCategoryDrilldown = null;
+  renderFinances();
+}
+window.clearFinanceCategory = clearFinanceCategory;
 
 function bindForms() {
   document.querySelector("#noteForm").addEventListener("submit", saveNote);
@@ -2499,10 +3087,10 @@ function renderDashboard() {
   // ── Resumo real do dia (sem gamificação) ──
   const pendingTasks = state.tasks.filter((t) => t.status === "Pendente" || t.status === "Em andamento").length;
   const monthKey = todayIso.slice(0, 7);
-  const monthEntries = (state.finances || []).filter((f) => f.date.startsWith(monthKey));
+  const monthEntries = (state.finances || []).filter((f) => f.date.startsWith(monthKey) && (f.workspaceId || "personal") === activeWorkspaceId);
   const monthReceitas = monthEntries.filter((f) => f.type === "receita").reduce((s, f) => s + f.amount, 0);
   const monthDespesas = monthEntries.filter((f) => f.type === "despesa").reduce((s, f) => s + f.amount, 0);
-  const monthSaldo = getCarryOverBalance(monthKey) + monthReceitas - monthDespesas;
+  const monthSaldo = getCarryOverBalance(monthKey, activeWorkspaceId) + monthReceitas - monthDespesas;
   const upcomingSorted = [...state.events].filter((e) => e.date >= todayIso).sort(sortEvent);
   const nextEvent = upcomingSorted[0];
   const topGoal = [...state.goals].filter((g) => g.current < g.target).sort((a, b) => (b.current / b.target) - (a.current / a.target))[0];
@@ -2538,6 +3126,215 @@ function renderDashboard() {
   renderChart();
   renderGoalSummary();
   renderDashFinance();
+  renderPremiumDashboard({
+    monthKey,
+    monthEntries,
+    monthReceitas,
+    monthDespesas,
+    monthSaldo,
+  });
+}
+
+function renderPremiumDashboard({ monthKey, monthEntries, monthReceitas, monthDespesas, monthSaldo }) {
+  const currentBalance = document.querySelector("#pulseCurrentBalance");
+  if (!currentBalance) return;
+
+  const now = new Date();
+  const currentDay = now.getDate();
+  const [year, month] = monthKey.split("-").map(Number);
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const recurring = Array.isArray(state.finRecurrents)
+    ? state.finRecurrents.filter((item) => (item.workspaceId || "personal") === activeWorkspaceId)
+    : [];
+  const futureRecurring = recurring.filter((item) => {
+    if (isRecurrentSkipped(item, monthKey)) return false;
+    const dueDay = Math.min(Number(item.day) || 1, daysInMonth);
+    if (dueDay <= currentDay) return false;
+    return !(state.finances || []).some((entry) =>
+      entry.date?.startsWith(monthKey)
+      && entry.description === item.description
+      && Number(entry.amount) === Number(item.amount)
+      && (entry.workspaceId || "personal") === activeWorkspaceId
+    );
+  });
+  const futureIncome = futureRecurring.filter((item) => item.type === "receita").reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const futureExpense = futureRecurring.filter((item) => item.type !== "receita").reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const projectedBalance = monthSaldo + futureIncome - futureExpense;
+  const safetyReserve = Math.max(500, monthReceitas * 0.18);
+  const safeSpend = Math.max(0, projectedBalance - safetyReserve);
+
+  currentBalance.textContent = formatCurrency(monthSaldo);
+  const projectedEl = document.querySelector("#pulseProjectedBalance");
+  const safeSpendEl = document.querySelector("#pulseSafeSpend");
+  if (projectedEl) {
+    projectedEl.textContent = formatCurrency(projectedBalance);
+    projectedEl.dataset.tone = projectedBalance >= 0 ? "positive" : "negative";
+  }
+  if (safeSpendEl) safeSpendEl.textContent = formatCurrency(safeSpend);
+
+  const contextEl = document.querySelector("#pulseBalanceContext");
+  if (contextEl) {
+    const count = monthEntries.length;
+    contextEl.textContent = `${count} ${count === 1 ? "lançamento" : "lançamentos"} considerado${count === 1 ? "" : "s"} neste mês`;
+  }
+
+  const futureSorted = [...futureRecurring].sort((a, b) => Number(a.day || 0) - Number(b.day || 0));
+  const nextRecurring = futureSorted[0];
+  const commitmentEl = document.querySelector("#pulseNextCommitment");
+  if (commitmentEl) {
+    commitmentEl.textContent = nextRecurring
+      ? `Próximo compromisso: ${nextRecurring.description} · ${formatCurrency(Number(nextRecurring.amount || 0))} · dia ${Math.min(Number(nextRecurring.day) || 1, daysInMonth)}`
+      : "Nenhum compromisso financeiro recorrente pendente neste mês.";
+  }
+
+  const recurringInsight = document.querySelector("#pulseRecurringInsight");
+  const recurringDetail = document.querySelector("#pulseRecurringInsightDetail");
+  if (recurringInsight) recurringInsight.textContent = futureRecurring.length
+    ? `${futureRecurring.length} ${futureRecurring.length === 1 ? "recorrência prevista" : "recorrências previstas"}`
+    : "Mês sem recorrências pendentes";
+  if (recurringDetail) recurringDetail.textContent = futureRecurring.length
+    ? `${formatCurrency(futureExpense)} em despesas e ${formatCurrency(futureIncome)} em receitas até o fechamento.`
+    : "Cadastre contas recorrentes para tornar a projeção mais precisa.";
+
+  renderPremiumForecast(monthKey, monthSaldo, futureRecurring);
+  renderPremiumTodayAgenda();
+  refreshDashboardForecast();
+}
+
+async function refreshDashboardForecast(force = false) {
+  if (!currentUser || isLocalDesignPreview) return;
+  const now = Date.now();
+  if (!force && now - lastForecastFetchAt < 30000) return;
+  lastForecastFetchAt = now;
+  try {
+    const params = new URLSearchParams({ workspaceId: activeWorkspaceId });
+    const { forecast } = await pulseApi(`/api/finance-forecast?${params}`);
+    if (!forecast) return;
+    const current = document.querySelector("#pulseCurrentBalance");
+    const projected = document.querySelector("#pulseProjectedBalance");
+    const safe = document.querySelector("#pulseSafeSpend");
+    const context = document.querySelector("#pulseBalanceContext");
+    if (current) current.textContent = formatCurrency(forecast.currentBalance);
+    if (projected) {
+      projected.textContent = formatCurrency(forecast.projectedBalance);
+      projected.dataset.tone = forecast.projectedBalance >= 0 ? "positive" : "negative";
+    }
+    if (safe) safe.textContent = formatCurrency(forecast.safeToSpend);
+    if (context) context.textContent = forecast.confidence === "low"
+      ? "Estimativa pelos lançamentos. Cadastre os saldos das contas para aumentar a precisão."
+      : `Projeção até ${formatDate(forecast.horizonDate)} com contas e compromissos registrados`;
+    const commitment = forecast.commitments?.[0];
+    const commitmentEl = document.querySelector("#pulseNextCommitment");
+    if (commitmentEl) commitmentEl.textContent = commitment
+      ? `Próximo compromisso: ${commitment.description} · ${formatCurrency(commitment.amount)} · ${formatDate(commitment.date)}`
+      : "Nenhum compromisso financeiro próximo até o fim do período.";
+    renderPremiumForecastTimeline(forecast);
+  } catch {
+    // Mantém a projeção local já renderizada; falha de rede nunca esvazia o painel.
+  }
+}
+
+function renderPremiumForecastTimeline(forecast) {
+  const line = document.querySelector("#pulseForecastLine");
+  const area = document.querySelector("#pulseForecastArea");
+  const point = document.querySelector("#pulseForecastPoint");
+  const timeline = Array.isArray(forecast.timeline) ? forecast.timeline : [];
+  if (!line || !area || !point || timeline.length < 1) return;
+  const start = new Date(`${forecast.today}T12:00:00`);
+  const end = new Date(`${forecast.horizonDate}T12:00:00`);
+  const span = Math.max(1, (end - start) / 86400000);
+  const values = timeline.map((item) => Number(item.balance) || 0);
+  const min = Math.min(...values, 0);
+  const max = Math.max(...values, 1);
+  const range = Math.max(1, max - min);
+  const coords = timeline.map((item) => {
+    const date = new Date(`${item.date}T12:00:00`);
+    const day = Math.max(0, Math.min(span, (date - start) / 86400000));
+    return [22 + (day / span) * 596, 198 - (((Number(item.balance) || 0) - min) / range) * 146];
+  });
+  if (coords.length === 1) coords.push([618, coords[0][1]]);
+  const path = coords.map(([x, y], index) => `${index ? "L" : "M"}${x.toFixed(1)} ${y.toFixed(1)}`).join(" ");
+  const last = coords[coords.length - 1];
+  line.setAttribute("d", path);
+  area.setAttribute("d", `${path} L${last[0].toFixed(1)} 218 L22 218 Z`);
+  point.setAttribute("cx", last[0].toFixed(1));
+  point.setAttribute("cy", last[1].toFixed(1));
+}
+
+function renderPremiumForecast(monthKey, startingBalance, futureRecurring) {
+  const line = document.querySelector("#pulseForecastLine");
+  const area = document.querySelector("#pulseForecastArea");
+  const point = document.querySelector("#pulseForecastPoint");
+  if (!line || !area || !point) return;
+
+  const [, monthNumber] = monthKey.split("-").map(Number);
+  const daysInMonth = new Date(Number(monthKey.slice(0, 4)), monthNumber, 0).getDate();
+  const today = Math.min(new Date().getDate(), daysInMonth);
+  const eventsByDay = new Map();
+  for (const item of futureRecurring) {
+    const day = Math.min(Number(item.day) || 1, daysInMonth);
+    const signedAmount = Number(item.amount || 0) * (item.type === "receita" ? 1 : -1);
+    eventsByDay.set(day, (eventsByDay.get(day) || 0) + signedAmount);
+  }
+
+  const points = [{ day: today, balance: startingBalance }];
+  let running = startingBalance;
+  for (let day = today + 1; day <= daysInMonth; day += 1) {
+    running += eventsByDay.get(day) || 0;
+    if (eventsByDay.has(day) || day === daysInMonth) points.push({ day, balance: running });
+  }
+  if (points.length === 1) points.push({ day: daysInMonth, balance: startingBalance });
+
+  const balances = points.map((item) => item.balance);
+  const minBalance = Math.min(...balances, 0);
+  const maxBalance = Math.max(...balances, 1);
+  const range = Math.max(1, maxBalance - minBalance);
+  const xFor = (day) => 22 + ((day - today) / Math.max(1, daysInMonth - today)) * 596;
+  const yFor = (balance) => 198 - ((balance - minBalance) / range) * 146;
+  const coords = points.map((item) => [xFor(item.day), yFor(item.balance)]);
+  const path = coords.map(([x, y], index) => `${index ? "L" : "M"}${x.toFixed(1)} ${y.toFixed(1)}`).join(" ");
+  const last = coords[coords.length - 1];
+  line.setAttribute("d", path);
+  area.setAttribute("d", `${path} L${last[0].toFixed(1)} 218 L22 218 Z`);
+  point.setAttribute("cx", last[0].toFixed(1));
+  point.setAttribute("cy", last[1].toFixed(1));
+}
+
+function renderPremiumTodayAgenda() {
+  const container = document.querySelector("#pulseTodayAgenda");
+  if (!container) return;
+  const todayTasks = (state.tasks || []).filter((task) =>
+    task.dueDate === todayIso && task.status !== "Concluida" && task.status !== "Cancelada"
+  ).map((task) => ({
+    time: task.time || "Hoje",
+    title: task.title,
+    detail: `Tarefa · ${task.priority || "prioridade normal"}`,
+  }));
+  const todayEvents = (state.events || []).filter((event) => event.date === todayIso).map((event) => ({
+    time: event.time || "Hoje",
+    title: event.title,
+    detail: event.location ? `Compromisso · ${event.location}` : "Compromisso",
+  }));
+  let items = [...todayEvents, ...todayTasks];
+  if (!items.length) {
+    items = (state.events || []).filter((event) => event.date > todayIso).sort(sortEvent).slice(0, 3).map((event) => ({
+      time: formatDate(event.date),
+      title: event.title,
+      detail: event.location ? `Próximo · ${event.location}` : "Próximo compromisso",
+    }));
+  }
+  items = items.sort((a, b) => String(a.time).localeCompare(String(b.time))).slice(0, 4);
+  if (!items.length) {
+    container.innerHTML = `<div class="pulse-empty">Seu dia está livre. Use “Adicionar” para planejar a próxima ação.</div>`;
+    return;
+  }
+  container.innerHTML = items.map((item) => `
+    <div class="pulse-timeline-item">
+      <span class="pulse-timeline-time">${escapeHtml(item.time)}</span>
+      <span class="pulse-timeline-node" aria-hidden="true"></span>
+      <span class="pulse-timeline-copy"><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.detail)}</span></span>
+    </div>
+  `).join("");
 }
 
 function renderDashFinance() {
@@ -4795,8 +5592,8 @@ function finMonthLabel(monthKey) {
 }
 
 // Retorna true se o mês está marcado como "fechado" pelo usuário
-function isMonthClosed(monthKey) {
-  return (state.monthClosures || []).some((c) => c.monthKey === monthKey);
+function isMonthClosed(monthKey, workspaceId = activeWorkspaceId) {
+  return (state.monthClosures || []).some((c) => c.monthKey === monthKey && (c.workspaceId || "personal") === workspaceId);
 }
 
 // Garante que lançamentos num mês fechado sejam bloqueados (UI)
@@ -4816,18 +5613,19 @@ function getPreviousMonthKey(monthKey) {
 // Saldo que "sobrou" do mês imediatamente anterior, para entrar automaticamente
 // no mês seguinte — só entra 1x (no mês seguinte), e só se aquele mês anterior
 // estiver fechado. Se não houver fechamento anterior, não soma nada.
-function getCarryOverBalance(monthKey) {
+function getCarryOverBalance(monthKey, workspaceId = activeWorkspaceId) {
   const prevKey = getPreviousMonthKey(monthKey);
-  const prevClosure = (state.monthClosures || []).find((c) => c.monthKey === prevKey);
+  const prevClosure = (state.monthClosures || []).find((c) => c.monthKey === prevKey && (c.workspaceId || "personal") === workspaceId);
   return prevClosure ? prevClosure.saldo : 0;
 }
 
 // Registra o fechamento do mês ativo com um snapshot completo do período
 function closeMonth(monthKey) {
+  if (!requireFinanceWorkspaceEdit()) return;
   if (!state.monthClosures) state.monthClosures = [];
   if (isMonthClosed(monthKey)) { showToast("✓ Mês já fechado."); return; }
 
-  const entries = (state.finances || []).filter((f) => f.date.startsWith(monthKey));
+  const entries = (state.finances || []).filter((f) => f.date.startsWith(monthKey) && (f.workspaceId || "personal") === activeWorkspaceId);
   const receitas = entries.filter((f) => f.type === "receita").reduce((s, f) => s + f.amount, 0);
   const despesas = entries.filter((f) => f.type === "despesa").reduce((s, f) => s + f.amount, 0);
 
@@ -4851,6 +5649,7 @@ function closeMonth(monthKey) {
 
   state.monthClosures.push({
     monthKey,
+    workspaceId: activeWorkspaceId,
     closedAt: new Date().toISOString(),
     receitas,
     despesas,
@@ -4906,9 +5705,10 @@ function showMonthCloseRecap(monthKey, receitas, despesas, saldoFinal) {
 
 // Remove o fechamento do mês (reabre para edições)
 function reopenMonth(monthKey) {
+  if (!requireFinanceWorkspaceEdit()) return;
   if (!isMonthClosed(monthKey)) return;
   if (!confirm(`Reabrir ${finMonthLabel(monthKey)} para edição?`)) return;
-  state.monthClosures = (state.monthClosures || []).filter((c) => c.monthKey !== monthKey);
+  state.monthClosures = (state.monthClosures || []).filter((c) => !(c.monthKey === monthKey && (c.workspaceId || "personal") === activeWorkspaceId));
   saveState();
   renderFinances();
   showToast(`🔓 ${finMonthLabel(monthKey)} reaberto.`);
@@ -4936,7 +5736,7 @@ function reopenMonth(monthKey) {
 
 function buildXlsxBlob(monthKey) {
   const entries = (state.finances || [])
-    .filter((f) => f.date.startsWith(monthKey))
+    .filter((f) => f.date.startsWith(monthKey) && (f.workspaceId || "personal") === activeWorkspaceId)
     .sort((a, b) => a.date.localeCompare(b.date));
 
   const label    = finMonthLabel(monthKey);
@@ -5263,7 +6063,7 @@ function zipFiles(filesObj) {
 
 // ── Ponto de entrada do botão Exportar ───────────────────────
 function exportMonthReport(monthKey) {
-  const entries = (state.finances || []).filter((f) => f.date.startsWith(monthKey))
+  const entries = (state.finances || []).filter((f) => f.date.startsWith(monthKey) && (f.workspaceId || "personal") === activeWorkspaceId)
     .sort((a, b) => a.date.localeCompare(b.date));
   if (!entries.length) {
     showToast("Nenhum lançamento no período para exportar.");
@@ -5300,7 +6100,7 @@ function exportMonthReport(monthKey) {
   for (let i = 5; i >= 0; i--) {
     const d = new Date(ay, am - 1 - i, 1);
     const mk = toLocalIso(d).slice(0, 7);
-    const me = (state.finances || []).filter((f) => f.date.startsWith(mk));
+    const me = (state.finances || []).filter((f) => f.date.startsWith(mk) && (f.workspaceId || "personal") === activeWorkspaceId);
     const mr = me.filter((f) => f.type === "receita").reduce((s, f) => s + f.amount, 0);
     const md = me.filter((f) => f.type === "despesa").reduce((s, f) => s + f.amount, 0);
     const lbl = safeFormatDate(d, { month: "short" }, "-");
@@ -5341,10 +6141,10 @@ function exportMonthReport(monthKey) {
   }
 
   // Recorrentes do usuário para a seção de assinaturas
-  const recurrents = (state.finRecurrents || []).filter((r) => r.type === "despesa");
+  const recurrents = (state.finRecurrents || []).filter((r) => r.type === "despesa" && (r.workspaceId || "personal") === activeWorkspaceId);
 
   // Metas e quanto foi usado
-  const goals = (state.finGoals || []).map((g) => {
+  const goals = (state.finGoals || []).filter((g) => (g.workspaceId || "personal") === activeWorkspaceId).map((g) => {
     const cat = findCategory(g.categoryId);
     const spent = byCat[g.categoryId]?.total || 0;
     const pct = g.limit > 0 ? Math.min(150, Math.round((spent / g.limit) * 100)) : 0;
@@ -6037,18 +6837,18 @@ const shownFinGoalAlerts = new Set();
 // da meta definida para ela naquele mês, e avisa com um toast (chega com
 // um pequeno atraso pra não sobrepor o toast de "Despesa registrada!").
 function checkFinGoalAlert(categoryId, monthKey) {
-  const goal = (state.finGoals || []).find((g) => g.categoryId === categoryId);
+  const goal = (state.finGoals || []).find((g) => g.categoryId === categoryId && (g.workspaceId || "personal") === activeWorkspaceId);
   if (!goal || !goal.limit) return;
 
   const spent = (state.finances || [])
-    .filter((f) => f.date.startsWith(monthKey) && f.type === "despesa" && f.category === categoryId)
+    .filter((f) => f.date.startsWith(monthKey) && f.type === "despesa" && f.category === categoryId && (f.workspaceId || "personal") === activeWorkspaceId)
     .reduce((s, f) => s + f.amount, 0);
   const pct = (spent / goal.limit) * 100;
   const cat = findCategory(categoryId);
   const label = cat.label.replace(/^\S+\s*/, "");
 
-  const key100 = `${monthKey}:${categoryId}:100`;
-  const key90  = `${monthKey}:${categoryId}:90`;
+  const key100 = `${activeWorkspaceId}:${monthKey}:${categoryId}:100`;
+  const key90  = `${activeWorkspaceId}:${monthKey}:${categoryId}:90`;
 
   if (pct >= 100 && !shownFinGoalAlerts.has(key100)) {
     shownFinGoalAlerts.add(key100);
@@ -6061,6 +6861,7 @@ function checkFinGoalAlert(categoryId, monthKey) {
 
 function saveExpense(event) {
   event.preventDefault();
+  if (!requireFinanceWorkspaceEdit()) return;
   const editId = valueOf("#expenseId");
   const type = document.querySelector("#expenseType").value || "despesa";
 
@@ -6073,7 +6874,7 @@ function saveExpense(event) {
   }
 
   const defaultCategory = type === "receita" ? "outros_receita" : "outros";
-  const amount = parseFloat(valueOf("#expenseAmount").replace(",", "."));
+  const amount = parseMoneyInput(valueOf("#expenseAmount"));
   if (isNaN(amount) || amount <= 0) { showToast("Informe um valor válido."); return; }
 
   const categoryId = valueOf("#expenseCategory") || defaultCategory;
@@ -6095,6 +6896,8 @@ function saveExpense(event) {
             category: categoryId,
             description: valueOf("#expenseDescription") || fallbackDescription,
             date: valueOf("#expenseDate") || todayIso,
+            accountId: valueOf("#expenseAccount") || "",
+            workspaceId: activeWorkspaceId,
           }
         : f
     );
@@ -6107,6 +6910,8 @@ function saveExpense(event) {
       category: categoryId,
       description: valueOf("#expenseDescription") || fallbackDescription,
       date: valueOf("#expenseDate") || todayIso,
+      accountId: valueOf("#expenseAccount") || "",
+      workspaceId: activeWorkspaceId,
     };
     state.finances.unshift(entry);
     showToast(type === "receita" ? "Receita adicionada!" : "Despesa registrada!");
@@ -6123,6 +6928,7 @@ function resetExpenseForm() {
   document.querySelector("#expenseId").value = "";
   document.querySelector("#expenseDate").value = todayIso;
   document.querySelector("#expenseType").value = "despesa";
+  populateFinanceAccountSelect();
   document.querySelectorAll("[data-fin-type]").forEach((b) => b.classList.toggle("active", b.dataset.finType === "despesa"));
   document.querySelector(".fin-form-card")?.classList.remove("is-receita");
   populateCategorySelect(null, "despesa");
@@ -6136,6 +6942,7 @@ function resetExpenseForm() {
 function editFinance(id) {
   const entry = state.finances.find((f) => f.id === id);
   if (!entry) return;
+  if (!requireFinanceWorkspaceEdit(entry.workspaceId || "personal")) return;
 
   setView("finances");
 
@@ -6144,6 +6951,9 @@ function editFinance(id) {
   document.querySelector("#expenseDescription").value  = entry.description || "";
   document.querySelector("#expenseDate").value         = entry.date;
   document.querySelector("#expenseType").value         = entry.type;
+  setActiveFinanceWorkspace(entry.workspaceId || "personal");
+  populateFinanceAccountSelect();
+  document.querySelector("#expenseAccount").value      = entry.accountId || "";
   document.querySelectorAll("[data-fin-type]").forEach((b) => b.classList.toggle("active", b.dataset.finType === entry.type));
   document.querySelector(".fin-form-card")?.classList.toggle("is-receita", entry.type === "receita");
 
@@ -6159,6 +6969,8 @@ function editFinance(id) {
 }
 
 function deleteFinance(id) {
+  const entry = state.finances.find((f) => f.id === id);
+  if (!entry || !requireFinanceWorkspaceEdit(entry.workspaceId || "personal")) return;
   state.finances = state.finances.filter((f) => f.id !== id);
   saveState();
   renderFinances();
@@ -6254,6 +7066,8 @@ function renderFinances() {
   const formCard  = document.querySelector(".fin-form-card");
 
   if (labelEl)  labelEl.textContent = finMonthLabel(monthKey);
+  const workspaceEl = document.querySelector("#finWorkspaceSelect");
+  if (workspaceEl) workspaceEl.value = activeWorkspaceId;
   if (badgeEl)  badgeEl.hidden = !closed;
   if (closeBtn) closeBtn.hidden = closed;
   if (reopenBtn) reopenBtn.hidden = !closed;
@@ -6262,8 +7076,10 @@ function renderFinances() {
 
   // ── Filtra lançamentos do mês ativo ──────────────────────────
   let entries = [...state.finances]
-    .filter((f) => f.date.startsWith(monthKey))
+    .filter((f) => f.date.startsWith(monthKey) && (f.workspaceId || "personal") === activeWorkspaceId)
     .sort((a, b) => b.date.localeCompare(a.date));
+
+  if (finCategoryDrilldown) entries = entries.filter((f) => f.category === finCategoryDrilldown);
 
   // Aplica a busca global (por descrição ou categoria)
   const query = elements.globalSearch.value.trim().toLowerCase();
@@ -6277,7 +7093,7 @@ function renderFinances() {
 
   const receitas    = entries.filter((f) => f.type === "receita").reduce((s, f) => s + f.amount, 0);
   const despesas    = entries.filter((f) => f.type === "despesa").reduce((s, f) => s + f.amount, 0);
-  const saldoAnterior = getCarryOverBalance(monthKey);
+  const saldoAnterior = getCarryOverBalance(monthKey, activeWorkspaceId);
   const saldo       = saldoAnterior + receitas - despesas;
   const usedPct     = receitas > 0 ? Math.min(100, Math.round((despesas / receitas) * 100)) : 0;
 
@@ -6311,7 +7127,7 @@ function renderFinances() {
       const cat = findCategory(catId);
       const pct = despesas > 0 ? Math.round((total / despesas) * 100) : 0;
       return `
-        <div class="fin-cat-row">
+        <div class="fin-cat-row" data-fin-category="${escapeHtml(catId)}" role="button" tabindex="0" aria-label="Abrir lançamentos de ${escapeHtml(cat.label)}">
           <div class="fin-cat-info">
             <span class="fin-cat-dot" style="background:${cat.color}"></span>
             <span class="fin-cat-label">${escapeHtml(cat.label)}</span>
@@ -6324,6 +7140,13 @@ function renderFinances() {
     }).join("") || `<div class="empty-state" style="padding:12px">Sem despesas no período</div>`;
 
   document.querySelector("#finCategories").innerHTML = catHtml;
+  const filterRoot = document.querySelector("#finTransactionFilter");
+  if (filterRoot) {
+    filterRoot.hidden = !finCategoryDrilldown;
+    filterRoot.innerHTML = finCategoryDrilldown
+      ? `<span>Filtrando por <strong>${escapeHtml(findCategory(finCategoryDrilldown).label)}</strong></span><button type="button" onclick="clearFinanceCategory()">Limpar filtro</button>`
+      : "";
+  }
   renderFinInsights(monthKey, entries, receitas, despesas, byCat);
 
   const listHtml = entries.length
@@ -6338,6 +7161,36 @@ function renderFinances() {
   renderFinGoals();
   renderFinClosures();
   renderFinRecurrents();
+  renderFinanceAccounts();
+}
+
+function populateFinanceAccountSelect() {
+  const select = document.querySelector("#expenseAccount");
+  if (!select) return;
+  const selected = select.value;
+  const accounts = (state.financeAccounts || []).filter((item) => !item.archived && (item.workspaceId || "personal") === activeWorkspaceId);
+  select.innerHTML = `<option value="">Sem conta específica</option>${accounts.map((account) => `<option value="${escapeHtml(account.id)}">${escapeHtml(account.name)}</option>`).join("")}`;
+  if ([...select.options].some((option) => option.value === selected)) select.value = selected;
+}
+
+function renderFinanceAccounts() {
+  const root = document.querySelector("#finAccountsList");
+  if (!root) return;
+  populateFinanceAccountSelect();
+  const accounts = (state.financeAccounts || []).filter((item) => !item.archived && (item.workspaceId || "personal") === activeWorkspaceId);
+  if (!accounts.length) {
+    root.innerHTML = '<div class="empty-state">Adicione suas contas para ver saldos separados e melhorar as projeções.</div>';
+    return;
+  }
+  const typeLabels = { checking: "Conta corrente", savings: "Poupança", cash: "Carteira", investment: "Investimentos", other: "Outra conta" };
+  const canEdit = canEditFinanceWorkspace();
+  root.innerHTML = accounts.map((account) => `
+    <article class="fin-account-card">
+      <div class="fin-account-icon" aria-hidden="true">${account.type === "cash" ? "◫" : account.type === "investment" ? "↗" : "▣"}</div>
+      <div class="fin-account-copy"><strong>${escapeHtml(account.name)}</strong><span>${typeLabels[account.type] || "Conta"} · ${workspaceLabel(account.workspaceId || "personal")}</span></div>
+      <strong class="fin-account-balance">${formatCurrency(account.balance || 0)}</strong>
+      ${canEdit ? `<div class="fin-account-actions"><button type="button" onclick="editFinanceAccount('${account.id}')">Editar</button><button type="button" onclick="archiveFinanceAccount('${account.id}')" aria-label="Arquivar ${escapeHtml(account.name)}">Arquivar</button></div>` : '<span class="task-meta">Somente leitura</span>'}
+    </article>`).join("");
 }
 
 function renderFinInsights(monthKey, entries, receitas, despesas, byCat) {
@@ -6347,7 +7200,7 @@ function renderFinInsights(monthKey, entries, receitas, despesas, byCat) {
   const [year, month] = monthKey.split("-").map(Number);
   const previousKey = toLocalIso(new Date(year, month - 2, 1)).slice(0, 7);
   const previousExpenses = (state.finances || [])
-    .filter((item) => item.date.startsWith(previousKey) && item.type === "despesa")
+    .filter((item) => item.date.startsWith(previousKey) && item.type === "despesa" && (item.workspaceId || "personal") === activeWorkspaceId)
     .reduce((sum, item) => sum + item.amount, 0);
   const top = Object.entries(byCat).sort(([, a], [, b]) => b - a)[0];
   const topCategory = top ? findCategory(top[0]) : null;
@@ -6415,6 +7268,7 @@ function renderFinTransaction(f) {
   // realmente selecionada — igual já acontecia para despesas.
   const icon    = cat.label.split(" ")[0];
   const catName = cat.label.replace(/^\S+\s*/, "");
+  const canEdit = canEditFinanceWorkspace(f.workspaceId || "personal");
   // Layout em 2 linhas: título+valor numa linha, categoria/data+ações na
   // outra. Antes tudo (ícone + título + valor + editar + excluir) disputava
   // uma única linha, sobrando pouquíssimo espaço pro título — por isso
@@ -6431,7 +7285,7 @@ function renderFinTransaction(f) {
         </div>
         <div class="fin-tx-bottom">
           <span class="task-meta fin-tx-meta">${escapeHtml(catName)} · ${formatDate(f.date)}</span>
-          <div class="fin-tx-actions">
+          <div class="fin-tx-actions"${canEdit ? "" : " hidden"}>
             <button class="mini-button" onclick="editFinance('${f.id}')" title="Editar">✏️</button>
             <button class="mini-button" onclick="deleteFinance('${f.id}')" title="Excluir">🗑️</button>
           </div>
@@ -7144,7 +7998,7 @@ function renderFinChart6m() {
   }
 
   const data = months.map((mk) => {
-    const entries = (state.finances || []).filter((f) => f.date.startsWith(mk));
+    const entries = (state.finances || []).filter((f) => f.date.startsWith(mk) && (f.workspaceId || "personal") === activeWorkspaceId);
     const r = entries.filter((f) => f.type === "receita").reduce((s, f) => s + f.amount, 0);
     const d = entries.filter((f) => f.type === "despesa").reduce((s, f) => s + f.amount, 0);
     const [y, m] = mk.split("-").map(Number);
@@ -7182,9 +8036,12 @@ function renderFinChart6m() {
     const dH = Math.max(2, (item.d / maxVal) * H);
     const isActive = item.mk === finActiveMonth;
     return `
-      <rect x="${x}" y="${H - rH + pad}" width="${barW}" height="${rH}" rx="2" fill="${isActive ? "var(--green)" : "var(--green-soft)"}" stroke="${isActive ? "var(--green)" : "none"}" stroke-width="1"><title>${item.lbl}: receitas ${formatCurrency(item.r)}</title></rect>
-      <rect x="${x + barW + gap}" y="${H - dH + pad}" width="${barW}" height="${dH}" rx="2" fill="${isActive ? "var(--red)" : "var(--red-soft)"}" stroke="${isActive ? "var(--red)" : "none"}" stroke-width="1"><title>${item.lbl}: despesas ${formatCurrency(item.d)}</title></rect>
-      <text x="${x + barW}" y="${H + pad + 10}" text-anchor="middle" font-size="5" fill="var(--muted)" font-family="inherit">${item.lbl}</text>`;
+      <g data-fin-month="${item.mk}" role="button" tabindex="0" aria-label="Abrir ${item.lbl}: receitas ${formatCurrency(item.r)}, despesas ${formatCurrency(item.d)}">
+        <rect x="${x - 2}" y="${pad}" width="${barW * 2 + gap + 4}" height="${H + 13}" rx="3" fill="transparent" />
+        <rect x="${x}" y="${H - rH + pad}" width="${barW}" height="${rH}" rx="2" fill="${isActive ? "var(--green)" : "var(--green-soft)"}" stroke="${isActive ? "var(--green)" : "none"}" stroke-width="1"><title>${item.lbl}: receitas ${formatCurrency(item.r)}</title></rect>
+        <rect x="${x + barW + gap}" y="${H - dH + pad}" width="${barW}" height="${dH}" rx="2" fill="${isActive ? "var(--red)" : "var(--red-soft)"}" stroke="${isActive ? "var(--red)" : "none"}" stroke-width="1"><title>${item.lbl}: despesas ${formatCurrency(item.d)}</title></rect>
+        <text x="${x + barW}" y="${H + pad + 10}" text-anchor="middle" font-size="5" fill="var(--muted)" font-family="inherit">${item.lbl}</text>
+      </g>`;
   }).join("");
 
   const legendLine = `
@@ -7213,19 +8070,20 @@ function renderFinSaldoEvolution() {
   // Sem nenhum lançamento no histórico inteiro, o saldo fica sempre em
   // zero e a linha vira um traço reto colado embaixo do gráfico — parecia
   // quebrado. Mostra um estado vazio em vez de um gráfico "fantasma".
-  if ((state.finances || []).length === 0) {
+  const workspaceFinances = (state.finances || []).filter((f) => (f.workspaceId || "personal") === activeWorkspaceId);
+  if (workspaceFinances.length === 0) {
     el.innerHTML = `<div class="empty-state">Sem dados suficientes para mostrar a evolução</div>`;
     return;
   }
 
   const firstMonth = months[0];
-  const baseline = (state.finances || [])
+  const baseline = workspaceFinances
     .filter((f) => f.date.slice(0, 7) < firstMonth)
     .reduce((s, f) => s + (f.type === "receita" ? f.amount : -f.amount), 0);
 
   let running = baseline;
   const data = months.map((mk) => {
-    const entries = (state.finances || []).filter((f) => f.date.startsWith(mk));
+    const entries = workspaceFinances.filter((f) => f.date.startsWith(mk));
     const net = entries.reduce((s, f) => s + (f.type === "receita" ? f.amount : -f.amount), 0);
     running += net;
     const [y, m] = mk.split("-").map(Number);
@@ -7279,7 +8137,7 @@ function renderFinSaldoEvolution() {
 function renderFinGoals() {
   const el = document.querySelector("#finGoalsList");
   if (!el) return;
-  const goals = state.finGoals || [];
+  const goals = (state.finGoals || []).filter((g) => (g.workspaceId || "personal") === activeWorkspaceId);
   if (!goals.length) {
     el.innerHTML = emptyStateHtml({
       iconName: "target",
@@ -7289,8 +8147,9 @@ function renderFinGoals() {
     return;
   }
   const monthKey = getActiveFinMonth();
+  const canEdit = canEditFinanceWorkspace();
   const byCat = {};
-  (state.finances || []).filter((f) => f.date.startsWith(monthKey) && f.type === "despesa")
+  (state.finances || []).filter((f) => f.date.startsWith(monthKey) && f.type === "despesa" && (f.workspaceId || "personal") === activeWorkspaceId)
     .forEach((f) => { byCat[f.category] = (byCat[f.category] || 0) + f.amount; });
 
   el.innerHTML = goals.map((g) => {
@@ -7304,7 +8163,7 @@ function renderFinGoals() {
         <div class="fin-goal-top">
           <span class="fin-goal-label">${escapeHtml(cat.label)}</span>
           <span class="fin-goal-val" style="color:${color}">${formatCurrency(spent)} / ${formatCurrency(g.limit)}</span>
-          <button class="icon-button" style="padding:2px 6px;font-size:0.7rem" onclick="deleteFinGoal('${g.id}')">${icon("x", 12)}</button>
+          ${canEdit ? `<button class="icon-button" style="padding:2px 6px;font-size:0.7rem" onclick="deleteFinGoal('${g.id}')">${icon("x", 12)}</button>` : ""}
         </div>
         <div class="progress-track" style="height:6px;margin-top:4px">
           <div style="width:${pct}%;height:100%;border-radius:999px;background:${color};transition:width 400ms"></div>
@@ -7319,7 +8178,9 @@ function renderFinGoals() {
 function renderFinClosures() {
   const el = document.querySelector("#finClosuresList");
   if (!el) return;
-  const closures = [...(state.monthClosures || [])].sort((a, b) => b.monthKey.localeCompare(a.monthKey));
+  const closures = (state.monthClosures || [])
+    .filter((c) => (c.workspaceId || "personal") === activeWorkspaceId)
+    .sort((a, b) => b.monthKey.localeCompare(a.monthKey));
   if (!closures.length) {
     el.innerHTML = emptyStateHtml({
       iconName: "calendarCheck",
@@ -7328,6 +8189,7 @@ function renderFinClosures() {
     });
     return;
   }
+  const canEdit = canEditFinanceWorkspace();
   el.innerHTML = closures.map((c) => `
     <div class="fin-closure-row">
       <div class="fin-closure-top">
@@ -7336,12 +8198,13 @@ function renderFinClosures() {
       </div>
       <div class="fin-closure-actions">
         <button class="mini-button" onclick="goToFinMonth('${c.monthKey}')">Ver / editar</button>
-        <button class="mini-button" onclick="reopenMonth('${c.monthKey}')">Reabrir</button>
+        ${canEdit ? `<button class="mini-button" onclick="reopenMonth('${c.monthKey}')">Reabrir</button>` : ""}
       </div>
     </div>`).join("");
 }
 
 function deleteFinGoal(id) {
+  if (!requireFinanceWorkspaceEdit()) return;
   state.finGoals = (state.finGoals || []).filter((g) => g.id !== id);
   saveState();
   renderFinGoals();
@@ -7365,14 +8228,15 @@ function bindFinGoalsModal() {
   modal?.addEventListener("click", (e) => { if (e.target === modal) modal.hidden = true; });
 
   saveBtn?.addEventListener("click", () => {
+    if (!requireFinanceWorkspaceEdit()) return;
     const catId = catSel.value;
     const limit = parseFloat(document.querySelector("#goalLimit").value.replace(",", "."));
     if (!catId || !limit || limit <= 0) { showToast("Preencha a categoria e o limite."); return; }
     if (!state.finGoals) state.finGoals = [];
     // Atualiza se já existir meta para essa categoria
-    const existing = state.finGoals.find((g) => g.categoryId === catId);
+    const existing = state.finGoals.find((g) => g.categoryId === catId && (g.workspaceId || "personal") === activeWorkspaceId);
     if (existing) { existing.limit = limit; }
-    else { state.finGoals.push({ id: crypto.randomUUID(), categoryId: catId, limit }); }
+    else { state.finGoals.push({ id: crypto.randomUUID(), categoryId: catId, limit, workspaceId: activeWorkspaceId }); }
     saveState();
     renderFinGoals();
     modal.hidden = true;
@@ -7387,7 +8251,7 @@ function bindFinGoalsModal() {
 function renderFinRecurrents() {
   const el = document.querySelector("#finRecurList");
   if (!el) return;
-  const recurrents = state.finRecurrents || [];
+  const recurrents = (state.finRecurrents || []).filter((r) => (r.workspaceId || "personal") === activeWorkspaceId);
   if (!recurrents.length) {
     el.innerHTML = emptyStateHtml({
       iconName: "compass",
@@ -7396,6 +8260,7 @@ function renderFinRecurrents() {
     });
     return;
   }
+  const canEdit = canEditFinanceWorkspace();
   el.innerHTML = recurrents.map((r) => {
     const cat     = findCategory(r.categoryId);
     const isRec   = r.type === "receita";
@@ -7409,7 +8274,7 @@ function renderFinRecurrents() {
         </div>
         <span class="fin-recur-amount ${isRec ? "receita" : "despesa"}">${isRec ? "+" : "-"}${formatCurrency(r.amount)}</span>
         <div class="fin-recur-status" aria-hidden="true">${skipped ? '<span class="fin-recur-status-dot skipped"></span>' : '<span class="fin-recur-status-dot"></span>'}</div>
-        <button class="fin-recur-menu-btn" type="button" data-recur-menu="${r.id}" aria-haspopup="true" aria-label="Mais ações">
+        <button class="fin-recur-menu-btn" type="button" data-recur-menu="${r.id}" aria-haspopup="true" aria-label="Mais ações"${canEdit ? "" : " hidden"}>
           <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="19" cy="12" r="1.9"/></svg>
         </button>
       </div>`;
@@ -7436,6 +8301,7 @@ function closeRecurrentActionMenu() {
   document.removeEventListener("click", closeRecurrentActionMenu);
 }
 function openRecurrentActionMenu(anchorBtn, id) {
+  if (!requireFinanceWorkspaceEdit()) return;
   closeRecurrentActionMenu();
   const rec = (state.finRecurrents || []).find((r) => r.id === id);
   if (!rec) return;
@@ -7487,6 +8353,7 @@ function isRecurrentSkipped(rec, monthKey) {
 function toggleSkipRecurrentMonth(id, monthKey) {
   const rec = (state.finRecurrents || []).find((r) => r.id === id);
   if (!rec) return;
+  if (!requireFinanceWorkspaceEdit(rec.workspaceId || "personal")) return;
   if (!rec.skippedMonths) rec.skippedMonths = [];
   const idx = rec.skippedMonths.indexOf(monthKey);
   if (idx >= 0) {
@@ -7501,6 +8368,8 @@ function toggleSkipRecurrentMonth(id, monthKey) {
 }
 
 function deleteRecurrent(id) {
+  const rec = (state.finRecurrents || []).find((r) => r.id === id);
+  if (!rec || !requireFinanceWorkspaceEdit(rec.workspaceId || "personal")) return;
   state.finRecurrents = (state.finRecurrents || []).filter((r) => r.id !== id);
   saveState();
   renderFinRecurrents();
@@ -7510,6 +8379,7 @@ function deleteRecurrent(id) {
 function applyRecurrent(id) {
   const rec = (state.finRecurrents || []).find((r) => r.id === id);
   if (!rec) return;
+  if (!requireFinanceWorkspaceEdit(rec.workspaceId || "personal")) return;
   if (!assertMonthNotClosed(finActiveMonth)) return;
   if (isRecurrentSkipped(rec, finActiveMonth)) {
     showToast(`"${rec.description}" está marcado para pular em ${finMonthLabel(finActiveMonth)}. Toque em ↩ pra reativar.`);
@@ -7527,6 +8397,7 @@ function applyRecurrent(id) {
     category: rec.categoryId,
     description: rec.description,
     date,
+    workspaceId: rec.workspaceId || "personal",
   });
   saveState();
   renderFinances();
@@ -7552,6 +8423,7 @@ function bindFinRecurModal() {
   typeSel?.addEventListener("change", updateCatOptions);
 
   saveBtn?.addEventListener("click", () => {
+    if (!requireFinanceWorkspaceEdit()) return;
     const desc   = document.querySelector("#recurDesc").value.trim();
     const amount = parseFloat(document.querySelector("#recurAmount").value.replace(",", "."));
     const type   = typeSel.value;
@@ -7563,7 +8435,7 @@ function bindFinRecurModal() {
       return;
     }
     if (!state.finRecurrents) state.finRecurrents = [];
-    state.finRecurrents.push({ id: crypto.randomUUID(), description: desc, amount, type, categoryId: catId, day });
+    state.finRecurrents.push({ id: crypto.randomUUID(), description: desc, amount, type, categoryId: catId, day, workspaceId: activeWorkspaceId });
     saveState();
     renderFinRecurrents();
     modal.hidden = true;
@@ -7577,15 +8449,17 @@ function bindFinRecurModal() {
 function autoApplyRecurrents() {
   const today = todayIso;
   const monthKey = today.slice(0, 7);
-  if (isMonthClosed(monthKey)) return;
   const [, , dd] = today.split("-").map(Number);
   let applied = false;
   let toastDelay = 0;
   (state.finRecurrents || []).forEach((rec) => {
+    const workspaceId = rec.workspaceId || "personal";
+    if (!canEditFinanceWorkspace(workspaceId)) return;
+    if (isMonthClosed(monthKey, workspaceId)) return;
     if (rec.day !== dd) return;
     if (isRecurrentSkipped(rec, monthKey)) return;
     const alreadyLaunched = (state.finances || []).some(
-      (f) => f.date === today && f.description === rec.description && f.amount === rec.amount
+      (f) => f.date === today && f.description === rec.description && f.amount === rec.amount && (f.workspaceId || "personal") === workspaceId
     );
     if (alreadyLaunched) return;
     state.finances.unshift({
@@ -7595,6 +8469,7 @@ function autoApplyRecurrents() {
       category: rec.categoryId,
       description: rec.description,
       date: today,
+      workspaceId,
     });
     applied = true;
     // Escalona os toasts quando mais de um recorrente cai no mesmo dia,
