@@ -2700,8 +2700,10 @@ function setView(view, { fromHistory = false } = {}) {
   document.querySelectorAll(".view").forEach((section) => section.classList.remove("active-view"));
   target.classList.add("active-view");
   elements.viewTitle.textContent = viewTitles[view];
-  // Scroll to top on mobile
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  // Trocas de area precisam começar no topo imediatamente. O scroll suave
+  // deixava o cabecalho parcialmente cortado durante a transicao, sobretudo
+  // no mobile e em navegadores que preservam a posicao anterior.
+  window.scrollTo({ top: 0, behavior: "auto" });
   // A primeira renderização dos cards de Receitas/Despesas/Saldo geralmente
   // acontece com a aba Finanças ainda escondida (clientWidth 0), então o
   // autofit em fitCurrencyValues() desiste sem ajustar o tamanho da fonte

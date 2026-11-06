@@ -202,6 +202,8 @@ button { touch-action: manipulation; }
 #notesView .note-card { min-height: 200px; padding: 20px; border-radius: 18px; }
 #notesView .note-card h3 { font-size: 1.0625rem; }
 #notesView .note-card p { font-size: .9375rem; line-height: 1.6; overflow-wrap: anywhere; }
+#notesView .note-card .note-card-actions { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 44px; }
+#notesView .note-card .note-card-actions .danger-action { width: 44px; min-width: 44px; padding-inline: 0; }
 .note-detail-card { width: min(860px, calc(100vw - 32px)); max-height: min(850px, calc(100dvh - 32px)); }
 .note-detail-body { font-size: 1rem; line-height: 1.65; overflow-wrap: anywhere; }
 
