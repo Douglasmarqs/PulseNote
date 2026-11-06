@@ -407,6 +407,46 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .fin-account-copy span { color: var(--muted); font-size: .72rem; }
 .fin-account-balance { color: var(--text); font-size: .94rem; }
 .fin-account-actions { display: flex; gap: 6px; }
+.fin-cards-panel { margin-bottom: 14px; }
+.fin-card-form {
+  display: grid;
+  grid-template-columns: minmax(170px, 1.2fr) 90px minmax(130px, .8fr) 100px 100px;
+  gap: 12px;
+  align-items: end;
+  margin-bottom: 16px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface2);
+}
+.fin-card-form label { display: grid; gap: 6px; color: var(--text2); font-size: .72rem; font-weight: 800; }
+.fin-card-form input { min-width: 0; min-height: 42px; padding: 0 11px; border: 1px solid var(--line); border-radius: 11px; color: var(--text); background: var(--surface); }
+.fin-card-form-actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 8px; }
+.fin-card-form-actions button { min-height: 36px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; color: var(--text2); background: var(--surface); font: inherit; font-size: .72rem; font-weight: 800; cursor: pointer; }
+.fin-card-form-actions button[type="submit"] { border-color: transparent; color: #fff; background: var(--accent); }
+.fin-cards-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.fin-card-item { min-width: 0; padding: 17px; border: 1px solid var(--line); border-radius: 18px; background: linear-gradient(145deg, color-mix(in srgb, var(--surface2) 94%, var(--accent) 6%), var(--surface2)); }
+.fin-card-item-head, .fin-card-identity, .fin-card-actions, .fin-card-limit-head { display: flex; align-items: center; }
+.fin-card-item-head { justify-content: space-between; gap: 12px; }
+.fin-card-identity { min-width: 0; gap: 11px; }
+.fin-card-identity > div { display: grid; min-width: 0; gap: 3px; }
+.fin-card-identity strong { overflow: hidden; color: var(--text); text-overflow: ellipsis; white-space: nowrap; }
+.fin-card-identity span:not(.fin-card-chip) { color: var(--muted); font-size: .72rem; }
+.fin-card-chip { width: 31px; height: 24px; flex: 0 0 auto; border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line)); border-radius: 8px; background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 45%, #fff), color-mix(in srgb, var(--teal) 35%, var(--surface))); }
+.fin-card-archive { padding: 7px 8px; border: 0; border-radius: 9px; color: var(--muted); background: transparent; font: inherit; font-size: .68rem; font-weight: 800; cursor: pointer; }
+.fin-card-invoice { display: grid; grid-template-columns: 1.2fr 1fr .75fr; gap: 10px; margin: 18px 0 14px; }
+.fin-card-invoice > div { display: grid; min-width: 0; gap: 4px; }
+.fin-card-invoice span { color: var(--muted); font-size: .66rem; }
+.fin-card-invoice strong { overflow: hidden; color: var(--text); font-size: .92rem; text-overflow: ellipsis; white-space: nowrap; }
+.fin-card-limit-head { justify-content: space-between; gap: 10px; margin-bottom: 7px; color: var(--muted); font-size: .68rem; }
+.fin-card-limit-track { height: 6px; overflow: hidden; border-radius: 99px; background: var(--line); }
+.fin-card-limit-track i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--accent), var(--teal)); }
+.fin-card-actions { flex-wrap: wrap; gap: 8px; margin-top: 15px; }
+.fin-card-actions button { min-height: 36px; flex: 1 1 130px; padding: 0 11px; border: 1px solid var(--line); border-radius: 10px; color: var(--text2); background: var(--surface); font: inherit; font-size: .72rem; font-weight: 800; cursor: pointer; transition: transform 140ms cubic-bezier(.23,1,.32,1), border-color 140ms ease; }
+.fin-card-actions button:active { transform: scale(.97); }
+.fin-card-actions button.primary { border-color: transparent; color: #fff; background: var(--accent); }
+.fin-card-purchase-form { display: grid; gap: 12px; }
+.fin-card-purchase-grid { display: grid; grid-template-columns: 1fr 110px; gap: 12px; }
 .pulse-connector-list { display: grid; gap: 7px; }
 .pulse-connector-list button { display: flex; min-height: 40px; align-items: center; gap: 8px; padding: 0 10px; border: 1px solid var(--pulse-glass-border); border-radius: 12px; color: var(--text2); background: color-mix(in srgb, var(--surface2) 55%, transparent); font-size: .69rem; text-align: left; cursor: pointer; }
 .pulse-connector-list button b, .pulse-connector-list button > span:last-child { margin-left: auto; color: var(--accent); font-size: .62rem; }
@@ -558,6 +598,10 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   .fin-account-form-actions { grid-column: 1 / -1; }
   .fin-account-card { grid-template-columns: auto minmax(0, 1fr) auto; }
   .fin-account-actions { grid-column: 2 / -1; }
+  .fin-card-form { grid-template-columns: 1fr 1fr; }
+  .fin-card-form-actions { grid-column: 1 / -1; }
+  .fin-cards-list { grid-template-columns: 1fr; }
+  .fin-card-invoice { grid-template-columns: 1.1fr 1fr .8fr; }
   body { background: radial-gradient(circle at 70% -10%, color-mix(in srgb, var(--accent) 13%, transparent), transparent 22rem), var(--bg); }
   .app-shell { grid-template-columns: minmax(0, 1fr); }
   .main-area { margin-left: 0; }

@@ -1217,6 +1217,22 @@
               </div>
               <div id="finAccountsList" class="fin-accounts-list"></div>
             </div>
+            <section class="panel fin-cards-panel" aria-labelledby="finCardsTitle">
+              <div class="panel-header">
+                <div><p class="eyebrow">Crédito</p><h2 id="finCardsTitle">Cartões e faturas</h2></div>
+                <button class="mini-button" id="finAddCard">+ Cartão</button>
+              </div>
+              <p class="fin-accounts-help">Acompanhe a fatura e distribua compras parceladas automaticamente nos próximos meses.</p>
+              <form id="finCardForm" class="fin-card-form" hidden>
+                <label>Nome<input id="finCardName" maxlength="40" placeholder="Ex.: Nubank" required /></label>
+                <label>Final<input id="finCardLast4" inputmode="numeric" maxlength="4" pattern="[0-9]{0,4}" placeholder="1234" /></label>
+                <label>Limite<input id="finCardLimit" inputmode="decimal" placeholder="0,00" required /></label>
+                <label>Fecha dia<input id="finCardClosingDay" type="number" min="1" max="31" value="1" required /></label>
+                <label>Vence dia<input id="finCardDueDay" type="number" min="1" max="31" value="10" required /></label>
+                <div class="fin-card-form-actions"><button type="button" id="finCardCancel">Cancelar</button><button type="submit">Salvar cartão</button></div>
+              </form>
+              <div id="finCardsList" class="fin-cards-list"></div>
+            </section>
             <div class="panel">
               <div class="panel-header">
                 <div><p class="eyebrow">Controle</p><h2>Metas de gasto</h2></div>
@@ -1674,9 +1690,29 @@
       </div>
     </div>
 
+    <div id="finCardPurchaseModal" class="modal-backdrop" hidden>
+      <div class="modal-card">
+        <div class="modal-header">
+          <div><p class="eyebrow">Nova compra</p><h2 id="finCardPurchaseTitle">Lançar no cartão</h2></div>
+          <button class="icon-button" id="finCloseCardPurchase" aria-label="Fechar">&#10005;</button>
+        </div>
+        <form id="finCardPurchaseForm" class="modal-body fin-card-purchase-form">
+          <input id="finCardPurchaseCardId" type="hidden" />
+          <label class="field"><span class="field-label">Descrição</span><input id="finCardPurchaseDescription" class="field-input" maxlength="80" placeholder="Ex.: Notebook" required /></label>
+          <label class="field"><span class="field-label">Valor total</span><input id="finCardPurchaseAmount" class="field-input" inputmode="decimal" placeholder="0,00" required /></label>
+          <div class="fin-card-purchase-grid">
+            <label class="field"><span class="field-label">Data da compra</span><input id="finCardPurchaseDate" class="field-input" type="date" required /></label>
+            <label class="field"><span class="field-label">Parcelas</span><input id="finCardPurchaseInstallments" class="field-input" type="number" min="1" max="48" value="1" required /></label>
+          </div>
+          <button class="primary-button" type="submit" style="width:100%;justify-content:center">Adicionar à fatura</button>
+        </form>
+      </div>
+    </div>
+
     <script src="/src/pwa-install.js" defer></script>
     <script src="/src/finance-projection.js?v=1"></script>
     <script src="/src/recurring-detector.js?v=1"></script>
+    <script src="/src/card-installments.js?v=1"></script>
     <script src="/src/notifications.js?v=35" defer></script>
     <script type="module" src="/src/app.js?v=37"></script>
     <script type="module" src="/src/push-notifications.js?v=35"></script>

@@ -13,9 +13,13 @@ test("dados de um espaço compartilhado ficam isolados no próprio workspace", (
   const data = sanitizeFinanceSpaceData({
     finances: [{ id: "f1", amount: 10, workspaceId: "personal", fcmTokens: ["secret"] }],
     financeAccounts: [{ id: "a1", name: "Conta conjunta", balance: 100 }],
+    creditCards: [{ id: "c1", name: "Cartão da casa", invoices: [] }],
+    scheduledFinances: [{ id: "s1", description: "IPTU", amount: 120 }],
   }, "space-123");
   assert.equal(data.finances[0].workspaceId, "space-123");
   assert.equal(data.financeAccounts[0].workspaceId, "space-123");
+  assert.equal(data.creditCards[0].workspaceId, "space-123");
+  assert.equal(data.scheduledFinances[0].workspaceId, "space-123");
   assert.equal("fcmTokens" in data.finances[0], false);
   assert.deepEqual(data.finGoals, []);
 });

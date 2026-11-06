@@ -402,6 +402,10 @@ button { touch-action: manipulation; }
   .fin-simulator-control { grid-template-columns: auto minmax(0, 1fr); }
   .fin-simulator-control button { grid-column: 1 / -1; min-height: 44px; }
   .fin-account-form { grid-template-columns: minmax(0, 1fr); }
+  .fin-card-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fin-card-form label:first-child,
+  .fin-card-form-actions { grid-column: 1 / -1; }
+  .fin-card-purchase-grid { grid-template-columns: minmax(0, 1fr); }
   .fin-shared-create { grid-template-columns: minmax(0, 1fr); }
   .fin-shared-create > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .fin-shared-space-card { grid-template-columns: 42px minmax(0, 1fr); }

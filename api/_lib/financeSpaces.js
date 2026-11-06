@@ -5,6 +5,8 @@ const FINANCE_SPACE_FIELDS = Object.freeze([
   "financeAccounts",
   "finGoals",
   "finRecurrents",
+  "creditCards",
+  "scheduledFinances",
   "monthClosures",
 ]);
 

@@ -1766,6 +1766,8 @@ function normalizeState(parsed) {
   if (!parsed.monthClosures) parsed.monthClosures = [];
   if (!parsed.finGoals) parsed.finGoals = [];
   if (!parsed.finRecurrents) parsed.finRecurrents = [];
+  if (!parsed.creditCards) parsed.creditCards = [];
+  if (!parsed.scheduledFinances) parsed.scheduledFinances = [];
   // O servidor de lembretes usa este fuso para converter um compromisso
   // salvo como data/hora local em um instante real. Sem persistir o fuso,
   // um usuário no Brasil recebia alerta com o horário UTC da Vercel.
@@ -1815,6 +1817,8 @@ function loadDefaultState() {
     monthClosures: [],
     finGoals: [],
     finRecurrents: [],
+    creditCards: [],
+    scheduledFinances: [],
     financeAccounts: [],
     financialSettings: { safetyReserve: 0 },
     timeZone: appTimeZone,
@@ -1953,6 +1957,14 @@ function bindPremiumDashboard() {
   document.querySelector("#finAddAccount")?.addEventListener("click", () => toggleFinanceAccountForm(true));
   document.querySelector("#finAccountCancel")?.addEventListener("click", () => toggleFinanceAccountForm(false));
   document.querySelector("#finAccountForm")?.addEventListener("submit", saveFinanceAccount);
+  document.querySelector("#finAddCard")?.addEventListener("click", () => toggleCreditCardForm(true));
+  document.querySelector("#finCardCancel")?.addEventListener("click", () => toggleCreditCardForm(false));
+  document.querySelector("#finCardForm")?.addEventListener("submit", saveCreditCard);
+  document.querySelector("#finCloseCardPurchase")?.addEventListener("click", closeCreditCardPurchase);
+  document.querySelector("#finCardPurchaseModal")?.addEventListener("click", (event) => {
+    if (event.target.id === "finCardPurchaseModal") closeCreditCardPurchase();
+  });
+  document.querySelector("#finCardPurchaseForm")?.addEventListener("submit", saveCreditCardPurchase);
   document.querySelector("#finCreateSpaceToggle")?.addEventListener("click", () => {
     const form = document.querySelector("#finCreateSpaceForm");
     if (form) form.hidden = false;
@@ -2142,6 +2154,8 @@ function financeSpaceDataFromState(workspaceId) {
     financeAccounts: (state.financeAccounts || []).filter(inSpace),
     finGoals: (state.finGoals || []).filter(inSpace),
     finRecurrents: (state.finRecurrents || []).filter(inSpace),
+    creditCards: (state.creditCards || []).filter(inSpace),
+    scheduledFinances: (state.scheduledFinances || []).filter(inSpace),
     monthClosures: (state.monthClosures || []).filter(inSpace),
     financialSettings: { safetyReserve: Number(state.financialSettings?.safetyReserve) || 0 },
   };
@@ -2149,7 +2163,7 @@ function financeSpaceDataFromState(workspaceId) {
 
 function mergeFinanceSpaceData(space) {
   if (!space?.id || !space.data) return;
-  const fields = ["finances", "financeAccounts", "finGoals", "finRecurrents", "monthClosures"];
+  const fields = ["finances", "financeAccounts", "finGoals", "finRecurrents", "creditCards", "scheduledFinances", "monthClosures"];
   for (const field of fields) {
     const local = Array.isArray(state[field]) ? state[field] : [];
     const personal = local.filter((item) => (item?.workspaceId || "personal") !== space.id);
@@ -2209,7 +2223,7 @@ function applyFinanceSpacePermissions() {
   const space = sharedFinanceSpace(activeWorkspaceId);
   const readOnly = Boolean(space && !space.canEdit);
   document.querySelector("#financesView")?.classList.toggle("is-readonly-space", readOnly);
-  for (const selector of ["#expenseForm input", "#expenseForm select", "#expenseForm button", "#aiQuickSubmit", "#finCloseMonth", "#finReopenMonth", "#finAddAccount", "#finOpenGoalsModal", "#finOpenRecurModal"]) {
+  for (const selector of ["#expenseForm input", "#expenseForm select", "#expenseForm button", "#aiQuickSubmit", "#finCloseMonth", "#finReopenMonth", "#finAddAccount", "#finAddCard", "#finCardForm input", "#finCardForm button", "#finOpenGoalsModal", "#finOpenRecurModal"]) {
     document.querySelectorAll(selector).forEach((element) => { element.disabled = readOnly; });
   }
 }
@@ -2416,6 +2430,135 @@ function archiveFinanceAccount(id) {
 }
 window.editFinanceAccount = editFinanceAccount;
 window.archiveFinanceAccount = archiveFinanceAccount;
+
+function toggleCreditCardForm(open) {
+  const form = document.querySelector("#finCardForm");
+  if (!form) return;
+  form.hidden = !open;
+  if (!open) {
+    form.reset();
+    document.querySelector("#finCardClosingDay").value = "1";
+    document.querySelector("#finCardDueDay").value = "10";
+    return;
+  }
+  requestAnimationFrame(() => document.querySelector("#finCardName")?.focus());
+}
+
+function saveCreditCard(event) {
+  event.preventDefault();
+  if (!requireFinanceWorkspaceEdit()) return;
+  const name = valueOf("#finCardName").trim();
+  const last4 = valueOf("#finCardLast4").replace(/\D/g, "").slice(-4);
+  const limit = parseSignedMoneyInput(valueOf("#finCardLimit"));
+  const closingDay = Number(valueOf("#finCardClosingDay"));
+  const dueDay = Number(valueOf("#finCardDueDay"));
+  if (name.length < 2 || limit <= 0 || closingDay < 1 || closingDay > 31 || dueDay < 1 || dueDay > 31) {
+    showToast("Revise o nome, o limite e as datas do cartão.");
+    return;
+  }
+  state.creditCards ||= [];
+  state.creditCards.push({
+    id: crypto.randomUUID(), name, last4, limit, closingDay, dueDay,
+    workspaceId: activeWorkspaceId, invoices: [], archived: false,
+    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+  });
+  saveState();
+  toggleCreditCardForm(false);
+  renderFinances();
+  lastForecastFetchAt = 0;
+  refreshDashboardForecast(true);
+}
+
+function openCreditCardPurchase(cardId) {
+  const card = (state.creditCards || []).find((item) => item.id === cardId && !item.archived);
+  if (!card || !requireFinanceWorkspaceEdit(card.workspaceId || "personal")) return;
+  document.querySelector("#finCardPurchaseCardId").value = card.id;
+  document.querySelector("#finCardPurchaseTitle").textContent = `Compra no ${card.name}`;
+  document.querySelector("#finCardPurchaseDate").value = todayIso;
+  document.querySelector("#finCardPurchaseInstallments").value = "1";
+  document.querySelector("#finCardPurchaseModal").hidden = false;
+  document.body.classList.add("modal-open");
+  requestAnimationFrame(() => document.querySelector("#finCardPurchaseDescription")?.focus());
+}
+
+function closeCreditCardPurchase() {
+  const modal = document.querySelector("#finCardPurchaseModal");
+  if (modal) modal.hidden = true;
+  document.querySelector("#finCardPurchaseForm")?.reset();
+  document.body.classList.remove("modal-open");
+}
+
+function saveCreditCardPurchase(event) {
+  event.preventDefault();
+  const card = (state.creditCards || []).find((item) => item.id === valueOf("#finCardPurchaseCardId"));
+  if (!card || !requireFinanceWorkspaceEdit(card.workspaceId || "personal")) return;
+  const description = valueOf("#finCardPurchaseDescription").trim();
+  const amount = parseSignedMoneyInput(valueOf("#finCardPurchaseAmount"));
+  const purchaseDate = valueOf("#finCardPurchaseDate");
+  const installments = Number(valueOf("#finCardPurchaseInstallments"));
+  const buildPlan = window.PulseCardInstallments?.buildInstallmentPlan;
+  if (description.length < 2 || amount <= 0 || !purchaseDate || installments < 1 || installments > 48 || typeof buildPlan !== "function") {
+    showToast("Revise a descrição, o valor, a data e as parcelas.");
+    return;
+  }
+
+  const purchaseId = crypto.randomUUID();
+  const plan = buildPlan({ amount, installments, purchaseDate, closingDay: card.closingDay, dueDay: card.dueDay });
+  card.invoices ||= [];
+  for (const part of plan) {
+    let invoice = card.invoices.find((item) => item.monthKey === part.monthKey);
+    if (!invoice) {
+      invoice = { id: crypto.randomUUID(), monthKey: part.monthKey, dueDate: part.dueDate, amount: 0, status: "open", purchases: [] };
+      card.invoices.push(invoice);
+    }
+    invoice.amount = Math.round((Number(invoice.amount || 0) + part.amount) * 100) / 100;
+    invoice.purchases ||= [];
+    invoice.purchases.push({
+      id: `${purchaseId}:${part.installmentNumber}`,
+      purchaseId, description, purchaseDate, amount: part.amount,
+      installmentNumber: part.installmentNumber, totalInstallments: part.totalInstallments,
+    });
+  }
+  card.updatedAt = new Date().toISOString();
+  saveState();
+  closeCreditCardPurchase();
+  renderFinances();
+  lastForecastFetchAt = 0;
+  refreshDashboardForecast(true);
+  showToast(installments > 1 ? `Compra distribuída em ${installments} faturas.` : "Compra adicionada à fatura.");
+}
+
+function payCreditCardInvoice(cardId, invoiceId) {
+  const card = (state.creditCards || []).find((item) => item.id === cardId);
+  const invoice = card?.invoices?.find((item) => item.id === invoiceId);
+  if (!card || !invoice || invoice.status === "paid" || !requireFinanceWorkspaceEdit(card.workspaceId || "personal")) return;
+  state.finances ||= [];
+  state.finances.unshift({
+    id: crypto.randomUUID(), type: "despesa", amount: Number(invoice.amount || 0), category: "contas",
+    description: `Fatura ${card.name}`, date: todayIso, workspaceId: card.workspaceId || "personal",
+    cardId: card.id, invoiceId: invoice.id,
+  });
+  invoice.status = "paid";
+  invoice.paidAt = new Date().toISOString();
+  saveState();
+  renderFinances();
+  lastForecastFetchAt = 0;
+  refreshDashboardForecast(true);
+  showToast(`Fatura de ${formatCurrency(invoice.amount)} marcada como paga.`);
+}
+
+function archiveCreditCard(cardId) {
+  const card = (state.creditCards || []).find((item) => item.id === cardId);
+  if (!card || !requireFinanceWorkspaceEdit(card.workspaceId || "personal")) return;
+  if (!confirm(`Arquivar o cartão “${card.name}”? As faturas existentes serão preservadas.`)) return;
+  card.archived = true;
+  card.updatedAt = new Date().toISOString();
+  saveState();
+  renderFinances();
+}
+window.openCreditCardPurchase = openCreditCardPurchase;
+window.payCreditCardInvoice = payCreditCardInvoice;
+window.archiveCreditCard = archiveCreditCard;
 
 function clearFinanceCategory() {
   finCategoryDrilldown = null;
@@ -7164,6 +7307,7 @@ function renderFinances() {
   renderFinClosures();
   renderFinRecurrents();
   renderFinanceAccounts();
+  renderCreditCards();
 }
 
 function populateFinanceAccountSelect() {
@@ -7193,6 +7337,55 @@ function renderFinanceAccounts() {
       <strong class="fin-account-balance">${formatCurrency(account.balance || 0)}</strong>
       ${canEdit ? `<div class="fin-account-actions"><button type="button" onclick="editFinanceAccount('${account.id}')">Editar</button><button type="button" onclick="archiveFinanceAccount('${account.id}')" aria-label="Arquivar ${escapeHtml(account.name)}">Arquivar</button></div>` : '<span class="task-meta">Somente leitura</span>'}
     </article>`).join("");
+}
+
+function renderCreditCards() {
+  const root = document.querySelector("#finCardsList");
+  if (!root) return;
+  const cards = (state.creditCards || []).filter((card) => !card.archived && (card.workspaceId || "personal") === activeWorkspaceId);
+  if (!cards.length) {
+    root.innerHTML = '<div class="empty-state">Nenhum cartão cadastrado. Adicione um para acompanhar faturas e parcelas.</div>';
+    return;
+  }
+  const canEdit = canEditFinanceWorkspace();
+  root.innerHTML = cards.map((card) => {
+    const openInvoices = (card.invoices || [])
+      .filter((invoice) => invoice.status !== "paid")
+      .sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)));
+    const nextInvoice = openInvoices.find((invoice) => invoice.dueDate >= todayIso) || openInvoices[0] || null;
+    const committed = openInvoices.reduce((sum, invoice) => sum + Number(invoice.amount || 0), 0);
+    const limit = Math.max(0, Number(card.limit || 0));
+    const usage = limit > 0 ? Math.min(100, Math.round((committed / limit) * 100)) : 0;
+    const installments = openInvoices.flatMap((invoice) => invoice.purchases || []).filter((purchase) => Number(purchase.totalInstallments) > 1).length;
+    return `
+      <article class="fin-card-item">
+        <div class="fin-card-item-head">
+          <div class="fin-card-identity">
+            <span class="fin-card-chip" aria-hidden="true"></span>
+            <div><strong>${escapeHtml(card.name)}</strong><span>${card.last4 ? `final ${escapeHtml(card.last4)}` : "cartão de crédito"}</span></div>
+          </div>
+          ${canEdit ? `<button type="button" class="fin-card-archive" data-card-action="archive" data-card-id="${escapeHtml(card.id)}" aria-label="Arquivar ${escapeHtml(card.name)}">Arquivar</button>` : '<span class="task-meta">Somente leitura</span>'}
+        </div>
+        <div class="fin-card-invoice">
+          <div><span>Próxima fatura</span><strong>${nextInvoice ? formatCurrency(nextInvoice.amount) : "R$ 0,00"}</strong></div>
+          <div><span>Vencimento</span><strong>${nextInvoice ? formatDate(nextInvoice.dueDate) : `dia ${card.dueDay}`}</strong></div>
+          <div><span>Parcelas futuras</span><strong>${installments}</strong></div>
+        </div>
+        <div class="fin-card-limit-head"><span>${formatCurrency(committed)} comprometidos</span><span>${usage}% do limite</span></div>
+        <div class="fin-card-limit-track"><i style="width:${usage}%"></i></div>
+        <div class="fin-card-actions"${canEdit ? "" : " hidden"}>
+          <button type="button" data-card-action="purchase" data-card-id="${escapeHtml(card.id)}">+ Adicionar compra</button>
+          ${nextInvoice ? `<button type="button" class="primary" data-card-action="pay" data-card-id="${escapeHtml(card.id)}" data-invoice-id="${escapeHtml(nextInvoice.id)}">Marcar fatura paga</button>` : ""}
+        </div>
+      </article>`;
+  }).join("");
+  root.querySelectorAll("[data-card-action]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (button.dataset.cardAction === "purchase") openCreditCardPurchase(button.dataset.cardId);
+      if (button.dataset.cardAction === "pay") payCreditCardInvoice(button.dataset.cardId, button.dataset.invoiceId);
+      if (button.dataset.cardAction === "archive") archiveCreditCard(button.dataset.cardId);
+    });
+  });
 }
 
 function renderFinInsights(monthKey, entries, receitas, despesas, byCat) {
