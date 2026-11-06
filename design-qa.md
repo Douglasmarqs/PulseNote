@@ -33,3 +33,15 @@ URL estável: `https://pulse-note-5erj-git-pulse-comm-fc87e7-douglas-projects-c8
 - Após a última correção não foi possível abrir uma nova sessão de automação visual porque o controle local do navegador foi desativado nas configurações do Work. A mudança final não afeta layout e foi coberta pelos testes; a inspeção visual anterior foi concluída no mesmo deployment de estilos.
 
 final result: passed
+
+## Rodada complementar — 6 de novembro de 2026
+
+- Branch de validação: `feature/pulsenote-admin-autopilot-20261013`.
+- Commit publicado: `2443cdc01d243031d1118b9a9d2d999ea30166d2`.
+- Deployment: `dpl_6kbpqmsPtyhvPbJW1Z4dEzKo7Cbe`, estado `READY`, sem erro de build.
+- URL estável da branch: `https://pulse-note-5erj-git-feature-pu-76c2a1-douglas-projects-c831a9fc.vercel.app`.
+- Regressão local: 150 de 150 testes aprovados.
+- Pulsinho: consultas de saldo, margem diária, compromissos, categorias, tarefas, agenda e metas agora usam o motor local, sem depender da disponibilidade do provedor de IA.
+- Perguntas abertas: continuam usando o provedor configurado, com uma única tentativa curta no fallback Gemini e resposta operacional segura caso haja timeout ou HTTP 503.
+- Integrações preservadas: simulador “posso gastar?”, gráficos com detalhamento, contas/espaços compartilhados e permissões owner/editor/viewer.
+- Produção não promovida nesta rodada. O teste real de push com o aplicativo fechado continua sendo a última etapa.

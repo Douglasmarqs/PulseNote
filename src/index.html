@@ -1114,8 +1114,9 @@
                   <div class="panel-header">
                     <div><p class="eyebrow">Calendário</p><h2 id="finCalMonthLabel">Financeiro</h2></div>
                     <div style="display:flex;gap:6px;flex-wrap:wrap">
-                      <span class="pill" style="background:var(--green-soft);color:var(--green);border-color:var(--green)">● Receita</span>
-                      <span class="pill" style="background:var(--red-soft);color:var(--red);border-color:var(--red)">● Despesa</span>
+                      <span class="pill" style="background:var(--green-soft);color:var(--green);border-color:var(--green)">● Entrada</span>
+                      <span class="pill" style="background:var(--red-soft);color:var(--red);border-color:var(--red)">● Saída</span>
+                      <span class="pill">Saldo previsto por dia</span>
                     </div>
                   </div>
                   <div id="finCalGrid" class="fin-cal-grid"></div>
@@ -1673,6 +1674,7 @@
     </div>
 
     <script src="/src/pwa-install.js" defer></script>
+    <script src="/src/finance-projection.js?v=1"></script>
     <script src="/src/notifications.js?v=35" defer></script>
     <script type="module" src="/src/app.js?v=37"></script>
     <script type="module" src="/src/push-notifications.js?v=35"></script>
