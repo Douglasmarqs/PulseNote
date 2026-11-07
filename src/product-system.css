@@ -649,6 +649,211 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   .muted, .task-meta, .pulse-section-heading p, .pulse-forecast-detail-copy { color: var(--text); }
 }
 
+/* Base mobile: mantém o PWA com comportamento de aplicativo sem bloquear zoom. */
+html {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  overscroll-behavior: none;
+}
+body { overscroll-behavior: none; }
+button, a, [role="button"], summary, .tab, .chip {
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.note-detail-scroll, .modal-body, .planner-month-scroll {
+  overscroll-behavior: contain;
+}
+
+/* Planner — uma agenda editorial, não uma pilha de caixas. */
+#plannerView .planner-header {
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(115deg, color-mix(in srgb, var(--accent) 12%, var(--glass-elevated)), var(--glass-elevated) 62%),
+    var(--surface);
+  border-color: var(--glass-border);
+  box-shadow: var(--product-shadow-raised);
+}
+#plannerView .planner-header::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent), var(--accent2), transparent 78%);
+  opacity: .78;
+}
+#plannerView .planner-tabs {
+  border: 1px solid var(--product-border);
+  background: color-mix(in srgb, var(--surface2) 78%, transparent);
+  box-shadow: inset 0 1px var(--glass-highlight);
+}
+#plannerView .planner-tabs button {
+  border-radius: 10px;
+  transition: transform 130ms ease, background-color 160ms ease, color 160ms ease;
+}
+#plannerView .planner-tabs button:active { transform: scale(.97); }
+#plannerView .planner-tabs button.active {
+  color: white;
+  background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent2) 72%, var(--accent)));
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--accent) 24%, transparent);
+}
+#plannerView .planner-goals-panel {
+  border-color: var(--glass-border);
+  background: var(--glass-subtle);
+}
+#plannerView .planner-section { margin-top: 22px; }
+#plannerView .planner-section:first-child { margin-top: 0; }
+#plannerView .planner-section-title { padding-inline: 4px; }
+#plannerView .planner-section-body { gap: 8px; }
+#plannerView .planner-row {
+  border: 1px solid var(--product-border);
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+  box-shadow: inset 0 1px var(--glass-highlight);
+  transition: transform 140ms ease, border-color 160ms ease, background-color 160ms ease;
+}
+#plannerView .planner-row:active { transform: scale(.995); }
+#plannerView .planner-row-main strong { letter-spacing: -.01em; }
+#plannerView .planner-row-kebab { flex: 0 0 40px; width: 40px; height: 40px; }
+#plannerView .planner-event-block {
+  border-color: var(--product-border);
+  box-shadow: 0 10px 26px rgba(0,0,0,.12), inset 0 1px var(--glass-highlight);
+}
+#plannerView .planner-month-cell {
+  border: 1px solid color-mix(in srgb, var(--product-border) 78%, transparent);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+}
+
+/* Notas — criação limpa; personalização de trechos continua no editor completo. */
+#notesView .note-editor {
+  border-color: var(--glass-border);
+  background: var(--glass-subtle);
+}
+#notesView .note-title-field input,
+#notesView .note-body-field textarea {
+  border: 0;
+  border-bottom: 1px solid var(--product-border);
+  border-radius: 0;
+  padding-inline: 2px;
+  background: transparent;
+  box-shadow: none;
+}
+#notesView .note-title-field input:focus,
+#notesView .note-body-field textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 1px var(--accent);
+}
+#notesView .note-quick-row { padding-top: 14px; }
+#notesView .note-priority-picker {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  width: 100%;
+}
+#notesView .note-priority-dot {
+  min-width: 0;
+  padding-inline: 8px;
+  border-radius: 12px;
+}
+#notesView .note-checklist-toggle { width: 100%; justify-content: center; }
+#notesView .note-more-details {
+  border-top-style: solid;
+  border-top-color: var(--product-border);
+}
+#notesView .note-more-details summary {
+  min-height: 42px;
+  border-radius: 10px;
+}
+#notesView .note-more-details summary:active { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+.note-details-hint {
+  margin: 8px 0 2px;
+  color: var(--muted);
+  font-size: .75rem;
+  line-height: 1.5;
+}
+#notesView .note-card {
+  border: 1px solid var(--product-border);
+  border-left: 3px solid var(--note-card-border, var(--accent));
+  background: color-mix(in srgb, var(--note-card-bg, var(--surface2)) 32%, var(--surface));
+  box-shadow: inset 0 1px var(--glass-highlight), var(--product-shadow);
+  transition: transform 150ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+#notesView .note-card:active { transform: scale(.995); }
+#notesView .note-card .card-actions {
+  padding-top: 10px;
+  border-top: 1px solid color-mix(in srgb, var(--product-border) 72%, transparent);
+}
+.note-detail-card {
+  background: var(--glass-elevated);
+  border-color: var(--glass-border);
+  box-shadow: 0 36px 110px rgba(0,0,0,.44);
+}
+.note-detail-toolbar {
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+}
+.note-detail-toolbar::-webkit-scrollbar { display: none; }
+.note-detail-footer { background: color-mix(in srgb, var(--surface) 90%, transparent); }
+
+@media (hover: hover) and (pointer: fine) {
+  #plannerView .planner-row:hover { transform: translateY(-1px); border-color: color-mix(in srgb, var(--accent) 22%, var(--product-border)); }
+  #notesView .note-card:hover { transform: translateY(-2px); box-shadow: var(--product-shadow-raised); }
+}
+
+@media (pointer: coarse) {
+  input, textarea, select { font-size: 16px !important; }
+}
+
+@media (hover: none) {
+  #notesView .note-card:hover,
+  #plannerView .planner-goal-chip:hover { transform: none; }
+}
+
+@media (max-width: 720px) {
+  #plannerView .planner-header { padding: 18px; border-radius: 20px; }
+  #plannerView .planner-header-actions { gap: 12px; }
+  #plannerView .planner-tabs { padding: 4px; }
+  #plannerView .planner-tabs button { min-height: 46px; }
+  #plannerView .planner-goals-panel { padding: 16px; }
+  #plannerView .planner-goals-strip {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: min(82vw, 340px);
+    grid-template-columns: none;
+    gap: 10px;
+    margin-inline: -4px;
+    padding: 2px 4px 8px;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+    touch-action: pan-y;
+  }
+  #plannerView .planner-goals-strip::-webkit-scrollbar { display: none; }
+  #plannerView .planner-goal-chip { scroll-snap-align: start; }
+  #plannerView .planner-row { padding: 13px; border-radius: 16px; }
+  #plannerView .planner-row-head { gap: 10px; }
+  #plannerView .planner-row-meta { row-gap: 6px; }
+  #plannerView .planner-day-nav { position: sticky; top: 76px; z-index: 8; backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); }
+  #plannerView .planner-month-cell { min-height: 66px; }
+
+  #notesView .note-editor, #notesView .list-panel { padding: 16px; }
+  #notesView .note-editor h2 { max-width: 15ch; line-height: 1.12; }
+  #notesView .note-priority-picker { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #notesView .note-priority-dot { min-height: 42px; }
+  #notesView .note-card { min-height: 0; }
+  #notesView .note-card .card-actions { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 42px; }
+  .note-detail-backdrop { padding: 0; }
+  .note-detail-card { height: 100dvh; min-height: 100dvh; }
+  .note-detail-scroll { padding-bottom: 20px; }
+  .note-detail-footer {
+    gap: 8px;
+    padding-inline: 14px;
+    padding-bottom: max(14px, env(safe-area-inset-bottom, 0px));
+  }
+  .note-detail-footer .ghost-button,
+  .note-detail-footer .primary-button { min-width: 0; padding-inline: 12px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation: none !important; transition-duration: .01ms !important; }
 }

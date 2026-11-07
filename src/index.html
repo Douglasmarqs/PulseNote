@@ -2,7 +2,7 @@
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
     <title>PulseNote - Produtividade pessoal</title>
 
     <!-- Aplica o tema (claro/escuro/sistema) ANTES da primeira pintura da
@@ -836,30 +836,7 @@
               <!-- Mais detalhes: tudo que é opcional fica recolhido, mas continua a 1 toque de distância -->
               <details class="note-more-details">
                 <summary>Mais detalhes <span class="chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span></summary>
-                <div class="note-appearance-options" aria-label="Aparência da anotação">
-                  <div class="note-appearance-option">
-                    <span class="note-control-label">Cor do texto</span>
-                    <div class="note-text-color-picker" id="noteTextColorPicker" role="group" aria-label="Cor do texto da nota">
-                      <button type="button" class="note-text-color-default active" data-note-text-color="" title="Cor padrão" aria-label="Cor padrão" aria-pressed="true">A</button>
-                      <button type="button" class="note-text-color-dot" data-note-text-color="#8b5cf6" style="--note-text-color:#8b5cf6" title="Texto lilás" aria-label="Texto lilás" aria-pressed="false"></button>
-                      <button type="button" class="note-text-color-dot" data-note-text-color="#ff375f" style="--note-text-color:#ff375f" title="Texto vermelho" aria-label="Texto vermelho" aria-pressed="false"></button>
-                      <button type="button" class="note-text-color-dot" data-note-text-color="#30d158" style="--note-text-color:#30d158" title="Texto verde" aria-label="Texto verde" aria-pressed="false"></button>
-                      <button type="button" class="note-text-color-dot" data-note-text-color="#0a84ff" style="--note-text-color:#0a84ff" title="Texto azul" aria-label="Texto azul" aria-pressed="false"></button>
-                      <button type="button" class="note-text-color-dot" data-note-text-color="#bf5af2" style="--note-text-color:#bf5af2" title="Texto roxo" aria-label="Texto roxo" aria-pressed="false"></button>
-                    </div>
-                  </div>
-                  <div class="note-appearance-option">
-                    <span class="note-control-label">Cor do cartão</span>
-                    <div class="note-color-picker" id="noteColorPicker" role="group" aria-label="Cor do cartão da nota">
-                      <button type="button" class="note-color-dot active" data-note-color="blue" title="Azul" aria-label="Azul"></button>
-                      <button type="button" class="note-color-dot" data-note-color="green" title="Verde" aria-label="Verde"></button>
-                      <button type="button" class="note-color-dot" data-note-color="pink" title="Rosa" aria-label="Rosa"></button>
-                      <button type="button" class="note-color-dot" data-note-color="purple" title="Roxo" aria-label="Roxo"></button>
-                      <button type="button" class="note-color-dot" data-note-color="orange" title="Lilás" aria-label="Lilás"></button>
-                      <button type="button" class="note-color-dot" data-note-color="teal" title="Turquesa" aria-label="Turquesa"></button>
-                    </div>
-                  </div>
-                </div>
+                <p class="note-details-hint">Organize somente se precisar. A nota salva normalmente sem preencher estes campos.</p>
                 <input id="noteTextColor" type="hidden" value="" />
                 <input id="noteColor" type="hidden" value="blue" />
                 <div class="form-grid">
