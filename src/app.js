@@ -657,6 +657,7 @@ let sharedFinanceInvites = [];
 const sharedSpaceSyncTimers = new Map();
 let finCategoryDrilldown = null;
 let lastForecastFetchAt = 0;
+let latestDashboardForecast = null;
 
 const elements = {
   viewTitle: document.querySelector("#viewTitle"),
@@ -1953,6 +1954,21 @@ function bindPremiumDashboard() {
   });
 
   document.querySelector("#pulseOpenSimulator")?.addEventListener("click", openFinanceSimulator);
+  const forecastVisual = document.querySelector(".pulse-forecast-visual");
+  forecastVisual?.addEventListener("click", openDashboardForecastDetail);
+  forecastVisual?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    openDashboardForecastDetail();
+  });
+  document.querySelector("#pulseForecastDetailClose")?.addEventListener("click", closeDashboardForecastDetail);
+  document.querySelector("#pulseForecastDetailModal")?.addEventListener("click", (event) => {
+    if (event.target.id === "pulseForecastDetailModal") closeDashboardForecastDetail();
+  });
+  document.querySelector("#pulseForecastDetailModal [data-view-shortcut='finances']")?.addEventListener("click", closeDashboardForecastDetail);
+  document.querySelector("#pulseForecastDetailModal")?.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeDashboardForecastDetail();
+  });
   document.querySelector("#finSimulatorForm")?.addEventListener("submit", runFinanceSimulation);
   document.querySelector("#finAddAccount")?.addEventListener("click", () => toggleFinanceAccountForm(true));
   document.querySelector("#finAccountCancel")?.addEventListener("click", () => toggleFinanceAccountForm(false));
@@ -2359,6 +2375,7 @@ function setActiveFinanceWorkspace(workspaceId) {
   if (accountSelect && [...accountSelect.options].some((option) => option.value === activeWorkspaceId)) accountSelect.value = activeWorkspaceId;
   finCategoryDrilldown = null;
   lastForecastFetchAt = 0;
+  latestDashboardForecast = null;
   renderSharedFinanceSpaces();
   applyFinanceSpacePermissions();
   renderDashboard();
@@ -3355,6 +3372,7 @@ async function refreshDashboardForecast(force = false) {
     const params = new URLSearchParams({ workspaceId: activeWorkspaceId });
     const { forecast } = await pulseApi(`/api/finance-forecast?${params}`);
     if (!forecast) return;
+    latestDashboardForecast = forecast;
     const current = document.querySelector("#pulseCurrentBalance");
     const projected = document.querySelector("#pulseProjectedBalance");
     const safe = document.querySelector("#pulseSafeSpend");
@@ -3377,6 +3395,59 @@ async function refreshDashboardForecast(force = false) {
   } catch {
     // Mantém a projeção local já renderizada; falha de rede nunca esvazia o painel.
   }
+}
+
+function openDashboardForecastDetail() {
+  const modal = document.querySelector("#pulseForecastDetailModal");
+  if (!modal) return;
+  const current = document.querySelector("#pulseForecastDetailCurrent");
+  const projected = document.querySelector("#pulseForecastDetailProjected");
+  const safe = document.querySelector("#pulseForecastDetailSafe");
+  const sourceCurrent = document.querySelector("#pulseCurrentBalance")?.textContent || "R$ 0,00";
+  const sourceProjected = document.querySelector("#pulseProjectedBalance")?.textContent || "R$ 0,00";
+  const sourceSafe = document.querySelector("#pulseSafeSpend")?.textContent || "R$ 0,00";
+  if (current) current.textContent = sourceCurrent;
+  if (projected) projected.textContent = sourceProjected;
+  if (safe) safe.textContent = sourceSafe;
+
+  const timeline = document.querySelector("#pulseForecastTimeline");
+  if (timeline) {
+    timeline.replaceChildren();
+    const commitments = Array.isArray(latestDashboardForecast?.commitments)
+      ? latestDashboardForecast.commitments.slice(0, 6)
+      : [];
+    if (!commitments.length) {
+      const empty = document.createElement("p");
+      empty.className = "pulse-forecast-detail-empty";
+      empty.textContent = "Nenhum compromisso futuro registrado para este período.";
+      timeline.append(empty);
+    } else {
+      commitments.forEach((item) => {
+        const row = document.createElement("div");
+        row.className = "pulse-forecast-detail-row";
+        const copy = document.createElement("div");
+        const title = document.createElement("strong");
+        const date = document.createElement("span");
+        const amount = document.createElement("b");
+        title.textContent = item.description || "Compromisso";
+        date.textContent = item.date ? formatDate(item.date) : "Data não informada";
+        amount.textContent = formatCurrency(Number(item.amount) || 0);
+        copy.append(title, date);
+        row.append(copy, amount);
+        timeline.append(row);
+      });
+    }
+  }
+  modal.hidden = false;
+  document.body.classList.add("modal-open");
+  requestAnimationFrame(() => document.querySelector("#pulseForecastDetailClose")?.focus());
+}
+
+function closeDashboardForecastDetail() {
+  const modal = document.querySelector("#pulseForecastDetailModal");
+  if (modal) modal.hidden = true;
+  document.body.classList.remove("modal-open");
+  document.querySelector(".pulse-forecast-visual")?.focus();
 }
 
 function renderPremiumForecastTimeline(forecast) {

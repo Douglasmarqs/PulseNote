@@ -224,7 +224,7 @@
                     </div>
                   </div>
 
-                  <div class="pulse-forecast-visual" aria-label="Evolução projetada do saldo no mês">
+                  <div class="pulse-forecast-visual" role="button" tabindex="0" aria-haspopup="dialog" aria-controls="pulseForecastDetailModal" aria-label="Abrir detalhes da evolução projetada do saldo no mês">
                     <div class="pulse-chart-legend"><span><i></i> Saldo real</span><span><i></i> Projeção</span></div>
                     <svg class="pulse-forecast-chart" viewBox="0 0 640 240" role="img" aria-labelledby="pulseForecastChartTitle">
                       <title id="pulseForecastChartTitle">Projeção do saldo até o fim do mês</title>
@@ -243,6 +243,7 @@
                     </svg>
                     <div class="pulse-chart-axis" aria-hidden="true"><span>Hoje</span><span>Fim do mês</span></div>
                     <div id="pulseNextCommitment" class="pulse-next-commitment">Nenhum compromisso financeiro próximo.</div>
+                    <span class="pulse-chart-open-hint">Ver projeção completa</span>
                   </div>
                 </div>
               </section>
@@ -539,6 +540,36 @@
             <div class="autopilot-confirm-actions">
               <button type="button" id="autopilotConfirmCancel" class="ghost-button">Cancelar</button>
               <button type="button" id="autopilotConfirmApply" class="primary-button">Confirmar</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="pulseForecastDetailModal" class="modal-backdrop" hidden>
+          <div class="modal-card pulse-forecast-detail" role="dialog" aria-modal="true" aria-labelledby="pulseForecastDetailTitle" aria-describedby="pulseForecastDetailDescription">
+            <div class="modal-header">
+              <div>
+                <p class="pulse-kicker">Projeção financeira</p>
+                <h2 id="pulseForecastDetailTitle">Como seu mês pode terminar</h2>
+              </div>
+              <button type="button" id="pulseForecastDetailClose" class="icon-button" aria-label="Fechar detalhes">✕</button>
+            </div>
+            <div class="modal-body pulse-forecast-detail-body">
+              <p id="pulseForecastDetailDescription" class="pulse-forecast-detail-copy">Uma leitura dos saldos e compromissos que já estão registrados.</p>
+              <div class="pulse-forecast-detail-metrics">
+                <div><span>Saldo atual</span><strong id="pulseForecastDetailCurrent">R$ 0,00</strong></div>
+                <div><span>Fechamento previsto</span><strong id="pulseForecastDetailProjected">R$ 0,00</strong></div>
+                <div><span>Disponível com segurança</span><strong id="pulseForecastDetailSafe">R$ 0,00</strong></div>
+              </div>
+              <div class="pulse-forecast-detail-section">
+                <div class="pulse-forecast-detail-heading">
+                  <div>
+                    <span>Próximos movimentos</span>
+                    <small>Compromissos considerados na projeção</small>
+                  </div>
+                  <button type="button" class="ghost-button" data-view-shortcut="finances">Abrir finanças</button>
+                </div>
+                <div id="pulseForecastTimeline" class="pulse-forecast-detail-timeline"></div>
+              </div>
             </div>
           </div>
         </div>
