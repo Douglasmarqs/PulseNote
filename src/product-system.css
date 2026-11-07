@@ -854,6 +854,242 @@ button, a, [role="button"], summary, .tab, .chip {
   .note-detail-footer .primary-button { min-width: 0; padding-inline: 12px; }
 }
 
+/* ============================================================
+   Tipografia e ritmo final
+   Consolida os estilos antigos em uma escala unica e impede que
+   textos reais, valores altos e nomes longos quebrem os layouts.
+   ============================================================ */
+:root {
+  --font-product: Inter, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-display: Inter, "SF Pro Display", "Segoe UI Variable Display", "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+  --leading-tight: 1.12;
+  --leading-title: 1.24;
+  --leading-body: 1.58;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+}
+
+html {
+  font-family: var(--font-product);
+  font-kerning: normal;
+  font-optical-sizing: auto;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  line-height: var(--leading-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, .topbar-greeting h1,
+.pulse-forecast-summary > strong, .fin-summary-card strong {
+  font-family: var(--font-display);
+  font-variation-settings: "wght" 720;
+  text-wrap: balance;
+}
+
+h1, h2, h3, p { overflow-wrap: normal; }
+h1 { line-height: var(--leading-tight); }
+h2, h3 { line-height: var(--leading-title); }
+p { line-height: var(--leading-body); }
+
+/* Todo descendente que participa de grid/flex pode encolher sem
+   empurrar botoes, valores ou colunas para fora da viewport. */
+:where(
+  .topbar-row, .view, .panel, .editor-panel, .pulse-glass,
+  .pulse-dashboard, .pulse-section-heading, .pulse-forecast-content,
+  .pulse-autopilot-header, .autopilot-card, .planner-shell,
+  .planner-header, .planner-row, .planner-row-head, .planner-row-main,
+  .note-card, .note-detail-card, .note-detail-header,
+  .fin-header, .fin-layout, .fin-summary-card, .fin-analysis-intro,
+  .fin-insight-card, .fin-transaction, .settings-layout
+) > * { min-width: 0; }
+
+:where(
+  .topbar-greeting, .pulse-section-heading > div, .pulse-timeline-copy,
+  .pulse-autopilot-body, .planner-header-title, .planner-row-main,
+  .planner-row-main > div, .note-card header > div, .note-detail-meta-row,
+  .fin-month-center, .fin-tx-copy, .fin-account-copy,
+  .fin-shared-space-copy
+) { min-width: 0; }
+
+:where(
+  .pulse-timeline-copy strong, .pulse-timeline-copy span,
+  .pulse-autopilot-body h3, .pulse-autopilot-body p,
+  .planner-row-main strong, .planner-row-main span,
+  .planner-event-block strong, .planner-event-block span,
+  .note-card h3, .note-card-preview, .note-detail-title-input,
+  .note-detail-body, .fin-tx-title, .fin-account-copy strong,
+  .fin-shared-space-copy strong, .settings-form label
+) { overflow-wrap: anywhere; }
+
+:where(
+  .pulse-beta-badge, .pulse-optional-badge, .pill, .priority-pill,
+  .status-pill, .event-countdown, .fin-closed-badge,
+  .fin-workspace-label, .note-folder-badge
+) {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+:where(
+  .pulse-forecast-summary > strong, .pulse-projected-value,
+  .pulse-safe-spend strong, .fin-summary-card strong,
+  .fin-tx-amount, .fin-account-balance, .fin-insight-card strong,
+  .planner-goal-value, time, input[type="number"]
+) { font-variant-numeric: tabular-nums lining-nums; }
+
+:where(button, .primary-button, .ghost-button, .mini-button, .icon-button) > svg,
+:where(button, .primary-button, .ghost-button, .mini-button, .icon-button) > .icon {
+  flex: 0 0 auto;
+}
+
+:where(button, .primary-button, .ghost-button, .mini-button) > span {
+  min-width: 0;
+}
+
+/* Cabecalhos e blocos respiram pelo mesmo ritmo, sem margens aleatorias. */
+.panel-header, .form-heading, .pulse-section-heading {
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+}
+.panel-header h2, .form-heading h2 { font-size: 1.0625rem; }
+.panel-header p, .form-heading p { margin-top: var(--space-1); }
+
+.pulse-dashboard { gap: var(--space-6); }
+.pulse-dashboard-grid--top, .pulse-dashboard-grid--bottom { gap: var(--space-6); }
+.pulse-glass { padding: clamp(22px, 2.4vw, 32px); }
+.pulse-section-heading h2 { margin: var(--space-1) 0 var(--space-2); }
+.pulse-section-heading p:last-child { max-width: 62ch; }
+.pulse-forecast-summary { gap: var(--space-1); }
+.pulse-forecast-summary > small { margin-bottom: var(--space-3); }
+.pulse-safe-spend { margin-top: var(--space-4); }
+.pulse-timeline { display: grid; gap: var(--space-1); }
+.pulse-timeline-item { padding-block: var(--space-3); }
+.pulse-autopilot-header { gap: var(--space-3); }
+.pulse-autopilot-body { margin-top: var(--space-5); }
+.pulse-autopilot-body h3 { margin-bottom: var(--space-2); }
+.pulse-autopilot-trust { padding-top: var(--space-4); }
+.pulse-command-card, .pulse-insight-card { align-content: start; }
+.pulse-command-form { gap: var(--space-2); }
+.pulse-connector-list { margin-top: var(--space-4); }
+
+/* Planner: metadados quebram abaixo do titulo, nunca por cima das acoes. */
+.planner-shell { gap: var(--space-6); }
+.planner-header { gap: var(--space-5); }
+.planner-header-title p { margin-bottom: var(--space-1); }
+.planner-header-title h2 { margin: 0; }
+.planner-goals-panel { padding: var(--space-6); }
+#plannerView .planner-section { margin-top: var(--space-6); }
+#plannerView .planner-section-title { margin-bottom: var(--space-3); }
+#plannerView .planner-row { gap: var(--space-3); padding: var(--space-4); }
+#plannerView .planner-row-head { align-items: flex-start; gap: var(--space-3); }
+#plannerView .planner-row-main { flex: 1 1 auto; }
+#plannerView .planner-row-main strong { display: block; line-height: 1.35; }
+#plannerView .planner-row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+#plannerView .planner-row-kebab { align-self: flex-start; }
+#plannerView .planner-event-block { padding: var(--space-4); }
+#plannerView .planner-event-block > div:first-child { min-width: 0; }
+
+/* Notas: campos, filtros, cartoes e rodape seguem uma coluna de leitura. */
+#notesView .workbench { gap: var(--space-6); }
+#notesView .note-editor, #notesView .list-panel { padding: var(--space-6); }
+#notesView .note-editor { gap: var(--space-4); }
+#notesView .note-editor .form-heading { margin-bottom: var(--space-1); }
+#notesView .note-title-field, #notesView .note-body-field { gap: var(--space-2); }
+#notesView .note-title-field input { min-height: 48px; }
+#notesView .note-quick-row { display: grid; gap: var(--space-3); }
+#notesView .note-more-details > *:not(summary) { margin-top: var(--space-3); }
+#notesView .note-filters, #notesView .note-folders { gap: var(--space-2); }
+#notesView .note-filter-group-label { margin: var(--space-5) 0 var(--space-2); }
+#notesView .note-grid { gap: var(--space-4); }
+#notesView .note-card { gap: var(--space-3); padding: var(--space-5); }
+#notesView .note-card header { margin: 0; }
+#notesView .note-card .note-meta,
+#notesView .note-card-preview,
+#notesView .note-priority-row,
+#notesView .note-card .card-actions { margin-block: 0; }
+#notesView .note-card .note-card-actions { margin-top: auto; padding-top: var(--space-4); }
+.note-detail-header { gap: var(--space-4); }
+.note-detail-meta-row { gap: var(--space-3); }
+.note-detail-scroll { display: grid; align-content: start; gap: var(--space-5); }
+.note-detail-checklist { margin: 0; padding: var(--space-4); }
+.note-detail-footer { gap: var(--space-3); }
+
+/* Financas: valores mantem destaque, descricoes ganham largura de leitura. */
+#financesView .fin-header { gap: var(--space-5); margin-bottom: var(--space-6); }
+#financesView .fin-summary-grid { gap: var(--space-4); }
+#financesView .fin-summary-card { display: grid; align-content: space-between; gap: var(--space-3); padding: var(--space-5); }
+#financesView .fin-summary-card strong { overflow-wrap: anywhere; line-height: 1.12; }
+#financesView .fin-budget-bar { gap: var(--space-3); padding: var(--space-4) var(--space-5); }
+#financesView .fin-tabs { margin-bottom: var(--space-6); }
+#financesView .fin-layout { gap: var(--space-6); }
+#financesView .fin-left, #financesView .fin-right { gap: var(--space-4); }
+#financesView .fin-analysis-intro { gap: var(--space-6); margin-bottom: var(--space-5); }
+#financesView .fin-insights-grid, #financesView .fin-analise-grid { gap: var(--space-4); }
+#financesView .fin-insight-card { display: grid; align-content: start; gap: var(--space-2); padding: var(--space-5); }
+#financesView .fin-insight-card strong { margin: 0; }
+#financesView .fin-transaction { align-items: flex-start; }
+#financesView .fin-tx-amount { flex: 0 0 auto; white-space: nowrap; }
+#financesView .fin-chart-metrics { row-gap: var(--space-2); }
+
+@media (max-width: 720px) {
+  .panel-header, .form-heading, .pulse-section-heading { margin-bottom: var(--space-4); }
+  .pulse-dashboard, .pulse-dashboard-grid--top, .pulse-dashboard-grid--bottom,
+  .planner-shell, #notesView .workbench { gap: var(--space-4); }
+  .pulse-glass, .panel, .editor-panel,
+  #notesView .note-editor, #notesView .list-panel { padding: var(--space-4); }
+  .pulse-autopilot-trust { align-items: flex-start; flex-direction: column; gap: var(--space-2); }
+  #plannerView .planner-goals-panel { padding: var(--space-4); }
+  #plannerView .planner-row { padding: 14px; }
+  #plannerView .planner-row-meta { margin-top: 6px; }
+  #notesView .note-card { padding: var(--space-4); }
+  #notesView .note-card .note-card-actions { padding-top: var(--space-3); }
+  .note-detail-meta-row { align-items: flex-start; flex-direction: column; }
+  .note-detail-more-link { align-self: flex-start; }
+  #financesView .fin-summary-card { padding: var(--space-4); }
+  #financesView .fin-analysis-intro { gap: var(--space-3); }
+  #financesView .fin-budget-bar-top { align-items: flex-start; flex-direction: column; }
+  #financesView .fin-budget-bar-label { overflow-wrap: anywhere; }
+}
+
+@media (max-width: 380px) {
+  .pulse-workspace-switcher { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #plannerView .planner-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #plannerView .planner-tabs button { padding-inline: var(--space-2); font-size: .8125rem; }
+  #financesView .fin-tabs {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+  }
+  #financesView .fin-tab-btn {
+    min-width: 108px;
+    flex: 0 0 108px;
+    padding-inline: var(--space-2);
+    font-size: .75rem;
+    scroll-snap-align: start;
+  }
+  #notesView .note-card .note-card-actions {
+    grid-template-columns: minmax(0, 1fr) 42px;
+  }
+  #notesView .note-card .note-card-actions > :first-child { grid-column: 1 / -1; }
+  .note-detail-footer { flex-wrap: wrap; }
+  .note-detail-footer .primary-button { flex: 1 1 100%; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation: none !important; transition-duration: .01ms !important; }
 }
