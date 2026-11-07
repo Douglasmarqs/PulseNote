@@ -4,8 +4,10 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const css = fs.readFileSync(path.join(__dirname, "../src/product-system.css"), "utf8");
+const html = fs.readFileSync(path.join(__dirname, "../src/index.html"), "utf8");
 
 test("produto usa tipografia consistente e uma escala central de espacos", () => {
+  assert.match(html, /product-system\.css\?v=2/);
   assert.match(css, /--font-product:[^;]*Segoe UI Variable Text/);
   assert.match(css, /--font-display:[^;]*Segoe UI Variable Display/);
   assert.match(css, /--leading-body:\s*1\.58/);
