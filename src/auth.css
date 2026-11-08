@@ -662,6 +662,9 @@ body.auth-page {
   align-items: center;
   gap: 10px;
 }
+.auth-error[hidden] {
+  display: none !important;
+}
 .auth-error-mascot {
   width: 30px;
   height: 30px;
