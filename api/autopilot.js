@@ -21,10 +21,13 @@ module.exports = async (req, res) => {
   if (!token) return res.status(401).json({ error: "unauthorized" });
 
   let uid;
+  let actor;
   let db;
   try {
     const fb = getFirebaseAdmin();
-    uid = (await fb.auth().verifyIdToken(token)).uid;
+    const decoded = await fb.auth().verifyIdToken(token);
+    uid = decoded.uid;
+    actor = { email: decoded.email, emailVerified: decoded.email_verified === true };
     db = fb.firestore();
   } catch (error) {
     console.warn("Autopilot authentication failed:", error?.code || error?.message);
@@ -32,7 +35,7 @@ module.exports = async (req, res) => {
   }
 
   try {
-    await checkAutopilotAccess(db, uid);
+    await checkAutopilotAccess(db, uid, actor);
     if (req.method === "GET") {
       const suggestions = await listAutopilotSuggestions(db, uid);
       return res.status(200).json({ ok: true, suggestions });

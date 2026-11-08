@@ -3677,7 +3677,7 @@ font-variant-numeric:tabular-nums;
 }
 
 .fin-cal-day {
-  aspect-ratio: 1;
+  min-height: 58px;
   border-radius: 10px;
   background: var(--surface2);
   border: 1.5px solid transparent;
@@ -3690,9 +3690,27 @@ font-variant-numeric:tabular-nums;
   color: var(--text2);
   cursor: pointer;
   transition: all 150ms;
-  gap: 2px;
-  padding: 0;
+  gap: 4px;
+  padding: 5px 2px;
 }
+
+.fin-cal-day-top { display: inline-flex; align-items: center; justify-content: center; gap: 4px; }
+
+.fin-day-balance {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text2);
+  font-size: 0.58rem;
+  font-weight: 750;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.fin-day-balance.is-negative { color: var(--red); }
+.fin-cal-day.today .fin-day-balance { color: rgba(255,255,255,.88); }
+.fin-cal-day.has-projection { box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--accent) 55%, transparent); }
 
 .fin-cal-day strong {
   font-size: 0.82rem;
@@ -3880,7 +3898,8 @@ gap:14px;
 align-items:stretch;
 }
   .fin-cal-grid { grid-template-columns: repeat(7, 1fr); gap: 3px; }
-  .fin-cal-day { font-size: 0.7rem; border-radius: 8px; }
+  .fin-cal-day { min-height: 52px; font-size: 0.7rem; border-radius: 8px; padding-inline: 1px; }
+  .fin-day-balance { font-size: 0.52rem; }
   .fin-cat-row { gap: 6px; }
   .fin-cat-info { min-width: 76px; font-size: 0.74rem; flex-shrink: 0; }
   .fin-cat-bar-wrap { min-width: 0; }
@@ -4248,6 +4267,85 @@ align-items:stretch;
 .fin-closure-actions .mini-button { flex: 1; text-align: center; }
 
 /* ─── Recorrentes ─────────────────────────────────────────────── */
+.fin-recurring-suggestions {
+  margin-bottom: 14px;
+  overflow: hidden;
+}
+.fin-recurring-suggestions-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+.fin-recurring-suggestions-head h2 { margin: 2px 0 5px; }
+.fin-recurring-suggestions-head p:not(.eyebrow) {
+  margin: 0;
+  max-width: 620px;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+.fin-recurring-suggestions-count {
+  display: grid;
+  place-items: center;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 9px;
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--line));
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+.fin-recurring-suggestions-list { display: grid; gap: 0; }
+.fin-recurring-suggestion-row {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--line);
+}
+.fin-recurring-suggestion-row:last-child { border-bottom: 0; padding-bottom: 0; }
+.fin-recurring-suggestion-mark {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.fin-recurring-suggestion-mark svg { width: 18px; height: 18px; }
+.fin-recurring-suggestion-copy { min-width: 0; }
+.fin-recurring-suggestion-copy strong,
+.fin-recurring-suggestion-copy span { display: block; }
+.fin-recurring-suggestion-copy strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 0.9rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fin-recurring-suggestion-copy span {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+.fin-recurring-suggestion-amount {
+  color: var(--text);
+  font-size: 0.86rem;
+  white-space: nowrap;
+}
+.fin-recurring-suggestion-row .mini-button {
+  min-height: 34px;
+  transition: transform 140ms cubic-bezier(0.23, 1, 0.32, 1), border-color 140ms ease, background-color 140ms ease;
+}
+.fin-recurring-suggestion-row .mini-button:active { transform: scale(0.97); }
+
 .fin-recur-list { display: grid; gap: 8px; min-width: 0; overflow: hidden; }
 .fin-recur-row {
   display: flex;
@@ -4340,6 +4438,13 @@ align-items:stretch;
 .fin-recur-menu button.danger:hover { background: var(--red-soft); color: var(--red); }
 
 @media (max-width: 380px) {
+  .fin-recurring-suggestion-row {
+    grid-template-columns: 34px minmax(0, 1fr) auto;
+    gap: 9px;
+  }
+  .fin-recurring-suggestion-mark { width: 34px; height: 34px; }
+  .fin-recurring-suggestion-amount { grid-column: 2; }
+  .fin-recurring-suggestion-row .mini-button { grid-column: 3; grid-row: 1 / span 2; }
   .fin-recur-row { gap: 6px; padding: 10px; }
   .fin-recur-icon { width: 34px; height: 34px; font-size: 0.95rem; }
   .fin-recur-amount { font-size: 0.8rem; }

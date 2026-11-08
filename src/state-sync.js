@@ -2,7 +2,7 @@
 // separate from the UI lets us test app ↔ WhatsApp/Autopilot concurrency.
 const COLLECTION_KEYS = new Set([
   "finances", "tasks", "events", "goals", "notes", "customCategories",
-  "monthClosures", "finGoals", "finRecurrents",
+  "monthClosures", "finGoals", "finRecurrents", "financeAccounts",
 ]);
 
 export function cloneState(value) {

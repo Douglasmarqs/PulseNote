@@ -184,6 +184,15 @@ export function createAutopilotUI({ getToken, openArea, notify }) {
     try { return await response.json(); } catch { return {}; }
   }
 
+  function accessMessage(code) {
+    if (code === "plan" || code === "plan_required") return "O Autopilot não está incluído no plano atual. Revise seu plano em Configurações para ativá-lo.";
+    if (code === "paused" || code === "expired" || code === "inactive_plan") return "Sua assinatura não está ativa. O restante dos seus dados continua disponível normalmente.";
+    if (code === "feature_disabled") return "O Autopilot foi pausado pelo administrador do PulseNote.";
+    if (code === "maintenance") return "O Autopilot está em manutenção. Nenhum dado foi alterado.";
+    if (code === "unauthorized") return "Sua sessão expirou. Entre novamente para carregar suas prioridades.";
+    return "Não foi possível consultar suas prioridades agora. Tente novamente em instantes.";
+  }
+
   async function load({ force = false } = {}) {
     if (!getToken()) return;
     if (isDesignPreview()) {
@@ -225,25 +234,31 @@ export function createAutopilotUI({ getToken, openArea, notify }) {
           signal: controller.signal,
         });
         const body = await readJson(response);
-        if (!response.ok) throw new Error(body.message || body.error || `Serviço indisponível (${response.status}).`);
+        if (!response.ok) {
+          const error = new Error(accessMessage(body.error));
+          error.code = body.error;
+          error.status = response.status;
+          throw error;
+        }
         if (serial !== requestSerial) return;
         suggestions = Array.isArray(body.suggestions) ? body.suggestions : [];
         fetchedAt = Date.now();
         render();
       } catch (error) {
         if (serial !== requestSerial) return;
-        setStatus("Não foi possível carregar as sugestões agora.");
-        setPreview("Sugestões indisponíveis neste momento.");
+        const detail = accessMessage(error?.code);
+        setStatus(detail);
+        setPreview(detail);
         if (dashboardCard) {
           dashboardCard.replaceChildren();
           const errorState = makeTextElement("div", "pulse-dashboard-suggestion", "");
           errorState.append(
-            makeTextElement("h3", "", "Autopilot temporariamente indisponível"),
-            makeTextElement("p", "", "Seus dados continuam seguros. Tente atualizar as sugestões em instantes."),
+            makeTextElement("h3", "", error?.code === "plan" ? "Autopilot não incluído no plano" : "Autopilot indisponível"),
+            makeTextElement("p", "", detail),
           );
           dashboardCard.append(errorState);
         }
-        if (!suggestions.length) renderEmpty("Sugestões indisponíveis", "Tente atualizar quando a conexão estiver estável.");
+        if (!suggestions.length) renderEmpty("Não foi possível mostrar sugestões", detail);
         console.warn("Pulse Autopilot indisponível:", error);
       } finally {
         clearTimeout(timeout);
@@ -312,4 +327,3 @@ export function createAutopilotUI({ getToken, openArea, notify }) {
   function show() { return load({ force: Boolean(pendingLoad && pendingSerial !== requestSerial) }); }
   return { bind, load, invalidate, show };
 }
-

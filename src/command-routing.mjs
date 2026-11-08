@@ -20,4 +20,3 @@ export function classifyPulseCommand(value) {
   if (/\d/.test(command)) return "finances";
   return "autopilot";
 }
-

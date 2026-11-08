@@ -2,7 +2,7 @@
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
     <title>PulseNote - Produtividade pessoal</title>
 
     <!-- Aplica o tema (claro/escuro/sistema) ANTES da primeira pintura da
@@ -73,6 +73,9 @@
     <link rel="stylesheet" href="/src/mobile.css?v=36" />
     <link rel="stylesheet" href="/src/autopilot.css?v=36" />
     <link rel="stylesheet" href="/src/premium.css?v=37" />
+    <!-- Sistema visual definitivo. Carrega por ultimo para unificar as
+         camadas historicas sem alterar a logica ou os dados do produto. -->
+    <link rel="stylesheet" href="/src/product-system.css?v=2" />
   </head>
   <body>
     <div class="app-shell">
@@ -217,10 +220,11 @@
                     <div class="pulse-safe-spend">
                       <span>Disponível com segurança hoje</span>
                       <strong id="pulseSafeSpend">R$ 0,00</strong>
+                      <button type="button" id="pulseOpenSimulator" class="pulse-safe-spend-action">Simular uma compra <span aria-hidden="true">→</span></button>
                     </div>
                   </div>
 
-                  <div class="pulse-forecast-visual" aria-label="Evolução projetada do saldo no mês">
+                  <div class="pulse-forecast-visual" role="button" tabindex="0" aria-haspopup="dialog" aria-controls="pulseForecastDetailModal" aria-label="Abrir detalhes da evolução projetada do saldo no mês">
                     <div class="pulse-chart-legend"><span><i></i> Saldo real</span><span><i></i> Projeção</span></div>
                     <svg class="pulse-forecast-chart" viewBox="0 0 640 240" role="img" aria-labelledby="pulseForecastChartTitle">
                       <title id="pulseForecastChartTitle">Projeção do saldo até o fim do mês</title>
@@ -239,6 +243,7 @@
                     </svg>
                     <div class="pulse-chart-axis" aria-hidden="true"><span>Hoje</span><span>Fim do mês</span></div>
                     <div id="pulseNextCommitment" class="pulse-next-commitment">Nenhum compromisso financeiro próximo.</div>
+                    <span class="pulse-chart-open-hint">Ver projeção completa</span>
                   </div>
                 </div>
               </section>
@@ -293,10 +298,11 @@
                       <button type="submit" aria-label="Continuar">→</button>
                     </div>
                   </form>
-                  <p>Use texto aqui; áudio, foto e documentos continuam disponíveis pelo WhatsApp.</p>
+                  <p>Converse normalmente. O Pulsinho usa seus dados reais para responder e pede confirmação antes de alterar qualquer coisa.</p>
+                  <div id="pulseCommandResponse" class="pulse-command-response" role="status" aria-live="polite" hidden></div>
                   <div class="pulse-connector-list">
                     <button type="button" data-view-shortcut="settings" data-settings-focus="whatsapp"><span class="pulse-status-dot"></span>WhatsApp conectado <b>Configurar</b></button>
-                    <button type="button" data-view-shortcut="autopilot">ChatGPT e Claude <span class="pulse-optional-badge">Planejado</span></button>
+                    <button type="button" data-view-shortcut="autopilot">IA conversacional <span class="pulse-optional-badge">Com confirmação</span></button>
                   </div>
                 </section>
               </aside>
@@ -534,6 +540,36 @@
             <div class="autopilot-confirm-actions">
               <button type="button" id="autopilotConfirmCancel" class="ghost-button">Cancelar</button>
               <button type="button" id="autopilotConfirmApply" class="primary-button">Confirmar</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="pulseForecastDetailModal" class="modal-backdrop" hidden>
+          <div class="modal-card pulse-forecast-detail" role="dialog" aria-modal="true" aria-labelledby="pulseForecastDetailTitle" aria-describedby="pulseForecastDetailDescription">
+            <div class="modal-header">
+              <div>
+                <p class="pulse-kicker">Projeção financeira</p>
+                <h2 id="pulseForecastDetailTitle">Como seu mês pode terminar</h2>
+              </div>
+              <button type="button" id="pulseForecastDetailClose" class="icon-button" aria-label="Fechar detalhes">✕</button>
+            </div>
+            <div class="modal-body pulse-forecast-detail-body">
+              <p id="pulseForecastDetailDescription" class="pulse-forecast-detail-copy">Uma leitura dos saldos e compromissos que já estão registrados.</p>
+              <div class="pulse-forecast-detail-metrics">
+                <div><span>Saldo atual</span><strong id="pulseForecastDetailCurrent">R$ 0,00</strong></div>
+                <div><span>Fechamento previsto</span><strong id="pulseForecastDetailProjected">R$ 0,00</strong></div>
+                <div><span>Disponível com segurança</span><strong id="pulseForecastDetailSafe">R$ 0,00</strong></div>
+              </div>
+              <div class="pulse-forecast-detail-section">
+                <div class="pulse-forecast-detail-heading">
+                  <div>
+                    <span>Próximos movimentos</span>
+                    <small>Compromissos considerados na projeção</small>
+                  </div>
+                  <button type="button" class="ghost-button" data-view-shortcut="finances">Abrir finanças</button>
+                </div>
+                <div id="pulseForecastTimeline" class="pulse-forecast-detail-timeline"></div>
+              </div>
             </div>
           </div>
         </div>
@@ -800,30 +836,7 @@
               <!-- Mais detalhes: tudo que é opcional fica recolhido, mas continua a 1 toque de distância -->
               <details class="note-more-details">
                 <summary>Mais detalhes <span class="chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span></summary>
-                <div class="note-appearance-options" aria-label="Aparência da anotação">
-                  <div class="note-appearance-option">
-                    <span class="note-control-label">Cor do texto</span>
-                    <div class="note-text-color-picker" id="noteTextColorPicker" role="group" aria-label="Cor do texto da nota">
-                      <button type="button" class="note-text-color-default active" data-note-text-color="" title="Cor padrão" aria-label="Cor padrão" aria-pressed="true">A</button>
-                      <button type="button" class="note-text-color-dot" data-note-text-color="#8b5cf6" style="--note-text-color:#8b5cf6" title="Texto lilás" aria-label="Texto lilás" aria-pressed="false"></button>
-                      <button type="button" class="note-text-color-dot" data-note-text-color="#ff375f" style="--note-text-color:#ff375f" title="Texto vermelho" aria-label="Texto vermelho" aria-pressed="false"></button>
-                      <button type="button" class="note-text-color-dot" data-note-text-color="#30d158" style="--note-text-color:#30d158" title="Texto verde" aria-label="Texto verde" aria-pressed="false"></button>
-                      <button type="button" class="note-text-color-dot" data-note-text-color="#0a84ff" style="--note-text-color:#0a84ff" title="Texto azul" aria-label="Texto azul" aria-pressed="false"></button>
-                      <button type="button" class="note-text-color-dot" data-note-text-color="#bf5af2" style="--note-text-color:#bf5af2" title="Texto roxo" aria-label="Texto roxo" aria-pressed="false"></button>
-                    </div>
-                  </div>
-                  <div class="note-appearance-option">
-                    <span class="note-control-label">Cor do cartão</span>
-                    <div class="note-color-picker" id="noteColorPicker" role="group" aria-label="Cor do cartão da nota">
-                      <button type="button" class="note-color-dot active" data-note-color="blue" title="Azul" aria-label="Azul"></button>
-                      <button type="button" class="note-color-dot" data-note-color="green" title="Verde" aria-label="Verde"></button>
-                      <button type="button" class="note-color-dot" data-note-color="pink" title="Rosa" aria-label="Rosa"></button>
-                      <button type="button" class="note-color-dot" data-note-color="purple" title="Roxo" aria-label="Roxo"></button>
-                      <button type="button" class="note-color-dot" data-note-color="orange" title="Lilás" aria-label="Lilás"></button>
-                      <button type="button" class="note-color-dot" data-note-color="teal" title="Turquesa" aria-label="Turquesa"></button>
-                    </div>
-                  </div>
-                </div>
+                <p class="note-details-hint">Organize somente se precisar. A nota salva normalmente sem preencher estes campos.</p>
                 <input id="noteTextColor" type="hidden" value="" />
                 <input id="noteColor" type="hidden" value="blue" />
                 <div class="form-grid">
@@ -985,6 +998,8 @@
               <button class="fin-month-arrow" id="finMonthPrev">‹</button>
               <div class="fin-month-center">
                 <span id="finMonthLabel" class="fin-month-label">Julho 2026</span>
+                <label class="sr-only" for="finWorkspaceSelect">Espaço financeiro</label>
+                <select id="finWorkspaceSelect" class="fin-workspace-label" aria-label="Espaço financeiro ativo"><option value="personal">Pessoal</option><option value="couple">Casal</option><option value="family">Família</option><option value="business">Empresa</option></select>
                 <span id="finClosedBadge" class="fin-closed-badge" hidden><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Fechado</span>
               </div>
               <button class="fin-month-arrow" id="finMonthNext">›</button>
@@ -1094,6 +1109,8 @@
                       <select id="expenseCategory" hidden aria-hidden="true" tabindex="-1"><option value="alimentacao">🍔 Alimentação</option></select>
                       <button type="button" id="newCategoryBtn" class="fin-cat-add-btn" title="Nova categoria">＋</button>
                     </div>
+                    <label class="fin-account-select-label" for="expenseAccount">Conta</label>
+                    <select id="expenseAccount" class="fin-account-select"><option value="">Sem conta específica</option></select>
                     <button type="submit" class="primary-button" style="width:100%;justify-content:center;height:44px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg><span>Registrar</span></button>
                     <button type="button" id="cancelEditExpense" hidden style="width:100%;height:36px;border-radius:10px;border:1.5px solid var(--line);background:var(--surface2);color:var(--text2);cursor:pointer;font-weight:600;font-family:inherit;margin-top:6px">Cancelar edição</button>
                   </form>
@@ -1105,8 +1122,9 @@
                   <div class="panel-header">
                     <div><p class="eyebrow">Calendário</p><h2 id="finCalMonthLabel">Financeiro</h2></div>
                     <div style="display:flex;gap:6px;flex-wrap:wrap">
-                      <span class="pill" style="background:var(--green-soft);color:var(--green);border-color:var(--green)">● Receita</span>
-                      <span class="pill" style="background:var(--red-soft);color:var(--red);border-color:var(--red)">● Despesa</span>
+                      <span class="pill" style="background:var(--green-soft);color:var(--green);border-color:var(--green)">● Entrada</span>
+                      <span class="pill" style="background:var(--red-soft);color:var(--red);border-color:var(--red)">● Saída</span>
+                      <span class="pill">Saldo previsto por dia</span>
                     </div>
                   </div>
                   <div id="finCalGrid" class="fin-cal-grid"></div>
@@ -1116,6 +1134,7 @@
                   <div class="panel-header">
                     <div><p class="eyebrow">Histórico</p><h2>Transações</h2></div>
                   </div>
+                  <div id="finTransactionFilter" class="fin-transaction-filter" hidden></div>
                   <div id="finTransactions" class="fin-tx-list"></div>
                 </div>
               </div><!-- /fin-right -->
@@ -1132,6 +1151,22 @@
               <p>Compare seu ritmo de gastos, identifique a principal categoria e acompanhe a evolução do saldo.</p>
             </div>
             <div id="finInsights" class="fin-insights-grid" aria-live="polite"></div>
+            <section class="panel fin-simulator" aria-labelledby="finSimulatorTitle">
+              <div class="fin-simulator-copy">
+                <p class="eyebrow">Planejamento inteligente</p>
+                <h2 id="finSimulatorTitle">Posso gastar isso?</h2>
+                <p>Teste uma compra antes de fazê-la. A projeção considera saldo, contas recorrentes, faturas e sua reserva de segurança.</p>
+              </div>
+              <form id="finSimulatorForm" class="fin-simulator-form">
+                <label for="finSimulatorAmount">Valor da compra</label>
+                <div class="fin-simulator-control">
+                  <span>R$</span>
+                  <input id="finSimulatorAmount" name="amount" inputmode="decimal" autocomplete="off" placeholder="0,00" required />
+                  <button type="submit">Simular</button>
+                </div>
+              </form>
+              <div id="finSimulatorResult" class="fin-simulator-result" role="status" aria-live="polite" hidden></div>
+            </section>
             <div class="fin-analise-grid">
               <div class="panel wide">
                 <div class="panel-header">
@@ -1158,6 +1193,54 @@
 
           <!-- ABA: CONTROLE — metas de gasto por categoria -->
           <div class="fin-tab-panel" data-fin-panel="controle" role="tabpanel" hidden>
+            <section class="panel fin-shared-spaces-panel" aria-labelledby="finSharedSpacesTitle">
+              <div class="panel-header">
+                <div><p class="eyebrow">Conta conjunta</p><h2 id="finSharedSpacesTitle">Espaços compartilhados</h2></div>
+                <button class="mini-button" id="finCreateSpaceToggle">+ Criar espaço</button>
+              </div>
+              <p class="fin-accounts-help">Compartilhe apenas as finanças deste espaço com seu parceiro ou família. Notas, tarefas e dados pessoais continuam privados.</p>
+              <form id="finCreateSpaceForm" class="fin-shared-create" hidden>
+                <label>Nome<input id="finSharedSpaceName" maxlength="70" placeholder="Ex.: Casa Douglas e Ana" required /></label>
+                <label>Tipo<select id="finSharedSpaceType"><option value="couple">Casal</option><option value="family">Família</option><option value="group">Grupo</option></select></label>
+                <div><button type="button" id="finCreateSpaceCancel">Cancelar</button><button type="submit">Criar e usar</button></div>
+              </form>
+              <div id="finSharedInvites" class="fin-shared-invites" hidden></div>
+              <div id="finSharedSpacesList" class="fin-shared-spaces-list"><div class="empty-state">Carregando espaços compartilhados…</div></div>
+            </section>
+            <div class="panel fin-accounts-panel">
+              <div class="panel-header">
+                <div><p class="eyebrow">Patrimônio</p><h2>Contas e saldos</h2></div>
+                <button class="mini-button" id="finAddAccount">+ Conta</button>
+              </div>
+              <p class="fin-accounts-help">Organize conta corrente, carteira, poupança e investimentos por espaço. Os saldos alimentam o simulador financeiro.</p>
+              <div id="finAccountFormWrap" class="fin-account-form-wrap" hidden>
+                <form id="finAccountForm" class="fin-account-form">
+                  <input id="finAccountId" type="hidden" />
+                  <label>Nome<input id="finAccountName" maxlength="50" placeholder="Ex.: Nubank principal" required /></label>
+                  <label>Tipo<select id="finAccountType"><option value="checking">Conta corrente</option><option value="savings">Poupança</option><option value="cash">Carteira</option><option value="investment">Investimentos</option><option value="other">Outra conta</option></select></label>
+                  <label>Espaço<select id="finAccountWorkspace"><option value="personal">Pessoal</option><option value="couple">Casal</option><option value="family">Família</option><option value="business">Empresa</option></select></label>
+                  <label>Saldo atual<input id="finAccountBalance" inputmode="decimal" placeholder="0,00" /></label>
+                  <div class="fin-account-form-actions"><button type="button" id="finAccountCancel">Cancelar</button><button type="submit">Salvar conta</button></div>
+                </form>
+              </div>
+              <div id="finAccountsList" class="fin-accounts-list"></div>
+            </div>
+            <section class="panel fin-cards-panel" aria-labelledby="finCardsTitle">
+              <div class="panel-header">
+                <div><p class="eyebrow">Crédito</p><h2 id="finCardsTitle">Cartões e faturas</h2></div>
+                <button class="mini-button" id="finAddCard">+ Cartão</button>
+              </div>
+              <p class="fin-accounts-help">Acompanhe a fatura e distribua compras parceladas automaticamente nos próximos meses.</p>
+              <form id="finCardForm" class="fin-card-form" hidden>
+                <label>Nome<input id="finCardName" maxlength="40" placeholder="Ex.: Nubank" required /></label>
+                <label>Final<input id="finCardLast4" inputmode="numeric" maxlength="4" pattern="[0-9]{0,4}" placeholder="1234" /></label>
+                <label>Limite<input id="finCardLimit" inputmode="decimal" placeholder="0,00" required /></label>
+                <label>Fecha dia<input id="finCardClosingDay" type="number" min="1" max="31" value="1" required /></label>
+                <label>Vence dia<input id="finCardDueDay" type="number" min="1" max="31" value="10" required /></label>
+                <div class="fin-card-form-actions"><button type="button" id="finCardCancel">Cancelar</button><button type="submit">Salvar cartão</button></div>
+              </form>
+              <div id="finCardsList" class="fin-cards-list"></div>
+            </section>
             <div class="panel">
               <div class="panel-header">
                 <div><p class="eyebrow">Controle</p><h2>Metas de gasto</h2></div>
@@ -1180,6 +1263,7 @@
 
           <!-- ABA: AUTOMAÇÃO — lançamentos recorrentes -->
           <div class="fin-tab-panel" data-fin-panel="automacao" role="tabpanel" hidden>
+            <div id="finRecurringSuggestions" class="panel fin-recurring-suggestions" hidden></div>
             <div class="panel">
               <div class="panel-header">
                 <div><p class="eyebrow">Automação</p><h2>Recorrentes</h2></div>
@@ -1394,6 +1478,20 @@
               </div>
             </section>
 
+            <section class="panel" id="pulsinhoAiCard">
+              <div class="panel-header"><div><p class="eyebrow">Inteligência</p><h2>Modelo do Pulsinho</h2></div><span class="billing-status-badge is-active">Conversação livre</span></div>
+              <p class="task-meta" style="margin-bottom:14px">O Pulsinho entende frases naturais no aplicativo e no WhatsApp. Escolha sua preferência; se o provedor principal estiver indisponível, o PulseNote usa o modelo seguro configurado como reserva.</p>
+              <label class="settings-ai-model">
+                <span>Preferência de IA</span>
+                <select id="pulsinhoAiPreference">
+                  <option value="auto">Automático (recomendado)</option>
+                  <option value="openai">GPT / OpenAI</option>
+                  <option value="anthropic">Claude / Anthropic</option>
+                </select>
+              </label>
+              <p class="task-meta">A IA recebe apenas um resumo necessário dos seus dados. Mudanças em tarefas, notas ou finanças continuam exigindo confirmação.</p>
+            </section>
+
             <section class="panel" id="whatsappIntegrationCard">
               <div class="panel-header"><div><p class="eyebrow">Notificações</p><h2>Lembretes do aplicativo</h2></div></div>
               <p class="task-meta" style="margin-bottom:12px">Defina o horário e a antecedência em cada tarefa ou compromisso. Os avisos chegam no navegador/PWA e, se você habilitar acima, também no WhatsApp.</p>
@@ -1600,10 +1698,31 @@
       </div>
     </div>
 
+    <div id="finCardPurchaseModal" class="modal-backdrop" hidden>
+      <div class="modal-card">
+        <div class="modal-header">
+          <div><p class="eyebrow">Nova compra</p><h2 id="finCardPurchaseTitle">Lançar no cartão</h2></div>
+          <button class="icon-button" id="finCloseCardPurchase" aria-label="Fechar">&#10005;</button>
+        </div>
+        <form id="finCardPurchaseForm" class="modal-body fin-card-purchase-form">
+          <input id="finCardPurchaseCardId" type="hidden" />
+          <label class="field"><span class="field-label">Descrição</span><input id="finCardPurchaseDescription" class="field-input" maxlength="80" placeholder="Ex.: Notebook" required /></label>
+          <label class="field"><span class="field-label">Valor total</span><input id="finCardPurchaseAmount" class="field-input" inputmode="decimal" placeholder="0,00" required /></label>
+          <div class="fin-card-purchase-grid">
+            <label class="field"><span class="field-label">Data da compra</span><input id="finCardPurchaseDate" class="field-input" type="date" required /></label>
+            <label class="field"><span class="field-label">Parcelas</span><input id="finCardPurchaseInstallments" class="field-input" type="number" min="1" max="48" value="1" required /></label>
+          </div>
+          <button class="primary-button" type="submit" style="width:100%;justify-content:center">Adicionar à fatura</button>
+        </form>
+      </div>
+    </div>
+
     <script src="/src/pwa-install.js" defer></script>
+    <script src="/src/finance-projection.js?v=1"></script>
+    <script src="/src/recurring-detector.js?v=1"></script>
+    <script src="/src/card-installments.js?v=1"></script>
     <script src="/src/notifications.js?v=35" defer></script>
     <script type="module" src="/src/app.js?v=37"></script>
     <script type="module" src="/src/push-notifications.js?v=35"></script>
   </body>
 </html>
-

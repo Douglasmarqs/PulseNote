@@ -170,3 +170,23 @@ test("admin maintenance, feature flag and subscription gate Autopilot", async ()
   db.documents.set("adminPlans/starter", { active: true, features: { autopilot: true } });
   assert.equal((await checkAutopilotAccess(db, uid)).allowed, true);
 });
+
+test("administrador verificado consegue validar Autopilot sem furar manutenção global", async () => {
+  const uid = "owner-admin";
+  const db = fakeFirestore(uid, exampleState());
+  db.documents.set("systemConfig/global", { maintenance: { enabled: false }, features: { autopilot: true } });
+  db.documents.set(`adminEntitlements/${uid}`, { planId: "starter" });
+  db.documents.set("adminPlans/starter", { active: true, features: { autopilot: false } });
+
+  const access = await checkAutopilotAccess(db, uid, {
+    email: "douglas1201.santos@gmail.com",
+    emailVerified: true,
+  });
+  assert.deepEqual(access, { allowed: true, reason: "admin_access" });
+
+  db.documents.set("systemConfig/global", { maintenance: { enabled: true }, features: { autopilot: true } });
+  await assert.rejects(checkAutopilotAccess(db, uid, {
+    email: "douglas1201.santos@gmail.com",
+    emailVerified: true,
+  }), { code: "maintenance", status: 503 });
+});

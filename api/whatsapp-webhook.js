@@ -66,6 +66,7 @@ const { getUserEntitlements } = require("./_lib/admin");
 const { listAutopilotSuggestions, executeAutopilotSuggestion } = require("./_lib/autopilotService");
 const { findSuggestion, formatSuggestionsForWhatsApp } = require("./_lib/autopilot");
 const { checkAutopilotAccess } = require("./_lib/autopilotAccess");
+const { askPulsinho, purchaseAmountFromQuestion } = require("./_lib/pulsinhoAssistant");
 const { META_GRAPH_VERSION } = require("./_lib/metaGraph");
 const messageContext = new AsyncLocalStorage();
 
@@ -1851,6 +1852,22 @@ module.exports = async (req, res) => {
         return respondOk();
       }
 
+      // Perguntas como "posso gastar 350?" não são lançamentos. Elas
+      // passam pelo simulador antes do parser de despesas para nunca
+      // registrar uma compra hipotética por engano.
+      if (purchaseAmountFromQuestion(rawText) > 0) {
+        const stateSnapshot = await fb.firestore().collection("userData").doc(uid).get();
+        const userState = stateSnapshot.exists ? stateSnapshot.data()?.data || {} : {};
+        const assistant = await askPulsinho({ state: userState, question: rawText });
+        if (assistant.ok) {
+          const followUps = (assistant.followUps || []).slice(0, 3).map((item) => `• ${item}`).join("\n");
+          await sendWhatsAppMessage(fromPhone, `🧠 *Pulsinho*\n${assistant.reply}${followUps ? `\n\nVocê também pode perguntar:\n${followUps}` : ""}`);
+        } else {
+          await sendWhatsAppMessage(fromPhone, "Não consegui calcular essa projeção agora. Nenhum gasto foi registrado; tente novamente em instantes.");
+        }
+        return respondOk();
+      }
+
       const result = await timeStage("parse_text", message.id, () => parseTextIntent({ text: rawText, categories, today, lastFinanceEntry, aiEnabled }));
 
       if (message.wasAudio && isDestructiveAudioIntent(result)) {
@@ -2060,7 +2077,21 @@ module.exports = async (req, res) => {
         return respondOk();
       }
 
-      // intent "expense" (ou falha da IA) — mesmo fluxo de sempre
+      // Quando o roteador de ações não reconhece a mensagem, o Pulsinho
+      // conversa usando o mesmo contexto do aplicativo. Ele só responde:
+      // alterações continuam passando pelos fluxos tipados e confirmações.
+      if (!result.ok) {
+        const stateSnapshot = await fb.firestore().collection("userData").doc(uid).get();
+        const userState = stateSnapshot.exists ? stateSnapshot.data()?.data || {} : {};
+        const assistant = await askPulsinho({ state: userState, question: rawText });
+        if (assistant.ok) {
+          const followUps = (assistant.followUps || []).slice(0, 3).map((item) => `• ${item}`).join("\n");
+          await sendWhatsAppMessage(fromPhone, `🧠 *Pulsinho*\n${assistant.reply}${followUps ? `\n\nVocê também pode perguntar:\n${followUps}` : ""}`);
+          return respondOk();
+        }
+      }
+
+      // intent "expense" (ou falha das camadas de compreensão) — mesmo fluxo seguro
       await finishParsedResult({
         fb, uid, fromPhone, categories, result, rawMessage: rawText,
         failureMsg: 'Não consegui entender essa mensagem 🤔 Manda "ajuda" pra ver o que eu entendo, ou descreve um gasto tipo "gastei 45 no mercado".',

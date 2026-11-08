@@ -16,4 +16,3 @@ test("comando com valor continua financeiro e pedido genérico vai ao Autopilot"
   assert.equal(classifyPulseCommand("mercado 42,90"), "finances");
   assert.equal(classifyPulseCommand("o que devo priorizar hoje?"), "autopilot");
 });
-
