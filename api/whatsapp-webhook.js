@@ -534,14 +534,82 @@ async function getUserCategoriesAndContext(fb, uid) {
   const pendingFinanceEdit = state.whatsappPendingFinanceEdit || null;
   const pendingMediaEntry = state.whatsappPendingMediaEntry || null;
   const pendingDelete = state.whatsappPendingDelete || null;
+  const pendingAssistantAction = state.whatsappPendingAssistantAction || null;
 
-  return { categories, lastFinanceEntry, pendingClarification, pendingFinanceEdit, pendingMediaEntry, pendingDelete };
+  return { categories, lastFinanceEntry, pendingClarification, pendingFinanceEdit, pendingMediaEntry, pendingDelete, pendingAssistantAction };
 }
 
 // 10 minutos pra responder "qual categoria" antes da pergunta expirar
 // — mesma lógica/janela do contexto de "lançamento recente" usado pra
 // correção de data (RECENT_CONTEXT_WINDOW_MS em parseCommandIntent.js).
 const CLARIFICATION_WINDOW_MS = 10 * 60 * 1000;
+const ASSISTANT_CONTEXT_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+async function loadWhatsAppAssistantHistory(fb, uid) {
+  const snapshot = await fb.firestore().collection("whatsappAssistantThreads").doc(uid).get();
+  if (!snapshot.exists) return [];
+  const data = snapshot.data() || {};
+  const age = Date.now() - new Date(data.updatedAt || 0).getTime();
+  if (!Number.isFinite(age) || age < 0 || age > ASSISTANT_CONTEXT_WINDOW_MS) return [];
+  return Array.isArray(data.messages) ? data.messages.slice(-8) : [];
+}
+
+async function saveWhatsAppAssistantTurn(fb, uid, history, question, reply) {
+  const messages = [
+    ...(Array.isArray(history) ? history : []),
+    { role: "user", content: String(question || "").slice(0, 1200) },
+    { role: "assistant", content: String(reply || "").slice(0, 1600) },
+  ].filter((item) => ["user", "assistant"].includes(item.role) && item.content).slice(-8);
+  await fb.firestore().collection("whatsappAssistantThreads").doc(uid).set({ uid, messages, updatedAt: new Date().toISOString() });
+}
+
+async function savePendingAssistantAction(fb, uid, action) {
+  return withUserData(fb, uid, (state) => {
+    state.whatsappPendingAssistantAction = { ...action, createdAt: new Date().toISOString() };
+    return true;
+  }, "save_assistant_action");
+}
+
+async function clearPendingAssistantAction(fb, uid) {
+  return withUserData(fb, uid, (state) => {
+    delete state.whatsappPendingAssistantAction;
+    return true;
+  }, "clear_assistant_action");
+}
+
+async function applyPendingAssistantAction(fb, uid, pending) {
+  if (!pendingIsFresh(pending)) return null;
+  return withUserData(fb, uid, (state) => {
+    const payload = pending.payload || {};
+    const title = String(payload.title || payload.description || "").trim().slice(0, 180);
+    if (!title) return undefined;
+    const id = crypto.randomUUID();
+    const isoDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || "")) ? value : getTodayInBrazil();
+    if (pending.type === "create_task") {
+      state.tasks = Array.isArray(state.tasks) ? state.tasks : [];
+      state.tasks.unshift({ id, title, status: "Pendente", priority: ["Baixa", "Media", "Alta", "Urgente"].includes(payload.priority) ? payload.priority : "Media", dueDate: isoDate(payload.dueDate), createdAt: getTodayInBrazil(), completedAt: "", dueTime: String(payload.dueTime || "").slice(0, 5), reminder: Number(payload.reminder) || 15, sourceNoteId: "", subtasks: [], recurrence: null });
+    } else if (pending.type === "create_event") {
+      state.events = Array.isArray(state.events) ? state.events : [];
+      state.events.push({ id, title, date: isoDate(payload.date), time: String(payload.time || "").slice(0, 5), location: String(payload.location || "Sem local").slice(0, 120), reminder: Number(payload.reminder) || 15, notes: String(payload.notes || "").slice(0, 500) });
+    } else if (pending.type === "create_note") {
+      state.notes = Array.isArray(state.notes) ? state.notes : [];
+      state.notes.unshift({ id, title, description: String(payload.description || "").slice(0, 3000), category: String(payload.category || "Geral").slice(0, 60), folder: "Entrada", tags: [], priority: "Media", checklist: [], attachments: [], goal: "", observations: "", color: "blue", textColor: "", favorite: false, createdAt: getTodayInBrazil(), convertedToTaskId: "" });
+    } else if (pending.type === "create_goal") {
+      state.goals = Array.isArray(state.goals) ? state.goals : [];
+      state.goals.unshift({ id, title, target: Math.max(1, Number(payload.target) || 100), current: Math.max(0, Number(payload.current) || 0), milestones: [] });
+    } else if (pending.type === "create_transaction") {
+      const amount = Math.round(Math.abs(Number(payload.amount) || 0) * 100) / 100;
+      if (!amount) return undefined;
+      const type = payload.type === "receita" ? "receita" : "despesa";
+      state.finances = Array.isArray(state.finances) ? state.finances : [];
+      state.finances.unshift({ id, type, amount, category: String(payload.category || (type === "receita" ? "outros_receita" : "outros")).slice(0, 60), description: title, date: isoDate(payload.date), accountId: "", workspaceId: "personal", source: "whatsapp", createdAt: new Date().toISOString() });
+    } else {
+      return undefined;
+    }
+    delete state.whatsappPendingAssistantAction;
+    return { type: pending.type, title };
+  }, "apply_assistant_action");
+}
 
 async function saveWhatsAppPendingClarification(fb, uid, clarification) {
   return withUserData(fb, uid, (state) => {
@@ -1680,7 +1748,7 @@ module.exports = async (req, res) => {
     const mediaRecognitionEnabled = canUse("mediaRecognition");
     const pdfReportsEnabled = canUse("pdfReports");
 
-    const { categories, lastFinanceEntry, pendingClarification, pendingFinanceEdit, pendingMediaEntry, pendingDelete } =
+    const { categories, lastFinanceEntry, pendingClarification, pendingFinanceEdit, pendingMediaEntry, pendingDelete, pendingAssistantAction } =
       await timeStage("load_user_context", message.id, () => getUserCategoriesAndContext(fb, uid));
     const today = getTodayInBrazil();
 
@@ -1729,6 +1797,23 @@ module.exports = async (req, res) => {
       const rawText = message.text.body;
       const norm = normalizeCommand(rawText);
       const referenceCommand = parseFinanceReferenceCommand(norm);
+
+      if (pendingAssistantAction) {
+        if (/^(?:cancelar|cancela|agora nao|não)$/.test(norm)) {
+          await clearPendingAssistantAction(fb, uid);
+          await sendWhatsAppMessage(fromPhone, "Tudo bem. A ação sugerida foi cancelada e nenhum dado foi alterado.");
+          return respondOk();
+        }
+        if (/^(?:confirmar|confirmo|sim|pode fazer)$/.test(norm)) {
+          const applied = await applyPendingAssistantAction(fb, uid, pendingAssistantAction);
+          if (applied) await sendWhatsAppMessage(fromPhone, `✅ Pronto. Confirmei e salvei: ${applied.title}.`);
+          else {
+            await clearPendingAssistantAction(fb, uid);
+            await sendWhatsAppMessage(fromPhone, "Essa confirmação expirou ou estava incompleta. Peça a ação novamente; nada foi alterado.");
+          }
+          return respondOk();
+        }
+      }
 
       if (pendingDelete) {
         if (/^cancelar(?: exclusao)?$/.test(norm)) {
@@ -1858,8 +1943,10 @@ module.exports = async (req, res) => {
       if (purchaseAmountFromQuestion(rawText) > 0) {
         const stateSnapshot = await fb.firestore().collection("userData").doc(uid).get();
         const userState = stateSnapshot.exists ? stateSnapshot.data()?.data || {} : {};
-        const assistant = await askPulsinho({ state: userState, question: rawText });
+        const history = await loadWhatsAppAssistantHistory(fb, uid);
+        const assistant = await askPulsinho({ state: userState, question: rawText, history, providerPreference: userState.aiProviderPreference });
         if (assistant.ok) {
+          await saveWhatsAppAssistantTurn(fb, uid, history, rawText, assistant.reply);
           const followUps = (assistant.followUps || []).slice(0, 3).map((item) => `• ${item}`).join("\n");
           await sendWhatsAppMessage(fromPhone, `🧠 *Pulsinho*\n${assistant.reply}${followUps ? `\n\nVocê também pode perguntar:\n${followUps}` : ""}`);
         } else {
@@ -2083,10 +2170,14 @@ module.exports = async (req, res) => {
       if (!result.ok) {
         const stateSnapshot = await fb.firestore().collection("userData").doc(uid).get();
         const userState = stateSnapshot.exists ? stateSnapshot.data()?.data || {} : {};
-        const assistant = await askPulsinho({ state: userState, question: rawText });
+        const history = await loadWhatsAppAssistantHistory(fb, uid);
+        const assistant = await askPulsinho({ state: userState, question: rawText, history, providerPreference: userState.aiProviderPreference });
         if (assistant.ok) {
+          await saveWhatsAppAssistantTurn(fb, uid, history, rawText, assistant.reply);
           const followUps = (assistant.followUps || []).slice(0, 3).map((item) => `• ${item}`).join("\n");
-          await sendWhatsAppMessage(fromPhone, `🧠 *Pulsinho*\n${assistant.reply}${followUps ? `\n\nVocê também pode perguntar:\n${followUps}` : ""}`);
+          if (assistant.proposedAction?.requiresConfirmation) await savePendingAssistantAction(fb, uid, assistant.proposedAction);
+          const confirmation = assistant.proposedAction?.requiresConfirmation ? `\n\n🔐 *Confirmação necessária*\n${assistant.proposedAction.summary || assistant.proposedAction.label}\nResponda *CONFIRMAR* para autorizar ou *CANCELAR*.` : "";
+          await sendWhatsAppMessage(fromPhone, `🧠 *Pulsinho*\n${assistant.reply}${confirmation}${followUps ? `\n\nVocê também pode perguntar:\n${followUps}` : ""}`);
           return respondOk();
         }
       }

@@ -21,7 +21,23 @@ function gatewayModels(providerPreference = "auto") {
   return [...unique.filter((model) => model.startsWith(preferredPrefix)), ...unique.filter((model) => !model.startsWith(preferredPrefix))];
 }
 
-async function requestModel({ model, token, systemPrompt, userPrompt, label, timeoutMs }) {
+function normalizeMessages(messages, userPrompt) {
+  const normalized = Array.isArray(messages)
+    ? messages
+        .filter((message) => ["user", "assistant"].includes(message?.role))
+        .map((message) => ({
+          role: message.role,
+          content: String(message.content || "").trim().slice(0, 2000),
+        }))
+        .filter((message) => message.content)
+        .slice(-12)
+    : [];
+  const current = String(userPrompt || "").trim();
+  if (current && normalized.at(-1)?.content !== current) normalized.push({ role: "user", content: current });
+  return normalized;
+}
+
+async function requestModel({ model, token, systemPrompt, userPrompt, messages, label, timeoutMs }) {
   const startedAt = Date.now();
   try {
     const response = await fetch("https://ai-gateway.vercel.sh/v1/chat/completions", {
@@ -35,9 +51,9 @@ async function requestModel({ model, token, systemPrompt, userPrompt, label, tim
         model,
         messages: [
           { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
+          ...normalizeMessages(messages, userPrompt),
         ],
-        max_tokens: 700,
+        max_tokens: 900,
       }),
     });
     if (!response.ok) {
@@ -56,16 +72,16 @@ async function requestModel({ model, token, systemPrompt, userPrompt, label, tim
   }
 }
 
-async function fetchGatewayJson({ systemPrompt, userPrompt, label = "assistant", timeoutMs = 15000, providerPreference = "auto" }) {
+async function fetchGatewayJson({ systemPrompt, userPrompt, messages, label = "assistant", timeoutMs = 15000, providerPreference = "auto" }) {
   const token = gatewayCredential();
   const models = gatewayModels(providerPreference);
   if (!token || !models.length) return { ok: false, status: 503, error: "ai_gateway_not_configured" };
   let last = { ok: false, status: 502, error: "ai_gateway_failed" };
   for (const model of models) {
-    last = await requestModel({ model, token, systemPrompt, userPrompt, label, timeoutMs });
+    last = await requestModel({ model, token, systemPrompt, userPrompt, messages, label, timeoutMs });
     if (last.ok) return last;
   }
   return last;
 }
 
-module.exports = { fetchGatewayJson, gatewayCredential, gatewayModels };
+module.exports = { fetchGatewayJson, gatewayCredential, gatewayModels, normalizeMessages };
