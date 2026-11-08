@@ -76,6 +76,8 @@
     <!-- Sistema visual definitivo. Carrega por ultimo para unificar as
          camadas historicas sem alterar a logica ou os dados do produto. -->
     <link rel="stylesheet" href="/src/product-system.css?v=2" />
+    <!-- Camada de experiência: uma linguagem única para todas as áreas. -->
+    <link rel="stylesheet" href="/src/experience.css?v=1" />
   </head>
   <body>
     <div class="app-shell">
@@ -294,11 +296,11 @@
                   <form id="pulseCommandForm" class="pulse-command-form">
                     <label for="pulseCommandInput">Pergunte ou peça uma ação</label>
                     <div class="pulse-command-control">
-                      <input id="pulseCommandInput" type="text" maxlength="180" autocomplete="off" placeholder="Ex.: mercado 86 reais ontem" />
+                      <input id="pulseCommandInput" type="text" maxlength="1600" autocomplete="off" placeholder="Converse com o Pulsinho…" />
                       <button type="submit" aria-label="Continuar">→</button>
                     </div>
                   </form>
-                  <p>Converse normalmente. O Pulsinho usa seus dados reais para responder e pede confirmação antes de alterar qualquer coisa.</p>
+                  <p>Pergunte, planeje ou peça uma ação com suas próprias palavras. O Pulsinho mantém o contexto da conversa e pede confirmação antes de alterar qualquer coisa.</p>
                   <div id="pulseCommandResponse" class="pulse-command-response" role="status" aria-live="polite" hidden></div>
                   <div class="pulse-connector-list">
                     <button type="button" data-view-shortcut="settings" data-settings-focus="whatsapp"><span class="pulse-status-dot"></span>WhatsApp conectado <b>Configurar</b></button>

@@ -52,6 +52,7 @@ module.exports = async (req, res) => {
     const result = await askPulsinho({
       state,
       question: body.question,
+      history: body.history,
       workspaceId,
       providerPreference: ["openai", "anthropic"].includes(body.providerPreference) ? body.providerPreference : state.aiProviderPreference,
     });

@@ -4,6 +4,7 @@ const { getAdmin } = require("./_lib/admin");
 
 const SERVER_OWNED_USER_COLLECTIONS = [
   "adminUsage",
+  "whatsappAssistantThreads",
 ];
 
 const SERVER_OWNED_USER_QUERY_COLLECTIONS = [

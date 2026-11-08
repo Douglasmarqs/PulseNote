@@ -37,6 +37,8 @@ import {
 // aviso simples na tela, com a mensagem exata do erro — assim dá pra
 // tirar print e mandar, em vez de "não funciona".
 let lastShownRuntimeError = "";
+const pulsinhoConversation = [];
+let pendingPulsinhoAction = null;
 function showRuntimeErrorBanner(message) {
   if (!message || message === lastShownRuntimeError) return; // evita repetir o mesmo aviso em loop
   lastShownRuntimeError = message;
@@ -1998,10 +2000,20 @@ function bindPremiumDashboard() {
   const response = document.querySelector("#pulseCommandResponse");
   response?.addEventListener("click", (event) => {
     const followUp = event.target.closest("[data-pulsinho-followup]");
-    if (!followUp || !commandInput) return;
-    commandInput.value = followUp.dataset.pulsinhoFollowup || "";
-    commandInput.focus();
-    commandForm?.requestSubmit();
+    if (followUp && commandInput) {
+      commandInput.value = followUp.dataset.pulsinhoFollowup || "";
+      commandInput.focus();
+      commandForm?.requestSubmit();
+      return;
+    }
+    if (event.target.closest("[data-pulsinho-action-confirm]")) {
+      confirmPulsinhoAction();
+      return;
+    }
+    if (event.target.closest("[data-pulsinho-action-cancel]")) {
+      pendingPulsinhoAction = null;
+      renderPulsinhoConversation();
+    }
   });
 
   document.querySelector("#finCategories")?.addEventListener("click", (event) => {
@@ -2044,36 +2056,102 @@ async function pulseApi(path, options = {}) {
   return payload;
 }
 
-function renderPulsinhoAnswer(payload) {
+function renderPulsinhoConversation({ loading = false, error = "" } = {}) {
   const root = document.querySelector("#pulseCommandResponse");
   if (!root) return;
-  root.classList.remove("is-loading");
   root.hidden = false;
-  const followUps = Array.isArray(payload.followUps) ? payload.followUps : [];
-  root.innerHTML = `<strong>Pulsinho</strong><span>${escapeHtml(payload.reply || "Não encontrei uma resposta segura com os dados disponíveis.")}</span>${followUps.length ? `<div class="pulse-command-followups">${followUps.map((item) => `<button type="button" data-pulsinho-followup="${escapeHtml(item)}">${escapeHtml(item)}</button>`).join("")}</div>` : ""}`;
+  root.classList.toggle("is-loading", loading);
+  const messages = pulsinhoConversation.map((message) => {
+    const label = message.role === "user" ? "Você" : "Pulsinho";
+    const provider = message.role === "assistant" && message.provider
+      ? `<small>${escapeHtml(message.provider === "pulse-engine" ? "Pulse Engine" : message.provider)}</small>`
+      : "";
+    const followUps = message === pulsinhoConversation.at(-1) && Array.isArray(message.followUps) ? message.followUps : [];
+    return `<article class="pulse-chat-message pulse-chat-message--${message.role}"><div><strong>${label}</strong>${provider}</div><p>${escapeHtml(message.content)}</p>${followUps.length ? `<div class="pulse-command-followups">${followUps.map((item) => `<button type="button" data-pulsinho-followup="${escapeHtml(item)}">${escapeHtml(item)}</button>`).join("")}</div>` : ""}</article>`;
+  }).join("");
+  const action = pendingPulsinhoAction
+    ? `<section class="pulse-action-confirm"><span>Confirmação necessária</span><strong>${escapeHtml(pendingPulsinhoAction.summary || pendingPulsinhoAction.label)}</strong><div><button type="button" class="primary" data-pulsinho-action-confirm>${escapeHtml(pendingPulsinhoAction.label || "Confirmar ação")}</button><button type="button" data-pulsinho-action-cancel>Agora não</button></div></section>`
+    : "";
+  const loadingMessage = loading ? `<div class="pulse-chat-thinking" aria-label="Pulsinho está pensando"><i></i><i></i><i></i></div>` : "";
+  const errorMessage = error ? `<div class="pulse-chat-error">${escapeHtml(error)}</div>` : "";
+  root.innerHTML = `${messages}${action}${loadingMessage}${errorMessage}`;
+  root.scrollTop = root.scrollHeight;
 }
 
 async function askPulsinhoFromDashboard(question) {
-  const root = document.querySelector("#pulseCommandResponse");
   const input = document.querySelector("#pulseCommandInput");
-  if (root) {
-    root.hidden = false;
-    root.classList.add("is-loading");
-    root.textContent = "Analisando seus dados com segurança…";
-  }
+  const history = pulsinhoConversation.map(({ role, content }) => ({ role, content })).slice(-10);
+  pulsinhoConversation.push({ role: "user", content: question });
+  pendingPulsinhoAction = null;
+  if (input) input.value = "";
+  renderPulsinhoConversation({ loading: true });
   try {
     const payload = await pulseApi("/api/pulsinho", {
       method: "POST",
-      body: JSON.stringify({ question, workspaceId: activeWorkspaceId, providerPreference: state.aiProviderPreference || "auto" }),
+      body: JSON.stringify({ question, history, workspaceId: activeWorkspaceId, providerPreference: state.aiProviderPreference || "auto" }),
     });
-    renderPulsinhoAnswer(payload);
-    if (input) input.value = "";
+    pulsinhoConversation.push({
+      role: "assistant",
+      content: payload.reply || "Não encontrei uma resposta segura com os dados disponíveis.",
+      followUps: Array.isArray(payload.followUps) ? payload.followUps : [],
+      provider: payload.provider || "",
+    });
+    pendingPulsinhoAction = payload.proposedAction?.requiresConfirmation ? payload.proposedAction : null;
+    renderPulsinhoConversation();
   } catch (error) {
-    if (root) {
-      root.classList.remove("is-loading");
-      root.innerHTML = `<strong>Não consegui responder agora</strong><span>${error?.code === "ai_not_configured" || error?.code === "assistant_unavailable" ? "A IA conversacional ainda não está disponível neste ambiente. O simulador financeiro continua funcionando com seus dados reais." : "A conexão falhou. Seus dados não foram alterados; tente novamente em instantes."}</span>`;
-    }
+    renderPulsinhoConversation({
+      error: error?.code === "ai_not_configured" || error?.code === "assistant_unavailable"
+        ? "A IA conversacional ainda não está disponível neste ambiente. Seus dados não foram alterados."
+        : "A conexão falhou. Seus dados não foram alterados; tente novamente em instantes.",
+    });
   }
+}
+
+function validPulsinhoDate(value, fallback = todayIso) {
+  const date = String(value || "").trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : fallback;
+}
+
+function confirmPulsinhoAction() {
+  const action = pendingPulsinhoAction;
+  if (!action) return;
+  const payload = action.payload || {};
+  const title = String(payload.title || payload.description || "").trim().slice(0, 180);
+  if (action.type !== "navigate" && !title) {
+    showToast("Não foi possível confirmar: faltou um título ou descrição.");
+    return;
+  }
+
+  if (action.type === "create_task") {
+    state.tasks.unshift(createTask(title, "Pendente", ["Baixa", "Media", "Alta", "Urgente"].includes(payload.priority) ? payload.priority : "Media", validPulsinhoDate(payload.dueDate), "", String(payload.dueTime || "").slice(0, 5), Number(payload.reminder) || 15));
+  } else if (action.type === "create_event") {
+    state.events.push({ id: crypto.randomUUID(), title, date: validPulsinhoDate(payload.date), time: String(payload.time || "").slice(0, 5), location: String(payload.location || "Sem local").slice(0, 120), reminder: Number(payload.reminder) || 15, notes: String(payload.notes || "").slice(0, 500) });
+  } else if (action.type === "create_note") {
+    state.notes.unshift({ id: crypto.randomUUID(), title, description: String(payload.description || "").slice(0, 3000), category: String(payload.category || "Geral").slice(0, 60), folder: "Entrada", tags: [], priority: "Media", checklist: [], attachments: [], goal: "", observations: "", color: "blue", textColor: "", favorite: false, createdAt: todayIso, convertedToTaskId: "" });
+  } else if (action.type === "create_goal") {
+    state.goals.unshift({ id: crypto.randomUUID(), title, target: Math.max(1, Number(payload.target) || 100), current: Math.max(0, Number(payload.current) || 0), milestones: [] });
+  } else if (action.type === "create_transaction") {
+    const amount = Math.round(Math.abs(Number(payload.amount) || 0) * 100) / 100;
+    if (!amount) { showToast("Não foi possível confirmar: informe um valor válido."); return; }
+    const type = payload.type === "receita" ? "receita" : "despesa";
+    const category = String(payload.category || (type === "receita" ? "outros_receita" : "outros")).slice(0, 60);
+    state.finances.unshift({ id: crypto.randomUUID(), type, amount, category, description: title, date: validPulsinhoDate(payload.date), accountId: "", workspaceId: activeWorkspaceId });
+  } else if (action.type === "navigate") {
+    const target = ["dashboard", "finances", "planner", "notes", "autopilot", "settings"].includes(payload.target) ? payload.target : "dashboard";
+    setView(target);
+    pendingPulsinhoAction = null;
+    renderPulsinhoConversation();
+    return;
+  } else {
+    showToast("Essa ação ainda não é compatível com o PulseNote.");
+    return;
+  }
+
+  pendingPulsinhoAction = null;
+  saveState();
+  renderAll();
+  pulsinhoConversation.push({ role: "assistant", content: "Pronto. A ação foi confirmada e salva no PulseNote.", provider: "pulse-engine" });
+  renderPulsinhoConversation();
 }
 
 function parseMoneyInput(value) {

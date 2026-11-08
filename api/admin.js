@@ -315,6 +315,10 @@ async function integrationStatus(db) {
         detail: `Webhook: ${lastInboundAt ? `último evento ${lastInboundAt}` : "sem evento registrado"}; ${failedEvents} falha(s) nos últimos ${events.length} eventos`,
         lastEventAt: lastInboundAt, recentFailures: failedEvents },
       { id: "gemini", label: "Gemini", configured: configured(["GEMINI_API_KEY"]), detail: "Interpretação de texto" },
+      { id: "ai-gateway", label: "Pulsinho GPT / Claude", configured: configured(["AI_GATEWAY_OPENAI_MODEL", "AI_GATEWAY_ANTHROPIC_MODEL"]),
+        detail: configured(["AI_GATEWAY_OPENAI_MODEL", "AI_GATEWAY_ANTHROPIC_MODEL"])
+          ? "Modelos OpenAI e Anthropic configurados via Vercel AI Gateway"
+          : "Defina os modelos AI_GATEWAY_OPENAI_MODEL e AI_GATEWAY_ANTHROPIC_MODEL" },
       { id: "qstash", label: "QStash / lembretes", configured: configured(["QSTASH_CURRENT_SIGNING_KEY", "QSTASH_NEXT_SIGNING_KEY", "QSTASH_DESTINATION_URL"]),
         detail: `Última execução: ${reminders.lastRunAt || "nenhuma"}; estado: ${reminders.status || "desconhecido"}`,
         lastRunAt: reminders.lastRunAt || null, runStatus: reminders.status || "unknown" },
