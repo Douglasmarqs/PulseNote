@@ -45,3 +45,16 @@ final result: passed
 - Perguntas abertas: continuam usando o provedor configurado, com uma única tentativa curta no fallback Gemini e resposta operacional segura caso haja timeout ou HTTP 503.
 - Integrações preservadas: simulador “posso gastar?”, gráficos com detalhamento, contas/espaços compartilhados e permissões owner/editor/viewer.
 - Produção não promovida nesta rodada. O teste real de push com o aplicativo fechado continua sendo a última etapa.
+
+## Reconstrução por quadros — Dashboard — 11 de novembro de 2026
+
+- Fonte visual: `PulseNote-Visual-Pack/imagens/{claro,escuro}/{desktop,mobile}/02-dashboard.png`.
+- Escopo desta aprovação: somente Dashboard, conforme solicitado antes de avançar às demais telas.
+- Implementação: estrutura de desktop e mobile, temas claro/escuro, navegação, espaços financeiros, resumo de saldo/gastos, meta de orçamento, gráfico com períodos reais, compromissos, resultado do mês e Pulsinho conversacional.
+- Regressão automatizada: 174 de 174 testes aprovados.
+- Build estático do repositório: não se aplica; o projeto é estático com rewrites da Vercel e não possui `index.html` na raiz.
+- Bloqueio visual local: o navegador interno informou `Local browser use is disabled in Work settings`; portanto ainda não foi possível capturar a implementação nos mesmos viewports 1440 e 390.
+- Próxima validação: publicar somente esta tela em preview, abrir o preview e comparar com os quatro quadros antes de qualquer avanço.
+
+final result: blocked
+
