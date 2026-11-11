@@ -73,20 +73,20 @@ window.addEventListener("unhandledrejection", (event) => {
   showRuntimeErrorBanner(event.reason?.message || String(event.reason));
 });
 
-// ── Tema: Claro / Aurora / Automático ─────────────────────────────
+// ── Tema: Claro / Escuro / Eclipse / Automático ───────────────────
 // A escolha fica em localStorage (não depende de login/Firestore, então
 // funciona até na tela de login). Um script inline no <head> do HTML já
 // aplica isso antes da primeira pintura da tela, para nunca "piscar"
 // claro por engano; aqui só mantemos o valor sincronizado durante o uso
 // do app e ligamos os botões em Configurações > Aparência.
-// Obs.: o antigo tema "Escuro" foi removido (não estava funcionando bem)
-// — "Automático" em modo escuro agora usa a mesma paleta do "Aurora".
+// O identificador interno "aurora" representa o tema Escuro executivo;
+// ele é preservado para não quebrar preferências já salvas.
 const THEME_STORAGE_KEY = "pulsenote-theme";
 
 function syncThemeColorMeta(choice) {
   const isDark = choice === "aurora" || choice === "eclipse" || (choice !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
   const meta = document.getElementById("themeColorMeta");
-  if (meta) meta.setAttribute("content", choice === "eclipse" ? "#000000" : (isDark ? "#060a18" : "#f5f7fa"));
+  if (meta) meta.setAttribute("content", choice === "eclipse" ? "#060a13" : (isDark ? "#0a1020" : "#f7f8fc"));
   // Mantém o <meta name="color-scheme"> alinhado ao tema escolhido, para que
   // selects, calendário nativo, barra de rolagem etc. nunca fiquem brancos
   // por cima de um app configurado como escuro (ver comentário no <head>).
@@ -115,9 +115,8 @@ try {
 function getSavedTheme() {
   try {
     const t = localStorage.getItem(THEME_STORAGE_KEY);
-    // Valor antigo "dark", de quem já tinha escolhido o extinto tema
-    // "Escuro", cai automaticamente em "system" (que agora é o Aurora
-    // quando o aparelho está escuro) — sem quebrar nada pra quem já usava.
+    // Valores antigos continuam caindo em "system", sem quebrar quem já
+    // usava uma versão anterior do seletor de aparência.
     return t === "light" || t === "aurora" || t === "eclipse" ? t : "system";
   } catch { return "system"; }
 }
@@ -339,7 +338,8 @@ async function logout() {
 // ── Guarda de autenticação + carregamento em tempo real ───────
 // Esta é a peça central: o app só é exibido depois de confirmar
 // que existe um usuário logado, e os dados vêm sempre do Firestore.
-const designPreviewRequested = new URLSearchParams(window.location.search).get("designPreview") === "1";
+const designPreviewMode = new URLSearchParams(window.location.search).get("designPreview") || "";
+const designPreviewRequested = ["1", "worst"].includes(designPreviewMode);
 const designPreviewHostAllowed = ["localhost", "127.0.0.1"].includes(window.location.hostname)
   || /^pulse-note-5erj-[a-z0-9-]+-douglas-projects-c831a9fc\.vercel\.app$/i.test(window.location.hostname);
 // O modo de demonstração usa somente dados fictícios e existe para QA visual.
@@ -354,12 +354,12 @@ const appReady = new Promise((resolve) => {
       if (isLocalDesignPreview) {
         currentUser = {
           uid: "local-design-preview",
-          displayName: "Douglas Marques",
-          email: "preview@pulsenote.local",
+          displayName: designPreviewMode === "worst" ? "Aleksandra Wiśniewska-Kowalczyk de Albuquerque" : "Douglas Marques",
+          email: designPreviewMode === "worst" ? "bartholomew.fitzgerald@northwind-industries-holdings.example.com" : "preview@pulsenote.local",
           emailVerified: true,
           getIdToken: async () => null,
         };
-        state = createDesignPreviewState();
+        state = createDesignPreviewState(designPreviewMode);
         observedState = cloneState(state);
         if (!resolved) { resolved = true; resolve(); }
         return;
@@ -715,6 +715,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   if (!currentUser) return; // já foi redirecionado para login.html
   if (!currentUser.emailVerified) return; // gate de verificação já está sendo exibido
+  mountDesignPreviewToggle();
 
   const now = new Date();
   const hour = now.getHours();
@@ -1835,11 +1836,11 @@ function loadDefaultState() {
   };
 }
 
-function createDesignPreviewState() {
+function createDesignPreviewState(mode = "1") {
   const monthKey = todayIso.slice(0, 7);
   const day = Number(todayIso.slice(8, 10));
   const dateForDay = (value) => `${monthKey}-${String(Math.max(1, Math.min(28, value))).padStart(2, "0")}`;
-  return normalizeState({
+  const preview = normalizeState({
     ...loadDefaultState(),
     tasks: [
       { id: "preview-task-1", title: "Finalizar relatório mensal", status: "Pendente", priority: "Alta", dueDate: todayIso, time: "09:30", subtasks: [], recurrence: null },
@@ -1861,6 +1862,38 @@ function createDesignPreviewState() {
       { id: "preview-rec-2", description: "Streaming", amount: 59.90, type: "despesa", categoryId: "assinaturas", day: Math.min(28, day + 7), skippedMonths: [] },
     ],
   });
+  if (mode !== "worst") return preview;
+  preview.tasks.unshift({
+    id: "preview-task-worst",
+    title: "Revisar a proposta comercial internacional com condições de pagamento, responsabilidades e observações da equipe multidisciplinar",
+    status: "Pendente",
+    priority: "Urgente",
+    dueDate: todayIso,
+    time: "23:59",
+    subtasks: [],
+    recurrence: null,
+  });
+  preview.events.unshift({
+    id: "preview-event-worst",
+    title: "Reunião extraordinária de planejamento financeiro familiar e revisão do orçamento anual",
+    date: todayIso,
+    time: "08:00",
+    location: "Centro Empresarial Antônio Carlos Jobim — Torre Internacional, sala 1284",
+    notes: "",
+    reminderMinutes: 1440,
+  });
+  preview.goals.unshift({ id: "preview-goal-worst", title: "Concluir a reserva de emergência da família antes da mudança internacional", current: 999999, target: 1000000, milestones: [] });
+  preview.finances.unshift({ id: "preview-fin-worst", type: "despesa", amount: 999999.99, category: "outros", description: "Transferência internacional extraordinária", date: todayIso });
+  return normalizeState(preview);
+}
+
+function mountDesignPreviewToggle() {
+  if (!isLocalDesignPreview || document.querySelector(".design-preview-toggle")) return;
+  const toggle = document.createElement("nav");
+  toggle.className = "design-preview-toggle";
+  toggle.setAttribute("aria-label", "Dados de teste do layout");
+  toggle.innerHTML = `<a href="?designPreview=1" class="${designPreviewMode === "1" ? "active" : ""}">Demo</a><a href="?designPreview=worst" class="${designPreviewMode === "worst" ? "active" : ""}">Pior caso</a>`;
+  document.body.appendChild(toggle);
 }
 
 // Salva mudanças localmente de imediato e agenda o envio para o Firestore

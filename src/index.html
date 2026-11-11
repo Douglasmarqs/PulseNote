@@ -17,7 +17,7 @@
          "vencida" pela media query certa). Agora o valor é calculado
          aqui, de forma síncrona, junto com o data-theme, para não
          piscar; e o app.js mantém sincronizado quando o tema muda. -->
-    <meta name="theme-color" id="themeColorMeta" content="#f5f7fa" />
+    <meta name="theme-color" id="themeColorMeta" content="#f7f8fc" />
     <!-- Diz ao navegador/OS qual esquema de cor a página está usando de fato,
          independente do tema do aparelho. Sem isso, controles nativos (menu
          do <select>, calendário do <input type="date">, barra de rolagem,
@@ -32,7 +32,7 @@
           var isDark = t === "aurora" || t === "eclipse" || ((t !== "light") && window.matchMedia("(prefers-color-scheme: dark)").matches);
           if (t === "light" || t === "aurora" || t === "eclipse") document.documentElement.setAttribute("data-theme", t);
           var meta = document.getElementById("themeColorMeta");
-          if (meta) meta.setAttribute("content", t === "eclipse" ? "#000000" : (isDark ? "#060a18" : "#f5f7fa"));
+          if (meta) meta.setAttribute("content", t === "eclipse" ? "#060a13" : (isDark ? "#0a1020" : "#f7f8fc"));
           var csMeta = document.getElementById("colorSchemeMeta");
           if (csMeta) csMeta.setAttribute("content", isDark ? "dark" : "light");
           // Alguns atalhos/PWAs do iOS restaurados reportam os insets da
@@ -77,7 +77,7 @@
          camadas historicas sem alterar a logica ou os dados do produto. -->
     <link rel="stylesheet" href="/src/product-system.css?v=2" />
     <!-- Camada de experiência: uma linguagem única para todas as áreas. -->
-    <link rel="stylesheet" href="/src/experience.css?v=1" />
+    <link rel="stylesheet" href="/src/experience.css?v=2" />
   </head>
   <body>
     <div class="app-shell">
@@ -1411,7 +1411,7 @@
                   <span class="theme-toggle-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2.5v2.3"/><path d="M12 19.2v2.3"/><path d="m4.6 4.6 1.6 1.6"/><path d="m17.8 17.8 1.6 1.6"/><path d="M2.5 12h2.3"/><path d="M19.2 12h2.3"/><path d="m4.6 19.4 1.6-1.6"/><path d="m17.8 6.2 1.6-1.6"/></svg></span><span>Claro</span>
                 </button>
                 <button type="button" class="theme-toggle-btn" data-theme-choice="aurora" role="radio">
-                  <span class="theme-toggle-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 13.5a8.5 8.5 0 1 1-9-10.9 7 7 0 0 0 9 10.9z"/></svg></span><span>Aurora</span>
+                  <span class="theme-toggle-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 13.5a8.5 8.5 0 1 1-9-10.9 7 7 0 0 0 9 10.9z"/></svg></span><span>Escuro</span>
                 </button>
                 <button type="button" class="theme-toggle-btn" data-theme-choice="eclipse" role="radio">
                   <span class="theme-toggle-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="12" r="7"/><circle cx="14.2" cy="12" r="7" fill="currentColor" stroke="none"/></svg></span><span>Eclipse</span>
