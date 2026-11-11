@@ -1882,8 +1882,9 @@ function createDesignPreviewState(mode = "1") {
       { id: "preview-fin-4", type: "despesa", amount: 287.90, category: "contas", description: "Energia e internet", date: dateForDay(Math.max(9, day - 2)) },
     ],
     finRecurrents: [
-      { id: "preview-rec-1", description: "Fatura do cartão", amount: 1490, type: "despesa", categoryId: "outros", day: Math.min(28, day + 4), skippedMonths: [] },
-      { id: "preview-rec-2", description: "Streaming", amount: 59.90, type: "despesa", categoryId: "assinaturas", day: Math.min(28, day + 7), skippedMonths: [] },
+      { id: "preview-rec-rent", description: "Aluguel", amount: 1600, type: "despesa", categoryId: "moradia", day, skippedMonths: [] },
+      { id: "preview-rec-card", description: "Fatura do cartão", amount: 1240, type: "despesa", categoryId: "outros", day: Math.min(28, day + 5), skippedMonths: [] },
+      { id: "preview-rec-internet", description: "Internet", amount: 149.90, type: "despesa", categoryId: "contas", day: Math.min(28, day + 7), skippedMonths: [] },
     ],
   });
   if (mode !== "worst") return preview;
@@ -1974,8 +1975,13 @@ function bindNavigation() {
       setView(view);
       const plannerFocus = button.dataset.plannerFocus;
       const settingsFocus = button.dataset.settingsFocus;
+      const financeFocus = button.dataset.financeFocus;
       if (view === "settings" && settingsFocus === "whatsapp") {
         requestAnimationFrame(() => document.querySelector("#whatsappIntegrationCard")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+        return;
+      }
+      if (view === "finances" && financeFocus === "analysis") {
+        requestAnimationFrame(() => document.querySelector('[data-fin-tab="analise"]')?.click());
         return;
       }
       if (view !== "planner" || !plannerFocus) return;
@@ -2006,6 +2012,19 @@ function bindPremiumDashboard() {
     dashboardBalancePeriod = Math.max(7, Number(button.dataset.dashboardPeriod) || 30);
     document.querySelectorAll("[data-dashboard-period]").forEach((item) => item.classList.toggle("active", item === button));
     renderDashboardBalanceChart(dashboardBalancePeriod);
+  });
+
+  document.querySelector("#pulseCategoryBars")?.addEventListener("click", (event) => {
+    const category = event.target.closest("[data-fin-category]")?.dataset.finCategory;
+    if (category) openFinanceCategory(category);
+  });
+
+  document.querySelector("#pulseTodayAgenda")?.addEventListener("click", (event) => {
+    const item = event.target.closest("[data-dashboard-target]");
+    if (!item) return;
+    const target = item.dataset.dashboardTarget;
+    setView(target);
+    if (target === "finances") requestAnimationFrame(() => document.querySelector('[data-fin-tab="automacao"]')?.click());
   });
 
   const commandForm = document.querySelector("#pulseCommandForm");
@@ -3463,7 +3482,7 @@ function renderPremiumDashboard({ monthKey, monthEntries, monthReceitas, monthDe
   const futureRecurring = recurring.filter((item) => {
     if (isRecurrentSkipped(item, monthKey)) return false;
     const dueDay = Math.min(Number(item.day) || 1, daysInMonth);
-    if (dueDay <= currentDay) return false;
+      if (dueDay < currentDay) return false;
     return !(state.finances || []).some((entry) =>
       entry.date?.startsWith(monthKey)
       && entry.description === item.description
@@ -3508,6 +3527,7 @@ function renderPremiumDashboard({ monthKey, monthEntries, monthReceitas, monthDe
     balanceTrendEl.textContent = `${balanceTrend >= 0 ? "↑" : "↓"} ${Math.abs(balanceTrend).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;
     balanceTrendEl.dataset.tone = balanceTrend >= 0 ? "positive" : "negative";
   }
+  renderDashboardCategories(monthEntries, monthDespesas);
   const projectedEl = document.querySelector("#pulseProjectedBalance");
   const safeSpendEl = document.querySelector("#pulseSafeSpend");
   if (projectedEl) {
@@ -3543,6 +3563,68 @@ function renderPremiumDashboard({ monthKey, monthEntries, monthReceitas, monthDe
   renderDashboardBalanceChart(dashboardBalancePeriod);
   renderPremiumTodayAgenda(futureRecurring, monthKey, daysInMonth);
   refreshDashboardForecast();
+}
+
+const dashboardCategoryIcons = {
+  moradia: "ph-house-line",
+  contas: "ph-lightbulb",
+  manutencao: "ph-wrench",
+  alimentacao: "ph-hamburger",
+  mercado: "ph-shopping-cart",
+  transporte: "ph-car",
+  combustivel: "ph-gas-pump",
+  saude: "ph-first-aid",
+  academia: "ph-barbell",
+  beleza: "ph-sparkle",
+  educacao: "ph-book-open",
+  lazer: "ph-film-strip",
+  viagem: "ph-airplane-tilt",
+  pets: "ph-paw-print",
+  familia: "ph-users-three",
+  compras: "ph-shopping-bag",
+  assinaturas: "ph-repeat",
+  outros: "ph-dots-three-circle",
+};
+
+function dashboardCategoryIcon(categoryId, description = "") {
+  const normalized = String(description).toLocaleLowerCase("pt-BR");
+  if (/cart[aã]o|fatura/.test(normalized)) return "ph-credit-card";
+  if (/internet|wifi|banda larga/.test(normalized)) return "ph-wifi-high";
+  if (/aluguel|condom[ií]nio|moradia/.test(normalized)) return "ph-house-line";
+  if (/energia|luz|eletric/.test(normalized)) return "ph-lightning";
+  return dashboardCategoryIcons[categoryId] || "ph-dots-three-circle";
+}
+
+function renderDashboardCategories(monthEntries, monthExpenses) {
+  const root = document.querySelector("#pulseCategoryBars");
+  const lead = document.querySelector("#pulseCategoryLeadPercent");
+  if (!root) return;
+  const grouped = new Map();
+  monthEntries.filter((entry) => entry.type === "despesa").forEach((entry) => {
+    const id = entry.category || "outros";
+    grouped.set(id, (grouped.get(id) || 0) + Number(entry.amount || 0));
+  });
+  const categories = [...grouped.entries()]
+    .map(([id, amount]) => ({ id, amount, percent: monthExpenses > 0 ? Math.round((amount / monthExpenses) * 100) : 0 }))
+    .sort((a, b) => b.amount - a.amount)
+    .slice(0, 6);
+  if (lead) lead.textContent = `${categories[0]?.percent || 0}%`;
+  if (!categories.length) {
+    root.innerHTML = `<p class="reference-category-empty">Registre gastos para acompanhar a distribuição por categoria.</p>`;
+    return;
+  }
+  const maxPercent = Math.max(1, ...categories.map((category) => category.percent));
+  root.innerHTML = categories.map((category) => {
+    const rawLabel = findCategory(category.id).label || "Outros";
+    const label = rawLabel.replace(/^[^\p{L}\p{N}]+/u, "").trim() || "Outros";
+    const height = Math.max(18, Math.round((category.percent / maxPercent) * 100));
+    return `<button type="button" class="reference-category-item" data-fin-category="${escapeHtml(category.id)}" aria-label="${escapeHtml(label)}: ${category.percent}% dos gastos">
+      <b>${category.percent}%</b>
+      <span class="reference-category-column"><i style="height:${height}%"></i></span>
+      <span class="reference-category-icon"><i class="ph ${dashboardCategoryIcon(category.id)}" aria-hidden="true"></i></span>
+      <small>${escapeHtml(label)}</small>
+    </button>`;
+  }).join("");
 }
 
 function renderDashboardBalanceChart(periodDays = 30) {
@@ -3778,6 +3860,14 @@ function renderPremiumForecast(monthKey, startingBalance, futureRecurring) {
   point.setAttribute("cy", last[1].toFixed(1));
 }
 
+function formatDashboardCommitmentDate(date) {
+  const parsed = new Date(`${date}T12:00:00`);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return new Intl.DateTimeFormat("pt-BR", { weekday: "short", day: "2-digit", month: "short" })
+    .format(parsed)
+    .replace(/\./g, "");
+}
+
 function renderPremiumTodayAgenda(futureRecurring = [], monthKey = todayIso.slice(0, 7), daysInMonth = 31) {
   const container = document.querySelector("#pulseTodayAgenda");
   if (!container) return;
@@ -3785,34 +3875,40 @@ function renderPremiumTodayAgenda(futureRecurring = [], monthKey = todayIso.slic
   const recurringItems = futureRecurring.slice(0, 3).map((item) => {
     const dueDay = Math.min(Number(item.day) || 1, daysInMonth);
     const daysUntil = Math.max(0, dueDay - todayDay);
+    const dueDate = `${monthKey}-${String(dueDay).padStart(2, "0")}`;
+    const relativeDate = daysUntil === 0 ? "Vence hoje" : daysUntil === 1 ? "Vence amanhã" : `Vence em ${daysUntil} dias`;
     return {
-      time: daysUntil === 0 ? "Hoje" : daysUntil === 1 ? "Amanhã" : `${daysUntil}d`,
+      icon: dashboardCategoryIcon(item.categoryId, item.description),
       title: item.description || "Compromisso financeiro",
-      detail: daysUntil === 0 ? "Vence hoje" : `Vence em ${daysUntil} dias`,
+      detail: `${relativeDate} • ${formatDashboardCommitmentDate(dueDate)}`,
       amount: formatCurrency(Number(item.amount || 0)),
+      target: "finances",
     };
   });
   const todayTasks = (state.tasks || []).filter((task) =>
     task.dueDate === todayIso && task.status !== "Concluida" && task.status !== "Cancelada"
   ).map((task) => ({
-    time: task.time || "Hoje",
+    icon: "ph-check-circle",
     title: task.title,
-    detail: `Tarefa · ${task.priority || "prioridade normal"}`,
+    detail: `${task.time ? `${task.time} • ` : ""}Tarefa • ${task.priority || "prioridade normal"}`,
     amount: "",
+    target: "planner",
   }));
   const todayEvents = (state.events || []).filter((event) => event.date === todayIso).map((event) => ({
-    time: event.time || "Hoje",
+    icon: "ph-calendar-dots",
     title: event.title,
-    detail: event.location ? `Compromisso · ${event.location}` : "Compromisso",
+    detail: `${event.time ? `${event.time} • ` : ""}${event.location ? `Compromisso • ${event.location}` : "Compromisso"}`,
     amount: "",
+    target: "planner",
   }));
   let items = [...recurringItems, ...todayEvents, ...todayTasks];
   if (!items.length) {
     items = (state.events || []).filter((event) => event.date > todayIso).sort(sortEvent).slice(0, 3).map((event) => ({
-      time: formatDate(event.date),
+      icon: "ph-calendar-dots",
       title: event.title,
-      detail: event.location ? `Próximo · ${event.location}` : "Próximo compromisso",
+      detail: `${formatDashboardCommitmentDate(event.date)}${event.location ? ` • ${event.location}` : ""}`,
       amount: "",
+      target: "planner",
     }));
   }
   items = items.slice(0, 3);
@@ -3821,12 +3917,11 @@ function renderPremiumTodayAgenda(futureRecurring = [], monthKey = todayIso.slic
     return;
   }
   container.innerHTML = items.map((item) => `
-    <div class="pulse-timeline-item">
-      <span class="pulse-timeline-time">${escapeHtml(item.time)}</span>
-      <span class="pulse-timeline-node" aria-hidden="true"></span>
+    <button type="button" class="pulse-timeline-item" data-dashboard-target="${escapeHtml(item.target)}">
+      <span class="pulse-timeline-time" aria-hidden="true"><i class="ph ${escapeHtml(item.icon)}"></i></span>
       <span class="pulse-timeline-copy"><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.detail)}</span></span>
       ${item.amount ? `<b class="pulse-timeline-amount">${escapeHtml(item.amount)}</b>` : ""}
-    </div>
+    </button>
   `).join("");
 }
 
