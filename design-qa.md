@@ -58,3 +58,14 @@ final result: passed
 
 final result: blocked
 
+## Dashboard — revisão de legibilidade e compromissos
+
+- Escala tipográfica ampliada no cabeçalho, resumos, gráficos, compromissos, resultado mensal e Pulsinho.
+- “Gastos por categoria” restaurado no desktop com dados reais, ícones semânticos e atalho para a análise financeira.
+- “Seus compromissos de hoje” reconstruído com ícones por tipo (moradia, cartão, internet, tarefa e agenda), prazo, data, valor e navegação para a área correspondente.
+- Dados de demonstração alinhados à referência visual: Aluguel, Fatura do cartão e Internet.
+- Verificação automatizada: `npm run build` — 174/174 testes aprovados.
+- Verificação visual final: bloqueada até captura do navegador ficar disponível ou o usuário enviar a nova captura do preview.
+
+final result: blocked
+
