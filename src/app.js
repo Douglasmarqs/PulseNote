@@ -39,6 +39,7 @@ import {
 let lastShownRuntimeError = "";
 const pulsinhoConversation = [];
 let pendingPulsinhoAction = null;
+let dashboardBalancePeriod = 30;
 function showRuntimeErrorBanner(message) {
   if (!message || message === lastShownRuntimeError) return; // evita repetir o mesmo aviso em loop
   lastShownRuntimeError = message;
@@ -480,6 +481,21 @@ const viewTitles = {
   settings: "Configurações",
 };
 
+let topbarGreetingTitle = "Olá!";
+let topbarContextLabel = "Seu dia, sob controle.";
+let topbarFullDateLabel = "Hoje";
+
+function syncTopbar(view = activeView) {
+  if (!elements.viewTitle || !elements.todayLabel) return;
+  if (view === "dashboard") {
+    elements.viewTitle.textContent = topbarGreetingTitle;
+    elements.todayLabel.textContent = topbarContextLabel;
+  } else {
+    elements.viewTitle.textContent = viewTitles[view] || "PulseNote";
+    elements.todayLabel.textContent = topbarFullDateLabel;
+  }
+}
+
 let lastUsageArea = "";
 let lastUsageAt = 0;
 function trackUsageArea(area) {
@@ -729,7 +745,15 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   const user = getUser();
   const firstName = user?.name?.split(" ")[0] || "Usuário";
-  elements.todayLabel.textContent = `${greeting}, ${firstName} · ${dateStr}`;
+  topbarGreetingTitle = `${greeting}, ${firstName}! 👋`;
+  topbarContextLabel = "Aqui está o seu panorama de hoje.";
+  topbarFullDateLabel = `${greeting}, ${firstName} · ${dateStr}`;
+  syncTopbar(activeView);
+  const topbarDate = document.querySelector("#topbarDateShort");
+  if (topbarDate) {
+    topbarDate.dateTime = toLocalIso(now);
+    topbarDate.textContent = new Intl.DateTimeFormat("pt-BR", { weekday: "short", day: "2-digit", month: "short", year: "numeric" }).format(now);
+  }
 
   const greetingMascot = document.querySelector("#greetingMascot");
   if (greetingMascot) {
@@ -1976,8 +2000,25 @@ function bindPremiumDashboard() {
   });
   document.querySelector("#finWorkspaceSelect")?.addEventListener("change", (event) => setActiveFinanceWorkspace(event.target.value));
 
+  document.querySelector(".reference-period-tabs")?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-dashboard-period]");
+    if (!button) return;
+    dashboardBalancePeriod = Math.max(7, Number(button.dataset.dashboardPeriod) || 30);
+    document.querySelectorAll("[data-dashboard-period]").forEach((item) => item.classList.toggle("active", item === button));
+    renderDashboardBalanceChart(dashboardBalancePeriod);
+  });
+
   const commandForm = document.querySelector("#pulseCommandForm");
   const commandInput = document.querySelector("#pulseCommandInput");
+  if (!pulsinhoConversation.length) {
+    const firstName = getUser()?.name?.split(" ")[0] || "por aí";
+    pulsinhoConversation.push({
+      role: "assistant",
+      content: `Olá, ${firstName}! Como posso te ajudar hoje? Você pode pedir para criar tarefas, organizar sua rotina, registrar gastos ou analisar suas finanças.`,
+      provider: "pulse-engine",
+    });
+    renderPulsinhoConversation();
+  }
   commandForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const command = commandInput?.value.trim() || "";
@@ -2970,7 +3011,7 @@ function setView(view, { fromHistory = false } = {}) {
   });
   document.querySelectorAll(".view").forEach((section) => section.classList.remove("active-view"));
   target.classList.add("active-view");
-  elements.viewTitle.textContent = viewTitles[view];
+  syncTopbar(view);
   // Trocas de area precisam começar no topo imediatamente. O scroll suave
   // deixava o cabecalho parcialmente cortado durante a transicao, sobretudo
   // no mobile e em navegadores que preservam a posicao anterior.
@@ -3437,6 +3478,36 @@ function renderPremiumDashboard({ monthKey, monthEntries, monthReceitas, monthDe
   const safeSpend = Math.max(0, projectedBalance - safetyReserve);
 
   currentBalance.textContent = formatCurrency(monthSaldo);
+  const monthExpensesEl = document.querySelector("#pulseMonthExpenses");
+  const monthIncomeEl = document.querySelector("#pulseMonthIncome");
+  const resultExpensesEl = document.querySelector("#pulseResultExpenses");
+  if (monthExpensesEl) monthExpensesEl.textContent = formatCurrency(monthDespesas);
+  if (monthIncomeEl) monthIncomeEl.textContent = formatCurrency(monthReceitas);
+  if (resultExpensesEl) resultExpensesEl.textContent = formatCurrency(monthDespesas);
+
+  const budgetGoal = (state.finGoals || [])
+    .filter((goal) => (goal.workspaceId || "personal") === activeWorkspaceId)
+    .reduce((sum, goal) => sum + Math.max(0, Number(goal.limit) || 0), 0);
+  const budgetPercent = budgetGoal > 0 ? Math.min(100, Math.round((monthDespesas / budgetGoal) * 100)) : 0;
+  const budgetPercentEl = document.querySelector("#pulseBudgetPercent");
+  const budgetGoalEl = document.querySelector("#pulseBudgetGoal");
+  const budgetProgressEl = document.querySelector("#pulseBudgetProgress");
+  if (budgetPercentEl) budgetPercentEl.textContent = `${budgetPercent}%`;
+  if (budgetGoalEl) budgetGoalEl.textContent = budgetGoal > 0 ? formatCurrency(budgetGoal) : "sem meta";
+  if (budgetProgressEl) budgetProgressEl.style.width = `${budgetPercent}%`;
+
+  const previousDate = new Date(year, month - 2, 1);
+  const previousKey = `${previousDate.getFullYear()}-${String(previousDate.getMonth() + 1).padStart(2, "0")}`;
+  const previousEntries = (state.finances || []).filter((entry) => entry.date?.startsWith(previousKey) && (entry.workspaceId || "personal") === activeWorkspaceId);
+  const previousIncome = previousEntries.filter((entry) => entry.type === "receita").reduce((sum, entry) => sum + Number(entry.amount || 0), 0);
+  const previousExpenses = previousEntries.filter((entry) => entry.type === "despesa").reduce((sum, entry) => sum + Number(entry.amount || 0), 0);
+  const previousBalance = getCarryOverBalance(previousKey, activeWorkspaceId) + previousIncome - previousExpenses;
+  const balanceTrend = previousBalance === 0 ? 0 : ((monthSaldo - previousBalance) / Math.abs(previousBalance)) * 100;
+  const balanceTrendEl = document.querySelector("#pulseBalanceTrend");
+  if (balanceTrendEl) {
+    balanceTrendEl.textContent = `${balanceTrend >= 0 ? "↑" : "↓"} ${Math.abs(balanceTrend).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;
+    balanceTrendEl.dataset.tone = balanceTrend >= 0 ? "positive" : "negative";
+  }
   const projectedEl = document.querySelector("#pulseProjectedBalance");
   const safeSpendEl = document.querySelector("#pulseSafeSpend");
   if (projectedEl) {
@@ -3469,9 +3540,89 @@ function renderPremiumDashboard({ monthKey, monthEntries, monthReceitas, monthDe
     ? `${formatCurrency(futureExpense)} em despesas e ${formatCurrency(futureIncome)} em receitas até o fechamento.`
     : "Cadastre contas recorrentes para tornar a projeção mais precisa.";
 
-  renderPremiumForecast(monthKey, monthSaldo, futureRecurring);
-  renderPremiumTodayAgenda();
+  renderDashboardBalanceChart(dashboardBalancePeriod);
+  renderPremiumTodayAgenda(futureRecurring, monthKey, daysInMonth);
   refreshDashboardForecast();
+}
+
+function renderDashboardBalanceChart(periodDays = 30) {
+  const line = document.querySelector("#pulseForecastLine");
+  const area = document.querySelector("#pulseForecastArea");
+  const point = document.querySelector("#pulseForecastPoint");
+  if (!line || !area || !point) return;
+
+  const end = new Date(`${todayIso}T12:00:00`);
+  const start = new Date(end);
+  start.setDate(start.getDate() - (periodDays - 1));
+  const startIso = toLocalIso(start);
+  const entries = (state.finances || [])
+    .filter((entry) => (entry.workspaceId || "personal") === activeWorkspaceId && entry.date >= startIso && entry.date <= todayIso)
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+
+  const currentMonthKey = todayIso.slice(0, 7);
+  const currentMonthEntries = (state.finances || []).filter((entry) => entry.date?.startsWith(currentMonthKey) && (entry.workspaceId || "personal") === activeWorkspaceId);
+  const currentBalance = getCarryOverBalance(currentMonthKey, activeWorkspaceId)
+    + currentMonthEntries.reduce((sum, entry) => sum + (entry.type === "receita" ? Number(entry.amount || 0) : -Number(entry.amount || 0)), 0);
+  const periodDelta = entries.reduce((sum, entry) => sum + (entry.type === "receita" ? Number(entry.amount || 0) : -Number(entry.amount || 0)), 0);
+  let running = currentBalance - periodDelta;
+  const daily = new Map();
+  entries.forEach((entry) => daily.set(entry.date, (daily.get(entry.date) || 0) + (entry.type === "receita" ? Number(entry.amount || 0) : -Number(entry.amount || 0))));
+
+  const points = [];
+  for (let index = 0; index < periodDays; index += 1) {
+    const day = new Date(start);
+    day.setDate(start.getDate() + index);
+    const iso = toLocalIso(day);
+    running += daily.get(iso) || 0;
+    points.push({ date: day, balance: running });
+  }
+
+  const values = points.map((item) => item.balance);
+  let min = Math.min(...values);
+  let max = Math.max(...values);
+  if (min === max) { min -= Math.max(100, Math.abs(min) * .08); max += Math.max(100, Math.abs(max) * .08); }
+  const padding = Math.max(50, (max - min) * .12);
+  min -= padding;
+  max += padding;
+  const range = Math.max(1, max - min);
+  const coords = points.map((item, index) => [
+    (index / Math.max(1, points.length - 1)) * 640,
+    202 - ((item.balance - min) / range) * 184,
+  ]);
+  const path = coords.map(([x, y], index) => `${index ? "L" : "M"}${x.toFixed(1)} ${y.toFixed(1)}`).join(" ");
+  const last = coords.at(-1) || [640, 110];
+  line.setAttribute("d", path);
+  area.setAttribute("d", `${path} L${last[0].toFixed(1)} 220 L0 220 Z`);
+  point.setAttribute("cx", last[0].toFixed(1));
+  point.setAttribute("cy", last[1].toFixed(1));
+
+  const axisValues = [max, max - range * .25, max - range * .5, max - range * .75, min];
+  ["pulseChartMax", "pulseChartMidHigh", "pulseChartMid", "pulseChartMidLow", "pulseChartMin"].forEach((id, index) => {
+    const element = document.querySelector(`#${id}`);
+    if (element) element.textContent = formatDashboardAxisCurrency(axisValues[index]);
+  });
+  const value = document.querySelector("#pulseChartCurrent");
+  if (value) value.textContent = formatCurrency(currentBalance);
+  const quarterDate = points[Math.floor((points.length - 1) * .33)]?.date || start;
+  const halfDate = points[Math.floor((points.length - 1) * .66)]?.date || end;
+  const labels = [
+    ["pulseChartStart", start],
+    ["pulseChartQuarter", quarterDate],
+    ["pulseChartHalf", halfDate],
+    ["pulseChartEnd", end],
+  ];
+  labels.forEach(([id, date]) => {
+    const element = document.querySelector(`#${id}`);
+    if (element) element.textContent = new Intl.DateTimeFormat("pt-BR", { day: "numeric", month: "short" }).format(date).replace(".", "");
+  });
+}
+
+function formatDashboardAxisCurrency(value) {
+  const absolute = Math.abs(Number(value) || 0);
+  const compact = absolute >= 1000
+    ? `R$ ${(absolute / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} mil`
+    : `R$ ${absolute.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}`;
+  return value < 0 ? `−${compact}` : compact;
 }
 
 async function refreshDashboardForecast(force = false) {
@@ -3502,7 +3653,7 @@ async function refreshDashboardForecast(force = false) {
     if (commitmentEl) commitmentEl.textContent = commitment
       ? `Próximo compromisso: ${commitment.description} · ${formatCurrency(commitment.amount)} · ${formatDate(commitment.date)}`
       : "Nenhum compromisso financeiro próximo até o fim do período.";
-    renderPremiumForecastTimeline(forecast);
+    if (!document.querySelector(".reference-dashboard")) renderPremiumForecastTimeline(forecast);
   } catch {
     // Mantém a projeção local já renderizada; falha de rede nunca esvazia o painel.
   }
@@ -3627,30 +3778,44 @@ function renderPremiumForecast(monthKey, startingBalance, futureRecurring) {
   point.setAttribute("cy", last[1].toFixed(1));
 }
 
-function renderPremiumTodayAgenda() {
+function renderPremiumTodayAgenda(futureRecurring = [], monthKey = todayIso.slice(0, 7), daysInMonth = 31) {
   const container = document.querySelector("#pulseTodayAgenda");
   if (!container) return;
+  const todayDay = new Date().getDate();
+  const recurringItems = futureRecurring.slice(0, 3).map((item) => {
+    const dueDay = Math.min(Number(item.day) || 1, daysInMonth);
+    const daysUntil = Math.max(0, dueDay - todayDay);
+    return {
+      time: daysUntil === 0 ? "Hoje" : daysUntil === 1 ? "Amanhã" : `${daysUntil}d`,
+      title: item.description || "Compromisso financeiro",
+      detail: daysUntil === 0 ? "Vence hoje" : `Vence em ${daysUntil} dias`,
+      amount: formatCurrency(Number(item.amount || 0)),
+    };
+  });
   const todayTasks = (state.tasks || []).filter((task) =>
     task.dueDate === todayIso && task.status !== "Concluida" && task.status !== "Cancelada"
   ).map((task) => ({
     time: task.time || "Hoje",
     title: task.title,
     detail: `Tarefa · ${task.priority || "prioridade normal"}`,
+    amount: "",
   }));
   const todayEvents = (state.events || []).filter((event) => event.date === todayIso).map((event) => ({
     time: event.time || "Hoje",
     title: event.title,
     detail: event.location ? `Compromisso · ${event.location}` : "Compromisso",
+    amount: "",
   }));
-  let items = [...todayEvents, ...todayTasks];
+  let items = [...recurringItems, ...todayEvents, ...todayTasks];
   if (!items.length) {
     items = (state.events || []).filter((event) => event.date > todayIso).sort(sortEvent).slice(0, 3).map((event) => ({
       time: formatDate(event.date),
       title: event.title,
       detail: event.location ? `Próximo · ${event.location}` : "Próximo compromisso",
+      amount: "",
     }));
   }
-  items = items.sort((a, b) => String(a.time).localeCompare(String(b.time))).slice(0, 4);
+  items = items.slice(0, 3);
   if (!items.length) {
     container.innerHTML = `<div class="pulse-empty">Seu dia está livre. Use “Adicionar” para planejar a próxima ação.</div>`;
     return;
@@ -3660,6 +3825,7 @@ function renderPremiumTodayAgenda() {
       <span class="pulse-timeline-time">${escapeHtml(item.time)}</span>
       <span class="pulse-timeline-node" aria-hidden="true"></span>
       <span class="pulse-timeline-copy"><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.detail)}</span></span>
+      ${item.amount ? `<b class="pulse-timeline-amount">${escapeHtml(item.amount)}</b>` : ""}
     </div>
   `).join("");
 }
@@ -9015,4 +9181,5 @@ window.updateGoalProgress = updateGoalProgress;
 // silenciosamente não faziam nada.
 window.setView = setView;
 window.setNotesFolderFilter = setNotesFolderFilter;
+
 
