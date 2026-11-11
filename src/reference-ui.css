@@ -1,0 +1,403 @@
+/* ========================================================================
+   PulseNote Reference UI
+   Camada visual reconstruída a partir dos quadros aprovados (desktop 1440
+   e mobile 390, temas claro e escuro). Mantém o DOM funcional e os dados
+   existentes; este arquivo deve continuar sendo a última folha carregada.
+   ======================================================================== */
+
+:root {
+  --ref-bg: #f6f8fc;
+  --ref-shell: #ffffff;
+  --ref-panel: #ffffff;
+  --ref-panel-soft: #f7f9fd;
+  --ref-panel-strong: #eef2fa;
+  --ref-text: #111728;
+  --ref-text-2: #536078;
+  --ref-text-3: #7d879c;
+  --ref-border: #dce3ef;
+  --ref-border-strong: #cbd5e5;
+  --ref-primary: #6557ee;
+  --ref-primary-strong: #5546dc;
+  --ref-primary-soft: #eeeaff;
+  --ref-cyan: #0fc4e8;
+  --ref-green: #18bf79;
+  --ref-green-soft: #e5f9ef;
+  --ref-red: #ef536d;
+  --ref-violet: #7b62ed;
+  --ref-sidebar: 214px;
+  --ref-rail: 366px;
+  --ref-radius-lg: 18px;
+  --ref-radius-md: 13px;
+  --ref-shadow: 0 1px 2px rgba(17, 24, 39, .035), 0 8px 28px rgba(28, 41, 69, .055);
+  --ref-font: Inter, "Segoe UI Variable", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+:root[data-theme="aurora"],
+:root[data-theme="eclipse"] {
+  --ref-bg: #07101f;
+  --ref-shell: #081221;
+  --ref-panel: #0e192b;
+  --ref-panel-soft: #121e32;
+  --ref-panel-strong: #17243a;
+  --ref-text: #f4f7fc;
+  --ref-text-2: #c1cade;
+  --ref-text-3: #8390aa;
+  --ref-border: #263650;
+  --ref-border-strong: #344665;
+  --ref-primary: #6d60f3;
+  --ref-primary-strong: #8075ff;
+  --ref-primary-soft: #22254b;
+  --ref-cyan: #16c9ec;
+  --ref-green: #21cf89;
+  --ref-green-soft: #123b32;
+  --ref-red: #ff627d;
+  --ref-violet: #9179ff;
+  --ref-shadow: 0 12px 38px rgba(0, 0, 0, .2);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):not([data-theme="aurora"]):not([data-theme="eclipse"]) {
+    --ref-bg: #07101f;
+    --ref-shell: #081221;
+    --ref-panel: #0e192b;
+    --ref-panel-soft: #121e32;
+    --ref-panel-strong: #17243a;
+    --ref-text: #f4f7fc;
+    --ref-text-2: #c1cade;
+    --ref-text-3: #8390aa;
+    --ref-border: #263650;
+    --ref-border-strong: #344665;
+    --ref-primary: #6d60f3;
+    --ref-primary-strong: #8075ff;
+    --ref-primary-soft: #22254b;
+    --ref-cyan: #16c9ec;
+    --ref-green: #21cf89;
+    --ref-green-soft: #123b32;
+    --ref-red: #ff627d;
+    --ref-violet: #9179ff;
+    --ref-shadow: 0 12px 38px rgba(0, 0, 0, .2);
+  }
+}
+
+html, body, button, input, textarea, select { font-family: var(--ref-font); }
+body { color: var(--ref-text); background: var(--ref-bg); }
+
+.app-shell { grid-template-columns: var(--ref-sidebar) minmax(0, 1fr); background: var(--ref-shell); }
+.sidebar {
+  width: var(--ref-sidebar);
+  padding: 20px 15px 16px;
+  border-color: var(--ref-border);
+  background: var(--ref-shell);
+}
+.brand { min-height: 52px; padding: 4px 10px 21px; }
+.brand > div:last-child strong { color: var(--ref-text); font-size: 1rem; font-weight: 780; letter-spacing: -.025em; }
+.brand > div:last-child span { display: none; }
+.brand-mark { width: 30px; height: 30px; border-radius: 9px; background: var(--ref-primary-soft); }
+.brand-mark::before, .brand-mark::after, .brand-mark span { background: var(--ref-primary); }
+.nav-list { gap: 5px; }
+.nav-item {
+  min-height: 45px;
+  padding: 0 14px;
+  gap: 12px;
+  color: var(--ref-text-2);
+  border: 0;
+  border-radius: 10px;
+  font-size: .89rem;
+  font-weight: 650;
+}
+.nav-item .icon { width: 20px; height: 20px; }
+.nav-item.active { color: var(--ref-text); background: var(--ref-primary-soft); }
+.nav-item.active .icon { color: var(--ref-primary); }
+.nav-item[data-view="profile"] { display: none; }
+.sidebar-footer { margin-top: auto; gap: 12px; }
+.sidebar-autopilot-status {
+  align-items: flex-start;
+  min-height: 123px;
+  padding: 17px 14px;
+  border: 1px solid var(--ref-border);
+  border-radius: 14px;
+  color: var(--ref-text);
+  background: var(--ref-panel-soft);
+}
+.sidebar-autopilot-status::before { content: "Pulsinho"; display: block; color: var(--ref-text); font-size: .85rem; font-weight: 760; }
+.sidebar-autopilot-status span:last-child { margin-top: 26px; }
+.sidebar-autopilot-status strong { display: none; }
+.sidebar-autopilot-status small { display: block; color: var(--ref-text-2); font-size: .72rem; line-height: 1.45; }
+.sidebar-autopilot-status small::before { content: "Seu copiloto de produtividade e finanças."; font-size: .72rem; }
+.sidebar-autopilot-status small { font-size: 0; }
+.sidebar-autopilot-dot { position: absolute; top: 17px; right: 14px; width: 8px; height: 8px; background: var(--ref-primary); }
+
+.main-area { min-width: 0; background: var(--ref-shell); }
+.topbar {
+  position: relative;
+  top: auto;
+  z-index: 20;
+  padding: 16px 24px 8px;
+  border: 0;
+  background: var(--ref-shell);
+  backdrop-filter: none;
+}
+.topbar-row { max-width: 1230px; min-height: 62px; margin: 0 auto; }
+.topbar-greeting { gap: 0; }
+.topbar-greeting .pulsinho { display: none; }
+.topbar-greeting h1 { margin: 0; color: var(--ref-text); font-size: 1.48rem; font-weight: 780; letter-spacing: -.04em; }
+.topbar-greeting p { margin-top: 4px; color: var(--ref-text-2); font-size: .76rem; }
+.topbar-actions { gap: 8px; }
+.topbar-date { margin: 0 auto; color: var(--ref-text-2); font-size: .68rem; font-weight: 650; text-transform: capitalize; }
+.topbar-notification { position: relative; display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 0; border-radius: 10px; color: var(--ref-text); background: transparent; font-size: 1.1rem; }
+.topbar-notification span { position: absolute; top: 8px; right: 8px; width: 6px; height: 6px; border: 1px solid var(--ref-shell); border-radius: 50%; background: var(--ref-primary); }
+.topbar-actions .user-avatar-btn { width: 34px; height: 34px; color: var(--ref-text); border: 0; background: var(--ref-primary-soft); font-size: .68rem; }
+.topbar .search-box {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  justify-content: center;
+  border: 0;
+  border-radius: 10px;
+  color: var(--ref-text);
+  background: transparent;
+}
+.topbar .search-box .icon { filter: grayscale(1); font-size: 1rem; }
+.topbar .search-box input { width: 0; min-width: 0; padding: 0; opacity: 0; }
+.topbar .search-box:focus-within { width: min(300px, 34vw); padding: 0 12px; justify-content: flex-start; border: 1px solid var(--ref-border); background: var(--ref-panel); }
+.topbar .search-box:focus-within input { width: 100%; opacity: 1; }
+.view { max-width: 1278px; padding: 0 24px 40px; }
+
+/* Dashboard aprovado ----------------------------------------------------- */
+.reference-dashboard {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--ref-rail);
+  gap: 16px;
+  max-width: 1230px;
+  margin: 0 auto;
+  align-items: start;
+}
+.reference-dashboard-main { min-width: 0; }
+.reference-dashboard .pulse-workspace-bar { min-height: 42px; margin-bottom: 12px; }
+.reference-dashboard .pulse-workspace-switcher { display: inline-flex; gap: 4px; padding: 0; border: 0; background: transparent; }
+.reference-dashboard .pulse-workspace-option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 104px;
+  min-height: 34px;
+  padding: 0 15px;
+  border: 1px solid var(--ref-border);
+  border-radius: 999px;
+  color: var(--ref-text-2);
+  background: var(--ref-panel-soft);
+  font-size: .74rem;
+  font-weight: 700;
+}
+.reference-dashboard .pulse-workspace-option i { font-size: .9rem; }
+.reference-dashboard .pulse-workspace-option.active { color: #fff; border-color: var(--ref-primary); background: var(--ref-primary); }
+.reference-summary-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.reference-summary-card,
+.reference-card,
+.reference-pulsinho-panel {
+  border: 1px solid var(--ref-border);
+  border-radius: var(--ref-radius-md);
+  background: var(--ref-panel);
+  box-shadow: var(--ref-shadow);
+}
+.reference-summary-card {
+  position: relative;
+  min-height: 139px;
+  padding: 18px 18px 14px;
+  overflow: hidden;
+}
+.reference-summary-card > span { display: block; margin: 5px 0 2px; color: var(--ref-text-2); font-size: .77rem; font-weight: 650; }
+.reference-summary-card > strong { display: block; position: relative; z-index: 2; color: var(--ref-text); font-size: 1.52rem; line-height: 1.05; letter-spacing: -.035em; font-variant-numeric: tabular-nums; }
+.reference-summary-card > small { display: block; position: relative; z-index: 2; margin-top: 7px; color: var(--ref-text-2); font-size: .7rem; }
+.reference-summary-icon { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; font-size: 1rem; }
+.reference-summary-icon--green { color: var(--ref-green); background: var(--ref-green-soft); }
+.reference-summary-icon--violet { color: var(--ref-violet); background: var(--ref-primary-soft); }
+.reference-summary-trend { display: flex; position: relative; z-index: 2; gap: 5px; margin-top: 6px; font-size: .69rem; }
+.reference-summary-trend b { color: var(--ref-green); }
+.reference-summary-trend span { color: var(--ref-text-2); }
+.reference-summary-spark { position: absolute; z-index: 1; right: 0; bottom: 0; width: 52%; height: 58%; color: var(--ref-green); opacity: .74; }
+.reference-summary-spark path { fill: currentColor; }
+.reference-budget-track { position: absolute; right: 18px; bottom: 17px; left: 18px; height: 8px; overflow: hidden; border-radius: 99px; background: var(--ref-panel-strong); }
+.reference-budget-track i { display: block; width: 0; height: 100%; border-radius: inherit; background: var(--ref-green); transition: width 420ms cubic-bezier(.2,.75,.25,1); }
+
+.reference-card { padding: 14px; }
+.reference-balance-chart { min-height: 296px; margin-top: 12px; }
+.reference-card-heading { display: flex; align-items: center; justify-content: space-between; gap: 14px; min-width: 0; }
+.reference-card-heading h2 { min-width: 0; margin: 0; color: var(--ref-text); font-size: .86rem; font-weight: 760; letter-spacing: -.015em; }
+.reference-info { display: inline-grid; place-items: center; width: 17px; height: 17px; margin-left: 4px; padding: 0; border: 1px solid var(--ref-primary); border-radius: 50%; color: var(--ref-primary); background: transparent; font-size: .63rem; font-weight: 800; }
+.reference-period-tabs { display: inline-flex; align-items: center; gap: 2px; padding: 3px; border-radius: 999px; background: var(--ref-panel-soft); }
+.reference-period-tabs button { min-height: 25px; padding: 0 11px; border: 0; border-radius: 999px; color: var(--ref-text-2); background: transparent; font-size: .64rem; font-weight: 680; }
+.reference-period-tabs button.active { color: #fff; background: var(--ref-primary); }
+.reference-chart-layout { display: grid; grid-template-columns: 62px minmax(0, 1fr); gap: 8px; margin-top: 15px; }
+.reference-chart-y { display: flex; flex-direction: column; justify-content: space-between; height: 210px; padding: 1px 0 6px; color: var(--ref-text-2); font-size: .62rem; font-variant-numeric: tabular-nums; }
+.reference-chart-layout > .pulse-forecast-visual { min-width: 0; min-height: 0; margin: 0; padding: 0; border: 0; border-radius: 0; color: inherit; background: transparent; box-shadow: none; transform: none; cursor: pointer; }
+.reference-chart-layout > .pulse-forecast-visual:hover,
+.reference-chart-layout > .pulse-forecast-visual:active { transform: none; box-shadow: none; }
+.reference-chart-layout > .pulse-forecast-visual:focus-visible { outline: 2px solid var(--ref-primary); outline-offset: 4px; border-radius: 8px; }
+.reference-chart-stage { position: relative; min-width: 0; height: 238px; }
+.reference-chart-svg { display: block; width: 100%; height: 205px; overflow: visible; }
+.reference-chart-grid path { fill: none; stroke: var(--ref-border); stroke-width: 1; stroke-dasharray: 3 5; }
+.reference-chart-svg .pulse-forecast-area { fill: url(#pulseBalanceFill); opacity: 1; }
+.reference-chart-svg .pulse-forecast-line { fill: none; stroke: var(--ref-cyan); stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 3px 7px rgba(15, 196, 232, .22)); }
+.reference-chart-svg .pulse-forecast-point { fill: var(--ref-cyan); stroke: var(--ref-panel); stroke-width: 4; }
+.reference-chart-value { position: absolute; top: 28px; right: 7px; padding: 5px 8px; border: 2px solid var(--ref-green); border-radius: 7px; color: var(--ref-text); background: var(--ref-panel); font-size: .68rem; font-weight: 800; }
+.reference-chart-axis { display: flex; justify-content: space-between; gap: 8px; color: var(--ref-text-2); font-size: .61rem; }
+
+.reference-dashboard-lower { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(235px, .75fr); gap: 12px; margin-top: 12px; }
+.reference-link { padding: 0; border: 0; color: var(--ref-primary); background: transparent; font-size: .7rem; font-weight: 720; }
+.reference-commitment-list { display: grid; gap: 7px; margin-top: 11px; }
+.reference-commitment-list .pulse-timeline-item { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; align-items: center; gap: 9px; min-height: 47px; padding: 6px 8px; border-radius: 9px; background: var(--ref-panel-soft); }
+.reference-commitment-list .pulse-timeline-time { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 8px; color: var(--ref-primary); background: var(--ref-primary-soft); font-size: .63rem; font-weight: 760; }
+.reference-commitment-list .pulse-timeline-node { display: none; }
+.reference-commitment-list .pulse-timeline-copy { min-width: 0; }
+.reference-commitment-list .pulse-timeline-copy strong,
+.reference-commitment-list .pulse-timeline-copy span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reference-commitment-list .pulse-timeline-copy strong { color: var(--ref-text); font-size: .73rem; }
+.reference-commitment-list .pulse-timeline-copy span { margin-top: 3px; color: var(--ref-text-2); font-size: .63rem; }
+.reference-commitment-list .pulse-timeline-amount { color: var(--ref-text); font-size: .69rem; font-weight: 760; }
+.reference-result-card { display: grid; gap: 3px; }
+.reference-result-card .reference-card-heading { margin-bottom: 6px; }
+.reference-result-row, .reference-result-total { display: grid; grid-template-columns: 25px minmax(0, 1fr) auto; align-items: center; gap: 6px; min-height: 37px; padding: 5px 7px; border-radius: 8px; font-size: .69rem; }
+.reference-result-row span, .reference-result-total span { display: grid; place-items: center; width: 23px; height: 23px; border-radius: 7px; }
+.reference-result-row b, .reference-result-total b { font-weight: 680; }
+.reference-result-row strong, .reference-result-total strong { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.reference-result-row--income span { color: var(--ref-green); background: var(--ref-green-soft); }
+.reference-result-row--expense span { color: var(--ref-red); background: color-mix(in srgb, var(--ref-red) 12%, transparent); }
+.reference-result-total { min-height: 47px; margin-top: 3px; color: var(--ref-green); background: var(--ref-green-soft); }
+.reference-result-total span { background: color-mix(in srgb, var(--ref-green) 16%, transparent); }
+.reference-result-total strong { font-size: .82rem; }
+
+.reference-pulsinho { position: sticky; top: 16px; grid-column: 2; grid-row: auto; }
+.reference-pulsinho-panel { display: flex; min-height: 650px; max-height: calc(100dvh - 104px); padding: 14px; flex-direction: column; overflow: hidden; }
+.reference-pulsinho-panel > header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.reference-pulsinho-panel > header > div { display: flex; align-items: center; gap: 7px; }
+.reference-pulsinho-panel > header strong { font-size: .88rem; }
+.reference-pulsinho-panel > header small { padding: 2px 5px; border-radius: 5px; color: var(--ref-primary); background: var(--ref-primary-soft); font-size: .57rem; font-weight: 800; }
+.reference-pulsinho-panel > header button { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; color: var(--ref-text-2); background: transparent; font-size: 1.1rem; }
+.reference-pulsinho-mark { color: var(--ref-primary); font-size: 1rem; }
+.reference-pulsinho-panel > p { margin: 7px 0 12px; color: var(--ref-text-2); font-size: .68rem; }
+.reference-pulsinho .pulse-command-response { display: flex !important; min-height: 0; max-height: none; margin: 0; padding: 0 2px 10px; flex: 1; flex-direction: column; gap: 9px; overflow-y: auto; overscroll-behavior: contain; }
+.reference-pulsinho .pulse-chat-message { max-width: 93%; padding: 10px 12px; border: 1px solid var(--ref-border); border-radius: 11px; color: var(--ref-text); background: var(--ref-panel-soft); font-size: .72rem; line-height: 1.35; }
+.reference-pulsinho .pulse-chat-message--user { align-self: flex-end; color: #fff; border-color: var(--ref-primary); background: var(--ref-primary); }
+.reference-pulsinho .pulse-chat-message > div { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+.reference-pulsinho .pulse-chat-message > div strong { font-size: .64rem; }
+.reference-pulsinho .pulse-chat-message > div small { color: var(--ref-text-3); font-size: .54rem; }
+.reference-pulsinho .pulse-chat-message p { margin: 0; color: inherit; font-size: inherit; line-height: inherit; }
+.reference-pulsinho .pulse-action-confirm { display: grid; gap: 8px; padding: 11px; border: 1px solid var(--ref-border-strong); border-radius: 11px; background: var(--ref-panel-soft); }
+.reference-pulsinho .pulse-action-confirm > span { color: var(--ref-green); font-size: .61rem; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
+.reference-pulsinho .pulse-action-confirm > strong { color: var(--ref-text); font-size: .7rem; line-height: 1.35; }
+.reference-pulsinho .pulse-action-confirm > div { display: grid; grid-template-columns: 1fr 1.25fr; gap: 6px; }
+.reference-pulsinho .pulse-action-confirm button { min-height: 34px; padding: 0 8px; border: 1px solid var(--ref-border); border-radius: 8px; color: var(--ref-text); background: var(--ref-panel); font-size: .63rem; font-weight: 700; }
+.reference-pulsinho .pulse-action-confirm button.primary { color: #fff; border-color: var(--ref-primary); background: var(--ref-primary); }
+.reference-pulsinho .pulse-command-form { margin-top: auto; }
+.reference-pulsinho .pulse-command-control { display: grid; grid-template-columns: minmax(0, 1fr) 36px; gap: 6px; padding: 5px; border: 1px solid var(--ref-border); border-radius: 10px; background: var(--ref-panel-soft); }
+.reference-pulsinho .pulse-command-control input { min-width: 0; min-height: 34px; padding: 0 7px; border: 0; outline: 0; color: var(--ref-text); background: transparent; font-size: .72rem; }
+.reference-pulsinho .pulse-command-control button { display: grid; place-items: center; min-width: 36px; min-height: 34px; padding: 0; border: 0; border-radius: 8px; color: #fff; background: var(--ref-primary); }
+
+@media (hover: hover) and (pointer: fine) {
+  .reference-dashboard .pulse-workspace-option:hover { border-color: var(--ref-primary); color: var(--ref-primary); }
+  .reference-dashboard .pulse-workspace-option.active:hover { color: #fff; }
+  .reference-period-tabs button:hover { color: var(--ref-text); background: var(--ref-panel-strong); }
+  .reference-period-tabs button.active:hover { color: #fff; background: var(--ref-primary-strong); }
+  .reference-link:hover { color: var(--ref-primary-strong); text-decoration: underline; }
+}
+
+@media (max-width: 1180px) and (min-width: 769px) {
+  :root { --ref-sidebar: 78px; --ref-rail: 316px; }
+  .brand > div:last-child, .nav-item > span:last-child, .sidebar-autopilot-status, .sidebar-footer { display: none; }
+  .brand { justify-content: center; padding-inline: 0; }
+  .nav-item { justify-content: center; padding: 0; }
+  .reference-dashboard .pulse-workspace-option { min-width: 92px; }
+}
+
+@media (max-width: 920px) and (min-width: 769px) {
+  .reference-dashboard { grid-template-columns: minmax(0, 1fr); }
+  .reference-pulsinho { position: static; grid-column: 1; }
+  .reference-pulsinho-panel { min-height: 460px; max-height: none; }
+}
+
+@media (max-width: 768px) {
+  :root { --ref-radius-lg: 13px; --ref-radius-md: 10px; }
+  body { min-width: 0; background: var(--ref-shell); }
+  .app-shell { display: block; min-width: 0; background: var(--ref-shell); }
+  .sidebar { display: none; }
+  .main-area { min-height: 100dvh; padding-bottom: calc(63px + env(safe-area-inset-bottom, 0px)); }
+  .topbar { position: relative; padding: max(13px, env(safe-area-inset-top, 0px)) 12px 6px; }
+  .topbar-row { min-height: 67px; }
+  .topbar-greeting h1 { font-size: 1.15rem; letter-spacing: -.035em; }
+  .topbar-greeting p { font-size: .66rem; }
+  .topbar-actions { align-self: flex-start; }
+  .topbar-date { display: none; }
+  .topbar-notification { width: 34px; height: 34px; }
+  .topbar-actions .user-avatar-btn { width: 30px; height: 30px; }
+  .topbar .search-box { display: none; }
+  .view { width: 100%; max-width: none; padding: 0 12px 18px; }
+  .reference-dashboard { display: block; width: 100%; max-width: 100%; }
+  .reference-dashboard .pulse-workspace-bar,
+  .reference-dashboard .reference-pulsinho { display: none; }
+  .reference-summary-grid { gap: 8px; }
+  .reference-summary-card { min-height: 104px; padding: 11px 10px 9px; }
+  .reference-summary-icon { width: 24px; height: 24px; border-radius: 6px; font-size: .79rem; }
+  .reference-summary-card > span { margin: 4px 0 1px; font-size: .62rem; }
+  .reference-summary-card > strong { font-size: 1.08rem; }
+  .reference-summary-card > small { margin-top: 4px; font-size: .55rem; }
+  .reference-summary-trend { margin-top: 4px; font-size: .56rem; }
+  .reference-summary-trend span { display: none; }
+  .reference-budget-track { right: 10px; bottom: 9px; left: 10px; height: 5px; }
+  .reference-summary-spark { width: 64%; height: 47%; }
+  .reference-card { padding: 10px; }
+  .reference-balance-chart { min-height: 236px; margin-top: 8px; }
+  .reference-card-heading h2 { font-size: .72rem; }
+  .reference-period-tabs { gap: 0; padding: 2px; }
+  .reference-period-tabs button { min-height: 23px; padding: 0 8px; font-size: .51rem; }
+  .reference-chart-layout { grid-template-columns: 48px minmax(0, 1fr); gap: 4px; margin-top: 10px; }
+  .reference-chart-y { height: 166px; font-size: .49rem; }
+  .reference-chart-stage { height: 190px; }
+  .reference-chart-svg { height: 163px; }
+  .reference-chart-value { top: 18px; right: 3px; padding: 3px 5px; font-size: .54rem; }
+  .reference-chart-axis { font-size: .48rem; }
+  .reference-dashboard-lower { display: block; margin-top: 8px; }
+  .reference-result-card { display: none; }
+  .reference-commitments { padding-bottom: 8px; }
+  .reference-link { font-size: .58rem; }
+  .reference-commitment-list { gap: 5px; margin-top: 8px; }
+  .reference-commitment-list .pulse-timeline-item { grid-template-columns: 30px minmax(0, 1fr) auto; min-height: 39px; padding: 4px 6px; }
+  .reference-commitment-list .pulse-timeline-time { width: 28px; height: 28px; font-size: .5rem; }
+  .reference-commitment-list .pulse-timeline-copy strong { font-size: .61rem; }
+  .reference-commitment-list .pulse-timeline-copy span { font-size: .52rem; }
+  .reference-commitment-list .pulse-timeline-amount { font-size: .56rem; }
+  .bottom-nav {
+    min-height: calc(60px + env(safe-area-inset-bottom, 0px));
+    padding: 5px 14px env(safe-area-inset-bottom, 0px);
+    border-color: var(--ref-border);
+    background: color-mix(in srgb, var(--ref-shell) 96%, transparent);
+    box-shadow: 0 -8px 24px rgba(13, 23, 44, .06);
+  }
+  .bottom-nav-item { color: var(--ref-text-2); font-size: .56rem; }
+  .bottom-nav-item.active { color: var(--ref-primary); }
+  .bottom-nav-fab { width: 43px; height: 43px; color: #fff; background: var(--ref-primary); box-shadow: 0 8px 20px color-mix(in srgb, var(--ref-primary) 30%, transparent); }
+  .pulse-action-confirm {
+    position: fixed;
+    z-index: 140;
+    right: 12px;
+    bottom: calc(59px + env(safe-area-inset-bottom, 0px));
+    left: 12px;
+    padding: 12px;
+    border: 1px solid var(--ref-border-strong);
+    border-radius: 14px 14px 0 0;
+    background: var(--ref-panel);
+    box-shadow: 0 -14px 40px rgba(5, 10, 25, .16);
+  }
+}
+
+@media (max-width: 390px) {
+  .topbar { padding-inline: 10px; }
+  .view { padding-inline: 10px; }
+  .reference-period-tabs button { padding-inline: 6px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reference-budget-track i, .reference-chart-svg .pulse-forecast-line { transition: none; animation: none; }
+}
+
