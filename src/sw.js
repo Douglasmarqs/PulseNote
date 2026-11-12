@@ -26,7 +26,14 @@
 // financeira também para quem já instalou o PWA.
 // v15: alinha o tema Eclipse à paleta violeta/ciano da atualização.
 // v16: entrega a saudação, o Planner mensal e o editor de notas revisados.
-const CACHE_NAME = "pulsenote-v17";
+// v21: entrega a consolidação responsiva de Notas e Planner em mobile.css.
+// v22: invalida o CSS antigo do painel administrativo após a correção responsiva.
+// v23: atualiza o fluxo de retorno à administração após o login.
+// v24: entrega o Dashboard com painéis sempre visíveis no PWA instalado.
+// v25: entrega o novo painel administrativo e a área de assinatura.
+// v27: invalida os recursos antigos após corrigir a navegação do painel
+// que alguns bloqueadores de conteúdo ocultavam como se fosse publicidade.
+const CACHE_NAME = "pulsenote-v35";
 
 // ── Firebase Cloud Messaging (push em segundo plano) ──────────────
 // Isso é o que permite uma notificação aparecer mesmo com o PulseNote
@@ -68,7 +75,7 @@ try {
   // logo abaixo pra abrir a tela certa).
   messaging.onBackgroundMessage((payload) => {
     const data = payload.data || {};
-    self.registration.showNotification(data.title || "PulseNote", {
+    return self.registration.showNotification(data.title || "PulseNote", {
       body: data.body || "",
       icon: "icons/pulsinho-notification-icon.png",
       badge: "icons/pulsinho-notification-icon.png",
@@ -91,6 +98,7 @@ const CORE_ASSETS = [
   "/src/forgot-password.html",
   "/src/styles.css",
   "/src/auth.css",
+  "/src/mobile.css",
   "/src/manifest.json",
   "/src/icons/icon-192.png",
   "/src/icons/icon-512.png",

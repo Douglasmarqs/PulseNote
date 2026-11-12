@@ -1,0 +1,122 @@
+/* Pulse Autopilot: usa os mesmos tokens de todos os temas do PulseNote. */
+.autopilot-entry {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-width: 0;
+  margin: 0 0 var(--space-5);
+  padding: var(--space-4) var(--space-5);
+  color: var(--text);
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--line));
+  border-radius: var(--radius-card);
+  background: linear-gradient(110deg, color-mix(in srgb, var(--accent-soft) 66%, var(--surface)), var(--surface) 72%);
+  box-shadow: var(--shadow-card);
+}
+
+.autopilot-entry-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 42px;
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+  color: #fff;
+  background: var(--accent);
+  font-size: 1.55rem;
+}
+
+.autopilot-entry-copy { flex: 1 1 auto; min-width: 0; }
+.autopilot-eyebrow {
+  display: block;
+  margin-bottom: var(--space-1);
+  color: var(--accent);
+  font-size: var(--text-xs);
+  font-weight: 800;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+.autopilot-entry h2 { margin: 0 0 2px; font-size: var(--text-lg); line-height: 1.3; }
+.autopilot-entry p { margin: 0; color: var(--text2); font-size: var(--text-sm); line-height: 1.45; overflow-wrap: anywhere; }
+.autopilot-entry-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 0 var(--space-4);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-btn);
+  color: var(--accent);
+  background: var(--surface);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  cursor: pointer;
+}
+.autopilot-entry-button:hover, .autopilot-entry-button:focus-visible { background: var(--accent-soft); }
+
+.autopilot-header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+}
+.autopilot-header > div { min-width: 0; }
+.autopilot-header h2 { margin: 0 0 var(--space-1); color: var(--text); font-size: clamp(1.3rem, 2vw, 1.85rem); line-height: 1.2; }
+.autopilot-header p:last-child { margin: 0; color: var(--text2); font-size: var(--text-sm); line-height: 1.5; }
+.autopilot-header button { flex: 0 0 auto; }
+.autopilot-status { margin: 0 0 var(--space-3); color: var(--text2); font-size: var(--text-sm); }
+.autopilot-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
+.autopilot-card, .autopilot-empty {
+  min-width: 0;
+  padding: var(--space-5);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+.autopilot-card { display: flex; flex-direction: column; gap: var(--space-3); }
+.autopilot-card-top { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-2); }
+.autopilot-area, .autopilot-priority {
+  padding: 4px 9px;
+  border-radius: var(--radius-pill);
+  font-size: var(--text-xs);
+  font-weight: 700;
+}
+.autopilot-area { color: var(--accent); background: var(--accent-soft); }
+.autopilot-priority { color: var(--text2); background: var(--surface2); border: 1px solid var(--line); }
+.autopilot-priority[data-priority="high"] { color: var(--red); background: var(--red-soft); border-color: color-mix(in srgb, var(--red) 25%, var(--line)); }
+.autopilot-card h3 { margin: 0; color: var(--text); font-size: var(--text-md); line-height: 1.35; overflow-wrap: anywhere; }
+.autopilot-card p { margin: 0; flex: 1; color: var(--text2); font-size: var(--text-sm); line-height: 1.5; overflow-wrap: anywhere; }
+.autopilot-card-actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); padding-top: var(--space-2); }
+.autopilot-card-actions button { min-height: 38px; padding: 0 var(--space-3); border-radius: 11px; font: inherit; font-size: var(--text-sm); font-weight: 700; cursor: pointer; }
+.autopilot-action-primary { border: 1px solid var(--accent); color: #fff; background: var(--accent); }
+.autopilot-action-primary:hover { background: var(--accent2); }
+.autopilot-action-secondary { border: 1px solid var(--line); color: var(--text2); background: var(--surface2); }
+.autopilot-action-secondary:hover { border-color: var(--accent); color: var(--accent); }
+.autopilot-empty { grid-column: 1 / -1; text-align: center; }
+.autopilot-empty strong { display: block; margin-bottom: var(--space-2); color: var(--text); }
+.autopilot-empty p { margin: 0; color: var(--text2); font-size: var(--text-sm); }
+.autopilot-privacy { margin: var(--space-5) 0 0; color: var(--muted); font-size: var(--text-xs); }
+.autopilot-confirm-card { width: min(100%, 460px); }
+.autopilot-confirm-card > p { margin: var(--space-2) 0 var(--space-5); color: var(--text2); line-height: 1.55; overflow-wrap: anywhere; }
+.autopilot-confirm-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: var(--space-2); }
+.autopilot-confirm-actions button { min-height: 42px; }
+
+@media (max-width: 900px) {
+  .autopilot-list { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 720px) {
+  .autopilot-entry { align-items: start; display: grid; grid-template-columns: 40px minmax(0, 1fr); padding: var(--space-4); gap: var(--space-3); }
+  .autopilot-entry-icon { width: 40px; height: 40px; }
+  .autopilot-entry-button { grid-column: 1 / -1; width: 100%; }
+  .autopilot-header { align-items: start; flex-direction: column; }
+  .autopilot-header button { width: 100%; justify-content: center; }
+  .autopilot-card, .autopilot-empty { padding: var(--space-4); }
+  .autopilot-card-actions button { flex: 1 1 130px; }
+  .autopilot-confirm-card { margin: auto var(--space-3) max(var(--space-4), var(--safe-area-bottom)); }
+  .autopilot-confirm-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .autopilot-confirm-actions button { width: 100%; justify-content: center; }
+}

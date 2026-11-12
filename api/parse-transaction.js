@@ -31,23 +31,9 @@
 //   FIREBASE_PRIVATE_KEY
 // ============================================================
 
-const admin = require("firebase-admin");
+const { getFirebaseAdmin } = require("./_lib/firebaseAdmin");
 const { parseTransactionText } = require("./_lib/parseTransactionAI");
-
-function getFirebaseAdmin() {
-  if (admin.apps.length) return admin;
-  admin.initializeApp({
-    credential: admin.credential.cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      // No painel da Vercel as quebras de linha da chave privada chegam
-      // como "\n" literal — precisamos converter de volta para quebras
-      // de linha reais, senão a assinatura da credencial fica inválida.
-      privateKey: (process.env.FIREBASE_PRIVATE_KEY || "").replace(/\\n/g, "\n"),
-    }),
-  });
-  return admin;
-}
+const { checkUserFeature } = require("./_lib/admin");
 
 async function verifyUser(req) {
   const authHeader = req.headers.authorization || "";
@@ -67,17 +53,37 @@ module.exports = async (req, res) => {
   }
 
   // ── 1) Autenticação ──────────────────────────────────────────
+  let uid;
   try {
-    await verifyUser(req);
+    uid = await verifyUser(req);
   } catch (err) {
     console.error("Falha na autenticação:", err.message);
     return res.status(401).json({ error: "unauthorized" });
   }
 
+  // A chave do painel administrativo governa o backend de verdade:
+  // desligar IA ou colocar em manutenção impede novas chamadas ao Gemini.
+  try {
+    const access = await checkUserFeature(getFirebaseAdmin().firestore(), uid, "aiParsing");
+    if (!access.allowed) {
+      const status = access.reason === "maintenance" || access.reason === "feature_disabled" ? 503 : 403;
+      return res.status(status).json({ error: access.reason });
+    }
+  } catch (err) {
+    console.error("Falha ao verificar acesso à IA:", err?.message || err);
+    return res.status(503).json({ error: "service_unavailable" });
+  }
+
   // ── 2) Validação básica + chamada à IA (lógica compartilhada com o
   //      webhook do WhatsApp — ver api/_lib/parseTransactionAI.js) ──
   const { text, categories, today } = req.body || {};
-  const result = await parseTransactionText({ text, categories, today });
+  let result;
+  try {
+    result = await parseTransactionText({ text, categories, today });
+  } catch (err) {
+    console.error("Falha ao interpretar lançamento:", err?.message || err);
+    return res.status(502).json({ error: "parser_unavailable" });
+  }
 
   if (!result.ok) {
     return res.status(result.status).json({ error: result.error });

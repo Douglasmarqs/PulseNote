@@ -21,25 +21,29 @@
 // ============================================================
 
 const FIN_CATEGORY_KEYWORDS = {
-  alimentacao: ["almoço", "almoco", "jantar", "lanche", "restaurante", "comida", "ifood", "padaria", "pão", "pao", "bolo", "confeitaria", "salgado", "café", "cafe", "pizza", "hambúrguer", "hamburguer", "churrasco", "marmita", "delivery", "açaí", "acai", "sorvete", "doces", "rappi", "padoca", "brunch", "sushi"],
-  mercado: ["mercado", "supermercado", "feira", "hortifruti", "atacadão", "atacadao"],
-  transporte: ["uber", "99", "ônibus", "onibus", "metro", "metrô", "táxi", "taxi", "passagem", "estacionamento", "pedágio", "pedagio"],
-  combustivel: ["gasolina", "combustível", "combustivel", "posto", "álcool", "alcool", "etanol", "diesel"],
-  manutencao: ["oficina", "mecânico", "mecanico", "manutenção do carro", "manutencao do carro", "reforma", "conserto", "encanador", "eletricista"],
-  saude: ["farmácia", "farmacia", "remédio", "remedio", "médico", "medico", "consulta", "dentista", "plano de saúde", "plano de saude", "exame", "hospital", "psicólogo", "psicologo", "terapia", "fisioterapia", "óculos", "oculos", "vacina", "laboratório", "laboratorio"],
-  academia: ["academia", "personal trainer", "crossfit", "pilates", "yoga", "musculação", "musculacao"],
-  beleza: ["cabelo", "corte de cabelo", "cabeleireiro", "cabeleireira", "salão", "salao", "manicure", "pedicure", "barbearia", "barbeiro", "depilação", "depilacao", "estética", "estetica", "maquiagem", "sobrancelha", "unha", "skincare"],
-  educacao: ["curso", "faculdade", "livro", "mensalidade escolar", "escola", "material escolar", "apostila", "aula", "udemy", "mensalidade da faculdade", "pós-graduação", "pos-graduacao"],
-  lazer: ["cinema", "show", "bar", "balada", "streaming", "jogo", "passeio", "ingresso", "netflix", "parque"],
-  eventos: ["festa", "aniversário", "aniversario", "casamento", "confraternização", "confraternizacao"],
-  presentes: ["presente", "lembrancinha"],
-  roupas: ["roupa", "calça", "calca", "camisa", "tênis", "tenis", "sapato", "blusa", "jaqueta", "acessório", "acessorio", "bolsa", "perfume"],
-  tecnologia: ["celular", "notebook", "computador", "fone de ouvido", "carregador", "eletrônico", "eletronico"],
-  moradia: ["aluguel", "condomínio", "condominio", "iptu"],
-  contas: ["luz", "água", "agua", "internet", "gás", "gas", "conta de", "telefone", "tv a cabo", "wifi"],
-  assinaturas: ["assinatura", "spotify", "amazon prime", "youtube premium", "mensalidade do", "disney+", "disney plus", "hbo max", "globoplay", "apple music", "icloud", "google one", "google fotos", "google photos", "chatgpt", "chat gpt", "openai", "uber one"],
+  // Alimentação pronta/delivery. Marcas, grafias populares e itens são
+  // deliberadamente tratados aqui: "mac donalds", "coxinha" e "pão"
+  // devem vencer qualquer palpite genérico que a IA possa devolver.
+  alimentacao: ["mcdonalds", "mcdonald's", "mc donalds", "mac donalds", "mcdonald", "burger king", "bk", "habibs", "subway", "kfc", "bobs", "bob's", "outback", "coco bambu", "china in box", "giraffas", "dominos", "domino's", "pizza hut", "ifood", "rappi", "ubereats", "uber eats", "aiqfome", "ze delivery", "delivery", "restaurante", "lanchonete", "padaria", "pão", "pao", "bolo", "coxinha", "salgado", "salgadinhos", "pastel", "esfiha", "hot dog", "cachorro quente", "hambúrguer", "hamburguer", "x bacon", "x salada", "sanduíche", "sanduiche", "pizza", "marmita", "quentinha", "prato feito", "pf ", "self service", "por quilo", "almoço", "almoco", "jantar", "lanche", "comida", "café", "cafe", "açaí", "acai", "sorvete", "doces", "doce", "churrasco", "sushi", "temaki", "yakisoba", "poke", "tapioca", "brunch", "refeição", "refeicao", "hamburgueria", "pizzaria", "cafeteria", "confeitaria", "biscoito", "chocolate", "suco", "refrigerante", "cerveja", "cervejaria", "vinho", "vinícola", "rodizio", "buffet", "comida japonesa", "comida mineira", "lanche da tarde", "café da manhã", "cafe da manha"],
+  // Compras para preparar em casa têm categoria separada de delivery.
+  mercado: ["supermercado", "mercadinho", "mercado", "hipermercado", "atacadão", "atacadao", "assai", "assaí", "carrefour", "pao de acucar", "pão de açúcar", "extra", "dia supermercado", "bh supermercado", "supernosso", "verdemar", "sacolão", "sacolao", "hortifruti", "ceasa", "feira", "quitanda", "açougue", "acougue", "costco", "sam's club", "smart supermercado", "atacarejo", "mercearia", "empório", "emporio", "provisões", "provisoes", "compras do mês", "compras da semana", "frutas", "verduras", "legumes", "carne", "peixe", "frango", "leite", "ovos", "arroz", "feijão", "feijao", "macarrão", "macarrao", "produto de limpeza"],
+  transporte: ["uber", "99 taxi", "99taxi", "cabify", "indrive", "blablacar", "buser", "mototáxi", "mototaxi", "ônibus", "onibus", "metrô", "metro", "trem", "cptm", "táxi", "taxi", "corrida", "passagem", "bilhete único", "bilhete unico", "estacionamento", "pedágio", "pedagio", "zona azul", "vale transporte", "cartão bhbus", "cartao bhbus", "passagem de ônibus", "passagem de onibus", "fretado", "aluguel de carro", "locadora", "movida", "localiza"],
+  combustivel: ["gasolina", "combustível", "combustivel", "etanol", "diesel", "gnv", "posto", "abastecimento"],
+  manutencao: ["oficina", "mecânico", "mecanico", "auto elétrica", "auto eletrica", "pneu", "revisão", "revisao", "manutenção do carro", "manutencao do carro", "reforma", "conserto", "encanador", "eletricista", "chaveiro", "marceneiro", "pintor", "funilaria", "alinhamento", "balanceamento", "troca de óleo", "troca de oleo", "lavagem do carro", "lava jato", "dedetização", "dedetizacao", "vidraceiro", "técnico", "tecnico", "assistência técnica", "assistencia tecnica"],
+  saude: ["farmácia", "farmacia", "drogaria", "droga raia", "drogasil", "pague menos", "ultrafarma", "remédio", "remedio", "médico", "medico", "consulta", "dentista", "plano de saúde", "plano de saude", "unimed", "amil", "sulamerica", "exame", "hospital", "pronto socorro", "psicólogo", "psicologo", "terapia", "fisioterapia", "óculos", "oculos", "vacina", "laboratório", "laboratorio", "nutricionista", "ortodontia", "dermatologista", "ginecologista", "cardiologista", "cirurgia", "medicamento", "vitamina", "suplemento"],
+  academia: ["academia", "smart fit", "bluefit", "personal trainer", "crossfit", "pilates", "yoga", "musculação", "musculacao", "corrida", "natação", "natacao", "esporte"],
+  beleza: ["cabelo", "corte de cabelo", "cabeleireiro", "cabeleireira", "salão", "salao", "manicure", "pedicure", "barbearia", "barbeiro", "depilação", "depilacao", "estética", "estetica", "maquiagem", "sobrancelha", "unha", "skincare", "cosmético", "cosmetico"],
+  educacao: ["curso", "faculdade", "universidade", "livro", "mensalidade escolar", "escola", "material escolar", "apostila", "aula", "udemy", "alura", "duolingo", "mensalidade da faculdade", "pós-graduação", "pos-graduacao", "idioma"],
+  lazer: ["cinema", "show", "bar", "balada", "streaming", "jogo", "passeio", "ingresso", "netflix", "prime video", "parque", "teatro", "spotify", "game pass", "playstation", "xbox", "steam", "nintendo", "livraria", "museu", "zoológico", "zoologico", "boliche", "karaoke", "pub", "happy hour", "clube"],
+  eventos: ["festa", "aniversário", "aniversario", "casamento", "confraternização", "confraternizacao", "formatura", "chá de bebê", "cha de bebe"],
+  presentes: ["presente", "lembrancinha", "flores", "buquê", "buque"],
+  roupas: ["roupa", "calça", "calca", "camisa", "tênis", "tenis", "sapato", "blusa", "jaqueta", "acessório", "acessorio", "bolsa", "perfume", "renner", "riachuelo", "c&a", "shein", "zara", "nike", "adidas", "havaianas", "chinelo", "meia", "cueca", "lingerie", "relógio", "relogio", "joia", "bijuteria", "óculos de sol", "oculos de sol"],
+  tecnologia: ["celular", "notebook", "computador", "fone de ouvido", "carregador", "eletrônico", "eletronico", "teclado", "mouse", "apple", "samsung", "amazon", "smartphone", "tablet", "monitor", "impressora", "cabo", "ssd", "memória ram", "memoria ram", "software", "domínio", "dominio", "hosting", "hospedagem de site"],
+  moradia: ["aluguel", "condomínio", "condominio", "iptu", "imobiliária", "imobiliaria", "financiamento da casa", "prestação da casa", "prestacao da casa", "mudança", "mudanca", "móveis", "moveis", "sofá", "sofa", "geladeira", "fogão", "fogao", "colchão", "colchao", "decoração", "decoracao"],
+  contas: ["conta de luz", "cemig", "energisa", "enel", "light", "luz", "conta de água", "conta de agua", "água", "agua", "copasa", "sabesp", "sanepar", "internet", "vivo fibra", "claro net", "tim", "oi fibra", "gás", "gas", "botijão", "botijao", "telefone", "celular pré pago", "recarga", "tv a cabo", "wifi", "wi fi", "energia", "saneamento", "esgoto", "conta de telefone", "plano de celular"],
+  assinaturas: ["assinatura", "amazon prime", "youtube premium", "disney+", "disney plus", "hbo max", "max", "globoplay", "apple music", "icloud", "google one", "google fotos", "google photos", "chatgpt", "chat gpt", "openai", "uber one", "crunchyroll", "kindle unlimited", "canva", "adobe"],
   viagem: ["viagem", "hospedagem", "hotel", "pousada", "passagem aérea", "passagem aerea"],
-  pet: ["ração", "racao", "veterinário", "veterinario", "petshop"],
+  pet: ["ração", "racao", "veterinário", "veterinario", "petshop", "pet shop", "cachorro", "gato", "areia de gato", "banho e tosa", "antipulgas", "brinquedo do pet", "consulta veterinária", "consulta veterinaria"],
   seguros: ["seguro do carro", "seguro residencial", "seguro de vida", "seguro"],
   impostos: ["ipva", "imposto de renda", "irpf", "imposto", "taxa"],
   doacoes: ["doação", "doacao", "dízimo", "dizimo"],
@@ -104,6 +108,33 @@ function addDaysIso(baseDate, delta) {
   const d = new Date(baseDate);
   d.setDate(d.getDate() + delta);
   return toIsoDate(d);
+}
+
+function validDateAtNoon(year, month, day) {
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)
+    || month < 0 || month > 11 || day < 1 || day > 31) return null;
+  const candidate = new Date(year, month, day, 12);
+  return candidate.getFullYear() === year && candidate.getMonth() === month && candidate.getDate() === day
+    ? candidate : null;
+}
+
+function nearestYearDate(today, month, day, direction) {
+  const step = direction === "past" ? -1 : 1;
+  for (let offset = 0; offset <= 8; offset++) {
+    const candidate = validDateAtNoon(today.getFullYear() + step * offset, month, day);
+    if (candidate && (direction === "past" ? candidate <= today : candidate >= today)) return candidate;
+  }
+  return null;
+}
+
+function nearestMonthDate(today, day, direction) {
+  const step = direction === "past" ? -1 : 1;
+  for (let offset = 0; offset <= 12; offset++) {
+    const monthStart = new Date(today.getFullYear(), today.getMonth() + step * offset, 1, 12);
+    const candidate = validDateAtNoon(monthStart.getFullYear(), monthStart.getMonth(), day);
+    if (candidate && (direction === "past" ? candidate <= today : candidate >= today)) return candidate;
+  }
+  return null;
 }
 
 // Extrai uma referência de data relativa/explícita do texto e devolve
@@ -178,21 +209,17 @@ function extractDateAndClean(text, todayIso, direction = "future") {
         const hasExplicitYear = !!explicitDate[3];
         let year = hasExplicitYear ? parseInt(explicitDate[3], 10) : today.getFullYear();
         if (year < 100) year += 2000;
-        let d = new Date(year, month, day);
-        if (!hasExplicitYear && !isNaN(d)) {
-          if (direction === "future" && d < today) d = new Date(year + 1, month, day);
-          else if (direction === "past" && d > today) d = new Date(year - 1, month, day);
-        }
-        if (!isNaN(d)) date = toIsoDate(d);
+        const d = hasExplicitYear
+          ? validDateAtNoon(year, month, day)
+          : nearestYearDate(today, month, day, direction);
+        if (d) date = toIsoDate(d);
         working = working.replace(explicitDate[0], " ");
       } else if (monthNameMatch) {
         const day = parseInt(monthNameMatch[1], 10);
         const monthKeyName = monthNameMatch[2].replace("ç", "c");
         const month = FIN_MONTH_NAMES[monthKeyName];
-        let d = new Date(today.getFullYear(), month, day);
-        if (direction === "future" && d < today) d = new Date(today.getFullYear() + 1, month, day); // futuro mais próximo pra compromisso
-        else if (direction === "past" && d > today) d = new Date(today.getFullYear() - 1, month, day); // passado mais próximo pra gasto/receita
-        if (!isNaN(d)) date = toIsoDate(d);
+        const d = nearestYearDate(today, month, day, direction);
+        if (d) date = toIsoDate(d);
         working = working.replace(monthNameMatch[0], " ");
       } else if (weekdayMatch) {
         const normalized = weekdayMatch[1].replace("-feira", "").replace("ç", "c").replace("á", "a");
@@ -206,12 +233,8 @@ function extractDateAndClean(text, todayIso, direction = "future") {
         working = working.replace(weekdayMatch[0], " ");
       } else if (dayOnlyMatch) {
         const day = parseInt(dayOnlyMatch[1], 10);
-        if (day >= 1 && day <= 31) {
-          let d = new Date(today.getFullYear(), today.getMonth(), day);
-          if (direction === "future" && d < today) d = new Date(today.getFullYear(), today.getMonth() + 1, day);
-          else if (direction === "past" && d > today) d = new Date(today.getFullYear(), today.getMonth() - 1, day);
-          if (!isNaN(d)) date = toIsoDate(d);
-        }
+        const d = nearestMonthDate(today, day, direction);
+        if (d) date = toIsoDate(d);
         working = working.replace(dayOnlyMatch[0], " ");
       }
     }
@@ -286,8 +309,25 @@ function extractAmountFromText(text) {
 }
 
 function guessType(text) {
-  const norm = String(text || "").toLowerCase();
-  return FIN_INCOME_HINTS.some((kw) => norm.includes(kw)) ? "receita" : "despesa";
+  const norm = String(text || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const explicitVerb = norm.match(/\b(gastei|gasto|paguei|comprei|desembolsei|recebi|ganhei|vendi)\b/);
+  if (explicitVerb) return /^(recebi|ganhei|vendi)$/.test(explicitVerb[1]) ? "receita" : "despesa";
+  return FIN_INCOME_HINTS.some((kw) => norm.includes(kw.normalize("NFD").replace(/[\u0300-\u036f]/g, ""))) ? "receita" : "despesa";
+}
+
+function normalizeCategoryText(value) {
+  return ` ${String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim()} `;
+}
+
+function includesCategoryKeyword(text, keyword) {
+  const normalizedKeyword = normalizeCategoryText(keyword).trim();
+  return !!normalizedKeyword && text.includes(` ${normalizedKeyword} `);
 }
 
 // categories: [{id, type, label}] — respeita categorias custom do
@@ -299,7 +339,7 @@ function guessType(text) {
 // porém claramente incompatível que veio da IA, vença algo explícito como
 // "pão"/"bolo" (Alimentação) ou "Uber" (Transporte).
 function guessSpecificCategoryId(text, type, categories) {
-  const working = String(text || "").toLowerCase();
+  const working = normalizeCategoryText(text);
   let categoryId = null;
   let bestLen = 0;
 
@@ -307,20 +347,22 @@ function guessSpecificCategoryId(text, type, categories) {
   for (const [id, keywords] of Object.entries(FIN_CATEGORY_KEYWORDS)) {
     if (!validIds.has(id)) continue; // só considera ids que o usuário realmente tem
     for (const kw of keywords) {
-      if (kw.length > bestLen && working.includes(kw)) {
+      const normalizedKeyword = normalizeCategoryText(kw).trim();
+      if (normalizedKeyword.length > bestLen && includesCategoryKeyword(working, kw)) {
         categoryId = id;
-        bestLen = kw.length;
+        bestLen = normalizedKeyword.length;
       }
     }
   }
   // Categorias custom sem lista de sinônimos própria: casa por palavra do label.
   for (const cat of categories || []) {
     if (cat.type !== type) continue;
-    const words = String(cat.label || "").replace(/^\S+\s*/, "").toLowerCase().split(/\s+/).filter((w) => w.length > 3);
+    const words = String(cat.label || "").replace(/^\p{Extended_Pictographic}\uFE0F?\s*/u, "").toLowerCase().split(/\s+/).filter((w) => w.length > 3);
     for (const w of words) {
-      if (w.length > bestLen && working.includes(w)) {
+      const normalizedWord = normalizeCategoryText(w).trim();
+      if (normalizedWord.length > bestLen && includesCategoryKeyword(working, w)) {
         categoryId = cat.id;
-        bestLen = w.length;
+        bestLen = normalizedWord.length;
       }
     }
   }
@@ -413,14 +455,14 @@ const TASK_CREATE_TRIGGERS = [
 // TASK_CREATE_TRIGGERS aqui não batia com nada e deixava o comando
 // inteiro (verbo incluso) como "alvo" da busca por tarefa.
 const TASK_COMPLETE_DELETE_TRIGGERS = [
-  /^\s*conclu[íi][r]?\s+(a\s+)?tarefa\s*(de|do|da)?\s*/i,
-  /^\s*termin[ei][i]?\s+(a\s+)?tarefa\s*(de|do|da)?\s*/i,
-  /^\s*finaliz[ei][i]?\s+(a\s+)?tarefa\s*(de|do|da)?\s*/i,
-  /^\s*marca[r]?\s+(a\s+)?tarefa\s*(de|do|da)?\s*(como\s+(feita|conclu[íi]da))?\s*/i,
-  /^\s*apag[ae][i]?[r]?\s+(a\s+)?tarefa\s*(de|do|da)?\s*/i,
-  /^\s*exclu[íi][i]?[r]?\s+(a\s+)?tarefa\s*(de|do|da)?\s*/i,
-  /^\s*deleta[r]?\s+(a\s+)?tarefa\s*(de|do|da)?\s*/i,
-  /^\s*remov[ei][i]?[r]?\s+(a\s+)?tarefa\s*(de|do|da)?\s*/i,
+  /^\s*conclu[íi][r]?\s+(a\s+)?tarefa\s*(?:(?:de|do|da)\b\s*)?/i,
+  /^\s*termin[ei][i]?\s+(a\s+)?tarefa\s*(?:(?:de|do|da)\b\s*)?/i,
+  /^\s*finaliz[ei][i]?\s+(a\s+)?tarefa\s*(?:(?:de|do|da)\b\s*)?/i,
+  /^\s*marca[r]?\s+(a\s+)?tarefa\s*(?:(?:de|do|da)\b\s*)?(como\s+(feita|conclu[íi]da))?\s*/i,
+  /^\s*apag[ae][i]?[r]?\s+(a\s+)?tarefa\s*(?:(?:de|do|da)\b\s*)?/i,
+  /^\s*exclu[íi][i]?[r]?\s+(a\s+)?tarefa\s*(?:(?:de|do|da)\b\s*)?/i,
+  /^\s*deleta[r]?\s+(a\s+)?tarefa\s*(?:(?:de|do|da)\b\s*)?/i,
+  /^\s*remov[ei][i]?[r]?\s+(a\s+)?tarefa\s*(?:(?:de|do|da)\b\s*)?/i,
 ];
 
 const GOAL_CREATE_TRIGGERS = [

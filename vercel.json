@@ -28,6 +28,18 @@
       ]
     },
     {
+      "source": "/manifest.json",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
+      ]
+    },
+    {
+      "source": "/src/manifest.json",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
+      ]
+    },
+    {
       "source": "/src/index.html",
       "headers": [
         { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
@@ -73,12 +85,20 @@
 
   "rewrites": [
     {
+      "source": "/api/finance-forecast",
+      "destination": "/api/pulsinho?mode=forecast"
+    },
+    {
       "source": "/login",
       "destination": "/src/login.html"
     },
     {
       "source": "/app",
       "destination": "/src/index.html"
+    },
+    {
+      "source": "/admin",
+      "destination": "/src/admin.html"
     },
     {
       "source": "/forgot-password",
@@ -110,7 +130,7 @@
     },
     {
       "source": "/(.*)",
-      "destination": "/index.html"
+      "destination": "/src/index.html"
     }
   ]
 }

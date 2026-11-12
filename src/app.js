@@ -2,21 +2,28 @@
 // PulseNote — Autenticação e sincronização via Firebase
 // ============================================================
 import { auth, db } from "./firebase-init.js";
+import { createAutopilotUI } from "./autopilot-ui.js";
+import { deleteAccountDataAndIdentity } from "./account-deletion.mjs";
+import { cloneState, changedStateKeys, mergeDirtyState } from "./state-sync.js";
 import {
   onAuthStateChanged,
   signOut,
   updateProfile,
   updatePassword,
   reauthenticateWithCredential,
+  reauthenticateWithPopup,
   EmailAuthProvider,
+  GoogleAuthProvider,
   sendEmailVerification,
   deleteUser,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   doc,
+  getDocFromServer,
   setDoc,
   deleteDoc,
   onSnapshot,
+  runTransaction,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 // ============================================================
@@ -30,6 +37,8 @@ import {
 // aviso simples na tela, com a mensagem exata do erro — assim dá pra
 // tirar print e mandar, em vez de "não funciona".
 let lastShownRuntimeError = "";
+const pulsinhoConversation = [];
+let pendingPulsinhoAction = null;
 function showRuntimeErrorBanner(message) {
   if (!message || message === lastShownRuntimeError) return; // evita repetir o mesmo aviso em loop
   lastShownRuntimeError = message;
@@ -64,20 +73,20 @@ window.addEventListener("unhandledrejection", (event) => {
   showRuntimeErrorBanner(event.reason?.message || String(event.reason));
 });
 
-// ── Tema: Claro / Aurora / Automático ─────────────────────────────
+// ── Tema: Claro / Escuro / Eclipse / Automático ───────────────────
 // A escolha fica em localStorage (não depende de login/Firestore, então
 // funciona até na tela de login). Um script inline no <head> do HTML já
 // aplica isso antes da primeira pintura da tela, para nunca "piscar"
 // claro por engano; aqui só mantemos o valor sincronizado durante o uso
 // do app e ligamos os botões em Configurações > Aparência.
-// Obs.: o antigo tema "Escuro" foi removido (não estava funcionando bem)
-// — "Automático" em modo escuro agora usa a mesma paleta do "Aurora".
+// O identificador interno "aurora" representa o tema Escuro executivo;
+// ele é preservado para não quebrar preferências já salvas.
 const THEME_STORAGE_KEY = "pulsenote-theme";
 
 function syncThemeColorMeta(choice) {
   const isDark = choice === "aurora" || choice === "eclipse" || (choice !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
   const meta = document.getElementById("themeColorMeta");
-  if (meta) meta.setAttribute("content", choice === "eclipse" ? "#000000" : (isDark ? "#060a18" : "#f5f7fa"));
+  if (meta) meta.setAttribute("content", choice === "eclipse" ? "#060a13" : (isDark ? "#0a1020" : "#f7f8fc"));
   // Mantém o <meta name="color-scheme"> alinhado ao tema escolhido, para que
   // selects, calendário nativo, barra de rolagem etc. nunca fiquem brancos
   // por cima de um app configurado como escuro (ver comentário no <head>).
@@ -106,9 +115,8 @@ try {
 function getSavedTheme() {
   try {
     const t = localStorage.getItem(THEME_STORAGE_KEY);
-    // Valor antigo "dark", de quem já tinha escolhido o extinto tema
-    // "Escuro", cai automaticamente em "system" (que agora é o Aurora
-    // quando o aparelho está escuro) — sem quebrar nada pra quem já usava.
+    // Valores antigos continuam caindo em "system", sem quebrar quem já
+    // usava uma versão anterior do seletor de aparência.
     return t === "light" || t === "aurora" || t === "eclipse" ? t : "system";
   } catch { return "system"; }
 }
@@ -169,6 +177,26 @@ function getStorageKey() {
 let currentUser   = null;   // objeto do usuário logado (Firebase Auth)
 let unsubscribeDoc = null;  // função para parar de "escutar" o Firestore
 let syncTimer      = null;
+let accountDeletionInProgress = false;
+let accountDeletionRequested = false;
+const activeSyncs = new Set();
+const SERVER_OWNED_FIELDS = ["fcmTokens", "serverNotifications"];
+let observedState = null;
+const dirtyBases = {};
+const dirtyVersions = {};
+
+function pendingSyncKey() {
+  return currentUser ? `${BASE_STORAGE_KEY}:pending:${currentUser.uid}` : null;
+}
+
+function persistPendingSync() {
+  const key = pendingSyncKey();
+  if (!key) return;
+  try {
+    if (Object.keys(dirtyBases).length) localStorage.setItem(key, JSON.stringify(dirtyBases));
+    else localStorage.removeItem(key);
+  } catch { /* armazenamento indisponível; o estado atual segue em memória */ }
+}
 
 // ── Helpers de usuário (substituem getToken/getUser antigos) ──
 function getUser() {
@@ -178,43 +206,6 @@ function getUser() {
     name: currentUser.displayName || "Usuário",
     email: currentUser.email,
   };
-}
-
-// ── Indicador visual de status de sincronização ───────────────
-// Agora clicável: se a última sincronização falhou, tocar/clicar no
-// indicador tenta salvar de novo na hora (em vez de esperar o próximo
-// debounce, que só dispara com uma nova alteração do usuário).
-let _lastSyncStatus = "saved";
-function showSyncStatus(status, detail) {
-  let el = document.getElementById("syncStatus");
-  if (!el) {
-    el = document.createElement("div");
-    el.id = "syncStatus";
-    el.className = "sync-status";
-    el.addEventListener("click", () => {
-      if (_lastSyncStatus === "error" || _lastSyncStatus === "offline") {
-        _syncRetries = 0;
-        syncToServer();
-      }
-    });
-    document.body.appendChild(el);
-  }
-  _lastSyncStatus = status;
-  const states = {
-    saving:  { text: "⏳ Salvando..." },
-    saved:   { text: "✅ Salvo na nuvem" },
-    offline: { text: "📵 Sem conexão — toque para tentar de novo" },
-    error:   { text: `❌ ${detail || "Erro ao salvar"} — toque para tentar de novo` },
-  };
-  const s = states[status] || states.saved;
-  el.textContent = s.text;
-  el.dataset.status = status;
-  el.classList.add("is-visible");
-  el.classList.toggle("is-actionable", status === "error" || status === "offline");
-  clearTimeout(showSyncStatus._hideTimer);
-  if (status === "saved") {
-    showSyncStatus._hideTimer = setTimeout(() => el.classList.remove("is-visible"), 1800);
-  }
 }
 
 // Remove valores "undefined" em qualquer profundidade (objetos e arrays).
@@ -235,22 +226,6 @@ function stripUndefinedDeep(value) {
   return value;
 }
 
-// Tradução de erros comuns do Firestore/Auth para algo que a pessoa
-// consiga entender e agir (em vez de "Erro ao salvar" sem contexto).
-function friendlySyncError(err) {
-  const code = err?.code || "";
-  if (code.includes("permission-denied")) return "Sem permissão para salvar. Faça login novamente";
-  if (code.includes("unauthenticated")) return "Sessão expirada. Faça login novamente";
-  if (code.includes("unavailable") || code.includes("network")) return "Sem conexão com o servidor";
-  if (code.includes("resource-exhausted") || err?.message?.includes("exceeds the maximum")) return "Dados grandes demais para salvar";
-  // Antes caía sempre em "Erro ao salvar" genérico, sem pista nenhuma do que
-  // houve — quem visse o aviso não tinha como saber se era regra do
-  // Firestore, dado inválido, etc. Agora mostra o motivo cru (código ou
-  // mensagem original) junto, pra dar algo concreto para investigar.
-  const raw = code || err?.message;
-  return raw ? `Erro ao salvar (${raw})` : "Erro ao salvar";
-}
-
 // ── Salva o state atual no Firestore (documento do usuário) ───
 // Guard triplo antes de qualquer escrita:
 // 1. currentUser existe (usuário logado)
@@ -259,60 +234,89 @@ function friendlySyncError(err) {
 // Sem esse guard, chamadas durante a inicialização (antes do onAuthStateChanged
 // terminar) disparavam "Erro ao salvar" mesmo sem nenhuma ação do usuário.
 let _syncRetries = 0;
-async function syncToServer() {
+function syncToServer() {
+  if (accountDeletionInProgress) return;
+  const work = performSyncToServer();
+  activeSyncs.add(work);
+  work.then(() => activeSyncs.delete(work), () => activeSyncs.delete(work));
+  return work;
+}
+
+async function performSyncToServer() {
   if (!currentUser || !currentUser.emailVerified || !state) return;
+  const fields = Object.keys(dirtyBases);
+  if (!fields.length) return;
 
   // Documento único por usuário: se ele crescer demais (fotos grandes,
   // muitos anos de lançamentos), o Firestore recusa a escrita (limite de
-  // 1 MiB por documento). Detectamos isso ANTES de tentar gravar, para
-  // mostrar um aviso útil em vez de ficar tentando de novo sem sucesso.
+  // 1 MiB por documento). Detectamos isso antes da tentativa; o cache local
+  // continua atualizado e o motivo fica disponível no console de suporte.
   const clean = stripUndefinedDeep(state);
+  delete clean.fcmTokens;
+  delete clean.serverNotifications;
+  const basesAtStart = cloneState(dirtyBases);
+  const versionsAtStart = { ...dirtyVersions };
   const approxBytes = new Blob([JSON.stringify(clean)]).size;
   if (approxBytes > 900_000) {
-    showSyncStatus("error", "Dados grandes demais para salvar (reduza a foto de perfil ou registros antigos)");
+    console.error("Não foi possível sincronizar: os dados excedem o limite seguro do documento do Firestore.");
     const key = getStorageKey();
     if (key) localStorage.setItem(key, JSON.stringify(state));
     return;
   }
 
-  showSyncStatus("saving");
   try {
-    await setDoc(doc(db, "userData", currentUser.uid), {
-      data: clean,
-      updatedAt: new Date().toISOString(),
+    const ref = doc(db, "userData", currentUser.uid);
+    const merged = await runTransaction(db, async (transaction) => {
+      const snapshot = await transaction.get(ref);
+      const remote = snapshot.exists() ? snapshot.data().data || {} : {};
+      const next = mergeDirtyState(remote, clean, basesAtStart);
+      const patch = {};
+      for (const field of fields) {
+        if (next[field] !== undefined) patch[field] = next[field];
+      }
+      transaction.set(ref, { data: patch, updatedAt: new Date().toISOString() }, {
+        mergeFields: ["updatedAt", ...Object.keys(patch).map((key) => `data.${key}`)],
+      });
+      return next;
     });
+    for (const field of fields) {
+      if (dirtyVersions[field] === versionsAtStart[field]) {
+        delete dirtyBases[field];
+        delete dirtyVersions[field];
+      } else {
+        // A pessoa editou novamente durante a transação: o próximo merge
+        // usa esta gravação confirmada como base, sem perder a edição nova.
+        dirtyBases[field] = cloneState(merged[field]);
+      }
+    }
+    persistPendingSync();
     const key = getStorageKey();
     if (key) localStorage.setItem(key, JSON.stringify(state));
-    showSyncStatus("saved");
     _syncRetries = 0; // reset ao ter sucesso
+    if (Object.keys(dirtyBases).length) scheduleSyncToServer();
   } catch (err) {
     console.error("Erro ao salvar no Firestore:", err);
     const key = getStorageKey();
     if (key) localStorage.setItem(key, JSON.stringify(state)); // nunca perde o dado localmente
-    if (!navigator.onLine) {
-      showSyncStatus("offline");
-      return;
-    }
+    if (!navigator.onLine) return;
     // Retry com backoff exponencial (máx 3 tentativas, 2s/4s/8s)
     if (_syncRetries < 3) {
       _syncRetries++;
       const delay = Math.pow(2, _syncRetries) * 1000;
-      showSyncStatus("saving"); // mantém "Salvando..." durante retry
       setTimeout(syncToServer, delay);
     } else {
       _syncRetries = 0;
-      showSyncStatus("error", friendlySyncError(err));
     }
   }
 }
 
 function scheduleSyncToServer() {
+  if (accountDeletionInProgress) return;
   clearTimeout(syncTimer);
   syncTimer = setTimeout(syncToServer, 1200);
 }
 
-// Mostra avisos quando a conexão cai ou volta
-window.addEventListener("offline", () => showSyncStatus("offline"));
+// Ao voltar a conexão, sincroniza silenciosamente o estado mais recente.
 window.addEventListener("online", () => {
   if (currentUser) syncToServer();
 });
@@ -334,11 +338,36 @@ async function logout() {
 // ── Guarda de autenticação + carregamento em tempo real ───────
 // Esta é a peça central: o app só é exibido depois de confirmar
 // que existe um usuário logado, e os dados vêm sempre do Firestore.
+const designPreviewMode = new URLSearchParams(window.location.search).get("designPreview") || "";
+const designPreviewRequested = ["1", "worst"].includes(designPreviewMode);
+const designPreviewHostAllowed = ["localhost", "127.0.0.1"].includes(window.location.hostname)
+  || /^pulse-note-5erj-[a-z0-9-]+-douglas-projects-c831a9fc\.vercel\.app$/i.test(window.location.hostname);
+// O modo de demonstração usa somente dados fictícios e existe para QA visual.
+// O domínio oficial não corresponde ao padrão acima, então esta rota jamais
+// ignora a autenticação em produção — mesmo que alguém copie o parâmetro.
+const isLocalDesignPreview = designPreviewRequested && designPreviewHostAllowed;
 const appReady = new Promise((resolve) => {
   let resolved = false; // garante que resolve() é chamado apenas uma vez
 
   onAuthStateChanged(auth, async (user) => {
     if (!user) {
+      if (isLocalDesignPreview) {
+        currentUser = {
+          uid: "local-design-preview",
+          displayName: designPreviewMode === "worst" ? "Aleksandra Wiśniewska-Kowalczyk de Albuquerque" : "Lucas Martins",
+          email: designPreviewMode === "worst" ? "bartholomew.fitzgerald@northwind-industries-holdings.example.com" : "lucas.martins@exemplo.com",
+          emailVerified: true,
+          getIdToken: async () => null,
+        };
+        state = createDesignPreviewState(designPreviewMode);
+        observedState = cloneState(state);
+        if (!resolved) { resolved = true; resolve(); }
+        return;
+      }
+      // Durante a exclusão, o handler abaixo limpa o cache local antes
+      // de navegar. O evento de Auth pode chegar antes de deleteUser
+      // resolver; não redirecione cedo demais deixando dados no aparelho.
+      if (accountDeletionInProgress) return;
       window.location.replace("/login");
       return;
     }
@@ -359,6 +388,7 @@ const appReady = new Promise((resolve) => {
       showVerifyEmailGate();
       return;
     }
+    trackUsageArea(activeView);
 
     // IMPORTANTE: o state SEMPRE começa "vazio" (defaults de fábrica) até
     // o Firestore confirmar os dados reais deste usuário específico.
@@ -376,6 +406,19 @@ const appReady = new Promise((resolve) => {
         if (parsed && typeof parsed === "object") state = normalizeState(parsed);
       } catch { /* cache corrompido — ignora e segue com defaults */ }
     }
+    observedState = cloneState(state);
+    if (cached) {
+      try {
+        const pending = JSON.parse(localStorage.getItem(pendingSyncKey()) || "{}");
+        if (pending && typeof pending === "object" && !Array.isArray(pending)) {
+          for (const [field, base] of Object.entries(pending)) {
+            if (SERVER_OWNED_FIELDS.includes(field) || !(field in state)) continue;
+            dirtyBases[field] = base;
+            dirtyVersions[field] = 1;
+          }
+        }
+      } catch { /* metadados antigos/corrompidos — usa o servidor */ }
+    }
 
     renderAll(); // mostra algo imediatamente (cache ou defaults) enquanto busca o Firestore
 
@@ -384,13 +427,21 @@ const appReady = new Promise((resolve) => {
     // onSnapshot escuta mudanças em tempo real no Firestore.
     // É chamado: (1) imediatamente com os dados atuais, (2) toda vez
     // que outro dispositivo/aba salvar algo novo para ESTE MESMO usuário.
+    let firstSnapshotForUser = true;
     unsubscribeDoc = onSnapshot(
       userDocRef,
       (snapshot) => {
+        // A exclusão apaga este documento ANTES da identidade Firebase.
+        // Não confunda esse evento com o primeiro login e não recrie os
+        // dados enquanto a exclusão está em andamento.
+        if (!snapshot.exists() && accountDeletionInProgress) return;
         if (snapshot.exists()) {
           const remote = snapshot.data().data;
           if (remote && typeof remote === "object") {
-            state = normalizeState(remote);
+            state = normalizeState(Object.keys(dirtyBases).length
+              ? mergeDirtyState(remote, state, dirtyBases)
+              : remote);
+            observedState = cloneState(state);
             const k = getStorageKey();
             if (k) localStorage.setItem(k, JSON.stringify(state));
           }
@@ -400,17 +451,18 @@ const appReady = new Promise((resolve) => {
           setDoc(userDocRef, { data: stripUndefinedDeep(state), updatedAt: new Date().toISOString() })
             .catch((err) => {
               console.error("Erro ao criar documento inicial:", err);
-              showSyncStatus("error", friendlySyncError(err));
             });
         }
 
         renderAll(); // re-renderiza com os dados confirmados do servidor
+        autopilotUi.invalidate();
+        if (firstSnapshotForUser && Object.keys(dirtyBases).length) scheduleSyncToServer();
+        firstSnapshotForUser = false;
 
         if (!resolved) { resolved = true; resolve(); }
       },
       (err) => {
         console.error("Erro ao escutar Firestore:", err);
-        showSyncStatus("error", friendlySyncError(err));
         if (!resolved) { resolved = true; resolve(); } // segue com cache local/defaults
       }
     );
@@ -423,9 +475,26 @@ const viewTitles = {
   planner: "Planner",
   notes: "Anotações",
   finances: "Finanças",
+  autopilot: "Pulse Autopilot",
   profile: "Perfil",
   settings: "Configurações",
 };
+
+let lastUsageArea = "";
+let lastUsageAt = 0;
+function trackUsageArea(area) {
+  if (!currentUser || !Object.hasOwn(viewTitles, area)) return;
+  const now = Date.now();
+  if (lastUsageArea === area && now - lastUsageAt < 60_000) return;
+  lastUsageArea = area;
+  lastUsageAt = now;
+  currentUser.getIdToken().then((token) => fetch("/api/usage-event", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ area }),
+    keepalive: true,
+  })).catch(() => { /* Telemetria operacional nunca bloqueia o aplicativo. */ });
+}
 
 // Catálogo padrão de categorias — cobre os casos mais comuns de despesa
 // pessoal (moradia, contas, alimentação, saúde, lazer, família, finanças...)
@@ -560,6 +629,7 @@ const appTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "America
 // pelos dados reais do usuário DEPOIS que o Firebase confirma o login
 // (dentro do bloco onAuthStateChanged, em appReady) — nunca antes disso.
 let state = loadDefaultState();
+observedState = cloneState(state);
 
 // Ponte para o notifications.js: como ele é um <script> normal (não um
 // módulo ES), não tem acesso direto às variáveis internas deste módulo.
@@ -579,9 +649,17 @@ let plannerWeekAnchor = todayIso; // qualquer data dentro da semana ativa
 let plannerMonthAnchor = todayIso; // qualquer data dentro do mês ativo
 let plannerExpandedGoals = new Set();
 let plannerExpandedTaskDetails = new Set(); // ids de tarefas com a checklist aberta — sem isso, qualquer alteração num item (concluir/excluir/adicionar) recriava a linha do zero e fechava a checklist na cara do usuário
+let plannerEditingEventId = null;
 let notesFolderFilter = "all"; // filtro de pasta ativo na biblioteca de Notas
 // Mês ativo na view de Finanças. Formato "YYYY-MM". Começa no mês atual.
 let finActiveMonth = todayIso.slice(0, 7);
+let activeWorkspaceId = "personal";
+let sharedFinanceSpaces = [];
+let sharedFinanceInvites = [];
+const sharedSpaceSyncTimers = new Map();
+let finCategoryDrilldown = null;
+let lastForecastFetchAt = 0;
+let latestDashboardForecast = null;
 
 const elements = {
   viewTitle: document.querySelector("#viewTitle"),
@@ -589,6 +667,11 @@ const elements = {
   globalSearch: document.querySelector("#globalSearch"),
   toast: document.querySelector("#toast"),
 };
+const autopilotUi = createAutopilotUI({
+  getToken: () => currentUser,
+  openArea: (area) => setView(["finances", "planner", "notes"].includes(area) ? area : "dashboard"),
+  notify: (message) => showToast(message),
+});
 
 document.addEventListener("DOMContentLoaded", async () => {
   // Mostra overlay de carregamento enquanto o Firebase autentica.
@@ -632,6 +715,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   if (!currentUser) return; // já foi redirecionado para login.html
   if (!currentUser.emailVerified) return; // gate de verificação já está sendo exibido
+  mountDesignPreviewToggle();
 
   const now = new Date();
   const hour = now.getHours();
@@ -646,6 +730,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   const user = getUser();
   const firstName = user?.name?.split(" ")[0] || "Usuário";
   elements.todayLabel.textContent = `${greeting}, ${firstName} · ${dateStr}`;
+  applyViewHeading(activeView);
+  renderShellUser(user);
 
   const greetingMascot = document.querySelector("#greetingMascot");
   if (greetingMascot) {
@@ -663,12 +749,16 @@ document.addEventListener("DOMContentLoaded", async () => {
   setInterval(updateEventCountdowns, 30000);
 
   bindNavigation();
+  bindPremiumDashboard();
+  await loadFinanceSpaces({ silent: true });
+  autopilotUi.bind();
   bindPlannerNav();
   bindPlannerQuickAdd();
   bindNoteDetail();
   bindForms();
   bindActions();
   bindSettingsView();
+  checkAdminAccess();
   bindThemeToggle();
   bindFinTabs();
   bindFinanceMonthControls();
@@ -676,7 +766,16 @@ document.addEventListener("DOMContentLoaded", async () => {
   bindFinRecurModal();
   bindGlobalPalette();
   autoApplyRecurrents();
+  // Registra a tela atual no primeiro carregamento. Isso faz o botão/gesto
+  // de voltar percorrer as telas do app antes de deixar a aplicação.
+  const viewFromHistory = history.state?.pnView;
+  if (viewFromHistory && document.querySelector(`#${viewFromHistory}View`)) {
+    setView(viewFromHistory, { fromHistory: true });
+  } else {
+    history.replaceState({ ...(history.state || {}), pnView: activeView, noteDetail: false }, "");
+  }
   renderAll();
+  autopilotUi.load();
   handlePwaShortcutAction();
 });
 
@@ -747,10 +846,10 @@ function showVerifyEmailGate() {
 }
 
 function renderProfileButton(user) {
-  const topbarActions = document.querySelector(".topbar-actions");
+  const topbarActions = document.querySelector("#bdTopActions");
   if (!topbarActions || document.querySelector(".user-avatar-btn")) return;
 
-  const initial  = (user?.name || "U").charAt(0).toUpperCase();
+  const initial  = bdInitials(user?.name || "U");
   const photoURL = state?.profilePhoto || currentUser?.photoURL || "";
 
   const wrapper = document.createElement("div");
@@ -768,7 +867,7 @@ function renderProfileButton(user) {
       ${avatarContent}
     </button>
   `;
-  topbarActions.prepend(wrapper);
+  topbarActions.append(wrapper);
 
   // Overlay escuro por trás do dropdown (estilo bottom-sheet no mobile)
   const backdrop = document.createElement("div");
@@ -800,6 +899,9 @@ function renderProfileButton(user) {
     <button class="dropdown-item" id="dropdownNotifications">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;vertical-align:-2px"><path d="M6 8.5a6 6 0 0 1 12 0c0 4.2 1.3 5.8 2 6.5H4c.7-.7 2-2.3 2-6.5z"/><path d="M9.5 17.5a2.5 2.5 0 0 0 5 0"/></svg>${window.notificationsAreEnabled?.() ? "Notificações ativadas" : "Ativar notificações"}
     </button>
+    <button class="dropdown-item" id="dropdownAdmin" hidden>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;vertical-align:-2px"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M8 9h8M8 13h3M14 13h2M8 17h5"/></svg>Abrir administração
+    </button>
     <button class="dropdown-item danger" id="dropdownLogout"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;vertical-align:-2px"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>Sair da conta</button>
   `;
   document.body.appendChild(dropdown);
@@ -830,7 +932,6 @@ function renderProfileButton(user) {
     closeDropdown();
     if (!confirm("Deseja sair da sua conta?")) return;
     clearTimeout(syncTimer);
-    showSyncStatus("saving");
     try { await syncToServer(); } finally { await logout(); }
   });
 
@@ -852,6 +953,11 @@ function renderProfileButton(user) {
     }
     closeDropdown();
     await window.requestNotificationPermission?.();
+  });
+
+  document.getElementById("dropdownAdmin").addEventListener("click", () => {
+    closeDropdown();
+    window.location.assign("/admin");
   });
 }
 
@@ -971,6 +1077,92 @@ function renderSettings() {
     : initial;
 
   renderWhatsAppSettings();
+  const aiPreference = document.getElementById("pulsinhoAiPreference");
+  if (aiPreference && document.activeElement !== aiPreference) aiPreference.value = state.aiProviderPreference || "auto";
+  loadBillingSettings();
+}
+
+let billingRequest = null;
+function billingMoney(cents) {
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format((Number(cents) || 0) / 100);
+}
+
+async function billingApi(action, method = "GET", body) {
+  if (!currentUser) throw new Error("unauthorized");
+  const token = await currentUser.getIdToken();
+  const response = await fetch(`/api/billing?action=${encodeURIComponent(action)}`, {
+    method,
+    headers: { "Authorization": `Bearer ${token}`, ...(body ? { "Content-Type": "application/json" } : {}) },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw Object.assign(new Error(payload.error || "billing_request_failed"), { code: payload.error });
+  return payload;
+}
+
+async function loadBillingSettings(force = false) {
+  const grid = document.getElementById("billingPlanGrid");
+  if (!grid || !currentUser) return;
+  const statusBadge = document.getElementById("billingStatusBadge");
+  const statusText = document.getElementById("billingStatusText");
+  // A prévia visual usa uma identidade fictícia e nunca deve consultar APIs
+  // autenticadas. Além de evitar ruído no console, isto reforça que o QA não
+  // cria assinatura, checkout ou qualquer alteração financeira real.
+  if (isLocalDesignPreview) {
+    statusBadge.textContent = "Prévia visual";
+    statusBadge.className = "billing-status-badge";
+    statusText.textContent = "Planos e pagamentos não são simulados neste preview seguro.";
+    grid.innerHTML = '<div class="empty-state">Entre com uma conta real para consultar assinatura e cobrança.</div>';
+    const actions = document.getElementById("billingActions");
+    if (actions) actions.hidden = true;
+    return null;
+  }
+  if (billingRequest && !force) return billingRequest;
+  billingRequest = billingApi("status").then((data) => {
+    const current = data.subscription || {};
+    const active = current.status === "active";
+    const planLabel = document.querySelector("#bdUserPlan");
+    if (planLabel) planLabel.textContent = active ? `Plano ${(data.plans || []).find((plan) => plan.id === current.planId)?.name || ""}`.trim() : "Sem plano";
+    statusBadge.textContent = active ? "Assinatura ativa" : current.planId ? "Assinatura pausada" : "Sem plano contratado";
+    statusBadge.className = `billing-status-badge ${active ? "is-active" : current.planId ? "is-warning" : ""}`;
+    statusText.textContent = !data.configured
+      ? "Os pagamentos ainda não foram ativados pelo administrador. Seus recursos atuais continuam funcionando normalmente."
+      : active ? "Seu acesso é atualizado automaticamente após cada confirmação do provedor de pagamento."
+        : "Escolha um plano para ativar os recursos correspondentes.";
+    grid.innerHTML = data.plans.length ? data.plans.map((plan) => {
+      const isCurrent = current.planId === plan.id;
+      const disabled = isCurrent || !plan.checkoutAvailable;
+      return `<article class="billing-plan-card ${isCurrent ? "is-current" : ""}">
+        <h3>${escapeHtml(plan.name)}</h3><p>${escapeHtml(plan.description || "Recursos definidos pelo administrador.")}</p>
+        <div class="billing-plan-price">${billingMoney(plan.priceCents)} <small>/${plan.billingInterval === "year" ? "ano" : "mês"}</small></div>
+        <button type="button" class="${isCurrent ? "ghost-button" : "primary-button"}" data-billing-plan="${escapeHtml(plan.id)}" ${disabled ? "disabled" : ""}>${isCurrent ? "Plano atual" : plan.checkoutAvailable ? "Assinar plano" : "Indisponível"}</button>
+      </article>`;
+    }).join("") : `<div class="empty-state">Nenhum plano público está disponível no momento.</div>`;
+    document.getElementById("billingActions").hidden = current.provider !== "stripe";
+    grid.querySelectorAll("[data-billing-plan]").forEach((button) => button.addEventListener("click", async () => {
+      if (button.disabled) return;
+      const original = button.textContent;
+      button.disabled = true;
+      button.textContent = "Abrindo pagamento…";
+      try {
+        const result = await billingApi("checkout", "POST", { planId: button.dataset.billingPlan });
+        window.location.assign(result.url);
+      } catch (error) {
+        console.error("Falha ao iniciar checkout:", error.code || error.message);
+        button.disabled = false;
+        button.textContent = original;
+        showToast("Não foi possível abrir o pagamento agora.");
+      }
+    }));
+    return data;
+  }).catch((error) => {
+    console.error("Falha ao carregar cobrança:", error.code || error.message);
+    statusBadge.textContent = "Indisponível";
+    statusBadge.className = "billing-status-badge is-warning";
+    statusText.textContent = "Não foi possível consultar sua assinatura agora. Tente novamente em instantes.";
+    grid.innerHTML = "";
+  }).finally(() => { billingRequest = null; });
+  return billingRequest;
 }
 
 // Mostra o estado atual da integração com WhatsApp em Configurações:
@@ -983,6 +1175,53 @@ function renderWhatsAppSettings() {
   const unlinkedBlock = document.getElementById("whatsappUnlinkedBlock");
   const codeBlock     = document.getElementById("whatsappCodeBlock");
   if (!linkedBlock || !unlinkedBlock || !state) return;
+
+  const appReminderCheckbox = document.getElementById("appReminderOptIn");
+  // A preferência da conta, sozinha, não prova que ESTE aparelho registrou
+  // a permissão do navegador. Exibir o controle como ligado sem essa
+  // permissão fazia a pessoa acreditar que receberia push com o app fechado,
+  // mesmo sem token FCM. O toggle agora representa o estado real do aparelho;
+  // ao ligá-lo, o fluxo abaixo pede a permissão e registra/renova o token.
+  if (appReminderCheckbox) {
+    appReminderCheckbox.checked = state.appReminderOptIn !== false
+      && window.pushNotificationsAreRegistered?.() === true;
+  }
+  const appReminderStatus = document.getElementById("appReminderStatus");
+  if (appReminderStatus) {
+    const hasToken = Array.isArray(state.fcmTokens) && state.fcmTokens.some(Boolean);
+    let persistedPushStatus = null;
+    try {
+      persistedPushStatus = JSON.parse(localStorage.getItem("pn_push_setup_status") || "null");
+    } catch (_) {
+      localStorage.removeItem("pn_push_setup_status");
+    }
+    const pushStatus = window.PulseNotePushSetupStatus
+      || persistedPushStatus
+      || window.PulseNotePush?.getRegistrationStatus?.()
+      || { code: "not-attempted" };
+    const failureLabels = {
+      "auth-required": "Entre novamente na conta e tente ativar o push.",
+      "notification-unsupported": "Este navegador não oferece notificações. Use um navegador compatível ou instale o PulseNote como aplicativo.",
+      "permission-denied": "Notificações estão bloqueadas para este site. Libere-as nas configurações do navegador.",
+      "permission-not-granted": "A permissão de notificações não foi concedida neste aparelho.",
+      "module-unavailable": "O módulo de push não terminou de carregar. Atualize a página e tente novamente.",
+      "registration-failed": "Não foi possível registrar este aparelho para push. Atualize a página e tente novamente.",
+      "messaging-unsupported": "Este navegador não oferece push em segundo plano.",
+      "push-manager-unsupported": "Este dispositivo não oferece push em segundo plano.",
+      "service-worker-unsupported": "Este navegador não oferece notificações com o app fechado.",
+      "messaging/permission-blocked": "O navegador bloqueou notificações para este site.",
+      "messaging/failed-service-worker-registration": "O serviço de notificações não conseguiu iniciar neste navegador.",
+      "messaging/token-subscribe-failed": "O Firebase recusou o registro deste aparelho. Tente novamente.",
+      "invalid-vapid-key": "A chave pública Web Push configurada no PulseNote é inválida.",
+      "vapid-key-missing": "A chave Web Push do projeto ainda não está configurada.",
+    };
+    appReminderStatus.textContent = hasToken && state.appReminderOptIn !== false
+      ? "Push em segundo plano ativo. Os avisos podem chegar com o app fechado."
+      : failureLabels[pushStatus.code]
+        || (("Notification" in window) && Notification.permission === "denied"
+          ? "Notificações estão bloqueadas nas configurações deste navegador."
+          : "Push em segundo plano ainda não foi registrado neste aparelho.");
+  }
 
   if (state.whatsappLinkedPhone) {
     linkedBlock.hidden   = false;
@@ -1044,6 +1283,35 @@ async function forceAppUpdate() {
 }
 
 
+async function checkAdminAccess() {
+  const card = document.getElementById("adminAccessCard");
+  const dropdownEntry = document.getElementById("dropdownAdmin");
+  const isPrimaryOwner = (currentUser?.email || "").trim().toLowerCase() === "douglas1201.santos@gmail.com";
+  if (!currentUser?.emailVerified) {
+    if (card) card.hidden = true;
+    if (dropdownEntry) dropdownEntry.hidden = true;
+    return;
+  }
+  // Mantém o atalho visível para a conta proprietária mesmo se a consulta
+  // transitória falhar. A página /admin ainda valida a autorização no servidor.
+  if (isPrimaryOwner) {
+    if (card) card.hidden = false;
+    if (dropdownEntry) dropdownEntry.hidden = false;
+  }
+  try {
+    const token = await currentUser.getIdToken();
+    const response = await fetch("/api/admin?action=me", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const allowed = response.status === 200;
+    if (card) card.hidden = !(allowed || isPrimaryOwner);
+    if (dropdownEntry) dropdownEntry.hidden = !(allowed || isPrimaryOwner);
+  } catch {
+    if (card) card.hidden = !isPrimaryOwner;
+    if (dropdownEntry) dropdownEntry.hidden = !isPrimaryOwner;
+  }
+}
+
 function bindSettingsView() {
   const msgEl = document.getElementById("settingsMessage");
   function showSettingsMsg(text, type) {
@@ -1055,6 +1323,22 @@ function bindSettingsView() {
   function hideSettingsMsg() {
     msgEl.hidden = true;
   }
+
+  document.getElementById("billingPortalButton")?.addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    const original = button.textContent;
+    button.disabled = true;
+    button.textContent = "Abrindo portal…";
+    try {
+      const result = await billingApi("portal", "POST");
+      window.location.assign(result.url);
+    } catch (error) {
+      console.error("Falha ao abrir portal de cobrança:", error.code || error.message);
+      button.disabled = false;
+      button.textContent = original;
+      showSettingsMsg("Não foi possível abrir a gestão da assinatura agora.", "error");
+    }
+  });
 
   // ── Upload de foto (processada localmente, sem Firebase Storage) ──
   document.getElementById("settingsPhotoInput").addEventListener("change", async (e) => {
@@ -1207,6 +1491,32 @@ function bindSettingsView() {
     showToast(e.target.checked ? "🔔 Lembretes por WhatsApp ativados!" : "Lembretes por WhatsApp desativados.");
   });
 
+  document.getElementById("pulsinhoAiPreference")?.addEventListener("change", (event) => {
+    state.aiProviderPreference = ["openai", "anthropic"].includes(event.target.value) ? event.target.value : "auto";
+    saveState();
+    showToast("Preferência do Pulsinho atualizada.");
+  });
+
+  // Este listener pertence à inicialização da tela, não à normalização de
+  // dados. Normalizar ocorre a cada snapshot; colocá-lo lá duplicava o
+  // handler e repetia pedidos de permissão e gravações.
+  document.getElementById("appReminderOptIn")?.addEventListener("change", async (e) => {
+    if (e.target.checked) {
+      const allowed = await window.requestNotificationPermission?.();
+      if (!allowed) {
+        state.appReminderOptIn = false;
+        e.target.checked = false;
+        saveState();
+        renderWhatsAppSettings();
+        return;
+      }
+    }
+    state.appReminderOptIn = e.target.checked;
+    saveState();
+    renderWhatsAppSettings();
+    showToast(e.target.checked ? "Lembretes no aplicativo ativados." : "Lembretes no aplicativo desativados.");
+  });
+
   // ── WhatsApp: desvincular ──────────────────────────────────────────
   document.getElementById("settingsWhatsappUnlinkBtn")?.addEventListener("click", async () => {
     hideSettingsMsg();
@@ -1290,32 +1600,120 @@ function bindSettingsView() {
 
   // ── Excluir conta permanentemente ─────────────────────────────────
   document.getElementById("settingsDeleteAccountBtn")?.addEventListener("click", async () => {
+    if (accountDeletionRequested) return;
     hideSettingsMsg();
+    const account = currentUser;
+    if (!account?.email) {
+      showSettingsMsg("Entre novamente na sua conta antes de excluí-la.", "error");
+      return;
+    }
     if (!confirm("Tem certeza que quer excluir sua conta? Todos os seus dados (notas, tarefas, agenda, metas e finanças) serão apagados PERMANENTEMENTE. Essa ação não pode ser desfeita.")) return;
 
-    const pw = prompt("Por segurança, digite sua senha atual para confirmar a exclusão:");
-    if (!pw) return;
-
+    accountDeletionRequested = true;
+    let whatsappUnlinked = false;
     try {
-      const credential = EmailAuthProvider.credential(currentUser.email, pw);
-      await reauthenticateWithCredential(currentUser, credential);
+      const providers = new Set((account.providerData || []).map((provider) => provider?.providerId));
+      if (providers.has(GoogleAuthProvider.PROVIDER_ID)) {
+        await reauthenticateWithPopup(account, new GoogleAuthProvider());
+      } else if (providers.has(EmailAuthProvider.PROVIDER_ID)) {
+        const pw = prompt("Por segurança, digite sua senha atual para confirmar a exclusão:");
+        if (!pw) return;
+        const credential = EmailAuthProvider.credential(account.email, pw);
+        await reauthenticateWithCredential(account, credential);
+      } else {
+        const providerError = new Error("Não foi possível identificar o método de acesso desta conta.");
+        providerError.code = "auth/provider-not-supported";
+        throw providerError;
+      }
 
-      await deleteDoc(doc(db, "userData", currentUser.uid)).catch((err) => {
-        console.warn("Não foi possível apagar os dados no Firestore (a conta será excluída mesmo assim):", err);
+      // O vínculo é protegido pelo servidor e precisa sair antes da
+      // identidade. Se falhar, mantemos a conta para não deixar um
+      // número associado a um UID que já não existe.
+      const token = await account.getIdToken();
+      const unlinkResponse = await fetch("/api/whatsapp-unlink", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${token}` },
       });
+      if (!unlinkResponse.ok) {
+        const unlinkError = new Error("Não foi possível desvincular o WhatsApp. Sua conta foi mantida; tente novamente mais tarde.");
+        unlinkError.code = "data/unlink-failed";
+        throw unlinkError;
+      }
+      whatsappUnlinked = true;
 
-      const key = getStorageKey();
-      if (key) localStorage.removeItem(key);
+      // Remove métricas operacionais protegidas pelo Admin SDK. Elas não
+      // podem ser apagadas diretamente pelo navegador por design.
+      const cleanupResponse = await fetch("/api/account-delete-cleanup", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${token}` },
+      });
+      if (!cleanupResponse.ok) {
+        const cleanupError = new Error("Não foi possível remover os dados operacionais. Sua conta foi mantida; tente novamente mais tarde.");
+        cleanupError.code = "data/cleanup-failed";
+        throw cleanupError;
+      }
 
-      await deleteUser(currentUser);
+      // Firestore e Auth não são transacionais entre si. Confirme uma
+      // cópia do servidor para poder restaurar o documento se a remoção
+      // da identidade falhar. Não limpe o cache local até ambos concluírem.
+      const userDocRef = doc(db, "userData", account.uid);
+      accountDeletionInProgress = true;
+      if (syncTimer) { clearTimeout(syncTimer); syncTimer = null; }
+      try {
+        // Uma sincronização já em curso poderia recriar o documento logo
+        // depois do delete. Aguarde as operações deste navegador terminarem.
+        await Promise.allSettled([...activeSyncs]);
+        await deleteAccountDataAndIdentity({
+          readData: async () => {
+            const snapshot = await getDocFromServer(userDocRef);
+            return snapshot.exists() ? snapshot.data() : null;
+          },
+          deleteData: async () => {
+            try {
+              await deleteDoc(userDocRef);
+            } catch (err) {
+              console.error("Falha ao apagar dados antes da exclusão da conta:", err?.code || err?.name || "erro");
+              const deletionError = new Error("Não foi possível remover seus dados agora. Sua conta foi mantida; tente novamente mais tarde.", { cause: err });
+              deletionError.code = "data/delete-failed";
+              throw deletionError;
+            }
+          },
+          deleteIdentity: () => deleteUser(account),
+          restoreData: (backup) => runTransaction(db, async (transaction) => {
+            const current = await transaction.get(userDocRef);
+            if (!current.exists()) transaction.set(userDocRef, backup);
+          }),
+        });
+      } catch (err) {
+        accountDeletionInProgress = false;
+        if (Object.keys(dirtyBases).length) scheduleSyncToServer();
+        throw err;
+      }
+
+      // deleteUser pode encerrar a sessão imediatamente: use chaves
+      // baseadas no UID capturado, não em currentUser (que já pode ser null).
+      try {
+        localStorage.removeItem(`${BASE_STORAGE_KEY}:${account.uid}`);
+        localStorage.removeItem(`${BASE_STORAGE_KEY}:pending:${account.uid}`);
+      } catch { /* a conta já foi removida; a navegação prossegue */ }
       window.location.replace("/login");
     } catch (err) {
       const messages = {
         "auth/wrong-password":        "Senha incorreta.",
         "auth/invalid-credential":    "Senha incorreta.",
+        "auth/popup-closed-by-user": "A confirmação com o Google foi cancelada.",
+        "auth/provider-not-supported": "Este método de acesso não permite confirmar a exclusão. Entre novamente e tente de novo.",
         "auth/requires-recent-login": "Por segurança, saia e entre na conta novamente antes de excluí-la.",
+        "data/unlink-failed":       "Não foi possível desvincular o WhatsApp. Sua conta foi mantida; tente novamente mais tarde.",
+        "data/cleanup-failed":      "Não foi possível remover os dados operacionais agora. Sua conta foi mantida; tente novamente mais tarde.",
+        "data/snapshot-failed":      "Não foi possível confirmar seus dados na nuvem. Sua conta foi mantida; verifique a conexão e tente novamente.",
+        "data/delete-failed":        "Não foi possível remover seus dados agora. Sua conta foi mantida; tente novamente mais tarde.",
+        "data/restore-failed":       "A exclusão não terminou e não foi possível restaurar os dados na nuvem. Não saia desta conta e entre em contato com o suporte.",
       };
-      showSettingsMsg(messages[err.code] || `Erro ao excluir conta: ${err.message}`, "error");
+      const message = messages[err.code] || `Erro ao excluir conta: ${err.message}`;
+      showSettingsMsg(`${message}${whatsappUnlinked ? " O WhatsApp foi desvinculado e pode ser vinculado novamente nas configurações." : ""}`, "error");
+    } finally {
+      accountDeletionRequested = false;
     }
   });
 }
@@ -1324,7 +1722,7 @@ function bindSettingsView() {
 // Se não houver foto, cai de volta para a inicial do nome (em vez de
 // deixar um ícone de imagem quebrada).
 function updateAllAvatars(photoURL) {
-  const initial = (getUser()?.name || "U").charAt(0).toUpperCase();
+  const initial = bdInitials(getUser()?.name || "U");
   const content = photoURL
     ? `<img src="${escapeHtml(photoURL)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%" alt=""/>`
     : initial;
@@ -1335,6 +1733,7 @@ function updateAllAvatars(photoURL) {
   // Botão principal no topbar
   const mainBtn = document.querySelector(".user-avatar-btn");
   if (mainBtn) mainBtn.innerHTML = content;
+  renderShellUser(getUser());
 
   // Mini avatar no dropdown
   const dropdownAvatar = document.querySelector(".user-dropdown-header div");
@@ -1376,6 +1775,8 @@ function normalizeState(parsed) {
   if (!parsed.monthClosures) parsed.monthClosures = [];
   if (!parsed.finGoals) parsed.finGoals = [];
   if (!parsed.finRecurrents) parsed.finRecurrents = [];
+  if (!parsed.creditCards) parsed.creditCards = [];
+  if (!parsed.scheduledFinances) parsed.scheduledFinances = [];
   // O servidor de lembretes usa este fuso para converter um compromisso
   // salvo como data/hora local em um instante real. Sem persistir o fuso,
   // um usuário no Brasil recebia alerta com o horário UTC da Vercel.
@@ -1393,9 +1794,21 @@ function normalizeState(parsed) {
   // perguntar isso quando já está vinculado — ver renderWhatsAppSettings).
   if (!Array.isArray(parsed.fcmTokens)) parsed.fcmTokens = [];
   if (parsed.whatsappReminderOptIn === undefined) parsed.whatsappReminderOptIn = false;
+  // A pessoa pode desligar notificações no aplicativo sem precisar
+  // desligar os lembretes do WhatsApp (e vice-versa).
+  if (parsed.appReminderOptIn === undefined) {
+    parsed.appReminderOptIn = parsed.fcmTokens.length > 0;
+  }
+  if (!["auto", "openai", "anthropic"].includes(parsed.aiProviderPreference)) parsed.aiProviderPreference = "auto";
   // Retrocompatibilidade: lançamentos, tarefas e metas antigos não tinham
   // esses campos — garantimos que existam pra não quebrar o restante do app.
-  parsed.tasks.forEach((t) => { if (!t.subtasks) t.subtasks = []; if (t.recurrence === undefined) t.recurrence = null; });
+  parsed.tasks.forEach((t) => {
+    if (!t.subtasks) t.subtasks = [];
+    if (t.recurrence === undefined) t.recurrence = null;
+    if (t.dueTime === undefined) t.dueTime = "";
+    if (!Number.isFinite(Number(t.reminder))) t.reminder = 15;
+  });
+
   parsed.notes.forEach((n) => { if (!n.tags) n.tags = []; });
   parsed.goals.forEach((g) => { if (!g.milestones) g.milestones = []; });
   return parsed;
@@ -1413,31 +1826,138 @@ function loadDefaultState() {
     monthClosures: [],
     finGoals: [],
     finRecurrents: [],
+    creditCards: [],
+    scheduledFinances: [],
+    financeAccounts: [],
+    financialSettings: { safetyReserve: 0 },
     timeZone: appTimeZone,
     whatsappLinkCode: null,
     whatsappLinkCodeExpiresAt: null,
     whatsappLinkedPhone: null,
     fcmTokens: [],
     whatsappReminderOptIn: false,
+    appReminderOptIn: false,
+    aiProviderPreference: "auto",
   };
+}
+
+function createDesignPreviewState(mode = "1") {
+  const monthKey = todayIso.slice(0, 7);
+  const day = Number(todayIso.slice(8, 10));
+  const dateForDay = (value) => `${monthKey}-${String(Math.max(1, Math.min(28, value))).padStart(2, "0")}`;
+  const prevKey = getPreviousMonthKey(monthKey);
+  const prevPrevKey = getPreviousMonthKey(prevKey);
+  const dayOf = (key, value) => `${key}-${String(value).padStart(2, "0")}`;
+  const preview = normalizeState({
+    ...loadDefaultState(),
+    tasks: [
+      { id: "preview-task-1", title: "Revisar relatório mensal", status: "Pendente", priority: "Alta", dueDate: todayIso, dueTime: "12:00", subtasks: [], recurrence: null },
+      { id: "preview-task-2", title: "Planejar metas de fevereiro", status: "Pendente", priority: "Alta", dueDate: offsetDate(1), subtasks: [], recurrence: null },
+      { id: "preview-task-3", title: "Ajustar apresentação de resultados", status: "Pendente", priority: "Media", dueDate: todayIso, dueTime: "18:00", subtasks: [], recurrence: null },
+    ],
+    events: [
+      { id: "preview-event-1", title: "Reunião de alinhamento", date: offsetDate(1), time: "10:00", location: "", notes: "", reminderMinutes: 30 },
+      { id: "preview-event-2", title: "Planejamento da semana", date: offsetDate(2), time: "10:00", location: "", notes: "", reminderMinutes: 60 },
+    ],
+    goals: [{ id: "preview-goal-1", title: "Reserva de emergência", current: 68, target: 100, milestones: [] }],
+    finances: [
+      // Mês atual: receitas 8.500, gastos 3.280
+      { id: "preview-fin-1", type: "receita", amount: 8500, category: "salario", description: "Salário", date: dateForDay(22) },
+      { id: "preview-fin-2", type: "despesa", amount: 1345, category: "moradia", description: "Condomínio e taxas", date: dateForDay(5) },
+      { id: "preview-fin-3", type: "despesa", amount: 420.9, category: "alimentacao", description: "Supermercado", date: dateForDay(Math.min(day, 23)) },
+      { id: "preview-fin-4", type: "despesa", amount: 32, category: "alimentacao", description: "Almoço no restaurante", date: dateForDay(Math.min(day, 24)) },
+      { id: "preview-fin-5", type: "despesa", amount: 203.1, category: "alimentacao", description: "Feira e padaria", date: dateForDay(12) },
+      { id: "preview-fin-6", type: "despesa", amount: 459, category: "transporte", description: "Combustível e transporte", date: dateForDay(10) },
+      { id: "preview-fin-7", type: "despesa", amount: 328, category: "saude", description: "Farmácia e consultas", date: dateForDay(15) },
+      { id: "preview-fin-8", type: "despesa", amount: 149.9, category: "assinaturas", description: "Provedor de internet", date: dateForDay(20) },
+      { id: "preview-fin-9", type: "despesa", amount: 112.1, category: "assinaturas", description: "Streaming e apps", date: dateForDay(8) },
+      { id: "preview-fin-10", type: "despesa", amount: 230, category: "outros", description: "Compras diversas", date: dateForDay(18) },
+      // Mês anterior (base da comparação "vs. mês anterior")
+      { id: "preview-fin-11", type: "despesa", amount: 2733, category: "moradia", description: "Despesas fixas do mês", date: dayOf(prevKey, 3) },
+      { id: "preview-fin-12", type: "receita", amount: 8500, category: "salario", description: "Salário", date: dayOf(prevKey, 5) },
+      { id: "preview-fin-13", type: "despesa", amount: 4537, category: "viagem", description: "Viagem de fim de ano", date: dayOf(prevKey, 25) },
+    ],
+    monthClosures: [
+      { id: "preview-close-1", monthKey: prevPrevKey, workspaceId: "personal", receitas: 0, despesas: 0, saldo: 6000 },
+      { id: "preview-close-2", monthKey: prevKey, workspaceId: "personal", receitas: 8500, despesas: 7270, saldo: 7230 },
+    ],
+    finGoals: [{ id: "preview-goal-spend", categoryId: "moradia", limit: 4500, workspaceId: "personal" }],
+    finRecurrents: [
+      { id: "preview-rec-1", description: "Aluguel", amount: 1600, type: "despesa", categoryId: "moradia", day: Math.min(31, day + 1), skippedMonths: [] },
+      { id: "preview-rec-2", description: "Fatura do cartão", amount: 1240, type: "despesa", categoryId: "outros", day: Math.min(31, day + 5), skippedMonths: [] },
+      { id: "preview-rec-3", description: "Internet", amount: 149.9, type: "despesa", categoryId: "assinaturas", day: Math.min(31, day + 7), skippedMonths: [] },
+    ],
+  });
+  if (mode === "1") {
+    // Conversa de exemplo do Pulsinho (somente no modo demonstração local).
+    pulsinhoConversation.push(
+      { role: "user", content: "Analise meus gastos deste mês e crie uma tarefa para revisar as assinaturas, pois acho que posso economizar." },
+      { role: "assistant", content: "Analisei seus gastos e identifiquei R$ 490,00 em assinaturas mensais (14% do total). Posso criar uma tarefa no seu Planner para você revisar essas assinaturas e avaliar cancelamentos?" },
+    );
+    pendingPulsinhoAction = {
+      type: "create_task",
+      label: "Criar tarefa",
+      summary: "Criar tarefa no Planner",
+      payload: { title: "Revisar assinaturas e avaliar cancelamentos", date: offsetDate(2), reminder: "Às 10:00" },
+      requiresConfirmation: true,
+    };
+  }
+  if (mode !== "worst") return preview;
+  preview.tasks.unshift({
+    id: "preview-task-worst",
+    title: "Revisar a proposta comercial internacional com condições de pagamento, responsabilidades e observações da equipe multidisciplinar",
+    status: "Pendente",
+    priority: "Urgente",
+    dueDate: todayIso,
+    time: "23:59",
+    subtasks: [],
+    recurrence: null,
+  });
+  preview.events.unshift({
+    id: "preview-event-worst",
+    title: "Reunião extraordinária de planejamento financeiro familiar e revisão do orçamento anual",
+    date: todayIso,
+    time: "08:00",
+    location: "Centro Empresarial Antônio Carlos Jobim — Torre Internacional, sala 1284",
+    notes: "",
+    reminderMinutes: 1440,
+  });
+  preview.goals.unshift({ id: "preview-goal-worst", title: "Concluir a reserva de emergência da família antes da mudança internacional", current: 999999, target: 1000000, milestones: [] });
+  preview.finances.unshift({ id: "preview-fin-worst", type: "despesa", amount: 999999.99, category: "outros", description: "Transferência internacional extraordinária", date: todayIso });
+  return normalizeState(preview);
+}
+
+function mountDesignPreviewToggle() {
+  if (!isLocalDesignPreview || document.querySelector(".design-preview-toggle")) return;
+  const toggle = document.createElement("nav");
+  toggle.className = "design-preview-toggle";
+  toggle.setAttribute("aria-label", "Dados de teste do layout");
+  toggle.innerHTML = `<a href="?designPreview=1" class="${designPreviewMode === "1" ? "active" : ""}">Demo</a><a href="?designPreview=worst" class="${designPreviewMode === "worst" ? "active" : ""}">Pior caso</a>`;
+  document.body.appendChild(toggle);
 }
 
 // Salva mudanças localmente de imediato e agenda o envio para o Firestore
 // (debounce de 1.2s — evita gravar a cada tecla digitada, por exemplo)
 function saveState() {
+  for (const field of changedStateKeys(observedState, state, SERVER_OWNED_FIELDS)) {
+    if (!(field in dirtyBases)) dirtyBases[field] = cloneState(observedState?.[field]);
+    dirtyVersions[field] = (dirtyVersions[field] || 0) + 1;
+  }
+  observedState = cloneState(state);
+  persistPendingSync();
   const key = getStorageKey();
   if (key) localStorage.setItem(key, JSON.stringify(state));
   // Só agenda sync se já temos usuário autenticado e verificado.
   // Sem esse guard, calls do renderAll() durante inicialização
-  // disparavam syncToServer() sem currentUser, causando erro de
-  // permissão no Firestore e o banner "❌ Erro ao salvar".
+  // disparavam tentativas inválidas de sync antes da sessão estar pronta.
   if (currentUser && currentUser.emailVerified) {
     scheduleSyncToServer();
+    if (isSharedFinanceWorkspace(activeWorkspaceId)) scheduleSharedSpaceSync(activeWorkspaceId);
   }
 }
 
 
-function createTask(title, status = "Pendente", priority = "Media", dueDate = todayIso, completedAt = "") {
+function createTask(title, status = "Pendente", priority = "Media", dueDate = todayIso, completedAt = "", dueTime = "", reminder = 15) {
   return {
     id: crypto.randomUUID(),
     title,
@@ -1446,6 +1966,8 @@ function createTask(title, status = "Pendente", priority = "Media", dueDate = to
     dueDate,
     createdAt: todayIso,
     completedAt,
+    dueTime,
+    reminder,
     sourceNoteId: "",
     subtasks: [],
     recurrence: null,
@@ -1467,6 +1989,11 @@ function bindNavigation() {
       const view = button.dataset.viewShortcut;
       setView(view);
       const plannerFocus = button.dataset.plannerFocus;
+      const settingsFocus = button.dataset.settingsFocus;
+      if (view === "settings" && settingsFocus === "whatsapp") {
+        requestAnimationFrame(() => document.querySelector("#whatsappIntegrationCard")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+        return;
+      }
       if (view !== "planner" || !plannerFocus) return;
 
       // Os cards do Dashboard não devem levar todos para a mesma posição
@@ -1480,32 +2007,778 @@ function bindNavigation() {
       requestAnimationFrame(() => target?.scrollIntoView({ behavior: "smooth", block: "start" }));
     });
   });
-  initDashPanelCollapse();
 }
 
-// Painéis do início (Prioridades do dia, Próximos compromissos,
-// Desempenho semanal, Foco da semana) podem ser minimizados — o estado
-// fica salvo no localStorage por painel, então a tela continua do jeito
-// que a pessoa deixou da última vez que abriu o app.
-function initDashPanelCollapse() {
-  document.querySelectorAll(".dash-panel").forEach((panel) => {
-    const id = panel.dataset.panelId;
-    const btn = panel.querySelector("[data-collapse-toggle]");
-    if (!id || !btn) return;
-    const storageKey = `pn_dash_collapsed_${id}`;
-    const setCollapsed = (collapsed) => {
-      panel.classList.toggle("is-collapsed", collapsed);
-      btn.setAttribute("aria-expanded", String(!collapsed));
-      btn.title = collapsed ? "Expandir" : "Minimizar";
-    };
-    setCollapsed(localStorage.getItem(storageKey) === "1");
-    btn.addEventListener("click", () => {
-      const collapsed = !panel.classList.contains("is-collapsed");
-      setCollapsed(collapsed);
-      localStorage.setItem(storageKey, collapsed ? "1" : "0");
-    });
+function bindPremiumDashboard() {
+  bindBoardsShell();
+  document.querySelector(".bd-ws")?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-workspace]");
+    if (button) setActiveFinanceWorkspace(button.dataset.workspace);
+  });
+  document.querySelector("#finWorkspaceSelect")?.addEventListener("change", (event) => setActiveFinanceWorkspace(event.target.value));
+
+  const commandForm = document.querySelector("#pulseCommandForm");
+  const commandInput = document.querySelector("#pulseCommandInput");
+  commandForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const command = commandInput?.value.trim() || "";
+    if (command.length < 3) {
+      showToast("Escreva um pedido curto para o Pulsinho entender.");
+      return;
+    }
+    await askPulsinhoFromDashboard(command);
+  });
+
+  document.querySelector("#pulseOpenSimulator")?.addEventListener("click", openFinanceSimulator);
+  const forecastVisual = document.querySelector(".pulse-forecast-visual");
+  forecastVisual?.addEventListener("click", openDashboardForecastDetail);
+  forecastVisual?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    openDashboardForecastDetail();
+  });
+  document.querySelector("#pulseForecastDetailClose")?.addEventListener("click", closeDashboardForecastDetail);
+  document.querySelector("#pulseForecastDetailModal")?.addEventListener("click", (event) => {
+    if (event.target.id === "pulseForecastDetailModal") closeDashboardForecastDetail();
+  });
+  document.querySelector("#pulseForecastDetailModal [data-view-shortcut='finances']")?.addEventListener("click", closeDashboardForecastDetail);
+  document.querySelector("#pulseForecastDetailModal")?.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeDashboardForecastDetail();
+  });
+  document.querySelector("#finSimulatorForm")?.addEventListener("submit", runFinanceSimulation);
+  document.querySelector("#finAddAccount")?.addEventListener("click", () => toggleFinanceAccountForm(true));
+  document.querySelector("#finAccountCancel")?.addEventListener("click", () => toggleFinanceAccountForm(false));
+  document.querySelector("#finAccountForm")?.addEventListener("submit", saveFinanceAccount);
+  document.querySelector("#finAddCard")?.addEventListener("click", () => toggleCreditCardForm(true));
+  document.querySelector("#finCardCancel")?.addEventListener("click", () => toggleCreditCardForm(false));
+  document.querySelector("#finCardForm")?.addEventListener("submit", saveCreditCard);
+  document.querySelector("#finCloseCardPurchase")?.addEventListener("click", closeCreditCardPurchase);
+  document.querySelector("#finCardPurchaseModal")?.addEventListener("click", (event) => {
+    if (event.target.id === "finCardPurchaseModal") closeCreditCardPurchase();
+  });
+  document.querySelector("#finCardPurchaseForm")?.addEventListener("submit", saveCreditCardPurchase);
+  document.querySelector("#finCreateSpaceToggle")?.addEventListener("click", () => {
+    const form = document.querySelector("#finCreateSpaceForm");
+    if (form) form.hidden = false;
+    document.querySelector("#finSharedSpaceName")?.focus();
+  });
+  document.querySelector("#finCreateSpaceCancel")?.addEventListener("click", () => {
+    const form = document.querySelector("#finCreateSpaceForm");
+    if (form) form.hidden = true;
+  });
+  document.querySelector("#finCreateSpaceForm")?.addEventListener("submit", createFinanceSpace);
+  document.querySelector("#finSharedSpacesList")?.addEventListener("submit", inviteToFinanceSpace);
+  document.querySelector("#finSharedSpacesList")?.addEventListener("click", handleSharedSpaceAction);
+  document.querySelector("#finSharedInvites")?.addEventListener("click", handleSharedSpaceAction);
+
+  const response = document.querySelector("#pulseCommandResponse");
+  response?.addEventListener("click", (event) => {
+    const followUp = event.target.closest("[data-pulsinho-followup]");
+    if (followUp && commandInput) {
+      commandInput.value = followUp.dataset.pulsinhoFollowup || "";
+      commandInput.focus();
+      commandForm?.requestSubmit();
+      return;
+    }
+    if (event.target.closest("[data-pulsinho-action-confirm]")) {
+      confirmPulsinhoAction();
+      return;
+    }
+    if (event.target.closest("[data-pulsinho-action-cancel]")) {
+      pendingPulsinhoAction = null;
+      renderPulsinhoConversation();
+    }
+  });
+
+  document.querySelector("#finCategories")?.addEventListener("click", (event) => {
+    const row = event.target.closest("[data-fin-category]");
+    if (row) openFinanceCategory(row.dataset.finCategory);
+  });
+  document.querySelector("#finCategories")?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    const row = event.target.closest("[data-fin-category]");
+    if (!row) return;
+    event.preventDefault();
+    openFinanceCategory(row.dataset.finCategory);
+  });
+  document.querySelector("#finChart6m")?.addEventListener("click", (event) => {
+    const target = event.target.closest("[data-fin-month]");
+    if (target) goToFinMonth(target.dataset.finMonth);
+  });
+  document.querySelector("#finChart6m")?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    const target = event.target.closest("[data-fin-month]");
+    if (!target) return;
+    event.preventDefault();
+    goToFinMonth(target.dataset.finMonth);
   });
 }
+
+async function pulseApi(path, options = {}) {
+  if (!currentUser) throw new Error("unauthorized");
+  const token = await currentUser.getIdToken();
+  const response = await fetch(path, {
+    ...options,
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      ...(options.body ? { "Content-Type": "application/json" } : {}),
+      ...(options.headers || {}),
+    },
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw Object.assign(new Error(payload.error || "request_failed"), { code: payload.error, status: response.status });
+  return payload;
+}
+
+function bdConfirmRows(action) {
+  const payload = action?.payload || {};
+  const labels = [
+    [["title", "titulo", "description", "descricao"], "Título"],
+    [["date", "dueDate", "data"], "Data sugerida"],
+    [["time", "hora", "dueTime"], "Horário"],
+    [["reminder", "lembrete"], "Lembrete"],
+    [["amount", "valor"], "Valor"],
+    [["category", "categoria"], "Categoria"],
+  ];
+  const rows = [];
+  for (const [keys, label] of labels) {
+    const key = keys.find((k) => payload[k] !== undefined && payload[k] !== "");
+    if (!key) continue;
+    let value = payload[key];
+    if (/^\d{4}-\d{2}-\d{2}$/.test(String(value))) {
+      const d = new Date(`${value}T12:00:00`);
+      value = `${BD_WEEKDAYS[d.getDay()]}, ${String(d.getDate()).padStart(2, "0")} de ${BD_MONTHS[d.getMonth()]} de ${d.getFullYear()}`;
+    } else if (key === "amount" || key === "valor") {
+      value = formatCurrency(Number(value) || 0);
+    }
+    if (label === "Título") {
+      rows.push(`<span class="field-label">${label}</span><div class="field-box">${escapeHtml(String(value))}</div>`);
+    } else {
+      const icon = { "Data sugerida": "calendar", "Horário": "clock", "Lembrete": "bell-ring", "Valor": "wallet", "Categoria": "layers" }[label] || "info";
+      rows.push(`<div class="row">${bdIcon(icon)}<span>${label}</span><b>${escapeHtml(String(value))}</b></div>`);
+    }
+  }
+  return rows.join("");
+}
+
+function renderPulsinhoConversation({ loading = false, error = "" } = {}) {
+  const root = document.querySelector("#pulseCommandResponse");
+  if (!root) return;
+  root.classList.toggle("is-loading", loading);
+  const intro = `<div class="bd-msg bd-msg--ai">Olá, ${escapeHtml(bdFirstName())}! Como posso te ajudar hoje? Você pode pedir para criar tarefas, organizar sua rotina, registrar gastos ou analisar suas finanças.</div>`;
+  const messages = pulsinhoConversation.map((message) => {
+    const followUps = message === pulsinhoConversation.at(-1) && Array.isArray(message.followUps) ? message.followUps : [];
+    const followUpHtml = followUps.length
+      ? `<div class="bd-followups">${followUps.map((item) => `<button type="button" data-pulsinho-followup="${escapeHtml(item)}">${escapeHtml(item)}</button>`).join("")}</div>`
+      : "";
+    const side = message.role === "user" ? "user" : "ai";
+    return `<div class="bd-msg bd-msg--${side}">${escapeHtml(message.content)}${followUpHtml}</div>`;
+  }).join("");
+  const action = pendingPulsinhoAction
+    ? `<section class="bd-confirm is-sheet" aria-label="Confirmação necessária">
+        <div class="bd-confirm-head">
+          <span class="ico">${bdIcon("task-check")}</span>
+          <div><strong>Confirmar ação?</strong><small>${escapeHtml(pendingPulsinhoAction.summary || pendingPulsinhoAction.label || "")}</small></div>
+          <button type="button" class="bd-icon-btn close" data-pulsinho-action-cancel aria-label="Fechar">${bdIcon("x")}</button>
+        </div>
+        ${bdConfirmRows(pendingPulsinhoAction) ? `<div class="bd-confirm-rows">${bdConfirmRows(pendingPulsinhoAction)}</div>` : ""}
+        <div class="bd-confirm-actions">
+          <button type="button" class="bd-btn" data-pulsinho-action-cancel>Cancelar</button>
+          <button type="button" class="bd-btn bd-btn--primary" data-pulsinho-action-confirm>${bdIcon("check")}${escapeHtml(pendingPulsinhoAction.label || "Confirmar")}</button>
+        </div>
+      </section>`
+    : "";
+  const loadingMessage = loading ? '<div class="bd-typing" aria-label="Pulsinho está pensando"><i></i><i></i><i></i></div>' : "";
+  const errorMessage = error ? `<div class="bd-chat-error">${escapeHtml(error)}</div>` : "";
+  root.innerHTML = `${intro}${messages}${loadingMessage}${errorMessage}${action}`;
+  root.scrollTop = root.scrollHeight;
+}
+
+async function askPulsinhoFromDashboard(question) {
+  const input = document.querySelector("#pulseCommandInput");
+  const history = pulsinhoConversation.map(({ role, content }) => ({ role, content })).slice(-10);
+  pulsinhoConversation.push({ role: "user", content: question });
+  pendingPulsinhoAction = null;
+  if (input) input.value = "";
+  renderPulsinhoConversation({ loading: true });
+  try {
+    const payload = await pulseApi("/api/pulsinho", {
+      method: "POST",
+      body: JSON.stringify({ question, history, workspaceId: activeWorkspaceId, providerPreference: state.aiProviderPreference || "auto" }),
+    });
+    pulsinhoConversation.push({
+      role: "assistant",
+      content: payload.reply || "Não encontrei uma resposta segura com os dados disponíveis.",
+      followUps: Array.isArray(payload.followUps) ? payload.followUps : [],
+      provider: payload.provider || "",
+    });
+    pendingPulsinhoAction = payload.proposedAction?.requiresConfirmation ? payload.proposedAction : null;
+    renderPulsinhoConversation();
+  } catch (error) {
+    renderPulsinhoConversation({
+      error: error?.code === "ai_not_configured" || error?.code === "assistant_unavailable"
+        ? "A IA conversacional ainda não está disponível neste ambiente. Seus dados não foram alterados."
+        : "A conexão falhou. Seus dados não foram alterados; tente novamente em instantes.",
+    });
+  }
+}
+
+function validPulsinhoDate(value, fallback = todayIso) {
+  const date = String(value || "").trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : fallback;
+}
+
+function confirmPulsinhoAction() {
+  const action = pendingPulsinhoAction;
+  if (!action) return;
+  const payload = action.payload || {};
+  const title = String(payload.title || payload.description || "").trim().slice(0, 180);
+  if (action.type !== "navigate" && !title) {
+    showToast("Não foi possível confirmar: faltou um título ou descrição.");
+    return;
+  }
+
+  if (action.type === "create_task") {
+    state.tasks.unshift(createTask(title, "Pendente", ["Baixa", "Media", "Alta", "Urgente"].includes(payload.priority) ? payload.priority : "Media", validPulsinhoDate(payload.dueDate), "", String(payload.dueTime || "").slice(0, 5), Number(payload.reminder) || 15));
+  } else if (action.type === "create_event") {
+    state.events.push({ id: crypto.randomUUID(), title, date: validPulsinhoDate(payload.date), time: String(payload.time || "").slice(0, 5), location: String(payload.location || "Sem local").slice(0, 120), reminder: Number(payload.reminder) || 15, notes: String(payload.notes || "").slice(0, 500) });
+  } else if (action.type === "create_note") {
+    state.notes.unshift({ id: crypto.randomUUID(), title, description: String(payload.description || "").slice(0, 3000), category: String(payload.category || "Geral").slice(0, 60), folder: "Entrada", tags: [], priority: "Media", checklist: [], attachments: [], goal: "", observations: "", color: "blue", textColor: "", favorite: false, createdAt: todayIso, convertedToTaskId: "" });
+  } else if (action.type === "create_goal") {
+    state.goals.unshift({ id: crypto.randomUUID(), title, target: Math.max(1, Number(payload.target) || 100), current: Math.max(0, Number(payload.current) || 0), milestones: [] });
+  } else if (action.type === "create_transaction") {
+    const amount = Math.round(Math.abs(Number(payload.amount) || 0) * 100) / 100;
+    if (!amount) { showToast("Não foi possível confirmar: informe um valor válido."); return; }
+    const type = payload.type === "receita" ? "receita" : "despesa";
+    const category = String(payload.category || (type === "receita" ? "outros_receita" : "outros")).slice(0, 60);
+    state.finances.unshift({ id: crypto.randomUUID(), type, amount, category, description: title, date: validPulsinhoDate(payload.date), accountId: "", workspaceId: activeWorkspaceId });
+  } else if (action.type === "navigate") {
+    const target = ["dashboard", "finances", "planner", "notes", "autopilot", "settings"].includes(payload.target) ? payload.target : "dashboard";
+    setView(target);
+    pendingPulsinhoAction = null;
+    renderPulsinhoConversation();
+    return;
+  } else {
+    showToast("Essa ação ainda não é compatível com o PulseNote.");
+    return;
+  }
+
+  pendingPulsinhoAction = null;
+  saveState();
+  renderAll();
+  pulsinhoConversation.push({ role: "assistant", content: "Pronto. A ação foi confirmada e salva no PulseNote.", provider: "pulse-engine" });
+  renderPulsinhoConversation();
+}
+
+function parseMoneyInput(value) {
+  const raw = String(value || "").trim().replace(/\s/g, "");
+  const normalized = raw.includes(",") ? raw.replace(/\./g, "").replace(",", ".") : raw;
+  const amount = Number(normalized);
+  return Number.isFinite(amount) && amount > 0 ? Math.round(amount * 100) / 100 : 0;
+}
+
+function parseSignedMoneyInput(value) {
+  const raw = String(value || "").trim().replace(/\s/g, "");
+  const normalized = raw.includes(",") ? raw.replace(/\./g, "").replace(",", ".") : raw;
+  const amount = Number(normalized);
+  return Number.isFinite(amount) ? Math.round(amount * 100) / 100 : 0;
+}
+
+function openFinanceSimulator() {
+  setView("finances");
+  document.querySelector('[data-fin-tab="analise"]')?.click();
+  requestAnimationFrame(() => {
+    document.querySelector("#finSimulatorForm")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    document.querySelector("#finSimulatorAmount")?.focus();
+  });
+}
+
+async function runFinanceSimulation(event) {
+  event?.preventDefault();
+  const input = document.querySelector("#finSimulatorAmount");
+  const result = document.querySelector("#finSimulatorResult");
+  const amount = parseMoneyInput(input?.value);
+  if (!amount) {
+    showToast("Informe um valor válido para simular.");
+    input?.focus();
+    return;
+  }
+  if (result) {
+    result.hidden = false;
+    result.classList.remove("is-risk");
+    result.innerHTML = '<div class="fin-simulator-answer"><strong>Calculando projeção…</strong><p>Considerando suas contas e compromissos registrados.</p></div>';
+  }
+  try {
+    const params = new URLSearchParams({ amount: String(amount), workspaceId: activeWorkspaceId });
+    const payload = await pulseApi(`/api/finance-forecast?${params}`);
+    const forecast = payload.forecast || {};
+    if (result) {
+      result.classList.toggle("is-risk", forecast.canAfford === false);
+      result.innerHTML = `
+        <div class="fin-simulator-answer"><strong>${forecast.canAfford ? "Cabe na sua projeção" : "Melhor rever esta compra"}</strong><p>${escapeHtml(forecast.summary || "")}</p></div>
+        <div class="fin-simulator-metric"><strong>${formatCurrency(forecast.projectedBalanceAfterPurchase)}</strong><span>saldo projetado após a compra</span></div>
+        <div class="fin-simulator-metric"><strong>${formatCurrency(forecast.lowestBalance)}</strong><span>menor saldo até o fim do mês</span></div>
+        <div class="fin-simulator-metric"><strong>${formatCurrency(forecast.reserve)}</strong><span>reserva preservada na análise</span></div>`;
+    }
+  } catch {
+    if (result) result.innerHTML = '<div class="fin-simulator-answer"><strong>Não foi possível simular</strong><p>Nenhum dado foi alterado. Atualize a página e tente novamente.</p></div>';
+  }
+}
+
+function openFinanceCategory(categoryId) {
+  finCategoryDrilldown = categoryId || null;
+  document.querySelector('[data-fin-tab="lancamentos"]')?.click();
+  renderFinances();
+  requestAnimationFrame(() => document.querySelector("#finTransactions")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+}
+
+function isSharedFinanceWorkspace(workspaceId) {
+  return sharedFinanceSpaces.some((space) => space.id === workspaceId);
+}
+
+function sharedFinanceSpace(workspaceId) {
+  return sharedFinanceSpaces.find((space) => space.id === workspaceId) || null;
+}
+
+function canEditFinanceWorkspace(workspaceId = activeWorkspaceId) {
+  const space = sharedFinanceSpace(workspaceId);
+  return !space || Boolean(space.canEdit);
+}
+
+function requireFinanceWorkspaceEdit(workspaceId = activeWorkspaceId) {
+  if (canEditFinanceWorkspace(workspaceId)) return true;
+  showToast("Este espaço foi compartilhado com você em modo somente leitura.");
+  return false;
+}
+
+function workspaceLabel(workspaceId) {
+  const shared = sharedFinanceSpace(workspaceId);
+  if (shared) return shared.name;
+  return ({ personal: "Pessoal", couple: "Casal privado", family: "Família privada", business: "Empresa" })[workspaceId] || "Pessoal";
+}
+
+function financeSpaceDataFromState(workspaceId) {
+  const inSpace = (item) => (item?.workspaceId || "personal") === workspaceId;
+  return {
+    finances: (state.finances || []).filter(inSpace),
+    financeAccounts: (state.financeAccounts || []).filter(inSpace),
+    finGoals: (state.finGoals || []).filter(inSpace),
+    finRecurrents: (state.finRecurrents || []).filter(inSpace),
+    creditCards: (state.creditCards || []).filter(inSpace),
+    scheduledFinances: (state.scheduledFinances || []).filter(inSpace),
+    monthClosures: (state.monthClosures || []).filter(inSpace),
+    financialSettings: { safetyReserve: Number(state.financialSettings?.safetyReserve) || 0 },
+  };
+}
+
+function mergeFinanceSpaceData(space) {
+  if (!space?.id || !space.data) return;
+  const fields = ["finances", "financeAccounts", "finGoals", "finRecurrents", "creditCards", "scheduledFinances", "monthClosures"];
+  for (const field of fields) {
+    const local = Array.isArray(state[field]) ? state[field] : [];
+    const personal = local.filter((item) => (item?.workspaceId || "personal") !== space.id);
+    const remote = Array.isArray(space.data[field]) ? space.data[field].map((item) => ({ ...item, workspaceId: space.id })) : [];
+    state[field] = [...personal, ...remote];
+  }
+}
+
+function renderFinanceWorkspaceOptions() {
+  const fixed = [
+    { id: "personal", label: "Pessoal" },
+    { id: "couple", label: "Casal privado" },
+    { id: "family", label: "Família privada" },
+    { id: "business", label: "Empresa" },
+  ];
+  const options = [...fixed, ...sharedFinanceSpaces.map((space) => ({ id: space.id, label: `Compartilhado · ${space.name}` }))];
+  for (const selector of ["#finWorkspaceSelect", "#finAccountWorkspace"]) {
+    const select = document.querySelector(selector);
+    if (!select) continue;
+    const previous = select.value || activeWorkspaceId;
+    select.innerHTML = options.map((option) => `<option value="${escapeHtml(option.id)}">${escapeHtml(option.label)}</option>`).join("");
+    select.value = options.some((option) => option.id === previous) ? previous : activeWorkspaceId;
+  }
+  const switcher = document.querySelector(".bd-ws");
+  if (switcher) {
+    const shortLabels = { personal: "Pessoal", couple: "Casal", family: "Família", business: "Empresa" };
+    const icons = { personal: "user", couple: "users", family: "house", business: "layers" };
+    const visible = options.filter((option) => option.id !== "business" || option.id === activeWorkspaceId);
+    switcher.innerHTML = visible.map((option) => `<button type="button" class="bd-ws-option${option.id === activeWorkspaceId ? " active" : ""}" data-workspace="${escapeHtml(option.id)}" aria-pressed="${option.id === activeWorkspaceId}">${bdIcon(icons[option.id] || "users")}${escapeHtml(shortLabels[option.id] || option.label.replace("Compartilhado · ", ""))}</button>`).join("");
+  }
+}
+
+function renderSharedFinanceSpaces() {
+  const root = document.querySelector("#finSharedSpacesList");
+  const invitesRoot = document.querySelector("#finSharedInvites");
+  if (!root || !invitesRoot) return;
+  invitesRoot.hidden = !sharedFinanceInvites.length;
+  invitesRoot.innerHTML = sharedFinanceInvites.map((invite) => `
+    <article class="fin-shared-invite">
+      <div><strong>Convite para ${escapeHtml(invite.spaceName || "um espaço")}</strong><span>${escapeHtml(invite.inviterName || "Um usuário")} convidou você para colaborar.</span></div>
+      <button type="button" data-shared-action="accept" data-invite-id="${escapeHtml(invite.id)}">Aceitar convite</button>
+    </article>`).join("");
+  if (!sharedFinanceSpaces.length) {
+    root.innerHTML = '<div class="empty-state">Nenhum espaço compartilhado. Crie um para organizar as finanças com seu parceiro ou família.</div>';
+    return;
+  }
+  root.innerHTML = sharedFinanceSpaces.map((space) => {
+    const owner = space.role === "owner";
+    const memberNames = (space.members || []).map((member) => member.name || member.email).filter(Boolean).join(", ");
+    return `<article class="fin-shared-space-card${space.id === activeWorkspaceId ? " is-active" : ""}">
+      <div class="fin-shared-space-icon" aria-hidden="true">${space.type === "couple" ? "♡" : space.type === "family" ? "⌂" : "◎"}</div>
+      <div class="fin-shared-space-copy"><strong>${escapeHtml(space.name)}</strong><span>${escapeHtml(memberNames || "Somente você")} · ${space.canEdit ? "Pode editar" : "Somente leitura"}</span></div>
+      <button type="button" class="fin-shared-open" data-shared-action="open" data-space-id="${escapeHtml(space.id)}">${space.id === activeWorkspaceId ? "Em uso" : "Abrir"}</button>
+      ${owner ? `<form class="fin-shared-invite-form" data-space-id="${escapeHtml(space.id)}"><input type="email" name="email" autocomplete="email" placeholder="E-mail para convidar" aria-label="E-mail para convidar" required><select name="role" aria-label="Permissão"><option value="editor">Pode editar</option><option value="viewer">Somente leitura</option></select><button type="submit">Convidar</button></form>` : `<button type="button" class="fin-shared-leave" data-shared-action="leave" data-space-id="${escapeHtml(space.id)}">Sair do espaço</button>`}
+    </article>`;
+  }).join("");
+}
+
+function applyFinanceSpacePermissions() {
+  const space = sharedFinanceSpace(activeWorkspaceId);
+  const readOnly = Boolean(space && !space.canEdit);
+  document.querySelector("#financesView")?.classList.toggle("is-readonly-space", readOnly);
+  for (const selector of ["#expenseForm input", "#expenseForm select", "#expenseForm button", "#aiQuickSubmit", "#finCloseMonth", "#finReopenMonth", "#finAddAccount", "#finAddCard", "#finCardForm input", "#finCardForm button", "#finOpenGoalsModal", "#finOpenRecurModal"]) {
+    document.querySelectorAll(selector).forEach((element) => { element.disabled = readOnly; });
+  }
+}
+
+async function loadFinanceSpaces({ silent = false } = {}) {
+  if (!currentUser || isLocalDesignPreview) {
+    renderFinanceWorkspaceOptions();
+    renderSharedFinanceSpaces();
+    return;
+  }
+  try {
+    const payload = await pulseApi("/api/finance-spaces");
+    sharedFinanceSpaces = Array.isArray(payload.spaces) ? payload.spaces : [];
+    sharedFinanceInvites = Array.isArray(payload.invites) ? payload.invites : [];
+    sharedFinanceSpaces.forEach(mergeFinanceSpaceData);
+    // A leitura do servidor é a nova base, não uma edição local. Assim o
+    // próximo salvamento de uma nota pessoal não tenta copiar os dados do
+    // espaço compartilhado para o documento privado do usuário.
+    observedState = cloneState(state);
+    if (isSharedFinanceWorkspace(activeWorkspaceId) === false && !["personal", "couple", "family", "business"].includes(activeWorkspaceId)) activeWorkspaceId = "personal";
+    renderFinanceWorkspaceOptions();
+    renderSharedFinanceSpaces();
+    applyFinanceSpacePermissions();
+  } catch (error) {
+    if (!silent) showToast("Não foi possível atualizar os espaços compartilhados agora.");
+    const root = document.querySelector("#finSharedSpacesList");
+    if (root) root.innerHTML = '<div class="empty-state">Os espaços compartilhados não puderam ser carregados. Seus dados pessoais continuam disponíveis.</div>';
+  }
+}
+
+async function createFinanceSpace(event) {
+  event.preventDefault();
+  const name = valueOf("#finSharedSpaceName").trim();
+  const type = valueOf("#finSharedSpaceType") || "group";
+  if (name.length < 2) return showToast("Dê um nome ao espaço compartilhado.");
+  const submit = event.currentTarget.querySelector('[type="submit"]');
+  if (submit) submit.disabled = true;
+  try {
+    const payload = await pulseApi("/api/finance-spaces", { method: "POST", body: JSON.stringify({ action: "create", name, type }) });
+    if (payload.space) sharedFinanceSpaces.push(payload.space);
+    event.currentTarget.reset();
+    event.currentTarget.hidden = true;
+    renderFinanceWorkspaceOptions();
+    renderSharedFinanceSpaces();
+    if (payload.space?.id) setActiveFinanceWorkspace(payload.space.id);
+    showToast("Espaço compartilhado criado.");
+  } catch { showToast("Não foi possível criar o espaço agora."); }
+  finally { if (submit) submit.disabled = false; }
+}
+
+async function inviteToFinanceSpace(event) {
+  const form = event.target.closest(".fin-shared-invite-form");
+  if (!form) return;
+  event.preventDefault();
+  const email = String(new FormData(form).get("email") || "").trim();
+  const role = String(new FormData(form).get("role") || "editor");
+  const submit = form.querySelector('[type="submit"]');
+  if (submit) submit.disabled = true;
+  try {
+    await pulseApi("/api/finance-spaces", { method: "POST", body: JSON.stringify({ action: "invite", spaceId: form.dataset.spaceId, email, role }) });
+    form.reset();
+    showToast("Convite criado. Ele aparecerá na conta desse e-mail.");
+  } catch (error) {
+    showToast(error.code === "already_member" ? "Essa pessoa já participa do espaço." : "Não foi possível criar o convite.");
+  } finally { if (submit) submit.disabled = false; }
+}
+
+async function handleSharedSpaceAction(event) {
+  const button = event.target.closest("[data-shared-action]");
+  if (!button) return;
+  const action = button.dataset.sharedAction;
+  if (action === "open") return setActiveFinanceWorkspace(button.dataset.spaceId);
+  button.disabled = true;
+  try {
+    if (action === "accept") {
+      await pulseApi("/api/finance-spaces", { method: "POST", body: JSON.stringify({ action: "accept", inviteId: button.dataset.inviteId }) });
+      await loadFinanceSpaces();
+      showToast("Convite aceito. O espaço já está disponível.");
+    }
+    if (action === "leave") {
+      if (!confirm("Sair deste espaço compartilhado? Seus dados pessoais não serão alterados.")) return;
+      await pulseApi("/api/finance-spaces", { method: "POST", body: JSON.stringify({ action: "leave", spaceId: button.dataset.spaceId }) });
+      if (activeWorkspaceId === button.dataset.spaceId) activeWorkspaceId = "personal";
+      await loadFinanceSpaces();
+      renderAll();
+      showToast("Você saiu do espaço compartilhado.");
+    }
+  } catch { showToast("Não foi possível concluir essa ação."); }
+  finally { button.disabled = false; }
+}
+
+function scheduleSharedSpaceSync(workspaceId) {
+  const space = sharedFinanceSpace(workspaceId);
+  if (!space?.canEdit) return;
+  clearTimeout(sharedSpaceSyncTimers.get(workspaceId));
+  sharedSpaceSyncTimers.set(workspaceId, setTimeout(() => syncSharedFinanceSpace(workspaceId), 900));
+}
+
+async function syncSharedFinanceSpace(workspaceId) {
+  const space = sharedFinanceSpace(workspaceId);
+  if (!space?.canEdit || !currentUser) return;
+  try {
+    const payload = await pulseApi("/api/finance-spaces", {
+      method: "POST",
+      body: JSON.stringify({ action: "save", spaceId: workspaceId, revision: space.revision, data: financeSpaceDataFromState(workspaceId) }),
+    });
+    space.revision = payload.revision;
+    space.data = financeSpaceDataFromState(workspaceId);
+  } catch (error) {
+    if (error.code === "space_conflict") {
+      await loadFinanceSpaces({ silent: true });
+      renderAll();
+      showToast("Este espaço mudou em outro aparelho. Atualizamos os dados para evitar sobrescrever alterações.");
+    } else {
+      showToast("A alteração ficou salva neste aparelho, mas o espaço compartilhado ainda não sincronizou.");
+    }
+  } finally {
+    sharedSpaceSyncTimers.delete(workspaceId);
+  }
+}
+
+function setActiveFinanceWorkspace(workspaceId) {
+  const allowed = new Set(["personal", "couple", "family", "business", ...sharedFinanceSpaces.map((space) => space.id)]);
+  activeWorkspaceId = allowed.has(workspaceId) ? workspaceId : "personal";
+  document.querySelectorAll("[data-workspace]").forEach((item) => {
+    const active = item.dataset.workspace === activeWorkspaceId;
+    item.classList.toggle("active", active);
+    item.setAttribute("aria-pressed", String(active));
+  });
+  const select = document.querySelector("#finWorkspaceSelect");
+  if (select) select.value = activeWorkspaceId;
+  const accountSelect = document.querySelector("#finAccountWorkspace");
+  if (accountSelect && [...accountSelect.options].some((option) => option.value === activeWorkspaceId)) accountSelect.value = activeWorkspaceId;
+  finCategoryDrilldown = null;
+  lastForecastFetchAt = 0;
+  latestDashboardForecast = null;
+  renderSharedFinanceSpaces();
+  applyFinanceSpacePermissions();
+  renderDashboard();
+  renderFinances();
+}
+
+function toggleFinanceAccountForm(open, account = null) {
+  const wrap = document.querySelector("#finAccountFormWrap");
+  const form = document.querySelector("#finAccountForm");
+  if (!wrap || !form) return;
+  wrap.hidden = !open;
+  if (!open) {
+    form.reset();
+    document.querySelector("#finAccountId").value = "";
+    return;
+  }
+  document.querySelector("#finAccountId").value = account?.id || "";
+  document.querySelector("#finAccountName").value = account?.name || "";
+  document.querySelector("#finAccountType").value = account?.type || "checking";
+  document.querySelector("#finAccountWorkspace").value = account?.workspaceId || activeWorkspaceId;
+  document.querySelector("#finAccountBalance").value = account ? String(account.balance || 0).replace(".", ",") : "";
+  requestAnimationFrame(() => document.querySelector("#finAccountName")?.focus());
+}
+
+function saveFinanceAccount(event) {
+  event.preventDefault();
+  const id = valueOf("#finAccountId");
+  const name = valueOf("#finAccountName").trim();
+  const balance = parseSignedMoneyInput(valueOf("#finAccountBalance"));
+  const type = valueOf("#finAccountType") || "checking";
+  const workspaceId = valueOf("#finAccountWorkspace") || "personal";
+  if (!requireFinanceWorkspaceEdit(workspaceId)) return;
+  if (name.length < 2) {
+    showToast("Informe um nome para a conta.");
+    return;
+  }
+  state.financeAccounts ||= [];
+  if (id) {
+    state.financeAccounts = state.financeAccounts.map((account) => account.id === id
+      ? { ...account, name, balance, type, workspaceId, updatedAt: new Date().toISOString() }
+      : account);
+  } else {
+    state.financeAccounts.push({
+      id: crypto.randomUUID(), name, balance, type, workspaceId,
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), archived: false,
+    });
+  }
+  saveState();
+  toggleFinanceAccountForm(false);
+  renderFinances();
+  lastForecastFetchAt = 0;
+  refreshDashboardForecast(true);
+}
+
+function editFinanceAccount(id) {
+  const account = (state.financeAccounts || []).find((item) => item.id === id);
+  if (account && !requireFinanceWorkspaceEdit(account.workspaceId || "personal")) return;
+  if (account) toggleFinanceAccountForm(true, account);
+}
+
+function archiveFinanceAccount(id) {
+  const account = (state.financeAccounts || []).find((item) => item.id === id);
+  if (account && !requireFinanceWorkspaceEdit(account.workspaceId || "personal")) return;
+  if (!account || !confirm(`Arquivar a conta “${account.name}”? Os lançamentos existentes serão preservados.`)) return;
+  account.archived = true;
+  account.updatedAt = new Date().toISOString();
+  saveState();
+  renderFinances();
+}
+window.editFinanceAccount = editFinanceAccount;
+window.archiveFinanceAccount = archiveFinanceAccount;
+
+function toggleCreditCardForm(open) {
+  const form = document.querySelector("#finCardForm");
+  if (!form) return;
+  form.hidden = !open;
+  if (!open) {
+    form.reset();
+    document.querySelector("#finCardClosingDay").value = "1";
+    document.querySelector("#finCardDueDay").value = "10";
+    return;
+  }
+  requestAnimationFrame(() => document.querySelector("#finCardName")?.focus());
+}
+
+function saveCreditCard(event) {
+  event.preventDefault();
+  if (!requireFinanceWorkspaceEdit()) return;
+  const name = valueOf("#finCardName").trim();
+  const last4 = valueOf("#finCardLast4").replace(/\D/g, "").slice(-4);
+  const limit = parseSignedMoneyInput(valueOf("#finCardLimit"));
+  const closingDay = Number(valueOf("#finCardClosingDay"));
+  const dueDay = Number(valueOf("#finCardDueDay"));
+  if (name.length < 2 || limit <= 0 || closingDay < 1 || closingDay > 31 || dueDay < 1 || dueDay > 31) {
+    showToast("Revise o nome, o limite e as datas do cartão.");
+    return;
+  }
+  state.creditCards ||= [];
+  state.creditCards.push({
+    id: crypto.randomUUID(), name, last4, limit, closingDay, dueDay,
+    workspaceId: activeWorkspaceId, invoices: [], archived: false,
+    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+  });
+  saveState();
+  toggleCreditCardForm(false);
+  renderFinances();
+  lastForecastFetchAt = 0;
+  refreshDashboardForecast(true);
+}
+
+function openCreditCardPurchase(cardId) {
+  const card = (state.creditCards || []).find((item) => item.id === cardId && !item.archived);
+  if (!card || !requireFinanceWorkspaceEdit(card.workspaceId || "personal")) return;
+  document.querySelector("#finCardPurchaseCardId").value = card.id;
+  document.querySelector("#finCardPurchaseTitle").textContent = `Compra no ${card.name}`;
+  document.querySelector("#finCardPurchaseDate").value = todayIso;
+  document.querySelector("#finCardPurchaseInstallments").value = "1";
+  document.querySelector("#finCardPurchaseModal").hidden = false;
+  document.body.classList.add("modal-open");
+  requestAnimationFrame(() => document.querySelector("#finCardPurchaseDescription")?.focus());
+}
+
+function closeCreditCardPurchase() {
+  const modal = document.querySelector("#finCardPurchaseModal");
+  if (modal) modal.hidden = true;
+  document.querySelector("#finCardPurchaseForm")?.reset();
+  document.body.classList.remove("modal-open");
+}
+
+function saveCreditCardPurchase(event) {
+  event.preventDefault();
+  const card = (state.creditCards || []).find((item) => item.id === valueOf("#finCardPurchaseCardId"));
+  if (!card || !requireFinanceWorkspaceEdit(card.workspaceId || "personal")) return;
+  const description = valueOf("#finCardPurchaseDescription").trim();
+  const amount = parseSignedMoneyInput(valueOf("#finCardPurchaseAmount"));
+  const purchaseDate = valueOf("#finCardPurchaseDate");
+  const installments = Number(valueOf("#finCardPurchaseInstallments"));
+  const buildPlan = window.PulseCardInstallments?.buildInstallmentPlan;
+  if (description.length < 2 || amount <= 0 || !purchaseDate || installments < 1 || installments > 48 || typeof buildPlan !== "function") {
+    showToast("Revise a descrição, o valor, a data e as parcelas.");
+    return;
+  }
+
+  const purchaseId = crypto.randomUUID();
+  const plan = buildPlan({ amount, installments, purchaseDate, closingDay: card.closingDay, dueDay: card.dueDay });
+  card.invoices ||= [];
+  for (const part of plan) {
+    let invoice = card.invoices.find((item) => item.monthKey === part.monthKey);
+    if (!invoice) {
+      invoice = { id: crypto.randomUUID(), monthKey: part.monthKey, dueDate: part.dueDate, amount: 0, status: "open", purchases: [] };
+      card.invoices.push(invoice);
+    }
+    invoice.amount = Math.round((Number(invoice.amount || 0) + part.amount) * 100) / 100;
+    invoice.purchases ||= [];
+    invoice.purchases.push({
+      id: `${purchaseId}:${part.installmentNumber}`,
+      purchaseId, description, purchaseDate, amount: part.amount,
+      installmentNumber: part.installmentNumber, totalInstallments: part.totalInstallments,
+    });
+  }
+  card.updatedAt = new Date().toISOString();
+  saveState();
+  closeCreditCardPurchase();
+  renderFinances();
+  lastForecastFetchAt = 0;
+  refreshDashboardForecast(true);
+  showToast(installments > 1 ? `Compra distribuída em ${installments} faturas.` : "Compra adicionada à fatura.");
+}
+
+function payCreditCardInvoice(cardId, invoiceId) {
+  const card = (state.creditCards || []).find((item) => item.id === cardId);
+  const invoice = card?.invoices?.find((item) => item.id === invoiceId);
+  if (!card || !invoice || invoice.status === "paid" || !requireFinanceWorkspaceEdit(card.workspaceId || "personal")) return;
+  state.finances ||= [];
+  state.finances.unshift({
+    id: crypto.randomUUID(), type: "despesa", amount: Number(invoice.amount || 0), category: "contas",
+    description: `Fatura ${card.name}`, date: todayIso, workspaceId: card.workspaceId || "personal",
+    cardId: card.id, invoiceId: invoice.id,
+  });
+  invoice.status = "paid";
+  invoice.paidAt = new Date().toISOString();
+  saveState();
+  renderFinances();
+  lastForecastFetchAt = 0;
+  refreshDashboardForecast(true);
+  showToast(`Fatura de ${formatCurrency(invoice.amount)} marcada como paga.`);
+}
+
+function archiveCreditCard(cardId) {
+  const card = (state.creditCards || []).find((item) => item.id === cardId);
+  if (!card || !requireFinanceWorkspaceEdit(card.workspaceId || "personal")) return;
+  if (!confirm(`Arquivar o cartão “${card.name}”? As faturas existentes serão preservadas.`)) return;
+  card.archived = true;
+  card.updatedAt = new Date().toISOString();
+  saveState();
+  renderFinances();
+}
+window.openCreditCardPurchase = openCreditCardPurchase;
+window.payCreditCardInvoice = payCreditCardInvoice;
+window.archiveCreditCard = archiveCreditCard;
+
+function clearFinanceCategory() {
+  finCategoryDrilldown = null;
+  renderFinances();
+}
+window.clearFinanceCategory = clearFinanceCategory;
 
 function bindForms() {
   document.querySelector("#noteForm").addEventListener("submit", saveNote);
@@ -1752,7 +3025,7 @@ function bindGlobalPalette() {
 }
 window.openPaletteResult = openPaletteResult;
 
-function setView(view) {
+function setView(view, { fromHistory = false } = {}) {
   const target = document.querySelector(`#${view}View`);
   if (!target) {
     // Segurança: se algum botão apontar pra uma view que não existe (foi
@@ -1763,20 +3036,32 @@ function setView(view) {
     console.warn(`setView: view "${view}" não existe.`);
     return;
   }
+  // Um detalhe de nota aberto é um modal de tela inteira. Sem fechá-lo
+  // antes de trocar a view, o backdrop continuava por cima da navegação e
+  // dava a impressão de que o app havia travado. Salva e fecha sem criar
+  // uma etapa extra no histórico quando a troca veio da navegação.
+  const noteModal = document.querySelector("#noteDetailModal");
+  if (!fromHistory && noteModal && !noteModal.hidden) closeNoteDetail({ updateHistory: false });
+
+  const previousView = activeView;
   activeView = view;
+  trackUsageArea(view);
   // Sync sidebar nav
-  document.querySelectorAll(".nav-item").forEach((item) => {
+  document.querySelectorAll("[data-nav]").forEach((item) => {
     item.classList.toggle("active", item.dataset.view === view);
   });
   // Sync bottom nav (mobile)
-  document.querySelectorAll(".bottom-nav-item").forEach((item) => {
+  document.querySelectorAll("[data-bnav]").forEach((item) => {
     item.classList.toggle("active", item.dataset.view === view);
   });
   document.querySelectorAll(".view").forEach((section) => section.classList.remove("active-view"));
   target.classList.add("active-view");
-  elements.viewTitle.textContent = viewTitles[view];
-  // Scroll to top on mobile
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  applyViewHeading(view);
+  if (view === "dashboard") requestAnimationFrame(renderBoardsEvolution);
+  // Trocas de area precisam começar no topo imediatamente. O scroll suave
+  // deixava o cabecalho parcialmente cortado durante a transicao, sobretudo
+  // no mobile e em navegadores que preservam a posicao anterior.
+  window.scrollTo({ top: 0, behavior: "auto" });
   // A primeira renderização dos cards de Receitas/Despesas/Saldo geralmente
   // acontece com a aba Finanças ainda escondida (clientWidth 0), então o
   // autofit em fitCurrencyValues() desiste sem ajustar o tamanho da fonte
@@ -1786,6 +3071,13 @@ function setView(view) {
   // gente reexecuta o autofit pra medir e ajustar certo.
   if (view === "finances") fitCurrencyValues("finReceitas", "finDespesas", "finSaldo");
   if (view === "dashboard") fitCurrencyValues("summaryFinSaldo", "dashFinReceitas", "dashFinDespesas", "dashFinSaldo");
+  if (view === "autopilot" || view === "dashboard") autopilotUi.show();
+
+  // A navegação entre áreas ganha uma entrada real no histórico: voltar no
+  // navegador/celular retorna à tela anterior em vez de sair do app.
+  if (!fromHistory && previousView !== view) {
+    history.pushState({ ...(history.state || {}), pnView: view, noteDetail: false }, "");
+  }
 }
 
 function saveNote(event) {
@@ -1793,6 +3085,34 @@ function saveNote(event) {
   const id = document.querySelector("#noteId").value;
   const existing = state.notes.find((note) => note.id === id);
   const newDescription = valueOf("#noteDescription");
+  const textColor = normalizeNoteTextColor(valueOf("#noteTextColor"));
+  const descriptionChanged = !existing || existing.description !== newDescription;
+  const textColorChanged = Boolean(existing) && normalizeNoteTextColor(existing.textColor) !== textColor;
+  const descriptionHtml = existing && !descriptionChanged && !textColorChanged
+    ? existing.descriptionHtml || notePlainTextToHtml(newDescription, textColor)
+    : notePlainTextToHtml(newDescription, textColor);
+  const existingChecklist = existing?.checklist || [];
+  const reusedChecklistIndexes = new Set();
+  const checklist = splitLines(valueOf("#noteChecklist")).map((text, index) => {
+    // Preserve a conclusao dos itens quando a pessoa edita outro campo da
+    // nota. Primeiro procuramos o mesmo texto (inclusive se ele mudou de
+    // posicao); se o texto foi renomeado, reaproveitamos o item da posicao.
+    let previousIndex = existingChecklist.findIndex((item, itemIndex) =>
+      !reusedChecklistIndexes.has(itemIndex) && noteChecklistItemText(item) === text
+    );
+    if (previousIndex < 0 && existingChecklist[index] && !reusedChecklistIndexes.has(index)) {
+      previousIndex = index;
+    }
+    if (previousIndex < 0) return { id: crypto.randomUUID(), text, done: false };
+
+    reusedChecklistIndexes.add(previousIndex);
+    const previousItem = existingChecklist[previousIndex];
+    return {
+      id: typeof previousItem === "object" && previousItem.id ? previousItem.id : crypto.randomUUID(),
+      text,
+      done: noteChecklistItemDone(previousItem),
+    };
+  });
   const payload = {
     id: id || crypto.randomUUID(),
     title: valueOf("#noteTitle"),
@@ -1801,21 +3121,20 @@ function saveNote(event) {
     folder: valueOf("#noteFolder") || "Entrada",
     tags: splitValues(valueOf("#noteTags")),
     priority: valueOf("#notePriority"),
-    checklist: splitLines(valueOf("#noteChecklist")),
+    checklist,
     attachments: splitValues(valueOf("#noteAttachments")),
     goal: valueOf("#noteGoal"),
     observations: valueOf("#noteObservations"),
     color: valueOf("#noteColor") || existing?.color || "blue",
+    textColor,
     favorite: existing?.favorite || false,
     createdAt: existing?.createdAt || todayIso,
     convertedToTaskId: existing?.convertedToTaskId || "",
-    // Esse formulário só mexe no texto puro (#noteDescription) — se a nota
-    // já tinha formatação feita no editor em tela cheia (negrito/destaque)
-    // e o texto não mudou aqui, mantém o HTML formatado. Se o texto MUDOU
-    // por aqui, o HTML antigo ficaria desatualizado (mostrando algo
-    // diferente do texto puro atual), então descarta e volta a ser texto
-    // simples — evita a formatação "grudada" sobrepor uma edição nova.
-    descriptionHtml: existing && existing.description === newDescription ? existing.descriptionHtml || "" : "",
+    // A cor escolhida já aparece enquanto a pessoa escreve a primeira
+    // versão da nota. Ao salvar, guardamos também o HTML equivalente para
+    // que a cor apareça no cartão e no editor detalhado. Formatações ricas
+    // existentes continuam intactas enquanto texto/cor não forem alterados.
+    descriptionHtml,
   };
 
   state.notes = id ? state.notes.map((note) => (note.id === id ? payload : note)) : [payload, ...state.notes];
@@ -1941,6 +3260,33 @@ function splitLines(value) {
     .filter(Boolean);
 }
 
+const NOTE_TEXT_COLORS = new Set(["#8b5cf6", "#ff375f", "#30d158", "#0a84ff", "#bf5af2"]);
+
+function normalizeNoteTextColor(color) {
+  const normalized = String(color || "").trim().toLowerCase();
+  return NOTE_TEXT_COLORS.has(normalized) ? normalized : "";
+}
+
+function notePlainTextToHtml(text, color) {
+  const safeColor = normalizeNoteTextColor(color);
+  if (!safeColor || !text) return "";
+  const safeText = escapeHtml(text).replace(/\n/g, "<br>");
+  return `<span style="color:${safeColor}">${safeText}</span>`;
+}
+
+function setNoteDraftTextColor(color) {
+  const safeColor = normalizeNoteTextColor(color);
+  const input = document.querySelector("#noteTextColor");
+  const description = document.querySelector("#noteDescription");
+  if (input) input.value = safeColor;
+  if (description) description.style.color = safeColor || "";
+  document.querySelectorAll("#noteTextColorPicker [data-note-text-color]").forEach((button) => {
+    const selected = normalizeNoteTextColor(button.dataset.noteTextColor) === safeColor;
+    button.classList.toggle("active", selected);
+    button.setAttribute("aria-pressed", String(selected));
+  });
+}
+
 function resetNoteForm() {
   const form = document.querySelector("#noteForm");
   if (!form) return;
@@ -1949,6 +3295,7 @@ function resetNoteForm() {
   document.querySelector("#notePriority").value = "Media";
   document.querySelector("#noteColor").value = "blue";
   document.querySelectorAll("#noteColorPicker .note-color-dot").forEach((dot) => dot.classList.toggle("active", dot.dataset.noteColor === "blue"));
+  setNoteDraftTextColor("");
   document.querySelectorAll("#notePriorityPicker .note-priority-dot").forEach((d) => d.classList.toggle("active", d.dataset.priority === "Media"));
   document.querySelector("#noteChecklistField").hidden = true;
   document.querySelector("#noteChecklistToggle").classList.remove("active");
@@ -1966,6 +3313,10 @@ function bindNoteQuickControls() {
       dot.classList.add("active");
       document.querySelector("#noteColor").value = dot.dataset.noteColor;
     });
+  });
+
+  document.querySelectorAll("#noteTextColorPicker [data-note-text-color]").forEach((button) => {
+    button.addEventListener("click", () => setNoteDraftTextColor(button.dataset.noteTextColor));
   });
 
   // Seletor de prioridade por bolinhas coloridas (substitui o <select> visível)
@@ -2086,6 +3437,448 @@ function getAchievementsList() {
   ];
 }
 
+// ============================================================
+// Sistema visual dos quadros — shell e Dashboard
+// ============================================================
+const BD_WEEKDAYS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+const BD_MONTHS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+let bdEvoRange = 30;
+
+function bdIcon(id) {
+  return `<svg class="i" aria-hidden="true"><use href="#i-${id}"/></svg>`;
+}
+
+function bdFirstName() {
+  return (getUser()?.name || "Usuário").trim().split(/\s+/)[0] || "Usuário";
+}
+
+function bdInitials(name) {
+  const parts = String(name || "U").trim().split(/\s+/).filter(Boolean);
+  const first = parts[0]?.charAt(0) || "U";
+  const last = parts.length > 1 ? parts[parts.length - 1].charAt(0) : "";
+  return `${first}${last}`.toUpperCase();
+}
+
+function bdFormatBoardDate(date = new Date()) {
+  return `${BD_WEEKDAYS[date.getDay()]}, ${String(date.getDate()).padStart(2, "0")} de ${BD_MONTHS[date.getMonth()]} de ${date.getFullYear()}`;
+}
+
+// Título + subtítulo do cabeçalho de cada área (seguem os quadros).
+function applyViewHeading(view) {
+  const first = bdFirstName();
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Bom dia" : hour < 18 ? "Boa tarde" : "Boa noite";
+  const headings = {
+    dashboard: [`${greeting}, ${first}! 👋`, "Aqui está o seu panorama de hoje."],
+    planner: ["Planner", "Organize suas tarefas, compromissos e metas."],
+    notes: [`Notas, ${first}! 📝`, "Capture ideias, organize informações e transforme em ação."],
+    finances: ["Finanças", "Organize, acompanhe e evolua suas finanças."],
+    autopilot: ["", ""],
+    profile: ["Perfil", ""],
+    settings: ["Configurações", "Gerencie sua conta, preferências, integrações e segurança."],
+  };
+  const [title, subtitle] = headings[view] || [viewTitles[view] || "", ""];
+  if (elements.viewTitle) {
+    elements.viewTitle.textContent = title;
+    elements.viewTitle.style.display = title ? "" : "none";
+  }
+  const subtitleEl = document.querySelector("#viewSubtitle");
+  if (subtitleEl) subtitleEl.textContent = subtitle;
+  document.body.dataset.view = view;
+  const dateEl = document.querySelector("#bdDateText");
+  if (dateEl) dateEl.textContent = bdFormatBoardDate();
+}
+
+function renderShellUser(user) {
+  const name = user?.name || "Usuário";
+  const photoURL = state?.profilePhoto || currentUser?.photoURL || "";
+  const avatar = document.querySelector("#bdUserAvatar");
+  if (avatar) {
+    avatar.innerHTML = photoURL ? `<img src="${escapeHtml(photoURL)}" alt="" />` : escapeHtml(bdInitials(name));
+  }
+  const nameEl = document.querySelector("#bdUserName");
+  if (nameEl) nameEl.textContent = name;
+  if (isLocalDesignPreview) {
+    const planEl = document.querySelector("#bdUserPlan");
+    if (planEl) planEl.textContent = "Plano Pro";
+  }
+}
+
+// ── Dados do dashboard ─────────────────────────────────────
+function bdWorkspaceFinances() {
+  return (state.finances || []).filter((f) => f.date && (f.workspaceId || "personal") === activeWorkspaceId);
+}
+
+function bdSignedAmount(entry) {
+  const amount = Number(entry.amount) || 0;
+  return entry.type === "receita" ? amount : -amount;
+}
+
+// Mesmo critério do saldo do app: sobra do mês anterior (se fechado) + lançamentos do mês até a data.
+function bdBalanceOn(iso, entries = bdWorkspaceFinances()) {
+  const monthKey = iso.slice(0, 7);
+  return getCarryOverBalance(monthKey, activeWorkspaceId)
+    + entries.filter((f) => f.date.startsWith(monthKey) && f.date <= iso).reduce((sum, f) => sum + bdSignedAmount(f), 0);
+}
+
+function bdBalanceSeries(range) {
+  const entries = bdWorkspaceFinances();
+  const net = new Map();
+  for (const entry of entries) net.set(entry.date, (net.get(entry.date) || 0) + bdSignedAmount(entry));
+  const monthly = range > 120;
+  const days = monthly ? 365 : range;
+  const end = new Date();
+  end.setHours(12, 0, 0, 0);
+  const cursor = new Date(end);
+  cursor.setDate(cursor.getDate() - (days - 1));
+  const points = [];
+  let running = 0;
+  let runningMonth = "";
+  while (cursor <= end) {
+    const iso = toLocalIso(cursor);
+    const monthKey = iso.slice(0, 7);
+    if (monthKey !== runningMonth) {
+      runningMonth = monthKey;
+      running = getCarryOverBalance(monthKey, activeWorkspaceId)
+        + entries.filter((f) => f.date.startsWith(monthKey) && f.date < iso).reduce((sum, f) => sum + bdSignedAmount(f), 0);
+    }
+    running += net.get(iso) || 0;
+    points.push({ date: iso, value: running });
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  if (!monthly) return points;
+  const byMonth = new Map();
+  for (const point of points) byMonth.set(point.date.slice(0, 7), point);
+  return [...byMonth.values()];
+}
+
+function bdNiceStep(raw) {
+  if (!(raw > 0)) return 1;
+  const exp = Math.floor(Math.log10(raw));
+  const base = raw / 10 ** exp;
+  const nice = base <= 1 ? 1 : base <= 2 ? 2 : base <= 2.5 ? 2.5 : base <= 5 ? 5 : 10;
+  return nice * 10 ** exp;
+}
+
+function bdSmoothPath(coords) {
+  if (coords.length < 3) return coords.map((p, i) => `${i ? "L" : "M"}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(" ");
+  let d = `M${coords[0][0].toFixed(1)} ${coords[0][1].toFixed(1)}`;
+  for (let i = 0; i < coords.length - 1; i += 1) {
+    const p0 = coords[i - 1] || coords[i];
+    const p1 = coords[i];
+    const p2 = coords[i + 1];
+    const p3 = coords[i + 2] || p2;
+    const c1x = p1[0] + (p2[0] - p0[0]) / 6;
+    const c1y = p1[1] + (p2[1] - p0[1]) / 6;
+    const c2x = p2[0] - (p3[0] - p1[0]) / 6;
+    const c2y = p2[1] - (p3[1] - p1[1]) / 6;
+    d += ` C${c1x.toFixed(1)} ${c1y.toFixed(1)} ${c2x.toFixed(1)} ${c2y.toFixed(1)} ${p2[0].toFixed(1)} ${p2[1].toFixed(1)}`;
+  }
+  return d;
+}
+
+function bdAxisMoney(value) {
+  return `R$ ${Math.round(value).toLocaleString("pt-BR")}`;
+}
+
+function bdPointLabel(point, monthly) {
+  const [year, month, day] = point.date.split("-").map(Number);
+  return monthly ? `${BD_MONTHS[month - 1]}/${String(year).slice(2)}` : `${day} ${BD_MONTHS[month - 1]}`;
+}
+
+function renderBoardsEvolution() {
+  const host = document.querySelector("#bdEvoChart");
+  if (!host) return;
+  const width = host.clientWidth;
+  const height = host.clientHeight;
+  if (!width || !height) return; // aba escondida: renderiza de novo quando aparecer
+  const monthly = bdEvoRange > 120;
+  const series = bdBalanceSeries(bdEvoRange);
+  if (!bdWorkspaceFinances().length || !series.length) {
+    host.innerHTML = '<div class="bd-empty">Sem lançamentos no período. Registre uma receita ou despesa para ver a evolução.</div>';
+    return;
+  }
+  const values = series.map((p) => p.value);
+  const rawMin = Math.min(...values);
+  const rawMax = Math.max(...values);
+  const step = bdNiceStep((Math.max(rawMax - rawMin, Math.abs(rawMax) * 0.05, 100)) / 5);
+  const yMin = Math.floor(rawMin / step) * step;
+  let yMax = Math.ceil(rawMax / step) * step;
+  if (yMax === yMin) yMax = yMin + step;
+  const pad = { left: 56, right: 16, top: 16, bottom: 24 };
+  const plotW = width - pad.left - pad.right;
+  const plotH = height - pad.top - pad.bottom;
+  const x = (i) => pad.left + (series.length === 1 ? plotW : (i / (series.length - 1)) * plotW);
+  const y = (v) => pad.top + plotH - ((v - yMin) / (yMax - yMin)) * plotH;
+  const coords = series.map((p, i) => [x(i), y(p.value)]);
+  const line = bdSmoothPath(coords);
+  const area = `${line} L${coords.at(-1)[0].toFixed(1)} ${(pad.top + plotH).toFixed(1)} L${coords[0][0].toFixed(1)} ${(pad.top + plotH).toFixed(1)} Z`;
+  const ticks = [];
+  for (let value = yMin; value <= yMax + step / 2; value += step) ticks.push(value);
+  const grid = ticks.map((value) => `<line x1="${pad.left}" x2="${width - pad.right}" y1="${y(value).toFixed(1)}" y2="${y(value).toFixed(1)}"/><text x="${pad.left - 8}" y="${(y(value) + 3.5).toFixed(1)}" text-anchor="end">${bdAxisMoney(value)}</text>`).join("");
+  const labelCount = width < 420 ? 3 : 5;
+  const labelIdx = [...new Set(Array.from({ length: labelCount }, (_, k) => Math.round((k / (labelCount - 1)) * (series.length - 1))))];
+  const xLabels = labelIdx.map((idx, k) => `<text x="${x(idx).toFixed(1)}" y="${height - 6}" text-anchor="${k === 0 ? "start" : k === labelIdx.length - 1 ? "end" : "middle"}">${bdPointLabel(series[idx], monthly)}</text>`).join("");
+  const last = coords.at(-1);
+  const tipText = formatCurrency(series.at(-1).value);
+  const tipW = tipText.length * 6.6 + 18;
+  const tipX = Math.min(Math.max(last[0] - tipW + 10, pad.left), width - tipW - 4);
+  const tipY = Math.max(last[1] - 34, 2);
+  host.innerHTML = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" preserveAspectRatio="none">
+    <defs><linearGradient id="bdEvoFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#22d3ee" stop-opacity=".38"/><stop offset="1" stop-color="#22d3ee" stop-opacity="0"/></linearGradient></defs>
+    <g class="grid">${grid}</g>
+    <path d="${area}" fill="url(#bdEvoFill)"/>
+    <path class="line" d="${line}"/>
+    ${xLabels}
+    <g class="tip"><rect x="${tipX.toFixed(1)}" y="${tipY.toFixed(1)}" width="${tipW.toFixed(1)}" height="24" rx="8"/><text x="${(tipX + tipW / 2).toFixed(1)}" y="${(tipY + 16).toFixed(1)}" text-anchor="middle">${escapeHtml(tipText)}</text></g>
+    <circle class="dot" cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="4.5"/>
+  </svg>`;
+  host.setAttribute("aria-label", `Evolução do saldo: ${tipText} hoje`);
+}
+
+function renderBoardsSparkline(series) {
+  const svg = document.querySelector("#bdBalanceSpark");
+  if (!svg) return;
+  const pts = series.slice(-30);
+  if (pts.length < 2) { svg.innerHTML = ""; return; }
+  const min = Math.min(...pts.map((p) => p.value));
+  const max = Math.max(...pts.map((p) => p.value));
+  const span = max - min || 1;
+  const coords = pts.map((p, i) => [(i / (pts.length - 1)) * 200, 58 - ((p.value - min) / span) * 46]);
+  const line = bdSmoothPath(coords);
+  svg.innerHTML = `<defs><linearGradient id="bdSparkFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#25d388" stop-opacity=".45"/><stop offset="1" stop-color="#25d388" stop-opacity="0"/></linearGradient></defs><path d="${line} L200 70 L0 70 Z" fill="url(#bdSparkFill)"/><path d="${line}" fill="none" stroke="#25d388" stroke-width="1.6" stroke-linecap="round"/>`;
+}
+
+const BD_CATEGORY_ICONS = {
+  moradia: "home", contas: "home", manutencao: "home",
+  alimentacao: "fork", mercado: "fork",
+  transporte: "car", combustivel: "car",
+  saude: "heart", academia: "heart", beleza: "heart",
+  assinaturas: "layers",
+};
+const BD_CATEGORY_SHORT = { alimentacao: "Aliment.", mercado: "Mercado", transporte: "Transp.", assinaturas: "Assin.", investimentos_desp: "Invest." };
+
+function bdCategoryName(id) {
+  if (BD_CATEGORY_SHORT[id]) return BD_CATEGORY_SHORT[id];
+  const label = String(findCategory(id).label || "Outros").replace(/^[^\p{L}\p{N}]+/u, "").trim();
+  return label.length > 9 ? `${label.slice(0, 8)}.` : label;
+}
+
+function renderBoardsCategories(monthEntries) {
+  const host = document.querySelector("#bdCats");
+  if (!host) return;
+  const expenses = monthEntries.filter((f) => f.type === "despesa");
+  const total = expenses.reduce((sum, f) => sum + (Number(f.amount) || 0), 0);
+  if (!total) {
+    host.innerHTML = '<div class="bd-empty" style="grid-column:1/-1;align-self:center">Nenhum gasto neste mês.</div>';
+    return;
+  }
+  const byCat = new Map();
+  for (const f of expenses) byCat.set(f.category || "outros", (byCat.get(f.category || "outros") || 0) + (Number(f.amount) || 0));
+  const sorted = [...byCat.entries()].sort((a, b) => b[1] - a[1]);
+  const top = sorted.slice(0, 5);
+  const restTotal = sorted.slice(5).reduce((sum, [, v]) => sum + v, 0);
+  const rows = top.map(([id, value]) => ({ id, value }));
+  const outrosExisting = rows.find((r) => r.id === "outros");
+  if (restTotal) {
+    if (outrosExisting) outrosExisting.value += restTotal;
+    else rows.push({ id: "outros", value: restTotal });
+  }
+  const maxPct = Math.max(...rows.map((r) => r.value / total));
+  host.style.gridTemplateColumns = `repeat(${rows.length}, 1fr)`;
+  host.innerHTML = rows.map((r) => {
+    const pct = r.value / total;
+    const icon = BD_CATEGORY_ICONS[r.id] || "dots-circle";
+    return `<div class="bd-cat" title="${escapeHtml(findCategory(r.id).label)} · ${escapeHtml(formatCurrency(r.value))}">
+      <span class="bd-cat-pct">${Math.round(pct * 100)}%</span>
+      <span class="bd-cat-track"><i class="bd-cat-bar" style="height:${Math.max(6, (pct / maxPct) * 100).toFixed(1)}%"></i></span>
+      <span class="bd-cat-ico">${bdIcon(icon)}</span>
+      <span class="bd-cat-name">${escapeHtml(bdCategoryName(r.id))}</span>
+    </div>`;
+  }).join("");
+}
+
+function bdDueLabel(dueIso) {
+  const diff = Math.round((new Date(`${dueIso}T12:00:00`) - new Date(`${todayIso}T12:00:00`)) / 86400000);
+  const when = diff === 0 ? "Vence hoje" : diff === 1 ? "Vence amanhã" : `Vence em ${diff} dias`;
+  const d = new Date(`${dueIso}T12:00:00`);
+  return `${when} • ${BD_WEEKDAYS[d.getDay()]}, ${String(d.getDate()).padStart(2, "0")} de ${BD_MONTHS[d.getMonth()]}`;
+}
+
+function bdRecurringIcon(item) {
+  const text = `${item.description || ""} ${item.categoryId || ""}`.toLowerCase();
+  if (/aluguel|moradia|condom/.test(text)) return "home";
+  if (/internet|wifi|net\b/.test(text)) return "wifi";
+  if (/cart|fatura/.test(text)) return "card";
+  return "card";
+}
+
+function renderBoardsToday() {
+  const host = document.querySelector("#bdToday");
+  if (!host) return;
+  const monthKey = todayIso.slice(0, 7);
+  const [year, month] = monthKey.split("-").map(Number);
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const todayDay = Number(todayIso.slice(8, 10));
+  const entries = bdWorkspaceFinances();
+  const items = [];
+
+  for (const item of (state.finRecurrents || []).filter((r) => (r.workspaceId || "personal") === activeWorkspaceId)) {
+    if (isRecurrentSkipped(item, monthKey)) continue;
+    const dueDay = Math.min(Number(item.day) || 1, daysInMonth);
+    if (dueDay < todayDay || dueDay - todayDay > 7) continue;
+    const alreadyLogged = entries.some((e) => e.date.startsWith(monthKey) && e.description === item.description && Number(e.amount) === Number(item.amount));
+    if (alreadyLogged) continue;
+    const dueIso = `${monthKey}-${String(dueDay).padStart(2, "0")}`;
+    items.push({
+      sort: `${dueIso} 99:99`, icon: bdRecurringIcon(item), tone: "tone-violet", title: item.description,
+      sub: bdDueLabel(dueIso), amount: `${item.type === "receita" ? "+ " : ""}${formatCurrency(Number(item.amount) || 0)}`,
+    });
+  }
+  for (const event of state.events.filter((e) => e.date === todayIso)) {
+    items.push({
+      sort: `${event.date} ${event.time || "00:00"}`, icon: "calendar", tone: "tone-blue", title: event.title,
+      sub: `Hoje${event.time ? ` • ${event.time}` : ""}${event.location ? ` · ${event.location}` : ""}`, amount: "",
+    });
+  }
+  items.sort((a, b) => a.sort.localeCompare(b.sort));
+  if (!items.length) {
+    host.innerHTML = '<li class="bd-empty" style="display:block;border:0">Nada para hoje. Aproveite o dia livre.</li>';
+    return;
+  }
+  host.innerHTML = items.slice(0, 4).map((item) => `<li>
+    <span class="bd-li-ico ${item.tone}">${bdIcon(item.icon)}</span>
+    <span class="bd-li-main"><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.sub)}</small></span>
+    ${item.amount ? `<span class="bd-li-amt">${escapeHtml(item.amount)}</span>` : ""}
+  </li>`).join("");
+}
+
+function bdTrendHtml(pct, { inverse = false } = {}) {
+  if (!Number.isFinite(pct)) return "";
+  const up = pct >= 0;
+  const good = inverse ? !up : up;
+  const text = `${up ? "+" : "-"}${Math.abs(pct).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
+  return `<b class="${good ? "" : "down"}">${bdIcon(up ? "arrow-up" : "arrow-down")}${text}</b> vs. mês anterior`;
+}
+
+function renderBoardsDashboard() {
+  if (!document.querySelector("#bdBalance")) return;
+  const monthKey = todayIso.slice(0, 7);
+  const entries = bdWorkspaceFinances();
+  const monthEntries = entries.filter((f) => f.date.startsWith(monthKey));
+  const receitas = monthEntries.filter((f) => f.type === "receita").reduce((s, f) => s + (Number(f.amount) || 0), 0);
+  const despesas = monthEntries.filter((f) => f.type === "despesa").reduce((s, f) => s + (Number(f.amount) || 0), 0);
+  const saldo = getCarryOverBalance(monthKey, activeWorkspaceId) + receitas - despesas;
+
+  document.querySelector("#bdBalance").textContent = formatCurrency(saldo);
+  document.querySelector("#bdSpend").textContent = formatCurrency(despesas);
+  document.querySelector("#bdIncome").textContent = formatCurrency(receitas);
+
+  // Saldo: variação contra o mesmo dia do mês anterior
+  const prevMonthKey = getPreviousMonthKey(monthKey);
+  const prevHasData = entries.some((f) => f.date.startsWith(prevMonthKey)) || isMonthClosed(prevMonthKey);
+  const [py, pm] = prevMonthKey.split("-").map(Number);
+  const prevDay = Math.min(Number(todayIso.slice(8, 10)), new Date(py, pm, 0).getDate());
+  const prevBalance = bdBalanceOn(`${prevMonthKey}-${String(prevDay).padStart(2, "0")}`, entries);
+  const trendEl = document.querySelector("#bdBalanceTrend");
+  if (trendEl) trendEl.innerHTML = prevHasData && prevBalance ? bdTrendHtml(((saldo - prevBalance) / Math.abs(prevBalance)) * 100) : "Saldo do mês até hoje";
+
+  // Gastos: meta (soma dos limites por categoria) ou variação contra o mês anterior
+  const goalTotal = (state.finGoals || []).filter((g) => (g.workspaceId || "personal") === activeWorkspaceId).reduce((s, g) => s + (Number(g.limit) || 0), 0);
+  const spendNote = document.querySelector("#bdSpendNote");
+  const spendProgress = document.querySelector("#bdSpendProgress");
+  const spendBar = document.querySelector("#bdSpendBar");
+  if (goalTotal > 0) {
+    const pct = Math.round((despesas / goalTotal) * 100);
+    spendNote.textContent = `${pct}% da meta (${formatCurrency(goalTotal)})`;
+    spendProgress.hidden = false;
+    spendBar.style.width = `${Math.min(100, pct)}%`;
+    spendBar.className = pct > 100 ? "over" : pct >= 85 ? "warn" : "";
+  } else {
+    const prevSpend = entries.filter((f) => f.date.startsWith(prevMonthKey) && f.type === "despesa").reduce((s, f) => s + (Number(f.amount) || 0), 0);
+    spendProgress.hidden = true;
+    spendNote.innerHTML = prevSpend ? bdTrendHtml(((despesas - prevSpend) / prevSpend) * 100, { inverse: true }) : "Defina metas de gasto em Finanças";
+  }
+
+  const prevIncome = entries.filter((f) => f.date.startsWith(prevMonthKey) && f.type === "receita").reduce((s, f) => s + (Number(f.amount) || 0), 0);
+  const incomeTrend = document.querySelector("#bdIncomeTrend");
+  if (incomeTrend) incomeTrend.innerHTML = prevIncome ? bdTrendHtml(((receitas - prevIncome) / prevIncome) * 100) : "Entradas do mês";
+
+  // Resultado do mês
+  const result = receitas - despesas;
+  document.querySelector("#bdResIn").textContent = formatCurrency(receitas);
+  document.querySelector("#bdResOut").textContent = formatCurrency(despesas);
+  const totalEl = document.querySelector("#bdResTotal");
+  totalEl.textContent = `${result >= 0 ? "+ " : "- "}${formatCurrency(Math.abs(result))}`;
+  totalEl.closest("li")?.classList.toggle("negative", result < 0);
+
+  renderBoardsSparkline(bdBalanceSeries(30));
+  renderBoardsEvolution();
+  renderBoardsCategories(monthEntries);
+  renderBoardsToday();
+
+  const overdue = state.tasks.some((t) => t.status !== "Concluida" && t.status !== "Cancelada" && t.dueDate && t.dueDate < todayIso);
+  const dot = document.querySelector("#bdBellDot");
+  if (dot) dot.hidden = !overdue;
+  const chatRoot = document.querySelector("#pulseCommandResponse");
+  if (chatRoot && !chatRoot.children.length) renderPulsinhoConversation();
+}
+
+function bindBoardsShell() {
+  // Intervalo do gráfico de evolução
+  document.querySelector("#bdEvoRange")?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-range]");
+    if (!button) return;
+    bdEvoRange = Number(button.dataset.range) || 30;
+    document.querySelectorAll("#bdEvoRange button").forEach((item) => item.classList.toggle("active", item === button));
+    renderBoardsEvolution();
+  });
+  const chart = document.querySelector("#bdEvoChart");
+  if (chart && "ResizeObserver" in window) {
+    let lastWidth = 0;
+    new ResizeObserver(() => {
+      if (Math.abs(chart.clientWidth - lastWidth) < 2) return;
+      lastWidth = chart.clientWidth;
+      renderBoardsEvolution();
+    }).observe(chart);
+  }
+  // Carrossel de KPIs (mobile): bolinhas acompanham a rolagem
+  const kpis = document.querySelector("#bdKpis");
+  kpis?.addEventListener("scroll", () => {
+    const max = kpis.scrollWidth - kpis.clientWidth;
+    const count = kpis.querySelectorAll(".bd-kpi").length;
+    const index = max > 0 ? Math.round((kpis.scrollLeft / max) * (count - 1)) : 0;
+    document.querySelectorAll("#bdKpiDots i").forEach((dot, i) => dot.classList.toggle("active", i === Math.min(index, count - 1)));
+  }, { passive: true });
+  // Busca recolhida em ícone
+  const search = document.querySelector(".bd-search");
+  const searchInput = document.querySelector("#globalSearch");
+  document.querySelector("#bdSearchBtn")?.addEventListener("click", () => {
+    const open = search.classList.toggle("open");
+    if (open) searchInput?.focus();
+    else if (searchInput?.value) { searchInput.value = ""; renderAll(); }
+  });
+  searchInput?.addEventListener("blur", () => { if (!searchInput.value.trim()) search?.classList.remove("open"); });
+  searchInput?.addEventListener("keydown", (event) => { if (event.key === "Escape") { searchInput.blur(); search?.classList.remove("open"); } });
+  // Sino → preferências de notificação
+  document.querySelector("#bdBellBtn")?.addEventListener("click", () => setView("settings"));
+  // Logo → Início
+  document.querySelectorAll("[data-nav-home]").forEach((link) => link.addEventListener("click", (event) => { event.preventDefault(); setView("dashboard"); }));
+  // Cartão do Pulsinho na lateral abre a conversa
+  document.querySelector("[data-focus-chat]")?.addEventListener("click", () => {
+    setView("dashboard");
+    requestAnimationFrame(() => {
+      document.querySelector("#bdChat")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      document.querySelector("#pulseCommandInput")?.focus({ preventScroll: true });
+    });
+  });
+  document.querySelector("#bdChatMore")?.addEventListener("click", () => {
+    pulsinhoConversation.length = 0;
+    pendingPulsinhoAction = null;
+    renderPulsinhoConversation();
+  });
+}
+
 function renderDashboard() {
   const doneToday = state.tasks.filter((task) => task.completedAt === todayIso).length;
   const doneTotal = state.tasks.filter((task) => task.status === "Concluida").length;
@@ -2096,10 +3889,10 @@ function renderDashboard() {
   // ── Resumo real do dia (sem gamificação) ──
   const pendingTasks = state.tasks.filter((t) => t.status === "Pendente" || t.status === "Em andamento").length;
   const monthKey = todayIso.slice(0, 7);
-  const monthEntries = (state.finances || []).filter((f) => f.date.startsWith(monthKey));
+  const monthEntries = (state.finances || []).filter((f) => f.date.startsWith(monthKey) && (f.workspaceId || "personal") === activeWorkspaceId);
   const monthReceitas = monthEntries.filter((f) => f.type === "receita").reduce((s, f) => s + f.amount, 0);
   const monthDespesas = monthEntries.filter((f) => f.type === "despesa").reduce((s, f) => s + f.amount, 0);
-  const monthSaldo = getCarryOverBalance(monthKey) + monthReceitas - monthDespesas;
+  const monthSaldo = getCarryOverBalance(monthKey, activeWorkspaceId) + monthReceitas - monthDespesas;
   const upcomingSorted = [...state.events].filter((e) => e.date >= todayIso).sort(sortEvent);
   const nextEvent = upcomingSorted[0];
   const topGoal = [...state.goals].filter((g) => g.current < g.target).sort((a, b) => (b.current / b.target) - (a.current / a.target))[0];
@@ -2135,6 +3928,270 @@ function renderDashboard() {
   renderChart();
   renderGoalSummary();
   renderDashFinance();
+  renderBoardsDashboard();
+  renderPremiumDashboard({
+    monthKey,
+    monthEntries,
+    monthReceitas,
+    monthDespesas,
+    monthSaldo,
+  });
+}
+
+function renderPremiumDashboard({ monthKey, monthEntries, monthReceitas, monthDespesas, monthSaldo }) {
+  const currentBalance = document.querySelector("#pulseCurrentBalance");
+  if (!currentBalance) return;
+
+  const now = new Date();
+  const currentDay = now.getDate();
+  const [year, month] = monthKey.split("-").map(Number);
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const recurring = Array.isArray(state.finRecurrents)
+    ? state.finRecurrents.filter((item) => (item.workspaceId || "personal") === activeWorkspaceId)
+    : [];
+  const futureRecurring = recurring.filter((item) => {
+    if (isRecurrentSkipped(item, monthKey)) return false;
+    const dueDay = Math.min(Number(item.day) || 1, daysInMonth);
+    if (dueDay <= currentDay) return false;
+    return !(state.finances || []).some((entry) =>
+      entry.date?.startsWith(monthKey)
+      && entry.description === item.description
+      && Number(entry.amount) === Number(item.amount)
+      && (entry.workspaceId || "personal") === activeWorkspaceId
+    );
+  });
+  const futureIncome = futureRecurring.filter((item) => item.type === "receita").reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const futureExpense = futureRecurring.filter((item) => item.type !== "receita").reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const projectedBalance = monthSaldo + futureIncome - futureExpense;
+  const safetyReserve = Math.max(500, monthReceitas * 0.18);
+  const safeSpend = Math.max(0, projectedBalance - safetyReserve);
+
+  currentBalance.textContent = formatCurrency(monthSaldo);
+  const projectedEl = document.querySelector("#pulseProjectedBalance");
+  const safeSpendEl = document.querySelector("#pulseSafeSpend");
+  if (projectedEl) {
+    projectedEl.textContent = formatCurrency(projectedBalance);
+    projectedEl.dataset.tone = projectedBalance >= 0 ? "positive" : "negative";
+  }
+  if (safeSpendEl) safeSpendEl.textContent = formatCurrency(safeSpend);
+
+  const contextEl = document.querySelector("#pulseBalanceContext");
+  if (contextEl) {
+    const count = monthEntries.length;
+    contextEl.textContent = `${count} ${count === 1 ? "lançamento" : "lançamentos"} considerado${count === 1 ? "" : "s"} neste mês`;
+  }
+
+  const futureSorted = [...futureRecurring].sort((a, b) => Number(a.day || 0) - Number(b.day || 0));
+  const nextRecurring = futureSorted[0];
+  const commitmentEl = document.querySelector("#pulseNextCommitment");
+  if (commitmentEl) {
+    commitmentEl.textContent = nextRecurring
+      ? `Próximo compromisso: ${nextRecurring.description} · ${formatCurrency(Number(nextRecurring.amount || 0))} · dia ${Math.min(Number(nextRecurring.day) || 1, daysInMonth)}`
+      : "Nenhum compromisso financeiro recorrente pendente neste mês.";
+  }
+
+  const recurringInsight = document.querySelector("#pulseRecurringInsight");
+  const recurringDetail = document.querySelector("#pulseRecurringInsightDetail");
+  if (recurringInsight) recurringInsight.textContent = futureRecurring.length
+    ? `${futureRecurring.length} ${futureRecurring.length === 1 ? "recorrência prevista" : "recorrências previstas"}`
+    : "Mês sem recorrências pendentes";
+  if (recurringDetail) recurringDetail.textContent = futureRecurring.length
+    ? `${formatCurrency(futureExpense)} em despesas e ${formatCurrency(futureIncome)} em receitas até o fechamento.`
+    : "Cadastre contas recorrentes para tornar a projeção mais precisa.";
+
+  renderPremiumForecast(monthKey, monthSaldo, futureRecurring);
+  renderPremiumTodayAgenda();
+  refreshDashboardForecast();
+}
+
+async function refreshDashboardForecast(force = false) {
+  if (!currentUser || isLocalDesignPreview) return;
+  const now = Date.now();
+  if (!force && now - lastForecastFetchAt < 30000) return;
+  lastForecastFetchAt = now;
+  try {
+    const params = new URLSearchParams({ workspaceId: activeWorkspaceId });
+    const { forecast } = await pulseApi(`/api/finance-forecast?${params}`);
+    if (!forecast) return;
+    latestDashboardForecast = forecast;
+    const current = document.querySelector("#pulseCurrentBalance");
+    const projected = document.querySelector("#pulseProjectedBalance");
+    const safe = document.querySelector("#pulseSafeSpend");
+    const context = document.querySelector("#pulseBalanceContext");
+    if (current) current.textContent = formatCurrency(forecast.currentBalance);
+    if (projected) {
+      projected.textContent = formatCurrency(forecast.projectedBalance);
+      projected.dataset.tone = forecast.projectedBalance >= 0 ? "positive" : "negative";
+    }
+    if (safe) safe.textContent = formatCurrency(forecast.safeToSpend);
+    if (context) context.textContent = forecast.confidence === "low"
+      ? "Estimativa pelos lançamentos. Cadastre os saldos das contas para aumentar a precisão."
+      : `Projeção até ${formatDate(forecast.horizonDate)} com contas e compromissos registrados`;
+    const commitment = forecast.commitments?.[0];
+    const commitmentEl = document.querySelector("#pulseNextCommitment");
+    if (commitmentEl) commitmentEl.textContent = commitment
+      ? `Próximo compromisso: ${commitment.description} · ${formatCurrency(commitment.amount)} · ${formatDate(commitment.date)}`
+      : "Nenhum compromisso financeiro próximo até o fim do período.";
+    renderPremiumForecastTimeline(forecast);
+  } catch {
+    // Mantém a projeção local já renderizada; falha de rede nunca esvazia o painel.
+  }
+}
+
+function openDashboardForecastDetail() {
+  const modal = document.querySelector("#pulseForecastDetailModal");
+  if (!modal) return;
+  const current = document.querySelector("#pulseForecastDetailCurrent");
+  const projected = document.querySelector("#pulseForecastDetailProjected");
+  const safe = document.querySelector("#pulseForecastDetailSafe");
+  const sourceCurrent = document.querySelector("#pulseCurrentBalance")?.textContent || "R$ 0,00";
+  const sourceProjected = document.querySelector("#pulseProjectedBalance")?.textContent || "R$ 0,00";
+  const sourceSafe = document.querySelector("#pulseSafeSpend")?.textContent || "R$ 0,00";
+  if (current) current.textContent = sourceCurrent;
+  if (projected) projected.textContent = sourceProjected;
+  if (safe) safe.textContent = sourceSafe;
+
+  const timeline = document.querySelector("#pulseForecastTimeline");
+  if (timeline) {
+    timeline.replaceChildren();
+    const commitments = Array.isArray(latestDashboardForecast?.commitments)
+      ? latestDashboardForecast.commitments.slice(0, 6)
+      : [];
+    if (!commitments.length) {
+      const empty = document.createElement("p");
+      empty.className = "pulse-forecast-detail-empty";
+      empty.textContent = "Nenhum compromisso futuro registrado para este período.";
+      timeline.append(empty);
+    } else {
+      commitments.forEach((item) => {
+        const row = document.createElement("div");
+        row.className = "pulse-forecast-detail-row";
+        const copy = document.createElement("div");
+        const title = document.createElement("strong");
+        const date = document.createElement("span");
+        const amount = document.createElement("b");
+        title.textContent = item.description || "Compromisso";
+        date.textContent = item.date ? formatDate(item.date) : "Data não informada";
+        amount.textContent = formatCurrency(Number(item.amount) || 0);
+        copy.append(title, date);
+        row.append(copy, amount);
+        timeline.append(row);
+      });
+    }
+  }
+  modal.hidden = false;
+  document.body.classList.add("modal-open");
+  requestAnimationFrame(() => document.querySelector("#pulseForecastDetailClose")?.focus());
+}
+
+function closeDashboardForecastDetail() {
+  const modal = document.querySelector("#pulseForecastDetailModal");
+  if (modal) modal.hidden = true;
+  document.body.classList.remove("modal-open");
+  document.querySelector(".pulse-forecast-visual")?.focus();
+}
+
+function renderPremiumForecastTimeline(forecast) {
+  const line = document.querySelector("#pulseForecastLine");
+  const area = document.querySelector("#pulseForecastArea");
+  const point = document.querySelector("#pulseForecastPoint");
+  const timeline = Array.isArray(forecast.timeline) ? forecast.timeline : [];
+  if (!line || !area || !point || timeline.length < 1) return;
+  const start = new Date(`${forecast.today}T12:00:00`);
+  const end = new Date(`${forecast.horizonDate}T12:00:00`);
+  const span = Math.max(1, (end - start) / 86400000);
+  const values = timeline.map((item) => Number(item.balance) || 0);
+  const min = Math.min(...values, 0);
+  const max = Math.max(...values, 1);
+  const range = Math.max(1, max - min);
+  const coords = timeline.map((item) => {
+    const date = new Date(`${item.date}T12:00:00`);
+    const day = Math.max(0, Math.min(span, (date - start) / 86400000));
+    return [22 + (day / span) * 596, 198 - (((Number(item.balance) || 0) - min) / range) * 146];
+  });
+  if (coords.length === 1) coords.push([618, coords[0][1]]);
+  const path = coords.map(([x, y], index) => `${index ? "L" : "M"}${x.toFixed(1)} ${y.toFixed(1)}`).join(" ");
+  const last = coords[coords.length - 1];
+  line.setAttribute("d", path);
+  area.setAttribute("d", `${path} L${last[0].toFixed(1)} 218 L22 218 Z`);
+  point.setAttribute("cx", last[0].toFixed(1));
+  point.setAttribute("cy", last[1].toFixed(1));
+}
+
+function renderPremiumForecast(monthKey, startingBalance, futureRecurring) {
+  const line = document.querySelector("#pulseForecastLine");
+  const area = document.querySelector("#pulseForecastArea");
+  const point = document.querySelector("#pulseForecastPoint");
+  if (!line || !area || !point) return;
+
+  const [, monthNumber] = monthKey.split("-").map(Number);
+  const daysInMonth = new Date(Number(monthKey.slice(0, 4)), monthNumber, 0).getDate();
+  const today = Math.min(new Date().getDate(), daysInMonth);
+  const eventsByDay = new Map();
+  for (const item of futureRecurring) {
+    const day = Math.min(Number(item.day) || 1, daysInMonth);
+    const signedAmount = Number(item.amount || 0) * (item.type === "receita" ? 1 : -1);
+    eventsByDay.set(day, (eventsByDay.get(day) || 0) + signedAmount);
+  }
+
+  const points = [{ day: today, balance: startingBalance }];
+  let running = startingBalance;
+  for (let day = today + 1; day <= daysInMonth; day += 1) {
+    running += eventsByDay.get(day) || 0;
+    if (eventsByDay.has(day) || day === daysInMonth) points.push({ day, balance: running });
+  }
+  if (points.length === 1) points.push({ day: daysInMonth, balance: startingBalance });
+
+  const balances = points.map((item) => item.balance);
+  const minBalance = Math.min(...balances, 0);
+  const maxBalance = Math.max(...balances, 1);
+  const range = Math.max(1, maxBalance - minBalance);
+  const xFor = (day) => 22 + ((day - today) / Math.max(1, daysInMonth - today)) * 596;
+  const yFor = (balance) => 198 - ((balance - minBalance) / range) * 146;
+  const coords = points.map((item) => [xFor(item.day), yFor(item.balance)]);
+  const path = coords.map(([x, y], index) => `${index ? "L" : "M"}${x.toFixed(1)} ${y.toFixed(1)}`).join(" ");
+  const last = coords[coords.length - 1];
+  line.setAttribute("d", path);
+  area.setAttribute("d", `${path} L${last[0].toFixed(1)} 218 L22 218 Z`);
+  point.setAttribute("cx", last[0].toFixed(1));
+  point.setAttribute("cy", last[1].toFixed(1));
+}
+
+function renderPremiumTodayAgenda() {
+  const container = document.querySelector("#pulseTodayAgenda");
+  if (!container) return;
+  const todayTasks = (state.tasks || []).filter((task) =>
+    task.dueDate === todayIso && task.status !== "Concluida" && task.status !== "Cancelada"
+  ).map((task) => ({
+    time: task.time || "Hoje",
+    title: task.title,
+    detail: `Tarefa · ${task.priority || "prioridade normal"}`,
+  }));
+  const todayEvents = (state.events || []).filter((event) => event.date === todayIso).map((event) => ({
+    time: event.time || "Hoje",
+    title: event.title,
+    detail: event.location ? `Compromisso · ${event.location}` : "Compromisso",
+  }));
+  let items = [...todayEvents, ...todayTasks];
+  if (!items.length) {
+    items = (state.events || []).filter((event) => event.date > todayIso).sort(sortEvent).slice(0, 3).map((event) => ({
+      time: formatDate(event.date),
+      title: event.title,
+      detail: event.location ? `Próximo · ${event.location}` : "Próximo compromisso",
+    }));
+  }
+  items = items.sort((a, b) => String(a.time).localeCompare(String(b.time))).slice(0, 4);
+  if (!items.length) {
+    container.innerHTML = `<div class="pulse-empty">Seu dia está livre. Use “Adicionar” para planejar a próxima ação.</div>`;
+    return;
+  }
+  container.innerHTML = items.map((item) => `
+    <div class="pulse-timeline-item">
+      <span class="pulse-timeline-time">${escapeHtml(item.time)}</span>
+      <span class="pulse-timeline-node" aria-hidden="true"></span>
+      <span class="pulse-timeline-copy"><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.detail)}</span></span>
+    </div>
+  `).join("");
 }
 
 function renderDashFinance() {
@@ -2496,6 +4553,12 @@ function renderPlannerGoalsStrip() {
           <span class="pill" style="${isComplete ? "background:var(--green);color:#fff;border-color:var(--green);" : ""}">${percent}%</span>
         </div>
         <div class="progress-track"><div style="width:${percent}%;background:${isComplete ? "var(--green)" : "linear-gradient(90deg,var(--accent),var(--purple))"}"></div></div>
+        <label class="planner-goal-progress-control" onclick="event.stopPropagation()">
+          <span>Progresso</span>
+          <input type="range" min="0" max="${Math.max(1, Number(goal.target) || 1)}" value="${Math.max(0, Number(goal.current) || 0)}" aria-label="Progresso de ${escapeHtml(goal.title)}" oninput="updateGoalProgress('${goal.id}', this.value, event)" />
+          <input class="planner-goal-number" type="number" min="0" max="${Math.max(1, Number(goal.target) || 1)}" value="${Math.max(0, Number(goal.current) || 0)}" inputmode="numeric" aria-label="Valor atual de ${escapeHtml(goal.title)}" oninput="updateGoalProgress('${goal.id}', this.value, event)" />
+          <span class="task-meta">de ${goal.target}</span>
+        </label>
         <div class="planner-goal-chip-controls">
           <div class="planner-goal-stepper">
             <button class="mini-button" onclick="changeGoal('${goal.id}', -1)" title="Diminuir">−</button>
@@ -2678,7 +4741,7 @@ function renderPlannerTaskRow(task) {
 function renderPlannerEventRow(ev) {
   const tone = plannerColorTone(ev.id);
   return `
-    <article class="planner-row planner-row--event" data-event-id="${ev.id}" style="border-left:4px solid ${tone.border}">
+    <article class="planner-row planner-row--event planner-row--interactive" data-event-id="${ev.id}" style="border-left:4px solid ${tone.border}" onclick="openPlannerEventEditor('${ev.id}')">
       <div class="planner-row-head">
         <div class="planner-row-time" style="background:${tone.bg};color:${tone.border}">${ev.time || "—"}</div>
         <div class="planner-row-main">
@@ -2688,7 +4751,8 @@ function renderPlannerEventRow(ev) {
             ${ev.location && ev.location !== "Sem local" ? `<span class="task-meta">${icon("mapPin", 12)}${escapeHtml(ev.location)}</span>` : ""}
           </div>
         </div>
-        <button class="mini-button planner-row-delete" onclick="deleteEvent('${ev.id}')" title="Excluir">${icon("trash", 14)}</button>
+        <button class="mini-button" onclick="event.stopPropagation();openPlannerEventEditor('${ev.id}')" title="Editar compromisso">${icon("pencil", 14)}</button>
+        <button class="mini-button planner-row-delete" onclick="event.stopPropagation();deleteEvent('${ev.id}')" title="Excluir">${icon("trash", 14)}</button>
       </div>
     </article>
   `;
@@ -2765,35 +4829,63 @@ function renderPlannerDay() {
   if (timeline) {
     const startHour = 6;
     const endHour = 23;
-    const hourRows = [...Array(endHour - startHour + 1)]
-      .map((_, i) => `<div class="planner-timeline-hour"><span>${String(startHour + i).padStart(2, "0")}:00</span><div class="planner-timeline-line"></div></div>`)
-      .join("");
-    const totalMinutes = (endHour - startHour + 1) * 60;
-    const blocksHtml = dayEvents
-      .map((ev) => {
-        if (!ev.time) return "";
-        const [h, m] = ev.time.split(":").map(Number);
-        const minutesFromStart = (h - startHour) * 60 + m;
-        if (minutesFromStart < 0 || minutesFromStart > totalMinutes) return "";
-        const top = (minutesFromStart / totalMinutes) * 100;
-        const tone = plannerColorTone(ev.id);
-        return `
-          <article class="planner-event-block" data-event-id="${ev.id}" style="top:${top}%;background:${tone.bg};border-color:${tone.border}">
+    // Cartões faziam parte de uma camada absoluta. Como os compromissos não
+    // têm duração obrigatória, um título grande ou os botões podiam invadir
+    // as linhas seguintes da agenda. A agenda agora agrupa os cartões dentro
+    // do horário deles: cresce para baixo quando necessário, sem esconder
+    // nenhum horário nem cobrir outro compromisso.
+    const eventsByHour = new Map();
+    const earlyEvents = [];
+    const lateEvents = [];
+    dayEvents.forEach((event) => {
+      if (!event.time) return;
+      const hour = Number(event.time.split(":")[0]);
+      if (!Number.isFinite(hour) || hour < startHour) earlyEvents.push(event);
+      else if (hour > endHour) lateEvents.push(event);
+      else {
+        const entries = eventsByHour.get(hour) || [];
+        entries.push(event);
+        eventsByHour.set(hour, entries);
+      }
+    });
+    const renderTimelineEvent = (ev) => {
+      const tone = plannerColorTone(ev.id);
+      return `
+        <article class="planner-event-block planner-event-block--interactive" data-event-id="${ev.id}" onclick="openPlannerEventEditor('${ev.id}')" style="--planner-event-bg:${tone.bg};--planner-event-border:${tone.border}">
+          <div class="planner-event-block-main">
             <strong>${ev.time} · ${escapeHtml(ev.title)}</strong>
             ${ev.location && ev.location !== "Sem local" ? `<span>${icon("mapPin", 11)}${escapeHtml(ev.location)}</span>` : ""}
-            <button class="mini-button" onclick="deleteEvent('${ev.id}')" title="Excluir">${icon("trash", 12)}</button>
-          </article>
-        `;
+            ${ev.notes ? `<small>${escapeHtml(ev.notes)}</small>` : ""}
+          </div>
+          <div class="planner-event-actions" aria-label="Ações do compromisso">
+            <button class="mini-button" type="button" onclick="event.stopPropagation();openPlannerEventEditor('${ev.id}')" title="Editar compromisso" aria-label="Editar compromisso">${icon("pencil", 12)}</button>
+            <button class="mini-button danger-action" type="button" onclick="event.stopPropagation();deleteEvent('${ev.id}')" title="Excluir compromisso" aria-label="Excluir compromisso">${icon("trash", 12)}</button>
+          </div>
+        </article>
+      `;
+    };
+    const hourRows = [...Array(endHour - startHour + 1)]
+      .map((_, i) => {
+        const hour = startHour + i;
+        const events = eventsByHour.get(hour) || [];
+        return `<div class="planner-timeline-hour ${events.length ? "has-events" : ""}">
+          <span>${String(hour).padStart(2, "0")}:00</span>
+          <div class="planner-timeline-slot">
+            <div class="planner-timeline-line"></div>
+            ${events.length ? `<div class="planner-timeline-events">${events.map(renderTimelineEvent).join("")}</div>` : ""}
+          </div>
+        </div>`;
       })
       .join("");
     const noTimeEvents = dayEvents.filter((ev) => !ev.time);
-    const noTimeHtml = noTimeEvents.length ? `<div class="planner-day-notime">${noTimeEvents.map(renderPlannerEventRow).join("")}</div>` : "";
+    const noTimeHtml = noTimeEvents.length ? `<div class="planner-day-notime"><p class="planner-timeline-section-label">Sem horário</p>${noTimeEvents.map(renderPlannerEventRow).join("")}</div>` : "";
+    const earlyHtml = earlyEvents.length ? `<div class="planner-day-notime"><p class="planner-timeline-section-label">Antes das ${String(startHour).padStart(2, "0")}:00</p>${earlyEvents.map(renderTimelineEvent).join("")}</div>` : "";
+    const lateHtml = lateEvents.length ? `<div class="planner-day-notime"><p class="planner-timeline-section-label">Após ${String(endHour).padStart(2, "0")}:00</p>${lateEvents.map(renderTimelineEvent).join("")}</div>` : "";
     timeline.innerHTML = `
       ${noTimeHtml}
-      <div class="planner-timeline-wrap">
-        <div class="planner-timeline-hours">${hourRows}</div>
-        <div class="planner-timeline-events">${blocksHtml}</div>
-      </div>
+      ${earlyHtml}
+      <div class="planner-timeline-wrap"><div class="planner-timeline-hours">${hourRows}</div></div>
+      ${lateHtml}
       ${!dayEvents.length ? emptyStateCompactHtml({ iconName: "compass", text: "Nenhum compromisso neste dia." }) : ""}
     `;
   }
@@ -2923,6 +5015,9 @@ function renderPlannerMonth() {
 function openPlannerQuickAdd(type) {
   const modal = document.querySelector("#plannerQuickAddModal");
   if (!modal) return;
+  plannerEditingEventId = null;
+  document.querySelector("#plannerQuickAddModal h2").textContent = "Adicionar ao planner";
+  document.querySelector("#plannerQuickAddForm [type='submit'] span").textContent = "Salvar";
   modal.hidden = false;
   setPlannerQuickAddType(type || (plannerActiveTab === "day" ? "event" : "task"));
   setTimeout(() => document.querySelector("#pqaTitle")?.focus(), 50);
@@ -2933,6 +5028,31 @@ function closePlannerQuickAdd() {
   if (!modal) return;
   modal.hidden = true;
   document.querySelector("#plannerQuickAddForm")?.reset();
+  plannerEditingEventId = null;
+}
+
+function openPlannerEventEditor(id) {
+  const ev = state.events.find((event) => event.id === id);
+  if (!ev) return;
+  const modal = document.querySelector("#plannerQuickAddModal");
+  if (!modal) return;
+  plannerEditingEventId = id;
+  modal.hidden = false;
+  document.querySelector("#plannerQuickAddModal h2").textContent = "Editar compromisso";
+  document.querySelector("#plannerQuickAddForm [type='submit'] span").textContent = "Salvar alterações";
+  document.querySelector("#pqaTitle").value = ev.title || "";
+  document.querySelector("#pqaEventDate").value = ev.date || todayIso;
+  document.querySelector("#pqaEventTime").value = ev.time || "";
+  document.querySelector("#pqaEventLocation").value = ev.location === "Sem local" ? "" : (ev.location || "");
+  document.querySelector("#pqaEventNotes").value = ev.notes || "";
+  const reminder = Number(ev.reminder || 15);
+  const select = document.querySelector("#pqaEventReminder");
+  const preset = [5, 15, 30, 60, 1440].includes(reminder);
+  select.value = preset ? String(reminder) : "custom";
+  document.querySelector("#pqaEventReminderMinutes").value = preset ? "" : reminder;
+  document.querySelector("#pqaEventReminderCustom").hidden = preset;
+  setPlannerQuickAddType("event");
+  setTimeout(() => document.querySelector("#pqaTitle")?.focus(), 50);
 }
 
 function setPlannerQuickAddType(type) {
@@ -2943,7 +5063,10 @@ function setPlannerQuickAddType(type) {
   const form = document.querySelector("#plannerQuickAddForm");
   form.dataset.type = type;
   const referenceDate = plannerActiveTab === "day" ? plannerDayDate : todayIso;
-  if (type === "task") document.querySelector("#pqaTaskDue").value ||= referenceDate;
+  if (type === "task") {
+    document.querySelector("#pqaTaskDue").value ||= referenceDate;
+    document.querySelector("#pqaTaskTime").value ||= "09:00";
+  }
   if (type === "event") {
     document.querySelector("#pqaEventDate").value ||= referenceDate;
     document.querySelector("#pqaEventTime").value ||= "09:00";
@@ -2961,15 +5084,19 @@ function bindPlannerQuickAdd() {
   document.querySelectorAll("#plannerQuickAddType button").forEach((btn) => {
     btn.addEventListener("click", () => setPlannerQuickAddType(btn.dataset.quickType));
   });
-  const reminderSelect = document.querySelector("#pqaEventReminder");
-  const reminderCustom = document.querySelector("#pqaEventReminderCustom");
-  const syncReminderField = () => {
-    if (!reminderSelect || !reminderCustom) return;
-    reminderCustom.hidden = reminderSelect.value !== "custom";
-    if (!reminderCustom.hidden) document.querySelector("#pqaEventReminderMinutes")?.focus();
+  const bindReminderField = (selectSelector, customSelector, inputSelector) => {
+    const reminderSelect = document.querySelector(selectSelector);
+    const reminderCustom = document.querySelector(customSelector);
+    const syncReminderField = () => {
+      if (!reminderSelect || !reminderCustom) return;
+      reminderCustom.hidden = reminderSelect.value !== "custom";
+      if (!reminderCustom.hidden) document.querySelector(inputSelector)?.focus();
+    };
+    reminderSelect?.addEventListener("change", syncReminderField);
+    syncReminderField();
   };
-  reminderSelect?.addEventListener("change", syncReminderField);
-  syncReminderField();
+  bindReminderField("#pqaTaskReminder", "#pqaTaskReminderCustom", "#pqaTaskReminderMinutes");
+  bindReminderField("#pqaEventReminder", "#pqaEventReminderCustom", "#pqaEventReminderMinutes");
   document.querySelector("#plannerQuickAddForm")?.addEventListener("submit", submitPlannerQuickAdd);
 }
 
@@ -2982,7 +5109,13 @@ function submitPlannerQuickAdd(event) {
   if (type === "task") {
     const priority = document.querySelector("#pqaTaskPriority").value;
     const due = document.querySelector("#pqaTaskDue").value || todayIso;
-    state.tasks.unshift(createTask(title, "Pendente", priority, due));
+    const dueTime = document.querySelector("#pqaTaskTime").value || "";
+    const selectedReminder = document.querySelector("#pqaTaskReminder").value;
+    const customReminder = Number(document.querySelector("#pqaTaskReminderMinutes").value);
+    const reminder = selectedReminder === "custom"
+      ? Math.min(10080, Math.max(5, Number.isFinite(customReminder) ? customReminder : 15))
+      : Number(selectedReminder || 15);
+    state.tasks.unshift(createTask(title, "Pendente", priority, due, "", dueTime, reminder));
     showToast("Tarefa adicionada.");
   } else if (type === "event") {
     const date = document.querySelector("#pqaEventDate").value || todayIso;
@@ -2994,8 +5127,14 @@ function submitPlannerQuickAdd(event) {
       ? Math.min(10080, Math.max(5, Number.isFinite(customReminder) ? customReminder : 15))
       : Number(selectedReminder || 15);
     const notes = valueOf("#pqaEventNotes") || "";
-    state.events.push({ id: crypto.randomUUID(), title, date, time, location, reminder, notes });
-    showToast("Compromisso salvo.");
+    const eventRecord = { id: plannerEditingEventId || crypto.randomUUID(), title, date, time, location, reminder, notes };
+    if (plannerEditingEventId) {
+      state.events = state.events.map((item) => item.id === plannerEditingEventId ? eventRecord : item);
+      showToast("Compromisso atualizado.");
+    } else {
+      state.events.push(eventRecord);
+      showToast("Compromisso salvo.");
+    }
   } else if (type === "goal") {
     const target = Number(document.querySelector("#pqaGoalTarget").value || 1);
     state.goals.unshift({ id: crypto.randomUUID(), title, target, current: 0, milestones: [] });
@@ -3075,15 +5214,26 @@ function setNotesFolderFilter(folder) {
   renderNotes();
 }
 
+// Checklists criados nas versões antigas eram arrays de texto. As funções
+// abaixo leem os dois formatos para que nenhuma nota existente desapareça
+// quando o item passa a poder ser marcado dentro do detalhe.
+function noteChecklistItemText(item) {
+  return typeof item === "string" ? item : String(item?.text || "");
+}
+
+function noteChecklistItemDone(item) {
+  return typeof item === "object" && !!item?.done;
+}
+
 function renderNoteCard(note, searchQuery) {
   const tone = noteColorTone(note); // cor escolhida pela pessoa; notas antigas mantêm a cor determinística anterior
   const checklistHtml =
     note.checklist && note.checklist.length
       ? `<div class="checklist-preview">${note.checklist
-          .map(
-            (item, i) =>
-              `<div class="cl-item${i >= 3 ? " cl-item-extra" : ""}"><span class="cl-check">${icon("check", 11)}</span><span class="cl-text">${escapeHtml(item)}</span></div>`
-          )
+          .map((item, i) => {
+            const done = noteChecklistItemDone(item);
+            return `<div class="cl-item${done ? " is-done" : ""}${i >= 3 ? " cl-item-extra" : ""}"><span class="cl-check">${icon("check", 11)}</span><span class="cl-text">${escapeHtml(noteChecklistItemText(item))}</span></div>`;
+          })
           .join("")}${
           note.checklist.length > 3
             ? `<button type="button" class="cl-toggle-btn" onclick="event.stopPropagation(); toggleNoteChecklistPreview(this)">+${note.checklist.length - 3} mais itens</button>`
@@ -3151,7 +5301,7 @@ function exportNoteMarkdown(id) {
   let md = `# ${note.title}\n\n`;
   if (note.tags?.length) md += note.tags.map((t) => `#${t}`).join(" ") + "\n\n";
   if (note.description) md += `${note.description}\n\n`;
-  if (note.checklist?.length) md += note.checklist.map((item) => `- [ ] ${item}`).join("\n") + "\n\n";
+  if (note.checklist?.length) md += note.checklist.map((item) => `- [${noteChecklistItemDone(item) ? "x" : " "}] ${noteChecklistItemText(item)}`).join("\n") + "\n\n";
   if (note.observations) md += `> ${note.observations}\n`;
 
   const blob = new Blob([md], { type: "text/markdown" });
@@ -3174,13 +5324,14 @@ function editNote(id) {
   document.querySelector("#noteTags").value = note.tags.join(", ");
   document.querySelector("#notePriority").value = note.priority;
   document.querySelector("#noteColor").value = note.color || "blue";
+  setNoteDraftTextColor(note.textColor || "");
   document.querySelectorAll("#noteColorPicker .note-color-dot").forEach((dot) =>
     dot.classList.toggle("active", dot.dataset.noteColor === (note.color || "blue"))
   );
   document.querySelectorAll("#notePriorityPicker .note-priority-dot").forEach((d) =>
     d.classList.toggle("active", d.dataset.priority === note.priority)
   );
-  document.querySelector("#noteChecklist").value = note.checklist.join("\n");
+  document.querySelector("#noteChecklist").value = (note.checklist || []).map(noteChecklistItemText).join("\n");
   document.querySelector("#noteAttachments").value = note.attachments.join(", ");
   document.querySelector("#noteGoal").value = note.goal;
   document.querySelector("#noteObservations").value = note.observations;
@@ -3191,7 +5342,14 @@ function editNote(id) {
   document.querySelector("#noteChecklistToggle").classList.toggle("active", hasChecklist);
 
   // Abre "Mais detalhes" automaticamente se algum campo opcional já tiver valor
-  const hasExtra = note.category || note.folder || (note.tags && note.tags.length) || note.goal || (note.attachments && note.attachments.length) || note.observations;
+  const hasExtra = note.category
+    || note.folder
+    || (note.tags && note.tags.length)
+    || note.goal
+    || (note.attachments && note.attachments.length)
+    || note.observations
+    || normalizeNoteTextColor(note.textColor)
+    || (note.color && note.color !== "blue");
   document.querySelector(".note-more-details").open = Boolean(hasExtra);
 
   // Deixa claro que agora é edição, não criação — antes o formulário ficava
@@ -3263,7 +5421,7 @@ let ndCurrentNoteId = null;
 // fora sem querer.
 function sanitizeNoteHtml(html) {
   const allowedTags = new Set(["B", "STRONG", "I", "EM", "BR", "DIV", "SPAN", "MARK", "P", "FONT"]);
-  const allowedStyles = ["backgroundColor", "fontWeight", "fontStyle"];
+  const allowedStyles = ["color", "backgroundColor", "fontWeight", "fontStyle"];
   const template = document.createElement("template");
   template.innerHTML = String(html || "");
 
@@ -3278,6 +5436,7 @@ function sanitizeNoteHtml(html) {
         node.replaceWith(document.createTextNode(node.textContent));
         return;
       }
+      if (node.tagName === "FONT" && node.getAttribute("color")) node.style.color = node.getAttribute("color");
       const keptStyles = node.style
         ? allowedStyles.map((prop) => [prop, node.style[prop]]).filter(([, value]) => value)
         : [];
@@ -3332,12 +5491,14 @@ function hexToRgba(hex, alpha) {
 let ndScrollY = 0;
 function lockBackgroundScroll() {
   ndScrollY = window.scrollY || window.pageYOffset || 0;
+  document.body.classList.add("note-detail-open");
   document.body.style.position = "fixed";
   document.body.style.top = `-${ndScrollY}px`;
   document.body.style.left = "0";
   document.body.style.right = "0";
 }
 function unlockBackgroundScroll() {
+  document.body.classList.remove("note-detail-open");
   document.body.style.position = "";
   document.body.style.top = "";
   document.body.style.left = "";
@@ -3386,6 +5547,8 @@ function openNoteDetail(id) {
     ? sanitizeNoteHtml(note.descriptionHtml)
     : escapeHtml(note.description || "").replace(/\n/g, "<br>");
 
+  renderNoteDetailChecklist(note);
+
   document.querySelector("#ndMeta").textContent =
     `${note.category || "Geral"} · criada em ${formatDate(note.createdAt)}`;
   document.querySelector("#ndFavBtn").classList.toggle("is-fav", !!note.favorite);
@@ -3397,7 +5560,46 @@ function openNoteDetail(id) {
   // "voltar" do celular (ou o botão físico/gesto de voltar do
   // Android) também fecha a nota, em vez de sair do app inteiro ou
   // deixar a pessoa sem uma saída óbvia se algum toque não registrar.
-  history.pushState({ noteDetail: true }, "");
+  history.pushState({ ...(history.state || {}), pnView: activeView, noteDetail: true }, "");
+}
+
+function renderNoteDetailChecklist(note) {
+  const section = document.querySelector("#ndChecklistSection");
+  const list = document.querySelector("#ndChecklistItems");
+  const summary = document.querySelector("#ndChecklistSummary");
+  const progress = document.querySelector("#ndChecklistProgress");
+  const progressBar = document.querySelector("#ndChecklistProgressBar");
+  if (!section || !list || !summary || !progress || !progressBar) return;
+  const items = note?.checklist || [];
+  const completed = items.filter(noteChecklistItemDone).length;
+  section.hidden = items.length === 0;
+  section.classList.toggle("is-complete", items.length > 0 && completed === items.length);
+  summary.textContent = completed === items.length
+    ? "Tudo concluído"
+    : `${items.length - completed} ${items.length - completed === 1 ? "item pendente" : "itens pendentes"}`;
+  progress.textContent = `${completed}/${items.length}`;
+  progressBar.style.width = `${items.length ? Math.round((completed / items.length) * 100) : 0}%`;
+  list.innerHTML = items.map((item, index) => {
+    const done = noteChecklistItemDone(item);
+    return `<button type="button" class="note-detail-check-item${done ? " is-done" : ""}" onclick="toggleNoteChecklistItem('${note.id}', ${index})" aria-pressed="${done}">
+      <span class="note-detail-check-box">${done ? icon("check", 13) : ""}</span>
+      <span>${escapeHtml(noteChecklistItemText(item))}</span>
+    </button>`;
+  }).join("");
+}
+
+function toggleNoteChecklistItem(noteId, index) {
+  const note = state.notes.find((item) => item.id === noteId);
+  if (!note || !note.checklist?.[index]) return;
+  const current = note.checklist[index];
+  note.checklist[index] = {
+    id: typeof current === "object" && current.id ? current.id : crypto.randomUUID(),
+    text: noteChecklistItemText(current),
+    done: !noteChecklistItemDone(current),
+  };
+  saveState();
+  renderNoteDetailChecklist(note);
+  renderNotes();
 }
 
 // Só cuida da parte visual (esconder modal, destravar scroll) — não
@@ -3419,12 +5621,13 @@ function closeNoteDetailUI() {
 // saiu (botão Salvar, X, toque fora do cartão). Sem isso, fechar sem
 // ter apertado "Salvar" explicitamente jogava fora tudo que tinha
 // sido digitado — o oposto de "prático e fácil".
-function closeNoteDetail() {
+function closeNoteDetail({ updateHistory = true } = {}) {
   if (!ndCurrentNoteId) return;
   flushNoteDetailSave();
   closeNoteDetailUI();
   renderAll();
-  if (history.state && history.state.noteDetail) history.back();
+  if (updateHistory && history.state && history.state.noteDetail) history.back();
+  else if (!updateHistory) history.replaceState({ ...(history.state || {}), pnView: activeView, noteDetail: false }, "");
 }
 
 function saveNoteDetail() {
@@ -3438,8 +5641,21 @@ function bindNoteDetail() {
   if (!modal || !body) return;
 
   document.querySelector("#closeNoteDetail").addEventListener("click", closeNoteDetail);
-  // Toca fora do cartão (no fundo escurecido) fecha, igual aos outros modais do app.
-  modal.addEventListener("click", (e) => { if (e.target === modal) closeNoteDetail(); });
+  // Fecha ao tocar/clicar no fundo, mas não quando uma seleção de texto
+  // começa no editor e termina fora do cartão. O clique sintetizado depois
+  // de um drag também chegava ao backdrop e desmontava o editor.
+  let backdropPointerId = null;
+  modal.addEventListener("pointerdown", (event) => {
+    backdropPointerId = event.target === modal && event.isPrimary && event.button === 0
+      ? event.pointerId
+      : null;
+  });
+  modal.addEventListener("pointerup", (event) => {
+    const closeFromBackdrop = backdropPointerId === event.pointerId && event.target === modal;
+    backdropPointerId = null;
+    if (closeFromBackdrop) closeNoteDetail();
+  });
+  modal.addEventListener("pointercancel", () => { backdropPointerId = null; });
 
   document.querySelector("#ndSaveBtn").addEventListener("click", saveNoteDetail);
 
@@ -3498,18 +5714,36 @@ function bindNoteDetail() {
   //      lugar, então normalmente nem precisa da camada 2.
   //   2) Como reforço pra qualquer navegador/gesto que ainda assim
   //      perca a seleção, guardamos o último Range válido a cada
-  //      mudança de seleção dentro do corpo, e restauramos ele antes
-  //      de rodar o comando.
+  //      mudança de seleção que cruza o corpo do editor, limitando o
+  //      trecho aos limites da nota antes de restaurar e formatar.
   let ndSavedRange = null;
   const saveNdSelection = () => {
     const sel = window.getSelection();
-    if (sel && sel.rangeCount > 0 && body.contains(sel.anchorNode) && !sel.isCollapsed) {
-      ndSavedRange = sel.getRangeAt(0).cloneRange();
+    if (!sel || !sel.rangeCount) return;
+    const range = sel.getRangeAt(0);
+    const anchorInside = sel.anchorNode === body || body.contains(sel.anchorNode);
+    const focusInside = sel.focusNode === body || body.contains(sel.focusNode);
+    if (anchorInside && focusInside) {
+      ndSavedRange = range.cloneRange();
+      return;
     }
+    try {
+      if (!range.intersectsNode(body)) return;
+      const clipped = range.cloneRange();
+      const bodyBounds = document.createRange();
+      bodyBounds.selectNodeContents(body);
+      if (clipped.compareBoundaryPoints(Range.START_TO_START, bodyBounds) < 0) clipped.setStart(body, 0);
+      if (clipped.compareBoundaryPoints(Range.END_TO_END, bodyBounds) > 0) clipped.setEnd(body, body.childNodes.length);
+      ndSavedRange = clipped;
+    } catch { /* conserva a última seleção válida */ }
   };
   body.addEventListener("mouseup", saveNdSelection);
   body.addEventListener("keyup", saveNdSelection);
   body.addEventListener("touchend", saveNdSelection);
+  document.addEventListener("selectionchange", saveNdSelection);
+  body.addEventListener("focus", () => {
+    if (ndSavedRange && !body.contains(ndSavedRange.commonAncestorContainer)) ndSavedRange = null;
+  });
 
   const toolbar = document.querySelector("#noteDetailToolbar");
   toolbar.addEventListener("mousedown", (e) => {
@@ -3520,12 +5754,12 @@ function bindNoteDetail() {
     const toolBtn = e.target.closest("[data-nd-cmd]");
     if (!swatch && !toolBtn) return;
 
+    const savedRange = ndSavedRange;
     body.focus();
     const sel = window.getSelection();
-    const stillHasSelectionInBody = sel && sel.rangeCount > 0 && body.contains(sel.anchorNode) && !sel.isCollapsed;
-    if (!stillHasSelectionInBody && ndSavedRange) {
+    if (sel && savedRange && body.contains(savedRange.commonAncestorContainer)) {
       sel.removeAllRanges();
-      sel.addRange(ndSavedRange);
+      sel.addRange(savedRange);
     }
 
     // styleWithCSS garante que backColor produza mesmo um
@@ -3533,15 +5767,26 @@ function bindNoteDetail() {
     // ficam inconsistentes sobre como aplicam a cor de destaque).
     document.execCommand("styleWithCSS", false, true);
     if (swatch) {
-      document.execCommand("backColor", false, hexToRgba(swatch.dataset.ndColor, 0.35));
+      document.execCommand("foreColor", false, swatch.dataset.ndColor);
+      toolbar.querySelectorAll("[data-nd-color]").forEach((button) => {
+        const selected = button === swatch;
+        button.setAttribute("aria-pressed", String(selected));
+        button.classList.toggle("is-selected", selected);
+      });
     } else if (toolBtn.dataset.ndCmd === "bold") {
       document.execCommand("bold");
     } else if (toolBtn.dataset.ndCmd === "italic") {
       document.execCommand("italic");
     } else if (toolBtn.dataset.ndCmd === "clear") {
       document.execCommand("backColor", false, "transparent");
+      document.execCommand("foreColor", false, getComputedStyle(body).color);
+      toolbar.querySelectorAll("[data-nd-color]").forEach((button) => {
+        button.setAttribute("aria-pressed", "false");
+        button.classList.remove("is-selected");
+      });
     }
     saveNdSelection();
+    flushNoteDetailSave();
   });
 
   // Gesto/botão físico de "voltar" do celular fecha a nota em vez de
@@ -3549,12 +5794,14 @@ function bindNoteDetail() {
   // isso chama a versão SEM history.back() (evita loop). Salva antes
   // de fechar pelo mesmo motivo de todo outro caminho de saída: voltar
   // pelo celular não pode jogar fora o que foi escrito.
-  window.addEventListener("popstate", () => {
+  window.addEventListener("popstate", (event) => {
     if (!modal.hidden) {
       flushNoteDetailSave();
       closeNoteDetailUI();
       renderAll();
     }
+    const view = event.state?.pnView;
+    if (view && view !== activeView) setView(view, { fromHistory: true });
   });
 }
 
@@ -4202,8 +6449,8 @@ function finMonthLabel(monthKey) {
 }
 
 // Retorna true se o mês está marcado como "fechado" pelo usuário
-function isMonthClosed(monthKey) {
-  return (state.monthClosures || []).some((c) => c.monthKey === monthKey);
+function isMonthClosed(monthKey, workspaceId = activeWorkspaceId) {
+  return (state.monthClosures || []).some((c) => c.monthKey === monthKey && (c.workspaceId || "personal") === workspaceId);
 }
 
 // Garante que lançamentos num mês fechado sejam bloqueados (UI)
@@ -4223,18 +6470,19 @@ function getPreviousMonthKey(monthKey) {
 // Saldo que "sobrou" do mês imediatamente anterior, para entrar automaticamente
 // no mês seguinte — só entra 1x (no mês seguinte), e só se aquele mês anterior
 // estiver fechado. Se não houver fechamento anterior, não soma nada.
-function getCarryOverBalance(monthKey) {
+function getCarryOverBalance(monthKey, workspaceId = activeWorkspaceId) {
   const prevKey = getPreviousMonthKey(monthKey);
-  const prevClosure = (state.monthClosures || []).find((c) => c.monthKey === prevKey);
+  const prevClosure = (state.monthClosures || []).find((c) => c.monthKey === prevKey && (c.workspaceId || "personal") === workspaceId);
   return prevClosure ? prevClosure.saldo : 0;
 }
 
 // Registra o fechamento do mês ativo com um snapshot completo do período
 function closeMonth(monthKey) {
+  if (!requireFinanceWorkspaceEdit()) return;
   if (!state.monthClosures) state.monthClosures = [];
   if (isMonthClosed(monthKey)) { showToast("✓ Mês já fechado."); return; }
 
-  const entries = (state.finances || []).filter((f) => f.date.startsWith(monthKey));
+  const entries = (state.finances || []).filter((f) => f.date.startsWith(monthKey) && (f.workspaceId || "personal") === activeWorkspaceId);
   const receitas = entries.filter((f) => f.type === "receita").reduce((s, f) => s + f.amount, 0);
   const despesas = entries.filter((f) => f.type === "despesa").reduce((s, f) => s + f.amount, 0);
 
@@ -4258,6 +6506,7 @@ function closeMonth(monthKey) {
 
   state.monthClosures.push({
     monthKey,
+    workspaceId: activeWorkspaceId,
     closedAt: new Date().toISOString(),
     receitas,
     despesas,
@@ -4313,9 +6562,10 @@ function showMonthCloseRecap(monthKey, receitas, despesas, saldoFinal) {
 
 // Remove o fechamento do mês (reabre para edições)
 function reopenMonth(monthKey) {
+  if (!requireFinanceWorkspaceEdit()) return;
   if (!isMonthClosed(monthKey)) return;
   if (!confirm(`Reabrir ${finMonthLabel(monthKey)} para edição?`)) return;
-  state.monthClosures = (state.monthClosures || []).filter((c) => c.monthKey !== monthKey);
+  state.monthClosures = (state.monthClosures || []).filter((c) => !(c.monthKey === monthKey && (c.workspaceId || "personal") === activeWorkspaceId));
   saveState();
   renderFinances();
   showToast(`🔓 ${finMonthLabel(monthKey)} reaberto.`);
@@ -4343,7 +6593,7 @@ function reopenMonth(monthKey) {
 
 function buildXlsxBlob(monthKey) {
   const entries = (state.finances || [])
-    .filter((f) => f.date.startsWith(monthKey))
+    .filter((f) => f.date.startsWith(monthKey) && (f.workspaceId || "personal") === activeWorkspaceId)
     .sort((a, b) => a.date.localeCompare(b.date));
 
   const label    = finMonthLabel(monthKey);
@@ -4670,7 +6920,7 @@ function zipFiles(filesObj) {
 
 // ── Ponto de entrada do botão Exportar ───────────────────────
 function exportMonthReport(monthKey) {
-  const entries = (state.finances || []).filter((f) => f.date.startsWith(monthKey))
+  const entries = (state.finances || []).filter((f) => f.date.startsWith(monthKey) && (f.workspaceId || "personal") === activeWorkspaceId)
     .sort((a, b) => a.date.localeCompare(b.date));
   if (!entries.length) {
     showToast("Nenhum lançamento no período para exportar.");
@@ -4707,7 +6957,7 @@ function exportMonthReport(monthKey) {
   for (let i = 5; i >= 0; i--) {
     const d = new Date(ay, am - 1 - i, 1);
     const mk = toLocalIso(d).slice(0, 7);
-    const me = (state.finances || []).filter((f) => f.date.startsWith(mk));
+    const me = (state.finances || []).filter((f) => f.date.startsWith(mk) && (f.workspaceId || "personal") === activeWorkspaceId);
     const mr = me.filter((f) => f.type === "receita").reduce((s, f) => s + f.amount, 0);
     const md = me.filter((f) => f.type === "despesa").reduce((s, f) => s + f.amount, 0);
     const lbl = safeFormatDate(d, { month: "short" }, "-");
@@ -4748,10 +6998,10 @@ function exportMonthReport(monthKey) {
   }
 
   // Recorrentes do usuário para a seção de assinaturas
-  const recurrents = (state.finRecurrents || []).filter((r) => r.type === "despesa");
+  const recurrents = (state.finRecurrents || []).filter((r) => r.type === "despesa" && (r.workspaceId || "personal") === activeWorkspaceId);
 
   // Metas e quanto foi usado
-  const goals = (state.finGoals || []).map((g) => {
+  const goals = (state.finGoals || []).filter((g) => (g.workspaceId || "personal") === activeWorkspaceId).map((g) => {
     const cat = findCategory(g.categoryId);
     const spent = byCat[g.categoryId]?.total || 0;
     const pct = g.limit > 0 ? Math.min(150, Math.round((spent / g.limit) * 100)) : 0;
@@ -5065,17 +7315,47 @@ function bindFinanceMonthControls() {
 
 }
 
+function updateGoalProgress(id, value, event) {
+  event?.stopPropagation();
+  const goal = state.goals.find((item) => item.id === id);
+  if (!goal) return;
+  const next = Math.max(0, Math.min(Number(goal.target) || 1, Number(value) || 0));
+  const wasComplete = goal.current >= goal.target;
+  goal.current = next;
+  saveState();
+  const percent = Math.min(100, Math.round((next / Math.max(1, Number(goal.target) || 1)) * 100));
+  document.querySelectorAll(`[data-goal-id="${id}"]`).forEach((card) => {
+    card.querySelectorAll("input").forEach((input) => {
+      if (document.activeElement !== input) input.value = next;
+    });
+    const pill = card.querySelector(".planner-goal-chip-top .pill");
+    if (pill) pill.textContent = `${percent}%`;
+    const fill = card.querySelector(".progress-track > div");
+    if (fill) fill.style.width = `${percent}%`;
+    card.classList.toggle("is-complete", next >= goal.target);
+  });
+  renderGoals();
+  if (!wasComplete && next >= goal.target) celebrate("Meta concluída. Medalha desbloqueada.");
+}
+
 // ── Lançamento por texto (heurística local — sem IA externa) ───
 // Interpreta uma frase livre (ex.: "almoço 32 reais ontem") só com
 // expressões regulares e listas de palavras-chave, tudo dentro do
 // navegador — nenhum texto sai do dispositivo do usuário.
 const FIN_CATEGORY_KEYWORDS = {
-  alimentacao:  ["almoço","almoco","jantar","lanche","mercado","supermercado","restaurante","comida","ifood","padaria","café","cafe","pizza","hambúrguer","hamburguer","feira","churrasco","marmita","delivery","açaí","acai","sorvete","doces","rappi","padoca","brunch","sushi"],
-  transporte:   ["uber","99","gasolina","combustível","combustivel","ônibus","onibus","metro","metrô","táxi","taxi","passagem","estacionamento","pedágio","pedagio","posto","oficina","seguro do carro","ipva","licenciamento","manutenção do carro","manutencao do carro","mecânico","mecanico"],
-  saude:        ["farmácia","farmacia","remédio","remedio","médico","medico","consulta","dentista","plano de saúde","plano de saude","exame","hospital","academia","psicólogo","psicologo","terapia","fisioterapia","óculos","oculos","vacina","laboratório","laboratorio"],
+  alimentacao:  ["almoço","almoco","jantar","lanche","restaurante","comida","ifood","padaria","café","cafe","pizza","hambúrguer","hamburguer","churrasco","marmita","delivery","açaí","acai","sorvete","doces","rappi","padoca","brunch","sushi","mcdonalds","mcdonald's","mc donalds","mac donalds","burger king","bk","coxinha","pastel","esfiha","sanduíche","sanduiche","bolo","pão","pao"],
+  mercado:      ["mercado","supermercado","mercadinho","hipermercado","atacadão","atacadao","assaí","assai","carrefour","pão de açúcar","pao de acucar","hortifruti","sacolão","sacolao","feira","açougue","acougue"],
+  transporte:   ["uber","99","ônibus","onibus","metro","metrô","táxi","taxi","passagem","estacionamento","pedágio","pedagio"],
+  combustivel:  ["gasolina","combustível","combustivel","etanol","diesel","gnv","posto","abastecimento"],
+  saude:        ["farmácia","farmacia","remédio","remedio","médico","medico","consulta","dentista","plano de saúde","plano de saude","exame","hospital","psicólogo","psicologo","terapia","fisioterapia","óculos","oculos","vacina","laboratório","laboratorio"],
+  academia:     ["academia","smart fit","bluefit","personal trainer","crossfit","pilates","yoga","musculação","musculacao","natação","natacao"],
   lazer:        ["cinema","show","viagem","bar","balada","streaming","jogo","passeio","ingresso","netflix","festa","parque","hospedagem","hotel","pousada","passeio turístico"],
   educacao:     ["curso","faculdade","livro","mensalidade escolar","escola","material escolar","apostila","aula","udemy","mensalidade da faculdade","pós-graduação","pos-graduacao"],
-  moradia:      ["aluguel","condomínio","condominio","luz","água","agua","internet","gás","gas","iptu","reforma","conta de","celular","telefone","tv a cabo","wifi","manutenção","manutencao"],
+  moradia:      ["aluguel","condomínio","condominio","iptu","reforma","móveis","moveis","sofá","sofa"],
+  contas:       ["conta de luz","conta de água","conta de agua","luz","água","agua","internet","gás","gas","conta de","celular","telefone","tv a cabo","wifi","energia","recarga"],
+  manutencao:  ["oficina","mecânico","mecanico","manutenção do carro","manutencao do carro","manutenção","manutencao"],
+  seguros:     ["seguro do carro","seguro"],
+  impostos:    ["ipva","licenciamento"],
   roupas:       ["roupa","calça","calca","camisa","tênis","tenis","sapato","blusa","jaqueta","acessório","acessorio","bolsa","perfume"],
   assinaturas:  ["assinatura","spotify","amazon prime","youtube premium","mensalidade do","disney+","disney plus","hbo max","globoplay","apple music","icloud","google one"],
   salario:      ["salário","salario","contracheque","pagamento do trabalho","pagamento da empresa","holerite"],
@@ -5414,18 +7694,18 @@ const shownFinGoalAlerts = new Set();
 // da meta definida para ela naquele mês, e avisa com um toast (chega com
 // um pequeno atraso pra não sobrepor o toast de "Despesa registrada!").
 function checkFinGoalAlert(categoryId, monthKey) {
-  const goal = (state.finGoals || []).find((g) => g.categoryId === categoryId);
+  const goal = (state.finGoals || []).find((g) => g.categoryId === categoryId && (g.workspaceId || "personal") === activeWorkspaceId);
   if (!goal || !goal.limit) return;
 
   const spent = (state.finances || [])
-    .filter((f) => f.date.startsWith(monthKey) && f.type === "despesa" && f.category === categoryId)
+    .filter((f) => f.date.startsWith(monthKey) && f.type === "despesa" && f.category === categoryId && (f.workspaceId || "personal") === activeWorkspaceId)
     .reduce((s, f) => s + f.amount, 0);
   const pct = (spent / goal.limit) * 100;
   const cat = findCategory(categoryId);
   const label = cat.label.replace(/^\S+\s*/, "");
 
-  const key100 = `${monthKey}:${categoryId}:100`;
-  const key90  = `${monthKey}:${categoryId}:90`;
+  const key100 = `${activeWorkspaceId}:${monthKey}:${categoryId}:100`;
+  const key90  = `${activeWorkspaceId}:${monthKey}:${categoryId}:90`;
 
   if (pct >= 100 && !shownFinGoalAlerts.has(key100)) {
     shownFinGoalAlerts.add(key100);
@@ -5438,6 +7718,7 @@ function checkFinGoalAlert(categoryId, monthKey) {
 
 function saveExpense(event) {
   event.preventDefault();
+  if (!requireFinanceWorkspaceEdit()) return;
   const editId = valueOf("#expenseId");
   const type = document.querySelector("#expenseType").value || "despesa";
 
@@ -5450,7 +7731,7 @@ function saveExpense(event) {
   }
 
   const defaultCategory = type === "receita" ? "outros_receita" : "outros";
-  const amount = parseFloat(valueOf("#expenseAmount").replace(",", "."));
+  const amount = parseMoneyInput(valueOf("#expenseAmount"));
   if (isNaN(amount) || amount <= 0) { showToast("Informe um valor válido."); return; }
 
   const categoryId = valueOf("#expenseCategory") || defaultCategory;
@@ -5472,6 +7753,8 @@ function saveExpense(event) {
             category: categoryId,
             description: valueOf("#expenseDescription") || fallbackDescription,
             date: valueOf("#expenseDate") || todayIso,
+            accountId: valueOf("#expenseAccount") || "",
+            workspaceId: activeWorkspaceId,
           }
         : f
     );
@@ -5484,6 +7767,8 @@ function saveExpense(event) {
       category: categoryId,
       description: valueOf("#expenseDescription") || fallbackDescription,
       date: valueOf("#expenseDate") || todayIso,
+      accountId: valueOf("#expenseAccount") || "",
+      workspaceId: activeWorkspaceId,
     };
     state.finances.unshift(entry);
     showToast(type === "receita" ? "Receita adicionada!" : "Despesa registrada!");
@@ -5500,6 +7785,7 @@ function resetExpenseForm() {
   document.querySelector("#expenseId").value = "";
   document.querySelector("#expenseDate").value = todayIso;
   document.querySelector("#expenseType").value = "despesa";
+  populateFinanceAccountSelect();
   document.querySelectorAll("[data-fin-type]").forEach((b) => b.classList.toggle("active", b.dataset.finType === "despesa"));
   document.querySelector(".fin-form-card")?.classList.remove("is-receita");
   populateCategorySelect(null, "despesa");
@@ -5513,6 +7799,7 @@ function resetExpenseForm() {
 function editFinance(id) {
   const entry = state.finances.find((f) => f.id === id);
   if (!entry) return;
+  if (!requireFinanceWorkspaceEdit(entry.workspaceId || "personal")) return;
 
   setView("finances");
 
@@ -5521,6 +7808,9 @@ function editFinance(id) {
   document.querySelector("#expenseDescription").value  = entry.description || "";
   document.querySelector("#expenseDate").value         = entry.date;
   document.querySelector("#expenseType").value         = entry.type;
+  setActiveFinanceWorkspace(entry.workspaceId || "personal");
+  populateFinanceAccountSelect();
+  document.querySelector("#expenseAccount").value      = entry.accountId || "";
   document.querySelectorAll("[data-fin-type]").forEach((b) => b.classList.toggle("active", b.dataset.finType === entry.type));
   document.querySelector(".fin-form-card")?.classList.toggle("is-receita", entry.type === "receita");
 
@@ -5536,6 +7826,8 @@ function editFinance(id) {
 }
 
 function deleteFinance(id) {
+  const entry = state.finances.find((f) => f.id === id);
+  if (!entry || !requireFinanceWorkspaceEdit(entry.workspaceId || "personal")) return;
   state.finances = state.finances.filter((f) => f.id !== id);
   saveState();
   renderFinances();
@@ -5631,6 +7923,8 @@ function renderFinances() {
   const formCard  = document.querySelector(".fin-form-card");
 
   if (labelEl)  labelEl.textContent = finMonthLabel(monthKey);
+  const workspaceEl = document.querySelector("#finWorkspaceSelect");
+  if (workspaceEl) workspaceEl.value = activeWorkspaceId;
   if (badgeEl)  badgeEl.hidden = !closed;
   if (closeBtn) closeBtn.hidden = closed;
   if (reopenBtn) reopenBtn.hidden = !closed;
@@ -5639,8 +7933,10 @@ function renderFinances() {
 
   // ── Filtra lançamentos do mês ativo ──────────────────────────
   let entries = [...state.finances]
-    .filter((f) => f.date.startsWith(monthKey))
+    .filter((f) => f.date.startsWith(monthKey) && (f.workspaceId || "personal") === activeWorkspaceId)
     .sort((a, b) => b.date.localeCompare(a.date));
+
+  if (finCategoryDrilldown) entries = entries.filter((f) => f.category === finCategoryDrilldown);
 
   // Aplica a busca global (por descrição ou categoria)
   const query = elements.globalSearch.value.trim().toLowerCase();
@@ -5654,7 +7950,7 @@ function renderFinances() {
 
   const receitas    = entries.filter((f) => f.type === "receita").reduce((s, f) => s + f.amount, 0);
   const despesas    = entries.filter((f) => f.type === "despesa").reduce((s, f) => s + f.amount, 0);
-  const saldoAnterior = getCarryOverBalance(monthKey);
+  const saldoAnterior = getCarryOverBalance(monthKey, activeWorkspaceId);
   const saldo       = saldoAnterior + receitas - despesas;
   const usedPct     = receitas > 0 ? Math.min(100, Math.round((despesas / receitas) * 100)) : 0;
 
@@ -5688,7 +7984,7 @@ function renderFinances() {
       const cat = findCategory(catId);
       const pct = despesas > 0 ? Math.round((total / despesas) * 100) : 0;
       return `
-        <div class="fin-cat-row">
+        <div class="fin-cat-row" data-fin-category="${escapeHtml(catId)}" role="button" tabindex="0" aria-label="Abrir lançamentos de ${escapeHtml(cat.label)}">
           <div class="fin-cat-info">
             <span class="fin-cat-dot" style="background:${cat.color}"></span>
             <span class="fin-cat-label">${escapeHtml(cat.label)}</span>
@@ -5701,6 +7997,13 @@ function renderFinances() {
     }).join("") || `<div class="empty-state" style="padding:12px">Sem despesas no período</div>`;
 
   document.querySelector("#finCategories").innerHTML = catHtml;
+  const filterRoot = document.querySelector("#finTransactionFilter");
+  if (filterRoot) {
+    filterRoot.hidden = !finCategoryDrilldown;
+    filterRoot.innerHTML = finCategoryDrilldown
+      ? `<span>Filtrando por <strong>${escapeHtml(findCategory(finCategoryDrilldown).label)}</strong></span><button type="button" onclick="clearFinanceCategory()">Limpar filtro</button>`
+      : "";
+  }
   renderFinInsights(monthKey, entries, receitas, despesas, byCat);
 
   const listHtml = entries.length
@@ -5715,6 +8018,86 @@ function renderFinances() {
   renderFinGoals();
   renderFinClosures();
   renderFinRecurrents();
+  renderFinanceAccounts();
+  renderCreditCards();
+}
+
+function populateFinanceAccountSelect() {
+  const select = document.querySelector("#expenseAccount");
+  if (!select) return;
+  const selected = select.value;
+  const accounts = (state.financeAccounts || []).filter((item) => !item.archived && (item.workspaceId || "personal") === activeWorkspaceId);
+  select.innerHTML = `<option value="">Sem conta específica</option>${accounts.map((account) => `<option value="${escapeHtml(account.id)}">${escapeHtml(account.name)}</option>`).join("")}`;
+  if ([...select.options].some((option) => option.value === selected)) select.value = selected;
+}
+
+function renderFinanceAccounts() {
+  const root = document.querySelector("#finAccountsList");
+  if (!root) return;
+  populateFinanceAccountSelect();
+  const accounts = (state.financeAccounts || []).filter((item) => !item.archived && (item.workspaceId || "personal") === activeWorkspaceId);
+  if (!accounts.length) {
+    root.innerHTML = '<div class="empty-state">Adicione suas contas para ver saldos separados e melhorar as projeções.</div>';
+    return;
+  }
+  const typeLabels = { checking: "Conta corrente", savings: "Poupança", cash: "Carteira", investment: "Investimentos", other: "Outra conta" };
+  const canEdit = canEditFinanceWorkspace();
+  root.innerHTML = accounts.map((account) => `
+    <article class="fin-account-card">
+      <div class="fin-account-icon" aria-hidden="true">${account.type === "cash" ? "◫" : account.type === "investment" ? "↗" : "▣"}</div>
+      <div class="fin-account-copy"><strong>${escapeHtml(account.name)}</strong><span>${typeLabels[account.type] || "Conta"} · ${workspaceLabel(account.workspaceId || "personal")}</span></div>
+      <strong class="fin-account-balance">${formatCurrency(account.balance || 0)}</strong>
+      ${canEdit ? `<div class="fin-account-actions"><button type="button" onclick="editFinanceAccount('${account.id}')">Editar</button><button type="button" onclick="archiveFinanceAccount('${account.id}')" aria-label="Arquivar ${escapeHtml(account.name)}">Arquivar</button></div>` : '<span class="task-meta">Somente leitura</span>'}
+    </article>`).join("");
+}
+
+function renderCreditCards() {
+  const root = document.querySelector("#finCardsList");
+  if (!root) return;
+  const cards = (state.creditCards || []).filter((card) => !card.archived && (card.workspaceId || "personal") === activeWorkspaceId);
+  if (!cards.length) {
+    root.innerHTML = '<div class="empty-state">Nenhum cartão cadastrado. Adicione um para acompanhar faturas e parcelas.</div>';
+    return;
+  }
+  const canEdit = canEditFinanceWorkspace();
+  root.innerHTML = cards.map((card) => {
+    const openInvoices = (card.invoices || [])
+      .filter((invoice) => invoice.status !== "paid")
+      .sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)));
+    const nextInvoice = openInvoices.find((invoice) => invoice.dueDate >= todayIso) || openInvoices[0] || null;
+    const committed = openInvoices.reduce((sum, invoice) => sum + Number(invoice.amount || 0), 0);
+    const limit = Math.max(0, Number(card.limit || 0));
+    const usage = limit > 0 ? Math.min(100, Math.round((committed / limit) * 100)) : 0;
+    const installments = openInvoices.flatMap((invoice) => invoice.purchases || []).filter((purchase) => Number(purchase.totalInstallments) > 1).length;
+    return `
+      <article class="fin-card-item">
+        <div class="fin-card-item-head">
+          <div class="fin-card-identity">
+            <span class="fin-card-chip" aria-hidden="true"></span>
+            <div><strong>${escapeHtml(card.name)}</strong><span>${card.last4 ? `final ${escapeHtml(card.last4)}` : "cartão de crédito"}</span></div>
+          </div>
+          ${canEdit ? `<button type="button" class="fin-card-archive" data-card-action="archive" data-card-id="${escapeHtml(card.id)}" aria-label="Arquivar ${escapeHtml(card.name)}">Arquivar</button>` : '<span class="task-meta">Somente leitura</span>'}
+        </div>
+        <div class="fin-card-invoice">
+          <div><span>Próxima fatura</span><strong>${nextInvoice ? formatCurrency(nextInvoice.amount) : "R$ 0,00"}</strong></div>
+          <div><span>Vencimento</span><strong>${nextInvoice ? formatDate(nextInvoice.dueDate) : `dia ${card.dueDay}`}</strong></div>
+          <div><span>Parcelas futuras</span><strong>${installments}</strong></div>
+        </div>
+        <div class="fin-card-limit-head"><span>${formatCurrency(committed)} comprometidos</span><span>${usage}% do limite</span></div>
+        <div class="fin-card-limit-track"><i style="width:${usage}%"></i></div>
+        <div class="fin-card-actions"${canEdit ? "" : " hidden"}>
+          <button type="button" data-card-action="purchase" data-card-id="${escapeHtml(card.id)}">+ Adicionar compra</button>
+          ${nextInvoice ? `<button type="button" class="primary" data-card-action="pay" data-card-id="${escapeHtml(card.id)}" data-invoice-id="${escapeHtml(nextInvoice.id)}">Marcar fatura paga</button>` : ""}
+        </div>
+      </article>`;
+  }).join("");
+  root.querySelectorAll("[data-card-action]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (button.dataset.cardAction === "purchase") openCreditCardPurchase(button.dataset.cardId);
+      if (button.dataset.cardAction === "pay") payCreditCardInvoice(button.dataset.cardId, button.dataset.invoiceId);
+      if (button.dataset.cardAction === "archive") archiveCreditCard(button.dataset.cardId);
+    });
+  });
 }
 
 function renderFinInsights(monthKey, entries, receitas, despesas, byCat) {
@@ -5724,7 +8107,7 @@ function renderFinInsights(monthKey, entries, receitas, despesas, byCat) {
   const [year, month] = monthKey.split("-").map(Number);
   const previousKey = toLocalIso(new Date(year, month - 2, 1)).slice(0, 7);
   const previousExpenses = (state.finances || [])
-    .filter((item) => item.date.startsWith(previousKey) && item.type === "despesa")
+    .filter((item) => item.date.startsWith(previousKey) && item.type === "despesa" && (item.workspaceId || "personal") === activeWorkspaceId)
     .reduce((sum, item) => sum + item.amount, 0);
   const top = Object.entries(byCat).sort(([, a], [, b]) => b - a)[0];
   const topCategory = top ? findCategory(top[0]) : null;
@@ -5792,6 +8175,7 @@ function renderFinTransaction(f) {
   // realmente selecionada — igual já acontecia para despesas.
   const icon    = cat.label.split(" ")[0];
   const catName = cat.label.replace(/^\S+\s*/, "");
+  const canEdit = !f.projected && canEditFinanceWorkspace(f.workspaceId || "personal");
   // Layout em 2 linhas: título+valor numa linha, categoria/data+ações na
   // outra. Antes tudo (ícone + título + valor + editar + excluir) disputava
   // uma única linha, sobrando pouquíssimo espaço pro título — por isso
@@ -5807,14 +8191,37 @@ function renderFinTransaction(f) {
           <span class="fin-tx-amount ${isReceita ? "receita" : "despesa"}">${isReceita ? "+" : "-"}${formatCurrency(f.amount)}</span>
         </div>
         <div class="fin-tx-bottom">
-          <span class="task-meta fin-tx-meta">${escapeHtml(catName)} · ${formatDate(f.date)}</span>
-          <div class="fin-tx-actions">
+          <span class="task-meta fin-tx-meta">${escapeHtml(catName)} · ${formatDate(f.date)}${f.projected ? " · Previsto" : ""}</span>
+          <div class="fin-tx-actions"${canEdit ? "" : " hidden"}>
             <button class="mini-button" onclick="editFinance('${f.id}')" title="Editar">✏️</button>
             <button class="mini-button" onclick="deleteFinance('${f.id}')" title="Excluir">🗑️</button>
           </div>
         </div>
       </div>
     </article>`;
+}
+
+function compactProjectedBalance(value) {
+  const amount = Number(value) || 0;
+  const absolute = Math.abs(amount);
+  const compact = absolute >= 1000
+    ? new Intl.NumberFormat("pt-BR", { notation: "compact", maximumFractionDigits: 1 }).format(absolute)
+    : new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 }).format(absolute);
+  return `${amount < 0 ? "−" : ""}${compact}`;
+}
+
+function buildClientFinanceProjection(monthKey) {
+  const builder = window.PulseFinanceProjection?.buildMonthProjection;
+  if (!builder) return { days: {}, projectedEntries: [] };
+  return builder({
+    monthKey,
+    workspaceId: activeWorkspaceId,
+    startingBalance: getCarryOverBalance(monthKey, activeWorkspaceId),
+    finances: state.finances,
+    recurrents: state.finRecurrents,
+    scheduledFinances: state.scheduledFinances,
+    creditCards: state.creditCards,
+  });
 }
 
 function renderFinCalendar(monthKey, entries) {
@@ -5825,33 +8232,35 @@ function renderFinCalendar(monthKey, entries) {
   if (calLabel) calLabel.textContent = finMonthLabel(monthKey);
   const [year, month] = monthKey.split("-").map(Number);
   const daysInMonth = new Date(year, month, 0).getDate();
-  const byDay = {};
-  entries.forEach((f) => {
-    const day = f.date.slice(8, 10);
-    if (!byDay[day]) byDay[day] = { receita: 0, despesa: 0 };
-    byDay[day][f.type] += f.amount;
-  });
+  const projection = buildClientFinanceProjection(monthKey);
   const days = [...Array(daysInMonth)].map((_, i) => {
     const d = String(i + 1).padStart(2, "0");
-    const data = byDay[d];
+    const data = projection.days[d];
     const dateStr = `${monthKey}-${d}`;
     const isToday = dateStr === todayIso;
+    const hasMovement = data && (data.receita > 0 || data.despesa > 0);
+    const hasProjection = data?.projected?.length > 0;
     let dot = "";
-    if (data) {
+    if (hasMovement) {
       if (data.receita > 0 && data.despesa > 0) dot = `<span class="fin-day-dot both"></span>`;
       else if (data.receita > 0) dot = `<span class="fin-day-dot receita"></span>`;
       else if (data.despesa > 0) dot = `<span class="fin-day-dot despesa"></span>`;
     }
-    return `<button class="fin-cal-day ${isToday ? "today" : ""} ${data ? "has-data" : ""}" onclick="filterFinByDate('${dateStr}')"><strong>${i + 1}</strong>${dot}</button>`;
+    const readableBalance = formatCurrency(data?.balance || 0);
+    return `<button class="fin-cal-day ${isToday ? "today" : ""} ${hasMovement ? "has-data" : ""} ${hasProjection ? "has-projection" : ""}" onclick="filterFinByDate('${dateStr}')" aria-label="Dia ${i + 1}. Saldo previsto ${readableBalance}${hasProjection ? ". Há lançamentos previstos" : ""}"><span class="fin-cal-day-top"><strong>${i + 1}</strong>${dot}</span><span class="fin-day-balance ${Number(data?.balance) < 0 ? "is-negative" : ""}">${compactProjectedBalance(data?.balance || 0)}</span></button>`;
   });
   grid.innerHTML = days.join("");
 }
 
 function filterFinByDate(date) {
-  const entries = state.finances.filter((f) => f.date === date);
+  const projected = buildClientFinanceProjection(date.slice(0, 7)).projectedEntries.filter((item) => item.date === date);
+  const entries = [
+    ...state.finances.filter((f) => f.date === date && (f.workspaceId || "personal") === activeWorkspaceId),
+    ...projected,
+  ];
   const listHtml = entries.length
     ? entries.map((f) => renderFinTransaction(f)).join("")
-    : `<div class="empty-state">Sem registros neste dia 📭</div>`;
+    : `<div class="empty-state">Sem registros ou previsões neste dia 📭</div>`;
   document.querySelector("#finTransactions").innerHTML = listHtml;
 }
 
@@ -6431,15 +8840,9 @@ function openNewCategoryPrompt(prefillName) {
     });
     saveState();
 
-    // Pequeno feedback de "salvando → salvo" antes de fechar, pra deixar
-    // claro que a ação foi concluída (em vez do modal simplesmente sumir).
-    saveBtn.classList.add("is-loading");
-    saveBtn.disabled = true;
-    setTimeout(() => {
-      populateCategorySelect(id, activeType);
-      modal.remove();
-      showToast(`✅ Categoria "${name}" criada!`);
-    }, 260);
+    populateCategorySelect(id, activeType);
+    modal.remove();
+    showToast(`✅ Categoria "${name}" criada!`);
   });
 }
 
@@ -6468,7 +8871,7 @@ function handlePwaShortcutAction() {
       }
     }
     // Limpa o parâmetro da URL para não reabrir a mesma ação ao recarregar
-    history.replaceState(null, "", window.location.pathname);
+    history.replaceState({ ...(history.state || {}), pnView: activeView, noteDetail: false }, "", window.location.pathname);
   }
 
   // Se o usuário tocar numa notificação enquanto o app já está aberto em
@@ -6527,7 +8930,7 @@ function renderFinChart6m() {
   }
 
   const data = months.map((mk) => {
-    const entries = (state.finances || []).filter((f) => f.date.startsWith(mk));
+    const entries = (state.finances || []).filter((f) => f.date.startsWith(mk) && (f.workspaceId || "personal") === activeWorkspaceId);
     const r = entries.filter((f) => f.type === "receita").reduce((s, f) => s + f.amount, 0);
     const d = entries.filter((f) => f.type === "despesa").reduce((s, f) => s + f.amount, 0);
     const [y, m] = mk.split("-").map(Number);
@@ -6565,9 +8968,12 @@ function renderFinChart6m() {
     const dH = Math.max(2, (item.d / maxVal) * H);
     const isActive = item.mk === finActiveMonth;
     return `
-      <rect x="${x}" y="${H - rH + pad}" width="${barW}" height="${rH}" rx="2" fill="${isActive ? "var(--green)" : "var(--green-soft)"}" stroke="${isActive ? "var(--green)" : "none"}" stroke-width="1"><title>${item.lbl}: receitas ${formatCurrency(item.r)}</title></rect>
-      <rect x="${x + barW + gap}" y="${H - dH + pad}" width="${barW}" height="${dH}" rx="2" fill="${isActive ? "var(--red)" : "var(--red-soft)"}" stroke="${isActive ? "var(--red)" : "none"}" stroke-width="1"><title>${item.lbl}: despesas ${formatCurrency(item.d)}</title></rect>
-      <text x="${x + barW}" y="${H + pad + 10}" text-anchor="middle" font-size="5" fill="var(--muted)" font-family="inherit">${item.lbl}</text>`;
+      <g data-fin-month="${item.mk}" role="button" tabindex="0" aria-label="Abrir ${item.lbl}: receitas ${formatCurrency(item.r)}, despesas ${formatCurrency(item.d)}">
+        <rect x="${x - 2}" y="${pad}" width="${barW * 2 + gap + 4}" height="${H + 13}" rx="3" fill="transparent" />
+        <rect x="${x}" y="${H - rH + pad}" width="${barW}" height="${rH}" rx="2" fill="${isActive ? "var(--green)" : "var(--green-soft)"}" stroke="${isActive ? "var(--green)" : "none"}" stroke-width="1"><title>${item.lbl}: receitas ${formatCurrency(item.r)}</title></rect>
+        <rect x="${x + barW + gap}" y="${H - dH + pad}" width="${barW}" height="${dH}" rx="2" fill="${isActive ? "var(--red)" : "var(--red-soft)"}" stroke="${isActive ? "var(--red)" : "none"}" stroke-width="1"><title>${item.lbl}: despesas ${formatCurrency(item.d)}</title></rect>
+        <text x="${x + barW}" y="${H + pad + 10}" text-anchor="middle" font-size="5" fill="var(--muted)" font-family="inherit">${item.lbl}</text>
+      </g>`;
   }).join("");
 
   const legendLine = `
@@ -6596,19 +9002,20 @@ function renderFinSaldoEvolution() {
   // Sem nenhum lançamento no histórico inteiro, o saldo fica sempre em
   // zero e a linha vira um traço reto colado embaixo do gráfico — parecia
   // quebrado. Mostra um estado vazio em vez de um gráfico "fantasma".
-  if ((state.finances || []).length === 0) {
+  const workspaceFinances = (state.finances || []).filter((f) => (f.workspaceId || "personal") === activeWorkspaceId);
+  if (workspaceFinances.length === 0) {
     el.innerHTML = `<div class="empty-state">Sem dados suficientes para mostrar a evolução</div>`;
     return;
   }
 
   const firstMonth = months[0];
-  const baseline = (state.finances || [])
+  const baseline = workspaceFinances
     .filter((f) => f.date.slice(0, 7) < firstMonth)
     .reduce((s, f) => s + (f.type === "receita" ? f.amount : -f.amount), 0);
 
   let running = baseline;
   const data = months.map((mk) => {
-    const entries = (state.finances || []).filter((f) => f.date.startsWith(mk));
+    const entries = workspaceFinances.filter((f) => f.date.startsWith(mk));
     const net = entries.reduce((s, f) => s + (f.type === "receita" ? f.amount : -f.amount), 0);
     running += net;
     const [y, m] = mk.split("-").map(Number);
@@ -6662,7 +9069,7 @@ function renderFinSaldoEvolution() {
 function renderFinGoals() {
   const el = document.querySelector("#finGoalsList");
   if (!el) return;
-  const goals = state.finGoals || [];
+  const goals = (state.finGoals || []).filter((g) => (g.workspaceId || "personal") === activeWorkspaceId);
   if (!goals.length) {
     el.innerHTML = emptyStateHtml({
       iconName: "target",
@@ -6672,8 +9079,9 @@ function renderFinGoals() {
     return;
   }
   const monthKey = getActiveFinMonth();
+  const canEdit = canEditFinanceWorkspace();
   const byCat = {};
-  (state.finances || []).filter((f) => f.date.startsWith(monthKey) && f.type === "despesa")
+  (state.finances || []).filter((f) => f.date.startsWith(monthKey) && f.type === "despesa" && (f.workspaceId || "personal") === activeWorkspaceId)
     .forEach((f) => { byCat[f.category] = (byCat[f.category] || 0) + f.amount; });
 
   el.innerHTML = goals.map((g) => {
@@ -6687,7 +9095,7 @@ function renderFinGoals() {
         <div class="fin-goal-top">
           <span class="fin-goal-label">${escapeHtml(cat.label)}</span>
           <span class="fin-goal-val" style="color:${color}">${formatCurrency(spent)} / ${formatCurrency(g.limit)}</span>
-          <button class="icon-button" style="padding:2px 6px;font-size:0.7rem" onclick="deleteFinGoal('${g.id}')">${icon("x", 12)}</button>
+          ${canEdit ? `<button class="icon-button" style="padding:2px 6px;font-size:0.7rem" onclick="deleteFinGoal('${g.id}')">${icon("x", 12)}</button>` : ""}
         </div>
         <div class="progress-track" style="height:6px;margin-top:4px">
           <div style="width:${pct}%;height:100%;border-radius:999px;background:${color};transition:width 400ms"></div>
@@ -6702,7 +9110,9 @@ function renderFinGoals() {
 function renderFinClosures() {
   const el = document.querySelector("#finClosuresList");
   if (!el) return;
-  const closures = [...(state.monthClosures || [])].sort((a, b) => b.monthKey.localeCompare(a.monthKey));
+  const closures = (state.monthClosures || [])
+    .filter((c) => (c.workspaceId || "personal") === activeWorkspaceId)
+    .sort((a, b) => b.monthKey.localeCompare(a.monthKey));
   if (!closures.length) {
     el.innerHTML = emptyStateHtml({
       iconName: "calendarCheck",
@@ -6711,6 +9121,7 @@ function renderFinClosures() {
     });
     return;
   }
+  const canEdit = canEditFinanceWorkspace();
   el.innerHTML = closures.map((c) => `
     <div class="fin-closure-row">
       <div class="fin-closure-top">
@@ -6719,12 +9130,13 @@ function renderFinClosures() {
       </div>
       <div class="fin-closure-actions">
         <button class="mini-button" onclick="goToFinMonth('${c.monthKey}')">Ver / editar</button>
-        <button class="mini-button" onclick="reopenMonth('${c.monthKey}')">Reabrir</button>
+        ${canEdit ? `<button class="mini-button" onclick="reopenMonth('${c.monthKey}')">Reabrir</button>` : ""}
       </div>
     </div>`).join("");
 }
 
 function deleteFinGoal(id) {
+  if (!requireFinanceWorkspaceEdit()) return;
   state.finGoals = (state.finGoals || []).filter((g) => g.id !== id);
   saveState();
   renderFinGoals();
@@ -6748,14 +9160,15 @@ function bindFinGoalsModal() {
   modal?.addEventListener("click", (e) => { if (e.target === modal) modal.hidden = true; });
 
   saveBtn?.addEventListener("click", () => {
+    if (!requireFinanceWorkspaceEdit()) return;
     const catId = catSel.value;
     const limit = parseFloat(document.querySelector("#goalLimit").value.replace(",", "."));
     if (!catId || !limit || limit <= 0) { showToast("Preencha a categoria e o limite."); return; }
     if (!state.finGoals) state.finGoals = [];
     // Atualiza se já existir meta para essa categoria
-    const existing = state.finGoals.find((g) => g.categoryId === catId);
+    const existing = state.finGoals.find((g) => g.categoryId === catId && (g.workspaceId || "personal") === activeWorkspaceId);
     if (existing) { existing.limit = limit; }
-    else { state.finGoals.push({ id: crypto.randomUUID(), categoryId: catId, limit }); }
+    else { state.finGoals.push({ id: crypto.randomUUID(), categoryId: catId, limit, workspaceId: activeWorkspaceId }); }
     saveState();
     renderFinGoals();
     modal.hidden = true;
@@ -6767,10 +9180,82 @@ function bindFinGoalsModal() {
 // ============================================================
 // LANÇAMENTOS RECORRENTES
 // ============================================================
+function recurringSuggestionsForWorkspace() {
+  const detector = window.PulseRecurringDetector?.detectRecurringSuggestions;
+  if (typeof detector !== "function") return [];
+  return detector({
+    finances: state.finances || [],
+    recurrents: state.finRecurrents || [],
+    workspaceId: activeWorkspaceId,
+  });
+}
+
+function renderRecurringSuggestions() {
+  const root = document.querySelector("#finRecurringSuggestions");
+  if (!root) return;
+  const suggestions = canEditFinanceWorkspace() ? recurringSuggestionsForWorkspace() : [];
+  root.hidden = suggestions.length === 0;
+  if (!suggestions.length) {
+    root.replaceChildren();
+    return;
+  }
+
+  root.innerHTML = `
+    <div class="fin-recurring-suggestions-head">
+      <div>
+        <p class="eyebrow">Detecção inteligente</p>
+        <h2>Sugestões encontradas</h2>
+        <p>Encontramos lançamentos parecidos em meses diferentes. Revise antes de automatizar.</p>
+      </div>
+      <span class="fin-recurring-suggestions-count">${suggestions.length}</span>
+    </div>
+    <div class="fin-recurring-suggestions-list">
+      ${suggestions.map((suggestion) => `
+        <article class="fin-recurring-suggestion-row">
+          <div class="fin-recurring-suggestion-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg>
+          </div>
+          <div class="fin-recurring-suggestion-copy">
+            <strong>${escapeHtml(suggestion.description)}</strong>
+            <span>${suggestion.occurrences} meses · dia ${suggestion.day} · ${suggestion.type === "receita" ? "receita" : "despesa"}</span>
+          </div>
+          <strong class="fin-recurring-suggestion-amount">${formatCurrency(suggestion.amount)}</strong>
+          <button class="mini-button" type="button" data-review-recurring="${escapeHtml(suggestion.key)}">Revisar</button>
+        </article>`).join("")}
+    </div>`;
+
+  root.querySelectorAll("[data-review-recurring]").forEach((button) => {
+    button.addEventListener("click", () => reviewRecurringSuggestion(button.dataset.reviewRecurring));
+  });
+}
+
+function reviewRecurringSuggestion(key) {
+  if (!requireFinanceWorkspaceEdit()) return;
+  const suggestion = recurringSuggestionsForWorkspace().find((item) => item.key === key);
+  if (!suggestion) {
+    renderRecurringSuggestions();
+    return;
+  }
+
+  document.querySelector("#finOpenRecurModal")?.click();
+  const type = document.querySelector("#recurType");
+  type.value = suggestion.type;
+  type.dispatchEvent(new Event("change", { bubbles: true }));
+  document.querySelector("#recurDesc").value = suggestion.description;
+  document.querySelector("#recurAmount").value = String(suggestion.amount.toFixed(2));
+  document.querySelector("#recurDay").value = String(suggestion.day);
+  const category = document.querySelector("#recurCategory");
+  if ([...category.options].some((option) => option.value === suggestion.categoryId)) {
+    category.value = suggestion.categoryId;
+  }
+  document.querySelector("#recurDesc")?.focus();
+}
+
 function renderFinRecurrents() {
+  renderRecurringSuggestions();
   const el = document.querySelector("#finRecurList");
   if (!el) return;
-  const recurrents = state.finRecurrents || [];
+  const recurrents = (state.finRecurrents || []).filter((r) => (r.workspaceId || "personal") === activeWorkspaceId);
   if (!recurrents.length) {
     el.innerHTML = emptyStateHtml({
       iconName: "compass",
@@ -6779,6 +9264,7 @@ function renderFinRecurrents() {
     });
     return;
   }
+  const canEdit = canEditFinanceWorkspace();
   el.innerHTML = recurrents.map((r) => {
     const cat     = findCategory(r.categoryId);
     const isRec   = r.type === "receita";
@@ -6792,7 +9278,7 @@ function renderFinRecurrents() {
         </div>
         <span class="fin-recur-amount ${isRec ? "receita" : "despesa"}">${isRec ? "+" : "-"}${formatCurrency(r.amount)}</span>
         <div class="fin-recur-status" aria-hidden="true">${skipped ? '<span class="fin-recur-status-dot skipped"></span>' : '<span class="fin-recur-status-dot"></span>'}</div>
-        <button class="fin-recur-menu-btn" type="button" data-recur-menu="${r.id}" aria-haspopup="true" aria-label="Mais ações">
+        <button class="fin-recur-menu-btn" type="button" data-recur-menu="${r.id}" aria-haspopup="true" aria-label="Mais ações"${canEdit ? "" : " hidden"}>
           <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="19" cy="12" r="1.9"/></svg>
         </button>
       </div>`;
@@ -6819,6 +9305,7 @@ function closeRecurrentActionMenu() {
   document.removeEventListener("click", closeRecurrentActionMenu);
 }
 function openRecurrentActionMenu(anchorBtn, id) {
+  if (!requireFinanceWorkspaceEdit()) return;
   closeRecurrentActionMenu();
   const rec = (state.finRecurrents || []).find((r) => r.id === id);
   if (!rec) return;
@@ -6870,6 +9357,7 @@ function isRecurrentSkipped(rec, monthKey) {
 function toggleSkipRecurrentMonth(id, monthKey) {
   const rec = (state.finRecurrents || []).find((r) => r.id === id);
   if (!rec) return;
+  if (!requireFinanceWorkspaceEdit(rec.workspaceId || "personal")) return;
   if (!rec.skippedMonths) rec.skippedMonths = [];
   const idx = rec.skippedMonths.indexOf(monthKey);
   if (idx >= 0) {
@@ -6884,6 +9372,8 @@ function toggleSkipRecurrentMonth(id, monthKey) {
 }
 
 function deleteRecurrent(id) {
+  const rec = (state.finRecurrents || []).find((r) => r.id === id);
+  if (!rec || !requireFinanceWorkspaceEdit(rec.workspaceId || "personal")) return;
   state.finRecurrents = (state.finRecurrents || []).filter((r) => r.id !== id);
   saveState();
   renderFinRecurrents();
@@ -6893,6 +9383,7 @@ function deleteRecurrent(id) {
 function applyRecurrent(id) {
   const rec = (state.finRecurrents || []).find((r) => r.id === id);
   if (!rec) return;
+  if (!requireFinanceWorkspaceEdit(rec.workspaceId || "personal")) return;
   if (!assertMonthNotClosed(finActiveMonth)) return;
   if (isRecurrentSkipped(rec, finActiveMonth)) {
     showToast(`"${rec.description}" está marcado para pular em ${finMonthLabel(finActiveMonth)}. Toque em ↩ pra reativar.`);
@@ -6910,6 +9401,7 @@ function applyRecurrent(id) {
     category: rec.categoryId,
     description: rec.description,
     date,
+    workspaceId: rec.workspaceId || "personal",
   });
   saveState();
   renderFinances();
@@ -6935,6 +9427,7 @@ function bindFinRecurModal() {
   typeSel?.addEventListener("change", updateCatOptions);
 
   saveBtn?.addEventListener("click", () => {
+    if (!requireFinanceWorkspaceEdit()) return;
     const desc   = document.querySelector("#recurDesc").value.trim();
     const amount = parseFloat(document.querySelector("#recurAmount").value.replace(",", "."));
     const type   = typeSel.value;
@@ -6946,7 +9439,7 @@ function bindFinRecurModal() {
       return;
     }
     if (!state.finRecurrents) state.finRecurrents = [];
-    state.finRecurrents.push({ id: crypto.randomUUID(), description: desc, amount, type, categoryId: catId, day });
+    state.finRecurrents.push({ id: crypto.randomUUID(), description: desc, amount, type, categoryId: catId, day, workspaceId: activeWorkspaceId });
     saveState();
     renderFinRecurrents();
     modal.hidden = true;
@@ -6960,15 +9453,17 @@ function bindFinRecurModal() {
 function autoApplyRecurrents() {
   const today = todayIso;
   const monthKey = today.slice(0, 7);
-  if (isMonthClosed(monthKey)) return;
   const [, , dd] = today.split("-").map(Number);
   let applied = false;
   let toastDelay = 0;
   (state.finRecurrents || []).forEach((rec) => {
+    const workspaceId = rec.workspaceId || "personal";
+    if (!canEditFinanceWorkspace(workspaceId)) return;
+    if (isMonthClosed(monthKey, workspaceId)) return;
     if (rec.day !== dd) return;
     if (isRecurrentSkipped(rec, monthKey)) return;
     const alreadyLaunched = (state.finances || []).some(
-      (f) => f.date === today && f.description === rec.description && f.amount === rec.amount
+      (f) => f.date === today && f.description === rec.description && f.amount === rec.amount && (f.workspaceId || "personal") === workspaceId
     );
     if (alreadyLaunched) return;
     state.finances.unshift({
@@ -6978,6 +9473,7 @@ function autoApplyRecurrents() {
       category: rec.categoryId,
       description: rec.description,
       date: today,
+      workspaceId,
     });
     applied = true;
     // Escalona os toasts quando mais de um recorrente cai no mesmo dia,
@@ -6987,15 +9483,14 @@ function autoApplyRecurrents() {
   });
   // Só sincroniza com o servidor se algo foi realmente adicionado —
   // a versão anterior sempre chamava saveState() mesmo sem lançar nada,
-  // o que disparava um ciclo de sync desnecessário ao abrir o app e
-  // causava o banner "❌ Erro ao salvar" quando o Firestore estava lento
-  // ou offline.
+  // o que disparava um ciclo de sync desnecessário ao abrir o app.
   if (applied) saveState();
 }
 
 window.editNote = editNote;
 window.toggleFavorite = toggleFavorite;
 window.toggleNoteChecklistPreview = toggleNoteChecklistPreview;
+window.toggleNoteChecklistItem = toggleNoteChecklistItem;
 window.convertNoteToTask = convertNoteToTask;
 window.deleteNote = deleteNote;
 window.openNoteDetail = openNoteDetail;
@@ -7035,12 +9530,14 @@ window.reopenMonth = reopenMonth;
 // ao adicionar uma função nova chamada via onclick/onsubmit em HTML
 // gerado dinamicamente, ela tem que ser exposta aqui também.
 window.openPlannerQuickAdd = openPlannerQuickAdd;
+window.openPlannerEventEditor = openPlannerEventEditor;
 window.jumpPlannerToDay = jumpPlannerToDay;
 window.selectPlannerDay = selectPlannerDay;
 window.togglePlannerGoalExpand = togglePlannerGoalExpand;
 window.openPlannerTaskActions = openPlannerTaskActions;
 window.submitGoalMilestoneForm = submitGoalMilestoneForm;
 window.submitSubtaskForm = submitSubtaskForm;
+window.updateGoalProgress = updateGoalProgress;
 
 // Mesma causa raiz, encontrada durante a auditoria fora do Planner —
 // corrigidas de brinde por serem idênticas e triviais (uma linha cada):
@@ -7048,3 +9545,4 @@ window.submitSubtaskForm = submitSubtaskForm;
 // silenciosamente não faziam nada.
 window.setView = setView;
 window.setNotesFolderFilter = setNotesFolderFilter;
+

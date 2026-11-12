@@ -69,6 +69,8 @@
   --shadow-edge-color: rgba(20, 22, 45, 0.12);
   --nav-height: 80px;
   --header-height: 70px;
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
 
   /* Escala de espaçamento em grid de 8pt — usada em todo trabalho novo
      daqui pra frente. Não fomos reescrever cada valor de padding/margin
@@ -97,6 +99,14 @@
   --text-xl: 1.3rem;
   --text-2xl: 1.6rem;
   --text-3xl: 2rem;
+}
+
+/* Alguns atalhos/PWAs do iOS restaurados informam inset zero mesmo com a
+   barra do sistema sobreposta. A classe é aplicada no <head> antes da
+   primeira pintura e só reserva esse mínimo no modo instalado. */
+:root.is-standalone {
+  --safe-area-top: max(env(safe-area-inset-top, 0px), 24px);
+  --safe-area-bottom: max(env(safe-area-inset-bottom, 0px), 8px);
 }
 
 /* ---------- Tema: Claro / Aurora / Automático ----------
@@ -380,9 +390,14 @@
 
 html {
   -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
   overflow-x: hidden;
+  overscroll-behavior-x: none;
   width: 100%;
   max-width: 100%;
+  min-width: 0;
+  min-height: 100%;
   /* Antes só o <body> tinha cor de fundo. Em PWA instalado no iOS
      (viewport-fit=cover), a área de safe-area/notch fica fora da caixa
      do <body> — sem isso aqui, aquela faixa podia "vazar" com a cor
@@ -409,6 +424,9 @@ body {
   overflow-x: hidden;
   width: 100%;
   max-width: 100%;
+  min-width: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
   position: relative;
 }
 
@@ -438,20 +456,28 @@ body::before {
 .app-shell {
   position: relative;
   z-index: 1;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: clip;
 }
 
 button, input, textarea, select {
   font: inherit;
   outline: none;
+  min-width: 0;
+  max-width: 100%;
 }
 button { cursor: pointer; border: none; background: none; }
-p, h1, h2, h3 { margin: 0; }
+p, h1, h2, h3 { margin: 0; overflow-wrap: anywhere; }
+img, video { max-width: 100%; height: auto; }
 
 /* ---------- App Shell ---------- */
 .app-shell {
   display: grid;
   grid-template-columns: 260px 1fr;
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 /* ---------- SIDEBAR (desktop) ---------- */
@@ -607,8 +633,11 @@ p, h1, h2, h3 { margin: 0; }
 /* ---------- MAIN AREA ---------- */
 .main-area {
   min-width: 0;
+  width: 100%;
+  max-width: 100%;
   display: flex;
   flex-direction: column;
+  overflow-x: clip;
 }
 
 /* ---------- TOP BAR ---------- */
@@ -621,7 +650,7 @@ p, h1, h2, h3 { margin: 0; }
      aparelho (relógio, sinal, bateria) — sem isso, o cabeçalho
      renderiza por baixo dela em qualquer tela com notch/status bar
      (afeta todas as views, já que o topbar é compartilhado). */
-  padding: calc(13px + env(safe-area-inset-top)) 24px 13px;
+  padding: calc(13px + var(--safe-area-top)) 24px 13px;
   background: color-mix(in srgb, var(--bg) 85%, transparent);
   backdrop-filter: blur(20px);
   /* Mesmo raciocínio da sidebar: fio sutil + sombra suave por baixo,
@@ -711,7 +740,7 @@ p, h1, h2, h3 { margin: 0; }
 .primary-button .icon { font-style: normal; font-size: 1.1rem; }
 
 /* ---------- VIEWS ---------- */
-.view { display: none; padding: 22px 26px; }
+.view { display: none; width: 100%; max-width: 100%; min-width: 0; padding: 22px 26px; }
 .active-view { display: block; animation: fadeUp 240ms ease; }
 
 @keyframes fadeUp {
@@ -1032,17 +1061,8 @@ button.overview-card-action {
 
 .panel-header h2 { font-size: 0.94rem; font-weight: 700; color: var(--text); }
 
-/* ---------- DASHBOARD PANELS — compactos e recolhíveis ---------- */
-/* Antes cada painel do início vinha sempre expandido, com cabeçalho maior
-   e listas vazias em caixas tracejadas de 24px de padding — em uma conta
-   nova (tudo vazio), a tela virava uma sequência de blocos grandes sem
-   informação nenhuma. Agora cada painel pode ser minimizado (o estado
-   fica salvo por painel, ver initDashPanelCollapse em app.js) e o
-   cabeçalho/conteúdo em si ocupam bem menos espaço. */
+/* ---------- DASHBOARD PANELS — compactos e sempre visíveis ---------- */
 .dash-panel-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
-
-.dash-panel-collapse-btn { font-size: 0.8rem; transition: transform 200ms ease, background 160ms, color 160ms; }
-.dash-panel.is-collapsed .dash-panel-collapse-btn { transform: rotate(-90deg); }
 
 .dash-panel-body {
   display: grid;
@@ -1051,8 +1071,6 @@ button.overview-card-action {
   grid-template-rows: 1fr;
 }
 .dash-panel-body > * { min-height: 0; overflow: hidden; }
-.dash-panel.is-collapsed .dash-panel-body { grid-template-rows: 0fr; }
-.dash-panel.is-collapsed .panel-header { margin-bottom: 0; }
 
 .icon-button {
   width: 34px;
@@ -1244,9 +1262,9 @@ button.overview-card-action {
    comentário junto de PRIORITY_RING no app.js sobre por que Média não
    usa mais var(--accent) (colidia visualmente com --orange no tema
    escuro "eclipse"). */
-.priority-Alta    { background: var(--orange-soft); color: var(--orange); }
+.priority-Alta    { background: #ede9fe; color: #6d28d9; }
 .priority-Urgente { background: var(--red-soft);    color: var(--red); }
-.priority-Media   { background: var(--teal-soft);   color: var(--teal); }
+.priority-Media   { background: #cffafe; color: #155e75; }
 .priority-Baixa   { background: var(--green-soft);  color: var(--green); }
 
 .status-Concluida   { background: var(--green-soft);  color: var(--green); }
@@ -1493,7 +1511,21 @@ input[type="time"] {
 .form-actions { display: flex; gap: 8px; }
 
 /* ---------- Note editor (versão simplificada) ---------- */
-.note-editor { gap: 10px; }
+.note-editor {
+  gap: 9px;
+  min-width: 0;
+  max-width: 100%;
+}
+.note-editor .form-heading { margin-bottom: 0; }
+.note-editor .form-heading h2 {
+  max-width: 24ch;
+  font-size: 1.16rem;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+.note-title-field,
+.note-body-field { min-width: 0; }
 
 .note-title-field input {
   font-size: 1.05rem;
@@ -1511,13 +1543,65 @@ input[type="time"] {
   resize: none;
   overflow: hidden;
   padding: 4px 2px;
-  min-height: 64px;
+  min-height: 56px;
   font-size: 0.94rem;
   line-height: 1.5;
 }
 .note-body-field textarea:focus { box-shadow: none; }
 
 textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms ease; }
+
+.note-draft-format-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  padding: 6px 2px 2px;
+}
+.note-control-label {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.note-text-color-picker {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 7px;
+  min-width: 0;
+}
+.note-text-color-default,
+.note-text-color-dot {
+  width: 30px;
+  height: 30px;
+  min-height: 30px;
+  flex: 0 0 30px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+.note-text-color-default {
+  display: grid;
+  place-items: center;
+  background: var(--surface2);
+  color: var(--text);
+  border-color: var(--line);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+.note-text-color-dot { background: var(--note-text-color); }
+.note-text-color-default:hover,
+.note-text-color-dot:hover { transform: scale(1.06); }
+.note-text-color-default.active,
+.note-text-color-dot.active {
+  border-color: var(--text);
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent);
+}
 
 .note-quick-row {
   display: flex;
@@ -1529,7 +1613,36 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   border-top: 1.5px dashed var(--line);
 }
 
+/* Aparência continua disponível, porém recolhida em "Mais detalhes".
+   O editor principal fica focado no conteúdo e não em duas paletas. */
+.note-appearance-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 10px 0 12px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface2);
+}
+.note-appearance-option {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  min-width: 0;
+}
+.note-appearance-options .note-text-color-picker,
+.note-appearance-options .note-color-picker {
+  justify-content: flex-start;
+}
+
 .note-priority-picker { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.note-card-color-control {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
 
 .note-color-picker { display:flex; gap:7px; align-items:center; }
 .note-color-dot {
@@ -1568,13 +1681,13 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   flex-shrink: 0;
 }
 .note-priority-dot[data-priority="Baixa"]   { color: var(--green); }
-.note-priority-dot[data-priority="Media"]   { color: var(--teal); }
-.note-priority-dot[data-priority="Alta"]    { color: var(--orange); }
+.note-priority-dot[data-priority="Media"]   { color: #0891b2; }
+.note-priority-dot[data-priority="Alta"]    { color: #8b5cf6; }
 .note-priority-dot[data-priority="Urgente"] { color: var(--red); }
 
 .note-priority-dot.active[data-priority="Baixa"]   { background: var(--green-soft);  border-color: var(--green); }
-.note-priority-dot.active[data-priority="Media"]   { background: var(--teal-soft);   border-color: var(--teal); }
-.note-priority-dot.active[data-priority="Alta"]    { background: var(--orange-soft); border-color: var(--orange); }
+.note-priority-dot.active[data-priority="Media"]   { background: #cffafe; color: #155e75; border-color: #0891b2; }
+.note-priority-dot.active[data-priority="Alta"]    { background: #ede9fe; color: #6d28d9; border-color: #8b5cf6; }
 .note-priority-dot.active[data-priority="Urgente"] { background: var(--red-soft);    border-color: var(--red); }
 .note-priority-dot.active { transform: scale(1.04); font-weight: 800; }
 
@@ -1621,7 +1734,7 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 .note-more-details > div.form-grid:not(:first-of-type),
 .note-more-details > label { margin-top: 10px; }
 
-.note-save-btn { flex: 1; justify-content: center; height: 46px; font-size: 0.95rem; }
+.note-save-btn { flex: 1; justify-content: center; height: 44px; font-size: 0.92rem; }
 
 /* Botão "Salvar compromisso" — mesmo tratamento do botão de notas: fica
    no final do formulário (depois de todos os campos), ocupando a largura
@@ -1666,9 +1779,9 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
    tinha muito texto — a causa do layout "quebrando" ao escrever mais). */
 .note-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
   gap: 14px;
-  align-items: start;
+  align-items: stretch;
 }
 
 /* Pastas: chips derivados dos valores de "folder" das notas — quebra
@@ -1756,9 +1869,12 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   background: color-mix(in srgb, var(--note-card-bg, var(--surface2)) 76%, var(--surface));
   transition: transform 200ms ease, box-shadow 200ms ease;
   cursor: pointer;
-  display: block;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
   position: relative;
   overflow-wrap: anywhere;
+  word-break: break-word;
   animation: fadeUp 200ms ease both;
 }
 
@@ -1814,6 +1930,8 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   -webkit-line-clamp: 4;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .note-card-preview [style*="background-color"] { padding: 1px 3px; border-radius: 4px; }
 .note-card-preview mark { background: var(--yellow-soft); color: inherit; border-radius: 3px; }
@@ -1821,14 +1939,15 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 .note-wordcount { display: block; margin-top: 2px; margin-bottom: 8px; }
 
 .note-card .tag-list { flex-wrap: wrap; }
-.note-priority-row { margin-top: 4px; }
+.note-priority-row { margin-top: auto; padding-top: 8px; }
 
 /* 3 ações por nota: "Editar" e "Tarefa" dividem o espaço em partes
    iguais, e "Excluir" vira um botão circular só com ícone à direita —
    em vez dos 4 botões de texto que quebravam linha de formas diferentes
    dependendo do tamanho da nota. */
 .note-card .card-actions {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr) 36px;
   align-items: center;
   gap: 6px;
   margin-top: 10px;
@@ -1839,7 +1958,17 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   align-items: center;
   justify-content: center;
   gap: 5px;
+  min-width: 0;
+  min-height: 36px;
+  padding: 7px 4px;
+  white-space: normal;
+  line-height: 1.2;
+  text-align: center;
 }
+.note-card-actions button span { min-width: 0; overflow-wrap: anywhere; }
+.note-card-actions button svg { flex-shrink: 0; }
+.note-card header > div { min-width: 0; }
+.note-card .card-actions .is-done-action { justify-content: center; }
 .note-card .card-actions .danger-action {
   flex: 0 0 auto;
   width: 30px;
@@ -2276,40 +2405,6 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   .toast-mascot, .toast-mascot .pulsinho__eye { animation: none !important; }
 }
 
-/* ---------- SYNC STATUS PILL ---------- */
-/* Antes era criado só com estilo inline (JS), então não dava pra reposicionar
-   no mobile — ficava fixo a 24px do fundo e acabava sobrepondo a barra de
-   navegação inferior, cobrindo o rótulo da aba ativa (parecia que a barra
-   "quebrou"/mudou de nome). Agora é uma classe de verdade, então o media
-   query abaixo consegue subir o indicador para cima da barra. */
-.sync-status {
-  position: fixed;
-  bottom: 24px;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 7px 16px;
-  border-radius: 999px;
-  font-size: 0.78rem;
-  font-weight: 700;
-  z-index: 998;
-  transition: opacity 300ms;
-  pointer-events: auto;
-  background: var(--surface);
-  border: 1.5px solid var(--line);
-  box-shadow: 0 4px 16px rgba(0,0,0,0.1);
-  color: var(--text2);
-  cursor: default;
-  max-width: 88vw;
-  text-align: center;
-  opacity: 0;
-}
-.sync-status.is-visible { opacity: 1; }
-.sync-status.is-actionable { cursor: pointer; }
-.sync-status[data-status="saving"]  { color: var(--accent); }
-.sync-status[data-status="saved"]   { color: var(--green); }
-.sync-status[data-status="offline"] { color: var(--orange); }
-.sync-status[data-status="error"]   { color: var(--red); }
-
 /* ---------- CELEBRATION ---------- */
 .celebration-burst { position: fixed; inset: 0; z-index: 100; pointer-events: none; }
 .celebration-burst span {
@@ -2413,6 +2508,11 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 
 /* ---- Mobile ---- */
 @media (max-width: 720px) {
+  /* Os modais vivem dentro de .app-shell, enquanto a navegação mobile é
+     irmã desse wrapper. Eleva somente quando existe um modal aberto para
+     que a barra inferior nunca fique por cima de formulários/ações. */
+  .app-shell:has(.modal-backdrop:not([hidden])) { z-index: 200; }
+
   .app-shell { grid-template-columns: 1fr; }
 
   /* Hide desktop sidebar */
@@ -2498,7 +2598,7 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   .bottom-nav-fab:active { transform: scale(0.93); }
 
   /* Mobile main area adjustments */
-  .main-area { padding-bottom: var(--nav-height); }
+  .main-area { padding-bottom: calc(var(--nav-height) + 20px + env(safe-area-inset-bottom)); }
 
   .topbar {
     padding: calc(10px + env(safe-area-inset-top)) 16px 12px;
@@ -2688,11 +2788,6 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   /* Toast above nav */
   .toast { bottom: calc(var(--nav-height) + 12px); right: 16px; left: 16px; justify-content: center; }
 
-  /* Indicador de sincronização também acima da barra — e mais alto ainda
-     que o toast, para nunca sobrepor um ao outro quando os dois aparecem
-     ao mesmo tempo (ex.: "Tarefa adicionada" + "Salvando..."). */
-  .sync-status { bottom: calc(var(--nav-height) + 62px); z-index: 90; }
-
   /* Form grid 1 col on mobile */
   .form-grid { grid-template-columns: 1fr; }
 
@@ -2706,6 +2801,19 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
     flex-direction: column;
     align-items: stretch;
   }
+  .note-draft-format-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .note-text-color-picker { justify-content: flex-start; width: 100%; }
+  .note-text-color-default,
+  .note-text-color-dot {
+    width: 40px;
+    height: 40px;
+    min-height: 40px;
+    flex-basis: 40px;
+  }
+  .note-card-color-control { width: 100%; }
   .note-priority-picker {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
@@ -2728,6 +2836,11 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
      que a linha de ações nunca quebre de forma imprevisível. */
   .note-card .card-actions button {
     padding: 0 6px;
+  }
+  .note-card .card-actions { min-width: 0; max-width: 100%; }
+  .note-card-actions button span {
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 }
 
@@ -2841,6 +2954,21 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   align-items: stretch;
   min-width: 0;
 }
+
+.note-detail-checklist { margin: 16px 0 4px; padding: 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface2); }
+.note-detail-checklist-heading { display: flex; justify-content: space-between; align-items: start; gap: 12px; }
+.note-detail-checklist-title { font-size: 0.78rem; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.note-detail-checklist-summary { margin: 3px 0 0; color: var(--text2); font-size: .78rem; }
+.note-detail-checklist-progress { flex: 0 0 auto; padding: 4px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: .75rem; font-weight: 800; }
+.note-detail-checklist-track { height: 5px; margin: 11px 0 5px; overflow: hidden; border-radius: 999px; background: var(--line); }
+.note-detail-checklist-track span { display: block; width: 0; height: 100%; border-radius: inherit; background: var(--purple); transition: width 220ms ease; }
+.note-detail-checklist.is-complete .note-detail-checklist-track span { background: var(--green); }
+.note-detail-check-item { width: 100%; display: flex; align-items: center; gap: 10px; padding: 10px 4px; color: var(--text); text-align: left; border: 0; border-bottom: 1px solid var(--line); background: transparent; border-radius: 8px; transition: background 160ms ease, color 160ms ease; }
+.note-detail-check-item:hover { background: color-mix(in srgb, var(--accent-soft) 45%, transparent); }
+.note-detail-check-item:last-child { border-bottom: 0; }
+.note-detail-check-box { display: inline-grid; place-items: center; flex: 0 0 20px; width: 20px; height: 20px; border: 1.5px solid var(--line-strong); border-radius: 6px; color: white; }
+.note-detail-check-item.is-done .note-detail-check-box { border-color: var(--purple); background: var(--purple); }
+.note-detail-check-item.is-done { color: var(--muted); text-decoration: line-through; }
 .fin-analise-grid > .panel.wide { grid-column: 1 / -1; }
 
 .fin-analysis-intro {
@@ -3549,7 +3677,7 @@ font-variant-numeric:tabular-nums;
 }
 
 .fin-cal-day {
-  aspect-ratio: 1;
+  min-height: 58px;
   border-radius: 10px;
   background: var(--surface2);
   border: 1.5px solid transparent;
@@ -3562,9 +3690,27 @@ font-variant-numeric:tabular-nums;
   color: var(--text2);
   cursor: pointer;
   transition: all 150ms;
-  gap: 2px;
-  padding: 0;
+  gap: 4px;
+  padding: 5px 2px;
 }
+
+.fin-cal-day-top { display: inline-flex; align-items: center; justify-content: center; gap: 4px; }
+
+.fin-day-balance {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text2);
+  font-size: 0.58rem;
+  font-weight: 750;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.fin-day-balance.is-negative { color: var(--red); }
+.fin-cal-day.today .fin-day-balance { color: rgba(255,255,255,.88); }
+.fin-cal-day.has-projection { box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--accent) 55%, transparent); }
 
 .fin-cal-day strong {
   font-size: 0.82rem;
@@ -3752,7 +3898,8 @@ gap:14px;
 align-items:stretch;
 }
   .fin-cal-grid { grid-template-columns: repeat(7, 1fr); gap: 3px; }
-  .fin-cal-day { font-size: 0.7rem; border-radius: 8px; }
+  .fin-cal-day { min-height: 52px; font-size: 0.7rem; border-radius: 8px; padding-inline: 1px; }
+  .fin-day-balance { font-size: 0.52rem; }
   .fin-cat-row { gap: 6px; }
   .fin-cat-info { min-width: 76px; font-size: 0.74rem; flex-shrink: 0; }
   .fin-cat-bar-wrap { min-width: 0; }
@@ -4038,13 +4185,6 @@ align-items:stretch;
 }
 .new-category-save:active { transform: translateY(1px) scale(0.99); }
 .new-category-save-icon { font-size: 1.05rem; line-height: 1; }
-.new-category-save.is-loading { opacity: 0.75; cursor: default; }
-.new-category-save.is-loading .new-category-save-icon {
-  display: inline-block;
-  animation: newCategorySpin 700ms linear infinite;
-}
-.new-category-save.is-loading .new-category-save-label::after { content: "..."; }
-@keyframes newCategorySpin { to { transform: rotate(360deg); } }
 @media (max-width: 380px) {
   .new-category-emoji-grid { grid-template-columns: repeat(5, 1fr); }
 }
@@ -4127,6 +4267,85 @@ align-items:stretch;
 .fin-closure-actions .mini-button { flex: 1; text-align: center; }
 
 /* ─── Recorrentes ─────────────────────────────────────────────── */
+.fin-recurring-suggestions {
+  margin-bottom: 14px;
+  overflow: hidden;
+}
+.fin-recurring-suggestions-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+.fin-recurring-suggestions-head h2 { margin: 2px 0 5px; }
+.fin-recurring-suggestions-head p:not(.eyebrow) {
+  margin: 0;
+  max-width: 620px;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+.fin-recurring-suggestions-count {
+  display: grid;
+  place-items: center;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 9px;
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--line));
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+.fin-recurring-suggestions-list { display: grid; gap: 0; }
+.fin-recurring-suggestion-row {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--line);
+}
+.fin-recurring-suggestion-row:last-child { border-bottom: 0; padding-bottom: 0; }
+.fin-recurring-suggestion-mark {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.fin-recurring-suggestion-mark svg { width: 18px; height: 18px; }
+.fin-recurring-suggestion-copy { min-width: 0; }
+.fin-recurring-suggestion-copy strong,
+.fin-recurring-suggestion-copy span { display: block; }
+.fin-recurring-suggestion-copy strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 0.9rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fin-recurring-suggestion-copy span {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+.fin-recurring-suggestion-amount {
+  color: var(--text);
+  font-size: 0.86rem;
+  white-space: nowrap;
+}
+.fin-recurring-suggestion-row .mini-button {
+  min-height: 34px;
+  transition: transform 140ms cubic-bezier(0.23, 1, 0.32, 1), border-color 140ms ease, background-color 140ms ease;
+}
+.fin-recurring-suggestion-row .mini-button:active { transform: scale(0.97); }
+
 .fin-recur-list { display: grid; gap: 8px; min-width: 0; overflow: hidden; }
 .fin-recur-row {
   display: flex;
@@ -4219,6 +4438,13 @@ align-items:stretch;
 .fin-recur-menu button.danger:hover { background: var(--red-soft); color: var(--red); }
 
 @media (max-width: 380px) {
+  .fin-recurring-suggestion-row {
+    grid-template-columns: 34px minmax(0, 1fr) auto;
+    gap: 9px;
+  }
+  .fin-recurring-suggestion-mark { width: 34px; height: 34px; }
+  .fin-recurring-suggestion-amount { grid-column: 2; }
+  .fin-recurring-suggestion-row .mini-button { grid-column: 3; grid-row: 1 / span 2; }
   .fin-recur-row { gap: 6px; padding: 10px; }
   .fin-recur-icon { width: 34px; height: 34px; font-size: 0.95rem; }
   .fin-recur-amount { font-size: 0.8rem; }
@@ -4422,6 +4648,24 @@ align-items:stretch;
 }
 .settings-message.success { background: var(--green-soft); color: var(--green); }
 .settings-message.error   { background: var(--red-soft);   color: var(--red); }
+
+.billing-settings-card { overflow: hidden; }
+.billing-status-badge {
+  display: inline-flex; align-items: center; min-height: 27px; padding: 5px 10px;
+  border: 1px solid var(--border); border-radius: 999px; color: var(--muted);
+  background: var(--surface2); font-size: .68rem; font-weight: 750; white-space: nowrap;
+}
+.billing-status-badge.is-active { color: var(--green); background: var(--green-soft); border-color: color-mix(in srgb,var(--green) 30%,var(--border)); }
+.billing-status-badge.is-warning { color: var(--orange); background: var(--orange-soft); border-color: color-mix(in srgb,var(--orange) 30%,var(--border)); }
+.billing-plan-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,210px),1fr)); gap: 10px; margin-top: 14px; }
+.billing-plan-card { min-width: 0; display: grid; gap: 9px; padding: 15px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface2); }
+.billing-plan-card.is-current { border-color: color-mix(in srgb,var(--accent) 62%,var(--border)); box-shadow: 0 0 0 2px color-mix(in srgb,var(--accent) 12%,transparent); }
+.billing-plan-card h3 { margin: 0; color: var(--text); font-size: .92rem; }
+.billing-plan-card p { margin: 0; color: var(--muted); font-size: .72rem; line-height: 1.45; }
+.billing-plan-price { color: var(--text); font-size: 1.14rem; font-weight: 850; letter-spacing: -.025em; }
+.billing-plan-price small { color: var(--muted); font-size: .66rem; font-weight: 650; letter-spacing: 0; }
+.billing-plan-card button { width: 100%; justify-content: center; }
+.billing-actions { margin-top: 12px; }
 
 .danger-button {
   background: var(--red-soft);
@@ -4724,29 +4968,37 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
   display: grid;
   grid-template-columns: 52px 1fr;
   align-items: start;
-  height: 56px;
+  min-height: 56px;
   gap: 8px;
 }
 .planner-timeline-hour span { font-size: 0.72rem; color: var(--muted); font-weight: 700; }
-.planner-timeline-line { border-top: 1px dashed var(--line); margin-top: 6px; }
-
-.planner-timeline-events { position: absolute; inset: 0; left: 60px; pointer-events: none; }
+.planner-timeline-slot { min-width: 0; padding-top: 6px; }
+.planner-timeline-line { border-top: 1px dashed var(--line); }
+.planner-timeline-events { display: grid; gap: 8px; padding: 8px 0 12px; }
 .planner-event-block {
-  position: absolute;
-  left: 0; right: 8px;
+  position: relative;
+  width: 100%;
   border-left: 4px solid;
   border-radius: 10px;
-  padding: 6px 10px;
+  padding: 9px 10px 9px 12px;
   font-size: 0.78rem;
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  pointer-events: auto;
+  align-items: flex-start;
+  gap: 10px;
+  background: var(--planner-event-bg);
+  border-color: var(--planner-event-border);
+  cursor: pointer;
   box-shadow: var(--shadow-card);
+  transition: transform 160ms ease, box-shadow 160ms ease, filter 160ms ease;
 }
-.planner-event-block strong { font-size: 0.82rem; color: var(--text); }
-.planner-event-block span { font-size: 0.72rem; color: var(--text2); }
-.planner-event-block .mini-button { align-self: flex-end; margin-top: 2px; }
+.planner-event-block:hover { box-shadow: var(--shadow-card-hover); transform: translateY(-1px); }
+.planner-event-block-main { display: grid; min-width: 0; flex: 1; gap: 3px; }
+.planner-event-block strong { font-size: 0.84rem; color: var(--text); overflow-wrap: anywhere; }
+.planner-event-block span, .planner-event-block small { font-size: 0.72rem; color: var(--text2); overflow-wrap: anywhere; }
+.planner-event-block small { line-height: 1.35; }
+.planner-event-actions { display: flex; gap: 5px; flex-shrink: 0; }
+.planner-event-actions .mini-button { width: 30px; height: 30px; display: grid; place-items: center; padding: 0; }
+.planner-timeline-section-label { font-size: 0.72rem; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
 
 /* ---------- Placeholder das visões que chegam nas próximas etapas ---------- */
 .planner-placeholder {
@@ -4800,8 +5052,7 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
     box-shadow: 0 6px 16px color-mix(in srgb, var(--accent) 35%, transparent);
   }
 
-  .planner-timeline-hour { grid-template-columns: 42px 1fr; height: 50px; }
-  .planner-timeline-events { left: 50px; }
+  .planner-timeline-hour { grid-template-columns: 42px 1fr; min-height: 50px; }
 
   /* Áreas de toque reais de 44px sem sacrificar os controles do desktop. */
   #plannerView .planner-header-actions > button,
@@ -4812,6 +5063,9 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
   .planner-inline-add-form button { min-height: 40px; height: 40px; }
   .reminder-custom-field { align-items: stretch; }
   .reminder-custom-field input { flex: 1 1 76px; }
+  .planner-event-block { padding: 8px 9px 8px 10px; gap: 8px; }
+  .planner-event-actions { gap: 4px; }
+  .planner-event-actions .mini-button { width: 34px; height: 34px; }
 }
 
 @media (max-width: 460px) {
@@ -5436,8 +5690,9 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
   border-radius: 0;
   padding: 0;
   min-height: 0;
+  min-width: 0;
 }
-@media (min-width: 720px) {
+@media (min-width: 721px) {
   .note-detail-backdrop { padding: 20px; }
   .note-detail-card {
     position: static;
@@ -5517,25 +5772,52 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
   font-size: 0.85rem;
 }
 .nd-tool-btn:active { transform: scale(0.94); }
+.nd-color-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+}
+.nd-color-label {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
 .nd-swatch {
   width: 28px; height: 28px; flex-shrink: 0;
   border-radius: 50%;
   border: 2px solid transparent;
   box-shadow: inset 0 0 0 1.5px rgba(0,0,0,0.15);
+  cursor: pointer;
 }
 .nd-swatch:active { transform: scale(0.9); }
-.nd-swatch.is-selected { border-color: var(--text); }
+.nd-swatch.is-selected,
+.nd-swatch[aria-pressed="true"] {
+  border-color: var(--text);
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent);
+}
 
-.note-detail-body {
+.note-detail-scroll {
   flex: 1;
-  min-height: 0; /* a correção principal — ver comentário no topo do bloco */
+  min-height: 0;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+.note-detail-body {
+  min-height: 132px;
   padding: 16px 20px 20px;
   font-size: 0.95rem;
   line-height: 1.55;
   color: var(--text);
+  overflow-wrap: anywhere;
 }
+.note-detail-scroll .note-detail-checklist { margin: 0 20px 20px; }
 .note-detail-body:focus { outline: none; }
 .note-detail-body:empty::before {
   content: attr(data-placeholder);
@@ -5563,8 +5845,61 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
   flex-shrink: 0;
   flex-wrap: wrap;
 }
-.note-detail-footer .ghost-button { flex-shrink: 0; }
-.note-detail-footer .primary-button { margin-left: auto; flex-shrink: 0; }
+.note-detail-footer .ghost-button,
+.note-detail-footer .primary-button {
+  width: auto;
+  min-width: 0;
+  flex: 1 1 0;
+  justify-content: center;
+}
+.note-detail-footer .primary-button { margin-left: 0; }
+
+@media (max-width: 720px) {
+  body.note-detail-open .bottom-nav { display: none; }
+  body.note-detail-open .app-shell { z-index: 200; }
+
+  .note-detail-card { width: 100vw; max-width: 100vw; }
+  .note-detail-body { font-size: 1rem; }
+  .note-detail-meta-row { align-items: flex-start; flex-wrap: wrap; min-width: 0; }
+  .note-detail-meta-row .note-detail-meta { min-width: 0; overflow-wrap: anywhere; }
+  .note-detail-more-link { white-space: normal; text-align: left; }
+  .note-detail-toolbar {
+    margin: 0 12px;
+    padding: 8px 10px;
+    gap: 8px;
+    flex-wrap: wrap;
+    overflow-x: hidden;
+  }
+  .nd-color-group {
+    order: 2;
+    flex: 1 1 100%;
+    justify-content: center;
+    gap: 10px;
+    padding: 6px 8px;
+  }
+  .nd-color-label { display: none; }
+  .note-detail-check-item { min-width: 0; }
+  .note-detail-check-item > span:last-child { min-width: 0; overflow-wrap: anywhere; }
+
+  .note-detail-footer {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    padding-inline: 12px;
+  }
+  .note-detail-footer .ghost-button,
+  .note-detail-footer .primary-button {
+    width: 100%;
+    max-width: 100%;
+    padding-inline: 8px;
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 380px) {
+  .note-detail-footer .ghost-button,
+  .note-detail-footer .primary-button { font-size: 0.78rem; }
+}
 
 /* ─── Planner: paleta vibrante (referência TaskifyAI) ────────────
    Só aqui, escopado com o prefixo #plannerView — não muda a cara do
@@ -5574,14 +5909,14 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
    overflow nenhum aqui, só cor/sombra/gradiente, exatamente pra não
    correr o risco de um bug estrutural como o da nota em tela cheia. */
 #plannerView .planner-header {
-  padding: 18px 20px;
+  padding: 20px 22px;
   border-radius: 20px;
   background:
-    radial-gradient(circle at 15% 20%, color-mix(in srgb, var(--teal) 42%, transparent), transparent 55%),
-    radial-gradient(circle at 85% 15%, rgba(191,90,242,0.32), transparent 55%),
-    radial-gradient(circle at 60% 90%, rgba(10,132,255,0.3), transparent 60%),
-    var(--surface2);
-  border: 1.5px solid var(--line);
+    radial-gradient(circle at 10% 0%, color-mix(in srgb, var(--teal) 28%, transparent), transparent 42%),
+    radial-gradient(circle at 92% 8%, color-mix(in srgb, var(--purple) 30%, transparent), transparent 44%),
+    linear-gradient(110deg, color-mix(in srgb, var(--surface) 74%, var(--teal-soft)), color-mix(in srgb, var(--surface) 70%, var(--accent-soft)));
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--line));
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--accent) 12%, transparent);
 }
 #plannerView .planner-header-title .eyebrow { color: var(--text2); }
 #plannerView .planner-header-title h2 { color: var(--text); }
@@ -5641,10 +5976,350 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
 #plannerView .status-Cancelada    { background: #ff375f; color: #fff; }
 
 #plannerView .planner-goal-chip {
-  background: var(--surface);
-  border-color: transparent;
-  border-top: 4px solid #bf5af2;
+  background: linear-gradient(145deg, var(--surface), color-mix(in srgb, var(--surface) 82%, var(--purple-soft)));
+  border-color: color-mix(in srgb, var(--purple) 18%, var(--line));
+  border-top: 4px solid var(--purple);
   border-radius: 18px;
+}
+
+#plannerView .planner-goal-progress-control {
+  display: grid;
+  grid-template-columns: auto minmax(72px, 1fr) 58px auto;
+  align-items: center;
+  gap: 8px;
+  color: var(--text2);
+  font-size: .76rem;
+  font-weight: 700;
+}
+#plannerView .planner-goal-progress-control input[type="range"] { accent-color: var(--purple); min-width: 0; }
+#plannerView .planner-goal-number { min-width: 0; width: 58px; padding: 6px 5px; text-align: center; }
+#plannerView .planner-row--interactive,
+#plannerView .planner-event-block--interactive { cursor: pointer; }
+#plannerView .planner-row--interactive:hover { box-shadow: 0 9px 20px rgba(36, 35, 70, .09); }
+#plannerView .planner-event-block--interactive:hover { filter: saturate(1.15); transform: translateX(2px); }
+.whatsapp-quick-card .dash-panel-body { display: grid; gap: 12px; }
+.whatsapp-quick-card .ghost-button { justify-self: start; }
+
+/* O painel de metas precisa parecer parte do mesmo Planner, mas sem virar
+   uma caixa branca estourada no Aurora/Eclipse. As misturas usam os tokens
+   do tema ativo; por isso claro, Aurora, Eclipse e automático preservam
+   contraste sem duplicar uma paleta para cada tema. */
+#plannerView .planner-goals-panel {
+  border-color: color-mix(in srgb, var(--accent) 15%, var(--line));
+  background: linear-gradient(150deg, var(--surface), color-mix(in srgb, var(--surface) 90%, var(--accent-soft)));
+}
+#plannerView .planner-goals-panel .panel-header {
+  padding-bottom: 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 10%, var(--line));
+}
+#plannerView .planner-goal-chip .progress-track {
+  background: color-mix(in srgb, var(--purple) 14%, var(--line));
+}
+#plannerView .planner-goal-chip .progress-track > div {
+  background: linear-gradient(90deg, var(--accent), var(--purple), var(--teal)) !important;
+}
+#plannerView .planner-goal-stepper,
+#plannerView .planner-goal-ms-toggle {
+  min-height: 38px;
+}
+
+/* Planner mobile: uma hierarquia curta e previsível. O desktop continua
+   usando a composição horizontal; abaixo de 720px, cada região recebe um
+   lugar fixo para que textos longos, metas e ações nunca disputem largura. */
+@media (max-width: 720px) {
+  #plannerView,
+  #plannerView .planner-shell,
+  #plannerView .planner-header,
+  #plannerView .planner-header-actions,
+  #plannerView .planner-goals-panel,
+  #plannerView .planner-goal-chip,
+  #plannerView .planner-subview,
+  #plannerView .planner-list-body,
+  #plannerView .planner-section,
+  #plannerView .planner-section-body { min-width: 0; }
+
+  #plannerView .planner-shell { gap: 12px; }
+  #plannerView .planner-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "title progress"
+      "actions actions";
+    align-items: center;
+    padding: 13px;
+    border-radius: 17px;
+    gap: 10px 12px;
+  }
+  #plannerView .planner-header-title { grid-area: title; min-width: 0; }
+  #plannerView .planner-header-title .eyebrow { margin-bottom: 2px; font-size: .67rem; }
+  #plannerView .planner-header-title h2 {
+    font-size: 1rem;
+    line-height: 1.24;
+    overflow-wrap: anywhere;
+  }
+  #plannerView .planner-progress-ring {
+    grid-area: progress;
+    justify-self: end;
+    gap: 6px;
+  }
+  #plannerView .planner-progress-ring svg { width: 42px; height: 42px; }
+  #plannerView .planner-ring-label strong { font-size: .86rem; }
+  #plannerView .planner-ring-label span,
+  #plannerView .planner-ring-empty { font-size: .63rem; }
+  #plannerView .planner-ring-empty { text-align: right; }
+
+  #plannerView .planner-header-actions {
+    grid-area: actions;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+    gap: 7px;
+    width: 100%;
+  }
+  #plannerView #plannerNewTaskBtn {
+    width: 100%;
+    min-height: 38px;
+    justify-content: center;
+    flex: none;
+  }
+  #plannerView .planner-tabs.segmented {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    width: 100%;
+    gap: 4px;
+    padding: 4px;
+    overflow: visible;
+  }
+  #plannerView .planner-tabs.segmented button {
+    min-width: 0;
+    min-height: 48px;
+    padding: 5px 2px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    border-radius: 10px;
+    font-size: .68rem;
+    line-height: 1.1;
+    overflow: hidden;
+  }
+  #plannerView .planner-tabs.segmented button svg { width: 14px; height: 14px; }
+  #plannerView .planner-tabs.segmented button span {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  #plannerView .planner-goals-panel {
+    padding: 12px;
+    border-radius: 17px;
+  }
+  #plannerView .planner-goals-panel .panel-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    padding-bottom: 8px;
+  }
+  #plannerView .planner-goals-panel .panel-header h2 { font-size: .92rem; }
+  #plannerView #plannerNewGoalBtn {
+    width: auto;
+    min-width: 0;
+    min-height: 36px;
+    padding-inline: 10px;
+    flex: none;
+    white-space: nowrap;
+  }
+  #plannerView .planner-goals-strip { gap: 8px; }
+  #plannerView .planner-goal-chip {
+    width: 100%;
+    padding: 10px 11px;
+    gap: 8px;
+    border-top-width: 3px;
+    border-radius: 15px;
+  }
+  #plannerView .planner-goal-chip-top { min-width: 0; align-items: flex-start; }
+  #plannerView .planner-goal-chip-top strong {
+    min-width: 0;
+    white-space: normal;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+  }
+  #plannerView .planner-goal-chip-top .pill { flex: 0 0 auto; }
+  #plannerView .planner-goal-chip .progress-track { height: 6px; min-width: 0; }
+  #plannerView .planner-goal-progress-control {
+    grid-template-columns: minmax(72px, 1fr) 52px auto;
+    gap: 6px;
+    min-width: 0;
+  }
+  #plannerView .planner-goal-progress-control > span:first-child { display: none; }
+  #plannerView .planner-goal-progress-control input[type="range"] { width: 100%; }
+  #plannerView .planner-goal-number {
+    width: 52px;
+    min-height: 36px;
+    padding: 5px 4px;
+  }
+  #plannerView .planner-goal-progress-control .task-meta {
+    white-space: nowrap;
+    font-size: .7rem;
+  }
+  #plannerView .planner-goal-chip-controls {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) 38px;
+    align-items: center;
+    gap: 6px;
+  }
+  #plannerView .planner-goal-stepper {
+    display: grid;
+    grid-template-columns: repeat(2, 36px);
+    gap: 5px;
+  }
+  #plannerView .planner-goal-stepper .task-meta { display: none; }
+  #plannerView .planner-goal-stepper .mini-button,
+  #plannerView .planner-goal-chip-controls > .planner-row-delete {
+    width: 36px;
+    min-width: 36px;
+    height: 36px;
+    min-height: 36px;
+    padding: 0;
+    flex: none;
+  }
+  #plannerView .planner-goal-chip-controls > .planner-row-delete {
+    width: 38px;
+    min-width: 38px;
+  }
+  #plannerView .planner-goal-ms-toggle {
+    width: 100%;
+    min-width: 0;
+    min-height: 36px;
+    padding-inline: 8px;
+  }
+  #plannerView .planner-goal-ms-toggle span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  #plannerView .planner-goal-milestones { min-width: 0; }
+  #plannerView .planner-goal-milestones .goal-milestone-row { min-width: 0; }
+  #plannerView .planner-goal-milestones .goal-milestone-row > span {
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  #plannerView .planner-goals-strip > .empty-state-pro { padding: 24px 12px; }
+
+  #plannerView .planner-list-body { gap: 14px; }
+  #plannerView .planner-section { gap: 7px; }
+  #plannerView .planner-section-title { min-width: 0; font-size: .77rem; }
+  #plannerView .planner-section-title-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+  }
+  #plannerView .planner-section-body { gap: 8px; }
+  #plannerView .planner-row {
+    width: 100%;
+    min-width: 0;
+    padding: 10px;
+    border-radius: 14px;
+  }
+  #plannerView .planner-row-head { min-width: 0; gap: 8px; align-items: flex-start; }
+  #plannerView .planner-row-main { min-width: 0; gap: 5px; padding-top: 2px; }
+  #plannerView .planner-row-main strong {
+    min-width: 0;
+    font-size: .88rem;
+    line-height: 1.28;
+    overflow-wrap: anywhere;
+  }
+  #plannerView .planner-row-meta { min-width: 0; gap: 4px 5px; }
+  #plannerView .planner-row-meta > * { max-width: 100%; min-width: 0; }
+  #plannerView .planner-row-meta .priority-pill,
+  #plannerView .planner-row-meta .status-pill {
+    padding: 3px 8px;
+    font-size: .68rem;
+  }
+  #plannerView .planner-row-meta .task-meta {
+    display: inline-flex;
+    align-items: center;
+    font-size: .7rem;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+  }
+  #plannerView .planner-row-kebab {
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    border-radius: 10px;
+  }
+  #plannerView .task-subtasks { min-width: 0; }
+  #plannerView .task-subtask-row { min-width: 0; }
+  #plannerView .task-subtask-row > span {
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  /* Compromissos têm editar e excluir. Empilhar as duas ações preserva
+     alvos de toque de 36px sem reduzir o espaço reservado ao título. */
+  #plannerView .planner-row--event .planner-row-head {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) 36px;
+    grid-template-rows: repeat(2, 36px);
+    align-items: start;
+  }
+  #plannerView .planner-row--event .planner-row-time {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    min-width: 44px;
+    padding-inline: 6px;
+  }
+  #plannerView .planner-row--event .planner-row-main {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+  #plannerView .planner-row--event .planner-row-head > .mini-button {
+    grid-column: 3;
+    grid-row: 1;
+    width: 36px;
+    min-width: 36px;
+    height: 36px;
+    min-height: 36px;
+    padding: 0;
+    flex: none;
+  }
+  #plannerView .planner-row--event .planner-row-head > .planner-row-delete { grid-row: 2; }
+
+  #plannerView .planner-day-nav-label { min-width: 0; }
+  #plannerView .planner-day-nav-label strong {
+    max-width: min(58vw, 280px);
+    font-size: .88rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  #plannerView .planner-day-allday-panel,
+  #plannerView .planner-day-timeline-panel { padding: 12px; }
+  #plannerView .planner-event-block { min-width: 0; }
+  #plannerView .planner-event-actions { flex-direction: column; }
+  #plannerView .planner-week-day { padding: 10px; border-radius: 15px; }
+
+  .whatsapp-quick-card .ghost-button { width: 100%; justify-content: center; }
+}
+
+@media (max-width: 360px) {
+  #plannerView .planner-header { padding: 11px; }
+  #plannerView .planner-tabs.segmented button { font-size: .63rem; }
+  #plannerView .planner-tabs.segmented button svg { width: 13px; height: 13px; }
+  #plannerView .planner-goals-panel { padding: 10px; }
+  #plannerView #plannerNewGoalBtn { padding-inline: 8px; font-size: .72rem; }
+  #plannerView .planner-goal-progress-control { grid-template-columns: minmax(56px, 1fr) 48px auto; gap: 5px; }
+  #plannerView .planner-goal-number { width: 48px; }
 }
 
 /* Faixa horizontal de dias na visão "Dia" do Planner (referência

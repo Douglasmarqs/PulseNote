@@ -18,6 +18,16 @@ import {
 // tela de login, mostramos "Bem-vindo de volta" em vez da mensagem de
 // boas-vindas de quem nunca usou o PulseNote aqui (ver script no login.html).
 const KNOWN_DEVICE_KEY = "pulsenote_known_device";
+// O retorno do login só aceita rotas internas conhecidas. Nunca use uma URL
+// arbitrária da query string como destino após autenticar.
+const authParams = new URLSearchParams(window.location.search);
+const postAuthPath = authParams.get("next") === "/admin" ? "/admin" : "/app";
+const switchingAdminAccount = postAuthPath === "/admin" && authParams.get("switch") === "1";
+
+function finishSignIn() {
+  markDeviceAsKnown();
+  window.location.replace(postAuthPath);
+}
 
 function markDeviceAsKnown() {
   try { localStorage.setItem(KNOWN_DEVICE_KEY, "1"); } catch (e) {}
@@ -74,8 +84,7 @@ async function signInWithGoogle() {
       try { await signOut(auth); } catch (e) {}
     }
     await signInWithPopup(auth, googleProvider);
-    markDeviceAsKnown();
-    window.location.replace("/app");
+    finishSignIn();
   } catch (err) {
     console.error("Google sign-in error:", err.code, err.message);
     // Pop-up bloqueado/indisponível (comum em PWA instalado e navegadores
@@ -99,8 +108,7 @@ document.querySelectorAll("[data-google-signin]").forEach((btn) => {
 // confirma o resultado quando a página recarregar.
 getRedirectResult(auth).then((result) => {
   if (result?.user) {
-    markDeviceAsKnown();
-    window.location.replace("/app");
+    finishSignIn();
   }
 }).catch((err) => {
   if (err?.code) console.error("Erro ao concluir login com Google:", err.code, err.message);
@@ -113,10 +121,9 @@ const unsubscribeAuthCheck = onAuthStateChanged(auth, (user) => {
   const isAuthPage = path === "/login" || path.endsWith("/login")
     || path === "/"
     || path.endsWith("/");
-  if (user && isAuthPage) {
-    markDeviceAsKnown();
-    window.location.replace("/app");
-  }
+  // Quem pediu explicitamente para trocar de conta precisa poder usar o
+  // botão Google, mesmo com uma sessão anterior ainda ativa neste domínio.
+  if (user && isAuthPage && !switchingAdminAccount) finishSignIn();
 });
 
 // ── Helpers UI ─────────────────────────────────────────────────
@@ -215,8 +222,7 @@ if (loginForm) {
     const password = document.getElementById("loginPassword").value;
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      markDeviceAsKnown();
-      window.location.replace("/app");
+      finishSignIn();
     } catch (err) {
       console.error("Login error:", err.code, err.message);
       showError("loginError", translateAuthError(err.code));
@@ -265,8 +271,7 @@ if (registerForm) {
       try { await sendEmailVerification(credential.user); }
       catch (verifyErr) { console.error("Erro ao enviar verificação:", verifyErr); }
       // Cadastro OK → vai para o app (que vai exigir a confirmação do e-mail)
-      markDeviceAsKnown();
-      window.location.replace("/app");
+      finishSignIn();
     } catch (err) {
       console.error("Register error:", err.code, err.message);
       showError("registerError", translateAuthError(err.code));

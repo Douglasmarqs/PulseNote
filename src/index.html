@@ -2,7 +2,7 @@
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
     <title>PulseNote - Produtividade pessoal</title>
 
     <!-- Aplica o tema (claro/escuro/sistema) ANTES da primeira pintura da
@@ -17,7 +17,7 @@
          "vencida" pela media query certa). Agora o valor é calculado
          aqui, de forma síncrona, junto com o data-theme, para não
          piscar; e o app.js mantém sincronizado quando o tema muda. -->
-    <meta name="theme-color" id="themeColorMeta" content="#f5f7fa" />
+    <meta name="theme-color" id="themeColorMeta" content="#f7f8fc" />
     <!-- Diz ao navegador/OS qual esquema de cor a página está usando de fato,
          independente do tema do aparelho. Sem isso, controles nativos (menu
          do <select>, calendário do <input type="date">, barra de rolagem,
@@ -32,15 +32,20 @@
           var isDark = t === "aurora" || t === "eclipse" || ((t !== "light") && window.matchMedia("(prefers-color-scheme: dark)").matches);
           if (t === "light" || t === "aurora" || t === "eclipse") document.documentElement.setAttribute("data-theme", t);
           var meta = document.getElementById("themeColorMeta");
-          if (meta) meta.setAttribute("content", t === "eclipse" ? "#000000" : (isDark ? "#060a18" : "#f5f7fa"));
+          if (meta) meta.setAttribute("content", t === "eclipse" ? "#060a13" : (isDark ? "#0a1020" : "#f7f8fc"));
           var csMeta = document.getElementById("colorSchemeMeta");
           if (csMeta) csMeta.setAttribute("content", isDark ? "dark" : "light");
+          // Alguns atalhos/PWAs do iOS restaurados reportam os insets da
+          // área segura como zero. A classe permite um fallback de layout
+          // antes da primeira pintura, sem afetar o site no navegador.
+          var isStandalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+          if (isStandalone) document.documentElement.classList.add("is-standalone");
         } catch (e) {}
       })();
     </script>
 
     <!-- PWA: instalação e ícone na tela inicial -->
-    <link rel="manifest" href="manifest.json" />
+    <link rel="manifest" href="manifest.json?v=20260922" />
     <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png" />
     <link rel="shortcut icon" href="favicon.ico" />
@@ -55,94 +60,130 @@
     <link rel="dns-prefetch" href="https://www.gstatic.com" />
 
     <!-- iOS: ícone e comportamento de app instalado -->
-    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=20260922" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="PulseNote" />
 
-    <link rel="stylesheet" href="/src/styles.css" />
-    <link rel="stylesheet" href="/src/auth.css" />
+    <link rel="stylesheet" href="/src/styles.css?v=36" />
+    <link rel="stylesheet" href="/src/auth.css?v=37" />
+    <!-- Camada responsiva final: concentra os ajustes mobile do app em um
+         único arquivo, carregado depois da base para evitar regras dispersas
+         competindo entre si. -->
+    <link rel="stylesheet" href="/src/mobile.css?v=36" />
+    <link rel="stylesheet" href="/src/autopilot.css?v=36" />
+    <link rel="stylesheet" href="/src/premium.css?v=37" />
+    <!-- Sistema visual definitivo. Carrega por ultimo para unificar as
+         camadas historicas sem alterar a logica ou os dados do produto. -->
+    <link rel="stylesheet" href="/src/product-system.css?v=2" />
+    <!-- Camada de experiência: uma linguagem única para todas as áreas. -->
+    <link rel="stylesheet" href="/src/experience.css?v=3" />
+    <!-- Sistema visual dos quadros (claro/escuro, desktop/mobile). Carrega por último. -->
+    <link rel="stylesheet" href="/src/boards.css?v=1" />
   </head>
-  <body>
-    <div class="app-shell">
+  <body class="bd">
+    <!-- Ícones do sistema visual (use: <svg class="i"><use href="#i-nome"/></svg>) -->
+    <svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+      <defs>
+        <linearGradient id="bdLogoGrad" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#4f7bff"/><stop offset="1" stop-color="#22d3ee"/></linearGradient>
+        <symbol id="i-logo" viewBox="0 0 32 32"><path d="M2 17h5.5l3.2-8 5.1 15 3.6-9.5 1.6 2.5H30" fill="none" stroke="url(#bdLogoGrad)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+        <symbol id="i-home" viewBox="0 0 24 24"><path d="M4 11.2L12 4l8 7.2"/><path d="M6 10v9a1 1 0 001 1h3.5v-5.5h3V20H17a1 1 0 001-1v-9"/></symbol>
+        <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></symbol>
+        <symbol id="i-note" viewBox="0 0 24 24"><path d="M14 3H7.5A2.5 2.5 0 005 5.5v13A2.5 2.5 0 007.5 21h9a2.5 2.5 0 002.5-2.5V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></symbol>
+        <symbol id="i-bars" viewBox="0 0 24 24"><path d="M5 20v-8M12 20V5M19 20v-5"/></symbol>
+        <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2.5L4.5 14H11l-1 7.5L19.5 10H13z"/></symbol>
+        <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.9l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.9-.3 1.7 1.7 0 00-1 1.6V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1-1.6 1.7 1.7 0 00-1.9.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.9 1.7 1.7 0 00-1.6-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.6-1 1.7 1.7 0 00-.3-1.9l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.9.3H9a1.7 1.7 0 001-1.6V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.6 1.7 1.7 0 001.9-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.9V9a1.7 1.7 0 001.6 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></symbol>
+        <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 9a6 6 0 0112 0c0 6.5 2.5 8 2.5 8h-17S6 15.500 6 9"/><path d="M10.200 20.500a2 2 0 003.600 0"/></symbol>
+        <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4-4"/></symbol>
+        <symbol id="i-chev-down" viewBox="0 0 24 24"><path d="M6 9.500l6 6 6-6"/></symbol>
+        <symbol id="i-chev-right" viewBox="0 0 24 24"><path d="M9.500 6l6 6-6 6"/></symbol>
+        <symbol id="i-chev-left" viewBox="0 0 24 24"><path d="M14.500 6l-6 6 6 6"/></symbol>
+        <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+        <symbol id="i-arrow-up" viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></symbol>
+        <symbol id="i-arrow-down" viewBox="0 0 24 24"><path d="M12 5v14M6 13l6 6 6-6"/></symbol>
+        <symbol id="i-wallet" viewBox="0 0 24 24"><path d="M19.500 7H5.500a2 2 0 010-4H18v4"/><path d="M3.500 5.500V18a2.500 2.500 0 002.500 2.500h13.500V7"/><circle cx="16" cy="13.500" r="1.100"/></symbol>
+        <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.500M12 7.700v.1"/></symbol>
+        <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8.500" r="3.700"/><path d="M4.500 20a7.500 7.500 0 0115 0"/></symbol>
+        <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8.500" r="3.300"/><path d="M2.800 19.500a6.200 6.200 0 0112.400 0"/><path d="M16 5.400a3.300 3.300 0 010 6.200M18.500 14.200a6.200 6.200 0 012.700 5.300"/></symbol>
+        <symbol id="i-house" viewBox="0 0 24 24"><path d="M3.500 11L12 3.800 20.500 11"/><path d="M5.500 9.500V20h13V9.500"/><path d="M10 20v-5h4v5"/></symbol>
+        <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M10.500 3l1.800 5.200L17.500 10l-5.200 1.800L10.500 17l-1.800-5.200L3.500 10l5.200-1.800z"/><path d="M18.500 14.500l.8 2.200 2.200.8-2.200.8-.8 2.200-.8-2.200-2.200-.8 2.200-.8z"/></symbol>
+        <symbol id="i-send" viewBox="0 0 24 24"><path d="M21.500 2.500L10.500 13.500"/><path d="M21.500 2.500l-6.800 19-4.200-8.200L2.300 9.200z"/></symbol>
+        <symbol id="i-dots-v" viewBox="0 0 24 24"><circle cx="12" cy="5.500" r="1.300" fill="currentColor"/><circle cx="12" cy="12" r="1.300" fill="currentColor"/><circle cx="12" cy="18.500" r="1.300" fill="currentColor"/></symbol>
+        <symbol id="i-dots-h" viewBox="0 0 24 24"><circle cx="5.500" cy="12" r="1.300" fill="currentColor"/><circle cx="12" cy="12" r="1.300" fill="currentColor"/><circle cx="18.500" cy="12" r="1.300" fill="currentColor"/></symbol>
+        <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.500l4.500 4.500L19 7.500"/></symbol>
+        <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+        <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+        <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.500"/><path d="M12 7.500V12l3 2"/></symbol>
+        <symbol id="i-bell-ring" viewBox="0 0 24 24"><path d="M6 9a6 6 0 0112 0c0 6.500 2.500 8 2.500 8h-17S6 15.500 6 9"/><path d="M10.200 20.500a2 2 0 003.600 0M3 6.500a9 9 0 012.300-3M21 6.500a9 9 0 00-2.300-3"/></symbol>
+        <symbol id="i-card" viewBox="0 0 24 24"><rect x="2.500" y="5" width="19" height="14" rx="2.800"/><path d="M2.500 10h19M6.500 15h3"/></symbol>
+        <symbol id="i-wifi" viewBox="0 0 24 24"><path d="M2.500 9a14 14 0 0119 0M5.500 12.500a9.500 9.500 0 0113 0M8.500 16a5 5 0 017 0"/><circle cx="12" cy="19.200" r=".9" fill="currentColor"/></symbol>
+        <symbol id="i-task-check" viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="17" rx="2.500"/><path d="M9 4h6v3H9z"/><path d="M9 14l2.200 2.200L15.500 12"/></symbol>
+        <symbol id="i-fork" viewBox="0 0 24 24"><path d="M7 3v7a2 2 0 01-2 2H5M7 3v18M4.500 3v6M9.500 3v6"/><path d="M17.500 3c-2 1.500-3 4-3 7 0 1.800 1 3 3 3V3zM17.500 13v8"/></symbol>
+        <symbol id="i-car" viewBox="0 0 24 24"><path d="M5 16l1.600-5a2 2 0 011.900-1.400h7a2 2 0 011.900 1.400L19 16"/><rect x="3" y="16" width="18" height="4" rx="1.500"/><path d="M6.500 20v1.500M17.500 20v1.500"/></symbol>
+        <symbol id="i-heart" viewBox="0 0 24 24"><path d="M12 20s-7.500-4.600-7.500-10.300A4.200 4.200 0 0112 7.500a4.200 4.200 0 017.500 2.200C19.500 15.400 12 20 12 20z"/></symbol>
+        <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 3.500l9 4.800-9 4.800-9-4.800z"/><path d="M3 12.500l9 4.800 9-4.800M3 16.700l9 4.800 9-4.800"/></symbol>
+        <symbol id="i-dots-circle" viewBox="0 0 24 24"><circle cx="5.500" cy="12" r="1.200" fill="currentColor"/><circle cx="12" cy="12" r="1.200" fill="currentColor"/><circle cx="18.500" cy="12" r="1.200" fill="currentColor"/></symbol>
+        <symbol id="i-trophy" viewBox="0 0 24 24"><path d="M7 4h10v5a5 5 0 01-10 0zM7 6H4v1.500A3.500 3.500 0 007.500 11M17 6h3v1.500A3.500 3.500 0 0116.500 11M12 14v4M8.500 20.500h7"/></symbol>
+      </defs>
+    </svg>
+    <div class="bd-shell">
 
       <!-- ========== SIDEBAR (desktop) ========== -->
-      <aside class="sidebar">
-        <div class="brand">
-          <div class="brand-mark"><span></span></div>
-          <div>
-            <strong>PulseNote</strong>
-            <span>Produtividade divertida</span>
-          </div>
-        </div>
+      <aside class="bd-sidebar" aria-label="Barra lateral">
+        <a class="bd-brand" href="#" data-nav-home aria-label="PulseNote — Início">
+          <svg class="bd-brand-mark"><use href="#i-logo"/></svg>
+          <strong>PulseNote</strong>
+        </a>
 
-        <nav class="nav-list" aria-label="Navegação principal">
-          <button class="nav-item active" data-view="dashboard">
-            <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11.5L12 4l8 7.5"/><path d="M6.5 10v8.5a1 1 0 001 1H10v-6h4v6h2.5a1 1 0 001-1V10"/></svg></span>
-            <span>Início</span>
-          </button>
-          <!-- NOVO: hub unificado (Lista/Dia/Semana/Mês) que substitui
-               Tarefas + Agenda + Metas — inspirado no app Calendars.
-               As 3 telas antigas continuam abaixo por enquanto (ver
-               data-view="tasks|calendar|goals"), só até a migração
-               terminar nas próximas etapas; depois são removidas. -->
-          <button class="nav-item" data-view="planner">
-            <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17"/><path d="M8 3v4"/><path d="M16 3v4"/><path d="M8.5 14l2 2 4-4"/></svg></span>
-            <span>Planner</span>
-          </button>
-          <button class="nav-item" data-view="notes">
-            <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h8"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></span>
-            <span>Notas</span>
-          </button>
-          <button class="nav-item" data-view="finances">
-            <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8a2 2 0 012-2h11a2 2 0 012 2"/><rect x="3" y="8" width="18" height="11" rx="2"/><path d="M16.3 13.2h1.7"/></svg></span>
-            <span>Finanças</span>
-          </button>
-          <button class="nav-item" data-view="profile">
-            <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8.5" r="3.5"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></svg></span>
-            <span>Perfil</span>
-          </button>
-          <button class="nav-item" data-view="settings">
-            <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.9l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.9-.3 1.7 1.7 0 00-1 1.6V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1-1.6 1.7 1.7 0 00-1.9.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.9V15a1.7 1.7 0 00-1.6-1H3a2 2 0 110-4h.1A1.7 1.7 0 004.7 9a1.7 1.7 0 00-.3-1.9l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.9.3H9a1.7 1.7 0 001-1.6V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.6 1.7 1.7 0 001.9-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.9V9a1.7 1.7 0 001.6 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.6 1z"/></svg></span>
-            <span>Configurações</span>
-          </button>
+        <nav class="bd-nav" aria-label="Navegação principal">
+          <button type="button" class="bd-nav-item active" data-nav data-view="dashboard"><svg class="i"><use href="#i-home"/></svg><span>Início</span></button>
+          <button type="button" class="bd-nav-item" data-nav data-view="planner"><svg class="i"><use href="#i-calendar"/></svg><span>Planner</span></button>
+          <button type="button" class="bd-nav-item" data-nav data-view="notes"><svg class="i"><use href="#i-note"/></svg><span>Notas</span></button>
+          <button type="button" class="bd-nav-item" data-nav data-view="finances"><svg class="i"><use href="#i-bars"/></svg><span>Finanças</span></button>
+          <button type="button" class="bd-nav-item" data-nav data-view="autopilot"><svg class="i"><use href="#i-bolt"/></svg><span>Autopilot</span></button>
         </nav>
 
-        <div class="sidebar-footer">
-          <div class="streak-box">
-            <span class="muted">🔥 Sequência</span>
-            <strong id="streakCount">0 dias</strong>
-          </div>
+        <button type="button" class="bd-side-pulsinho" data-view-shortcut="dashboard" data-focus-chat aria-label="Abrir conversa com o Pulsinho">
+          <svg class="i"><use href="#i-sparkle"/></svg>
+          <strong>Pulsinho</strong>
+          <span>Seu copiloto de produtividade e finanças.</span>
+          <svg class="bd-side-wave" viewBox="0 0 200 60" preserveAspectRatio="none" aria-hidden="true">
+            <defs><linearGradient id="bdSideWaveA" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#5b4ff5" stop-opacity=".1"/><stop offset=".55" stop-color="#4f7bff" stop-opacity=".55"/><stop offset="1" stop-color="#22d3ee" stop-opacity=".75"/></linearGradient></defs>
+            <path d="M0 52C34 50 52 40 84 38s54 6 82-14c12-8 24-14 34-18v54H0z" fill="url(#bdSideWaveA)"/>
+            <path d="M0 46C36 46 56 32 88 31s56 4 82-16c10-7 20-11 30-13" fill="none" stroke="#7aa2ff" stroke-opacity=".55" stroke-width="1.2"/>
+          </svg>
+        </button>
+
+        <div class="bd-side-foot">
+          <button type="button" class="bd-nav-item bd-nav-item--settings" data-nav data-view="settings"><svg class="i"><use href="#i-gear"/></svg><span>Configurações</span></button>
+          <button type="button" class="bd-user-chip" data-view-shortcut="settings" aria-label="Abrir conta e configurações">
+            <span class="bd-avatar" id="bdUserAvatar" aria-hidden="true">U</span>
+            <span class="bd-user-meta"><strong id="bdUserName">Usuário</strong><small id="bdUserPlan">Plano Pro</small></span>
+            <svg class="i bd-user-chev"><use href="#i-chev-down"/></svg>
+          </button>
+          <span id="streakCount" class="sr-only">0 dias</span>
         </div>
       </aside>
 
       <!-- ========== MAIN AREA ========== -->
-      <main class="main-area">
+      <main class="bd-main">
 
         <!-- TOP BAR -->
-        <header class="topbar">
-          <div class="topbar-row">
-            <div class="topbar-greeting">
-              <div class="pulsinho pulsinho--greeting" id="greetingMascot">
-                <div class="pulsinho__face">
-                  <div class="pulsinho__eyes"><span class="pulsinho__eye"></span><span class="pulsinho__eye"></span></div>
-                  <svg class="pulsinho__pulse" viewBox="0 0 120 26"><path d="M0,13 L28,13 L36,3 L44,23 L52,13 L64,13 L70,6 L76,20 L82,13 L120,13"/></svg>
-                </div>
-              </div>
-              <div>
-                <p id="todayLabel">Hoje</p>
-                <h1 id="viewTitle">Seu dia em foco</h1>
-              </div>
-            </div>
-            <div class="topbar-actions">
-              <label class="search-box" title="Filtra esta tela — aperte Enter para buscar em tudo (ou Ctrl/Cmd+K)">
-                <span class="icon">🔍</span>
-                <input id="globalSearch" type="text" inputmode="search" autocomplete="off" autocorrect="off" placeholder="Pesquisar" />
-              </label>
-              <!-- O botão "Instalar app" é inserido aqui pelo pwa-install.js,
-                   apenas se o navegador permitir instalação como PWA -->
-              <div data-pwa-install-slot></div>
-            </div>
+        <header class="bd-topbar">
+          <a class="bd-mobile-brand" href="#" data-nav-home aria-label="PulseNote — Início"><svg class="bd-brand-mark"><use href="#i-logo"/></svg><strong>PulseNote</strong></a>
+          <div class="bd-titles">
+            <p id="todayLabel" class="sr-only">Hoje</p>
+            <h1 id="viewTitle">Seu dia em foco</h1>
+            <p id="viewSubtitle" class="bd-subtitle"></p>
+          </div>
+          <div class="bd-top-actions" id="bdTopActions">
+            <div class="bd-date-pill" id="bdDatePill"><svg class="i"><use href="#i-calendar"/></svg><span id="bdDateText">—</span></div>
+            <label class="bd-search" title="Filtra esta tela — Enter busca em tudo (ou Ctrl/Cmd+K)">
+              <button type="button" class="bd-icon-btn" id="bdSearchBtn" aria-label="Pesquisar"><svg class="i"><use href="#i-search"/></svg></button>
+              <input id="globalSearch" type="text" inputmode="search" autocomplete="off" autocorrect="off" placeholder="Pesquisar" />
+            </label>
+            <button type="button" class="bd-icon-btn bd-bell" id="bdBellBtn" aria-label="Notificações"><svg class="i"><use href="#i-bell"/></svg><i class="bd-bell-dot" id="bdBellDot" hidden></i></button>
+            <div data-pwa-install-slot></div>
           </div>
         </header>
 
@@ -164,6 +205,98 @@
 
         <!-- ===== DASHBOARD VIEW ===== -->
         <section id="dashboardView" class="view active-view">
+
+          <div class="bd-dash" aria-label="Visão geral do PulseNote">
+            <div class="bd-dash-main">
+              <div class="bd-ws" role="group" aria-label="Alternar espaço">
+                <button type="button" class="bd-ws-option active" data-workspace="personal" aria-pressed="true"><svg class="i"><use href="#i-user"/></svg>Pessoal</button>
+                <button type="button" class="bd-ws-option" data-workspace="couple" aria-pressed="false"><svg class="i"><use href="#i-users"/></svg>Casal</button>
+                <button type="button" class="bd-ws-option" data-workspace="family" aria-pressed="false"><svg class="i"><use href="#i-house"/></svg>Família</button>
+              </div>
+
+              <div class="bd-kpis" id="bdKpis">
+                <article class="bd-card bd-kpi bd-kpi--balance">
+                  <span class="bd-kpi-icon tone-green"><svg class="i"><use href="#i-wallet"/></svg></span>
+                  <div class="bd-kpi-body">
+                    <span class="bd-kpi-label">Saldo atual</span>
+                    <strong class="bd-kpi-value" id="bdBalance">R$ 0,00</strong>
+                    <span class="bd-trend" id="bdBalanceTrend"></span>
+                  </div>
+                  <svg class="bd-kpi-spark" id="bdBalanceSpark" viewBox="0 0 200 70" preserveAspectRatio="none" aria-hidden="true"></svg>
+                </article>
+                <article class="bd-card bd-kpi bd-kpi--spend">
+                  <span class="bd-kpi-icon tone-violet"><svg class="i"><use href="#i-arrow-down"/></svg></span>
+                  <div class="bd-kpi-body">
+                    <span class="bd-kpi-label">Gastos do mês</span>
+                    <strong class="bd-kpi-value" id="bdSpend">R$ 0,00</strong>
+                    <span class="bd-kpi-note" id="bdSpendNote"></span>
+                    <div class="bd-progress" id="bdSpendProgress" hidden><i id="bdSpendBar"></i></div>
+                  </div>
+                </article>
+                <article class="bd-card bd-kpi bd-kpi--income">
+                  <span class="bd-kpi-icon tone-blue"><svg class="i"><use href="#i-arrow-up"/></svg></span>
+                  <div class="bd-kpi-body">
+                    <span class="bd-kpi-label">Receitas do mês</span>
+                    <strong class="bd-kpi-value" id="bdIncome">R$ 0,00</strong>
+                    <span class="bd-trend" id="bdIncomeTrend"></span>
+                  </div>
+                </article>
+              </div>
+              <div class="bd-dots" id="bdKpiDots" aria-hidden="true"><i class="active"></i><i></i><i></i></div>
+
+              <div class="bd-row bd-row--charts">
+                <article class="bd-card bd-evo">
+                  <header class="bd-card-head">
+                    <h3>Evolução do saldo <span class="bd-info" title="Saldo acumulado dia a dia no período escolhido"><svg class="i"><use href="#i-info"/></svg></span></h3>
+                    <div class="bd-seg" id="bdEvoRange" role="group" aria-label="Período">
+                      <button type="button" data-range="7">7 dias</button>
+                      <button type="button" data-range="30" class="active">30 dias</button>
+                      <button type="button" data-range="90">3 meses</button>
+                      <button type="button" data-range="365">12 meses</button>
+                    </div>
+                  </header>
+                  <div class="bd-evo-chart" id="bdEvoChart" role="img" aria-label="Gráfico de evolução do saldo"></div>
+                </article>
+                <article class="bd-card bd-cats">
+                  <header class="bd-card-head"><h3>Gastos por categoria (mês)</h3></header>
+                  <div class="bd-cats-chart" id="bdCats"></div>
+                </article>
+              </div>
+
+              <div class="bd-row bd-row--lists">
+                <article class="bd-card bd-todo">
+                  <header class="bd-card-head">
+                    <h3>Seus compromissos de hoje</h3>
+                    <button type="button" class="bd-link" data-view-shortcut="planner" data-planner-focus="agenda">Ver planner <svg class="i"><use href="#i-arrow-right"/></svg></button>
+                  </header>
+                  <ul class="bd-list" id="bdToday"></ul>
+                </article>
+                <article class="bd-card bd-result">
+                  <header class="bd-card-head"><h3>Resultado do mês <span class="bd-info" title="Receitas menos gastos do mês atual"><svg class="i"><use href="#i-info"/></svg></span></h3></header>
+                  <ul class="bd-result-list">
+                    <li><span class="bd-res-icon up"><svg class="i"><use href="#i-arrow-down"/></svg></span><span>Receitas</span><strong id="bdResIn">R$ 0,00</strong></li>
+                    <li><span class="bd-res-icon down"><svg class="i"><use href="#i-arrow-up"/></svg></span><span>Gastos</span><strong id="bdResOut">R$ 0,00</strong></li>
+                    <li class="bd-res-total"><span class="bd-res-icon total"><svg class="i"><use href="#i-bars"/></svg></span><span>Resultado</span><strong id="bdResTotal">R$ 0,00</strong></li>
+                  </ul>
+                </article>
+              </div>
+            </div>
+
+            <aside class="bd-card bd-chat" id="bdChat" aria-label="Pulsinho">
+              <header class="bd-chat-head">
+                <span class="bd-chat-icon"><svg class="i"><use href="#i-sparkle"/></svg></span>
+                <div><h3>Pulsinho <span class="bd-badge">IA</span></h3><p>Seu assistente de produtividade e finanças.</p></div>
+                <button type="button" class="bd-icon-btn bd-chat-more" id="bdChatMore" aria-label="Limpar conversa" title="Limpar conversa"><svg class="i"><use href="#i-dots-v"/></svg></button>
+              </header>
+              <div id="pulseCommandResponse" class="bd-chat-body" role="log" aria-live="polite"></div>
+              <form id="pulseCommandForm" class="bd-chat-form">
+                <input id="pulseCommandInput" type="text" maxlength="1600" autocomplete="off" placeholder="Pergunte ao Pulsinho..." aria-label="Pergunte ao Pulsinho" />
+                <button type="submit" class="bd-send" aria-label="Enviar"><svg class="i"><use href="#i-send"/></svg></button>
+              </form>
+            </aside>
+          </div>
+
+          <div class="legacy-dashboard" hidden aria-hidden="true">
 
           <!-- Hero -->
           <section class="daily-hero">
@@ -187,6 +320,16 @@
                 <span class="mascot-badge">XP</span>
               </div>
             </div>
+          </section>
+
+          <section class="autopilot-entry" aria-labelledby="autopilotEntryTitle">
+            <span class="autopilot-entry-icon" aria-hidden="true">✦</span>
+            <div class="autopilot-entry-copy">
+              <span class="autopilot-eyebrow">Pulse Autopilot</span>
+              <h2 id="autopilotEntryTitle">Próxima ação, sem adivinhação</h2>
+              <p id="autopilotPreview">Analisando suas prioridades com segurança…</p>
+            </div>
+            <button type="button" class="autopilot-entry-button" data-view-shortcut="autopilot">Ver sugestões <span aria-hidden="true">→</span></button>
           </section>
 
           <!-- Visão geral do dia: um único grid coeso. Antes eram dois grids
@@ -257,11 +400,8 @@
             </button>
           </div>
 
-          <!-- Dashboard panels — cada um pode ser minimizado (estado fica
-               salvo, então continua do jeito que a pessoa deixou da
-               próxima vez que abrir o app). O botão "→" continua levando
-               pra tela cheia daquele assunto; o chevron só encolhe/expande
-               o cartão aqui no início. -->
+          <!-- Painéis do Dashboard ficam sempre visíveis. Os botões "→"
+               continuam abrindo a área correspondente. -->
           <!-- Coluna principal + barra lateral, como qualquer dashboard
                profissional: a ordem visual sempre bate com a ordem aqui
                no HTML (nada de grid "dense" reordenando cartões sozinho). -->
@@ -275,7 +415,6 @@
                   </div>
                   <div class="dash-panel-actions">
                     <button class="icon-button" data-view-shortcut="planner" data-planner-focus="tasks" title="Ver tarefas">→</button>
-                    <button class="icon-button dash-panel-collapse-btn" type="button" data-collapse-toggle aria-expanded="true" title="Minimizar">⌄</button>
                   </div>
                 </div>
                 <div class="dash-panel-body">
@@ -308,7 +447,6 @@
                   </div>
                   <div class="dash-panel-actions">
                     <button class="icon-button" data-view-shortcut="planner" data-planner-focus="agenda" title="Ver agenda">→</button>
-                    <button class="icon-button dash-panel-collapse-btn" type="button" data-collapse-toggle aria-expanded="true" title="Minimizar">⌄</button>
                   </div>
                 </div>
                 <div class="dash-panel-body">
@@ -324,7 +462,6 @@
                   </div>
                   <div class="dash-panel-actions">
                     <button class="icon-button" data-view-shortcut="planner" data-planner-focus="goals" title="Ver metas">→</button>
-                    <button class="icon-button dash-panel-collapse-btn" type="button" data-collapse-toggle aria-expanded="true" title="Minimizar">⌄</button>
                   </div>
                 </div>
                 <div class="dash-panel-body">
@@ -340,16 +477,89 @@
                   </div>
                   <div class="dash-panel-actions">
                     <button class="icon-button" data-view-shortcut="finances" title="Ver finanças">→</button>
-                    <button class="icon-button dash-panel-collapse-btn" type="button" data-collapse-toggle aria-expanded="true" title="Minimizar">⌄</button>
                   </div>
                 </div>
                 <div class="dash-panel-body">
                   <div id="dashFinancePanel"></div>
                 </div>
               </section>
+
+              <section class="panel dash-panel whatsapp-quick-card" data-panel-id="whatsapp">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Integração</p>
+                    <h2>PulseNote no WhatsApp</h2>
+                  </div>
+                  <button class="icon-button" data-view-shortcut="settings" data-settings-focus="whatsapp" title="Configurar WhatsApp">→</button>
+                </div>
+                <div class="dash-panel-body">
+                  <p class="task-meta">Registre gastos por texto, áudio, foto ou PDF de boleto e receba lembretes no mesmo lugar.</p>
+                  <button class="ghost-button" data-view-shortcut="settings" data-settings-focus="whatsapp">Configurar integração</button>
+                </div>
+              </section>
             </div>
           </div>
+          </div>
         </section>
+
+        <!-- Sugestões reais do backend; nenhuma ação é executada sem confirmação. -->
+        <section id="autopilotView" class="view" aria-labelledby="autopilotTitle">
+          <div class="autopilot-header">
+            <div>
+              <p class="autopilot-eyebrow">Pulse Autopilot</p>
+              <h2 id="autopilotTitle">Seu próximo passo, com clareza</h2>
+              <p>Prioridades de finanças, planner e notas. Você decide o que executar.</p>
+            </div>
+            <button type="button" id="autopilotRefresh" class="ghost-button">Atualizar sugestões</button>
+          </div>
+          <p id="autopilotStatus" class="autopilot-status" role="status" aria-live="polite">Carregando sugestões…</p>
+          <div id="autopilotList" class="autopilot-list"></div>
+          <p class="autopilot-privacy">Nada é alterado automaticamente. Cada ação exige sua confirmação.</p>
+        </section>
+
+        <div id="autopilotConfirmModal" class="modal-backdrop" hidden>
+          <div class="modal-card autopilot-confirm-card" role="dialog" aria-modal="true" aria-labelledby="autopilotConfirmTitle" aria-describedby="autopilotConfirmDescription">
+            <div class="modal-header">
+              <h2 id="autopilotConfirmTitle">Confirmar ação</h2>
+              <button type="button" id="autopilotConfirmClose" class="icon-button" aria-label="Fechar">✕</button>
+            </div>
+            <p id="autopilotConfirmDescription"></p>
+            <div class="autopilot-confirm-actions">
+              <button type="button" id="autopilotConfirmCancel" class="ghost-button">Cancelar</button>
+              <button type="button" id="autopilotConfirmApply" class="primary-button">Confirmar</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="pulseForecastDetailModal" class="modal-backdrop" hidden>
+          <div class="modal-card pulse-forecast-detail" role="dialog" aria-modal="true" aria-labelledby="pulseForecastDetailTitle" aria-describedby="pulseForecastDetailDescription">
+            <div class="modal-header">
+              <div>
+                <p class="pulse-kicker">Projeção financeira</p>
+                <h2 id="pulseForecastDetailTitle">Como seu mês pode terminar</h2>
+              </div>
+              <button type="button" id="pulseForecastDetailClose" class="icon-button" aria-label="Fechar detalhes">✕</button>
+            </div>
+            <div class="modal-body pulse-forecast-detail-body">
+              <p id="pulseForecastDetailDescription" class="pulse-forecast-detail-copy">Uma leitura dos saldos e compromissos que já estão registrados.</p>
+              <div class="pulse-forecast-detail-metrics">
+                <div><span>Saldo atual</span><strong id="pulseForecastDetailCurrent">R$ 0,00</strong></div>
+                <div><span>Fechamento previsto</span><strong id="pulseForecastDetailProjected">R$ 0,00</strong></div>
+                <div><span>Disponível com segurança</span><strong id="pulseForecastDetailSafe">R$ 0,00</strong></div>
+              </div>
+              <div class="pulse-forecast-detail-section">
+                <div class="pulse-forecast-detail-heading">
+                  <div>
+                    <span>Próximos movimentos</span>
+                    <small>Compromissos considerados na projeção</small>
+                  </div>
+                  <button type="button" class="ghost-button" data-view-shortcut="finances">Abrir finanças</button>
+                </div>
+                <div id="pulseForecastTimeline" class="pulse-forecast-detail-timeline"></div>
+              </div>
+            </div>
+          </div>
+        </div>
 
         <!-- Folha de criação rápida do Planner — Tarefa / Compromisso / Meta
              num único lugar, no lugar dos 3 formulários espalhados pelas
@@ -386,6 +596,26 @@
                     <span class="pqa-row-label">Vencimento</span>
                     <input id="pqaTaskDue" type="date" class="pqa-row-control" />
                   </label>
+                  <label class="pqa-icon-row">
+                    <span class="pqa-row-icon" style="color:var(--teal)">◷</span>
+                    <span class="pqa-row-label">Horário</span>
+                    <input id="pqaTaskTime" type="time" class="pqa-row-control" />
+                  </label>
+                  <select id="pqaTaskReminder" aria-label="Antecedência do lembrete da tarefa">
+                    <option value="none" selected>Sem lembrete</option>
+                    <option value="0">Lembrar na hora</option>
+                    <option value="5">Lembrar 5 min antes</option>
+                    <option value="15">Lembrar 15 min antes</option>
+                    <option value="30">Lembrar 30 min antes</option>
+                    <option value="60">Lembrar 1 hora antes</option>
+                    <option value="1440">Lembrar 1 dia antes</option>
+                    <option value="custom">Definir antecedência</option>
+                  </select>
+                  <label id="pqaTaskReminderCustom" class="reminder-custom-field" hidden>
+                    <span>Lembrar com</span>
+                    <input id="pqaTaskReminderMinutes" type="number" min="1" max="10080" step="1" inputmode="numeric" placeholder="ex.: 90" />
+                    <span>minutos de antecedência</span>
+                  </label>
                 </div>
 
                 <div id="pqaEventFields" style="display:none">
@@ -395,8 +625,10 @@
                   </div>
                   <input id="pqaEventLocation" placeholder="Local ou link" style="margin-top:10px" />
                   <select id="pqaEventReminder" style="margin-top:10px">
+                    <option value="none" selected>Sem lembrete</option>
+                    <option value="0">Lembrar na hora</option>
                     <option value="5">Lembrar 5 min antes</option>
-                    <option value="15" selected>Lembrar 15 min antes</option>
+                    <option value="15">Lembrar 15 min antes</option>
                     <option value="30">Lembrar 30 min antes</option>
                       <option value="60">Lembrar 1 hora antes</option>
                       <option value="1440">Lembrar 1 dia antes</option>
@@ -404,7 +636,7 @@
                     </select>
                     <label id="pqaEventReminderCustom" class="reminder-custom-field" hidden>
                       <span>Lembrar com</span>
-                      <input id="pqaEventReminderMinutes" type="number" min="5" max="10080" step="5" inputmode="numeric" placeholder="ex.: 90" />
+                      <input id="pqaEventReminderMinutes" type="number" min="1" max="10080" step="1" inputmode="numeric" placeholder="ex.: 90" />
                       <span>minutos de antecedência</span>
                     </label>
                   <textarea id="pqaEventNotes" rows="2" placeholder="Notas do compromisso (opcional)" style="margin-top:10px"></textarea>
@@ -564,17 +796,9 @@
                 <textarea id="noteDescription" class="autogrow" rows="3" placeholder="Escreva livremente aqui — ideias, lembretes, recados para você mesmo..."></textarea>
               </label>
 
-              <!-- Atalhos rápidos: cor, prioridade e checklist ficam à mão sem poluir a tela -->
+              <!-- Só as decisões mais frequentes ficam expostas. Aparência e
+                   organização vivem em "Mais detalhes" para manter o editor leve. -->
               <div class="note-quick-row">
-                <div class="note-color-picker" id="noteColorPicker" role="group" aria-label="Cor da nota">
-                  <button type="button" class="note-color-dot active" data-note-color="blue" title="Azul" aria-label="Azul"></button>
-                  <button type="button" class="note-color-dot" data-note-color="green" title="Verde" aria-label="Verde"></button>
-                  <button type="button" class="note-color-dot" data-note-color="pink" title="Rosa" aria-label="Rosa"></button>
-                  <button type="button" class="note-color-dot" data-note-color="purple" title="Roxo" aria-label="Roxo"></button>
-                  <button type="button" class="note-color-dot" data-note-color="orange" title="Lilás" aria-label="Lilás"></button>
-                  <button type="button" class="note-color-dot" data-note-color="teal" title="Turquesa" aria-label="Turquesa"></button>
-                </div>
-                <input id="noteColor" type="hidden" value="blue" />
                 <div class="note-priority-picker" id="notePriorityPicker">
                   <button type="button" class="note-priority-dot" data-priority="Baixa"><span class="dot"></span>Baixa</button>
                   <button type="button" class="note-priority-dot active" data-priority="Media"><span class="dot"></span>Média</button>
@@ -599,6 +823,9 @@
               <!-- Mais detalhes: tudo que é opcional fica recolhido, mas continua a 1 toque de distância -->
               <details class="note-more-details">
                 <summary>Mais detalhes <span class="chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span></summary>
+                <p class="note-details-hint">Organize somente se precisar. A nota salva normalmente sem preencher estes campos.</p>
+                <input id="noteTextColor" type="hidden" value="" />
+                <input id="noteColor" type="hidden" value="blue" />
                 <div class="form-grid">
                   <label>
                     Categoria
@@ -708,17 +935,33 @@
               <button type="button" class="nd-tool-btn" data-nd-cmd="bold" title="Negrito"><b>N</b></button>
               <button type="button" class="nd-tool-btn" data-nd-cmd="italic" title="Itálico"><i>I</i></button>
               <span class="nd-toolbar-sep"></span>
-              <button type="button" class="nd-swatch" data-nd-color="#8b5cf6" style="background:#8b5cf6" title="Destaque lilás"></button>
-              <button type="button" class="nd-swatch" data-nd-color="#ff375f" style="background:#ff375f" title="Destaque vermelho"></button>
-              <button type="button" class="nd-swatch" data-nd-color="#30d158" style="background:#30d158" title="Destaque verde"></button>
-              <button type="button" class="nd-swatch" data-nd-color="#0a84ff" style="background:#0a84ff" title="Destaque azul"></button>
-              <button type="button" class="nd-swatch" data-nd-color="#bf5af2" style="background:#bf5af2" title="Destaque roxo"></button>
+              <div class="nd-color-group" role="group" aria-label="Cor do texto">
+                <span class="nd-color-label">Cor do texto</span>
+                <button type="button" class="nd-swatch" data-nd-color="#8b5cf6" style="background:#8b5cf6" title="Texto lilás" aria-label="Texto lilás" aria-pressed="false"></button>
+                <button type="button" class="nd-swatch" data-nd-color="#ff375f" style="background:#ff375f" title="Texto vermelho" aria-label="Texto vermelho" aria-pressed="false"></button>
+                <button type="button" class="nd-swatch" data-nd-color="#30d158" style="background:#30d158" title="Texto verde" aria-label="Texto verde" aria-pressed="false"></button>
+                <button type="button" class="nd-swatch" data-nd-color="#0a84ff" style="background:#0a84ff" title="Texto azul" aria-label="Texto azul" aria-pressed="false"></button>
+                <button type="button" class="nd-swatch" data-nd-color="#bf5af2" style="background:#bf5af2" title="Texto roxo" aria-label="Texto roxo" aria-pressed="false"></button>
+              </div>
               <button type="button" class="nd-tool-btn" data-nd-cmd="clear" title="Remover destaque">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m4 20 3-3"/><path d="m21 3-9.9 9.9"/><path d="M12.5 6.5 9 3 3 9l3.5 3.5"/><path d="m6 15 3 3"/><path d="M14 21h7"/></svg>
               </button>
             </div>
 
-            <div id="ndBody" class="note-detail-body" contenteditable="true" data-placeholder="Escreva livremente aqui..."></div>
+            <div class="note-detail-scroll">
+              <div id="ndBody" class="note-detail-body" contenteditable="true" data-placeholder="Escreva livremente aqui..."></div>
+              <section id="ndChecklistSection" class="note-detail-checklist" hidden aria-label="Checklist da nota">
+                <div class="note-detail-checklist-heading">
+                  <div>
+                    <div class="note-detail-checklist-title">Checklist</div>
+                    <p id="ndChecklistSummary" class="note-detail-checklist-summary"></p>
+                  </div>
+                  <span id="ndChecklistProgress" class="note-detail-checklist-progress"></span>
+                </div>
+                <div class="note-detail-checklist-track" aria-hidden="true"><span id="ndChecklistProgressBar"></span></div>
+                <div id="ndChecklistItems"></div>
+              </section>
+            </div>
 
             <div class="note-detail-footer">
               <button type="button" class="ghost-button" id="ndConvertTaskBtn">
@@ -742,6 +985,8 @@
               <button class="fin-month-arrow" id="finMonthPrev">‹</button>
               <div class="fin-month-center">
                 <span id="finMonthLabel" class="fin-month-label">Julho 2026</span>
+                <label class="sr-only" for="finWorkspaceSelect">Espaço financeiro</label>
+                <select id="finWorkspaceSelect" class="fin-workspace-label" aria-label="Espaço financeiro ativo"><option value="personal">Pessoal</option><option value="couple">Casal</option><option value="family">Família</option><option value="business">Empresa</option></select>
                 <span id="finClosedBadge" class="fin-closed-badge" hidden><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Fechado</span>
               </div>
               <button class="fin-month-arrow" id="finMonthNext">›</button>
@@ -851,6 +1096,8 @@
                       <select id="expenseCategory" hidden aria-hidden="true" tabindex="-1"><option value="alimentacao">🍔 Alimentação</option></select>
                       <button type="button" id="newCategoryBtn" class="fin-cat-add-btn" title="Nova categoria">＋</button>
                     </div>
+                    <label class="fin-account-select-label" for="expenseAccount">Conta</label>
+                    <select id="expenseAccount" class="fin-account-select"><option value="">Sem conta específica</option></select>
                     <button type="submit" class="primary-button" style="width:100%;justify-content:center;height:44px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg><span>Registrar</span></button>
                     <button type="button" id="cancelEditExpense" hidden style="width:100%;height:36px;border-radius:10px;border:1.5px solid var(--line);background:var(--surface2);color:var(--text2);cursor:pointer;font-weight:600;font-family:inherit;margin-top:6px">Cancelar edição</button>
                   </form>
@@ -862,8 +1109,9 @@
                   <div class="panel-header">
                     <div><p class="eyebrow">Calendário</p><h2 id="finCalMonthLabel">Financeiro</h2></div>
                     <div style="display:flex;gap:6px;flex-wrap:wrap">
-                      <span class="pill" style="background:var(--green-soft);color:var(--green);border-color:var(--green)">● Receita</span>
-                      <span class="pill" style="background:var(--red-soft);color:var(--red);border-color:var(--red)">● Despesa</span>
+                      <span class="pill" style="background:var(--green-soft);color:var(--green);border-color:var(--green)">● Entrada</span>
+                      <span class="pill" style="background:var(--red-soft);color:var(--red);border-color:var(--red)">● Saída</span>
+                      <span class="pill">Saldo previsto por dia</span>
                     </div>
                   </div>
                   <div id="finCalGrid" class="fin-cal-grid"></div>
@@ -873,6 +1121,7 @@
                   <div class="panel-header">
                     <div><p class="eyebrow">Histórico</p><h2>Transações</h2></div>
                   </div>
+                  <div id="finTransactionFilter" class="fin-transaction-filter" hidden></div>
                   <div id="finTransactions" class="fin-tx-list"></div>
                 </div>
               </div><!-- /fin-right -->
@@ -889,6 +1138,22 @@
               <p>Compare seu ritmo de gastos, identifique a principal categoria e acompanhe a evolução do saldo.</p>
             </div>
             <div id="finInsights" class="fin-insights-grid" aria-live="polite"></div>
+            <section class="panel fin-simulator" aria-labelledby="finSimulatorTitle">
+              <div class="fin-simulator-copy">
+                <p class="eyebrow">Planejamento inteligente</p>
+                <h2 id="finSimulatorTitle">Posso gastar isso?</h2>
+                <p>Teste uma compra antes de fazê-la. A projeção considera saldo, contas recorrentes, faturas e sua reserva de segurança.</p>
+              </div>
+              <form id="finSimulatorForm" class="fin-simulator-form">
+                <label for="finSimulatorAmount">Valor da compra</label>
+                <div class="fin-simulator-control">
+                  <span>R$</span>
+                  <input id="finSimulatorAmount" name="amount" inputmode="decimal" autocomplete="off" placeholder="0,00" required />
+                  <button type="submit">Simular</button>
+                </div>
+              </form>
+              <div id="finSimulatorResult" class="fin-simulator-result" role="status" aria-live="polite" hidden></div>
+            </section>
             <div class="fin-analise-grid">
               <div class="panel wide">
                 <div class="panel-header">
@@ -915,6 +1180,54 @@
 
           <!-- ABA: CONTROLE — metas de gasto por categoria -->
           <div class="fin-tab-panel" data-fin-panel="controle" role="tabpanel" hidden>
+            <section class="panel fin-shared-spaces-panel" aria-labelledby="finSharedSpacesTitle">
+              <div class="panel-header">
+                <div><p class="eyebrow">Conta conjunta</p><h2 id="finSharedSpacesTitle">Espaços compartilhados</h2></div>
+                <button class="mini-button" id="finCreateSpaceToggle">+ Criar espaço</button>
+              </div>
+              <p class="fin-accounts-help">Compartilhe apenas as finanças deste espaço com seu parceiro ou família. Notas, tarefas e dados pessoais continuam privados.</p>
+              <form id="finCreateSpaceForm" class="fin-shared-create" hidden>
+                <label>Nome<input id="finSharedSpaceName" maxlength="70" placeholder="Ex.: Casa Douglas e Ana" required /></label>
+                <label>Tipo<select id="finSharedSpaceType"><option value="couple">Casal</option><option value="family">Família</option><option value="group">Grupo</option></select></label>
+                <div><button type="button" id="finCreateSpaceCancel">Cancelar</button><button type="submit">Criar e usar</button></div>
+              </form>
+              <div id="finSharedInvites" class="fin-shared-invites" hidden></div>
+              <div id="finSharedSpacesList" class="fin-shared-spaces-list"><div class="empty-state">Carregando espaços compartilhados…</div></div>
+            </section>
+            <div class="panel fin-accounts-panel">
+              <div class="panel-header">
+                <div><p class="eyebrow">Patrimônio</p><h2>Contas e saldos</h2></div>
+                <button class="mini-button" id="finAddAccount">+ Conta</button>
+              </div>
+              <p class="fin-accounts-help">Organize conta corrente, carteira, poupança e investimentos por espaço. Os saldos alimentam o simulador financeiro.</p>
+              <div id="finAccountFormWrap" class="fin-account-form-wrap" hidden>
+                <form id="finAccountForm" class="fin-account-form">
+                  <input id="finAccountId" type="hidden" />
+                  <label>Nome<input id="finAccountName" maxlength="50" placeholder="Ex.: Nubank principal" required /></label>
+                  <label>Tipo<select id="finAccountType"><option value="checking">Conta corrente</option><option value="savings">Poupança</option><option value="cash">Carteira</option><option value="investment">Investimentos</option><option value="other">Outra conta</option></select></label>
+                  <label>Espaço<select id="finAccountWorkspace"><option value="personal">Pessoal</option><option value="couple">Casal</option><option value="family">Família</option><option value="business">Empresa</option></select></label>
+                  <label>Saldo atual<input id="finAccountBalance" inputmode="decimal" placeholder="0,00" /></label>
+                  <div class="fin-account-form-actions"><button type="button" id="finAccountCancel">Cancelar</button><button type="submit">Salvar conta</button></div>
+                </form>
+              </div>
+              <div id="finAccountsList" class="fin-accounts-list"></div>
+            </div>
+            <section class="panel fin-cards-panel" aria-labelledby="finCardsTitle">
+              <div class="panel-header">
+                <div><p class="eyebrow">Crédito</p><h2 id="finCardsTitle">Cartões e faturas</h2></div>
+                <button class="mini-button" id="finAddCard">+ Cartão</button>
+              </div>
+              <p class="fin-accounts-help">Acompanhe a fatura e distribua compras parceladas automaticamente nos próximos meses.</p>
+              <form id="finCardForm" class="fin-card-form" hidden>
+                <label>Nome<input id="finCardName" maxlength="40" placeholder="Ex.: Nubank" required /></label>
+                <label>Final<input id="finCardLast4" inputmode="numeric" maxlength="4" pattern="[0-9]{0,4}" placeholder="1234" /></label>
+                <label>Limite<input id="finCardLimit" inputmode="decimal" placeholder="0,00" required /></label>
+                <label>Fecha dia<input id="finCardClosingDay" type="number" min="1" max="31" value="1" required /></label>
+                <label>Vence dia<input id="finCardDueDay" type="number" min="1" max="31" value="10" required /></label>
+                <div class="fin-card-form-actions"><button type="button" id="finCardCancel">Cancelar</button><button type="submit">Salvar cartão</button></div>
+              </form>
+              <div id="finCardsList" class="fin-cards-list"></div>
+            </section>
             <div class="panel">
               <div class="panel-header">
                 <div><p class="eyebrow">Controle</p><h2>Metas de gasto</h2></div>
@@ -937,6 +1250,7 @@
 
           <!-- ABA: AUTOMAÇÃO — lançamentos recorrentes -->
           <div class="fin-tab-panel" data-fin-panel="automacao" role="tabpanel" hidden>
+            <div id="finRecurringSuggestions" class="panel fin-recurring-suggestions" hidden></div>
             <div class="panel">
               <div class="panel-header">
                 <div><p class="eyebrow">Automação</p><h2>Recorrentes</h2></div>
@@ -1082,7 +1396,7 @@
                   <span class="theme-toggle-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2.5v2.3"/><path d="M12 19.2v2.3"/><path d="m4.6 4.6 1.6 1.6"/><path d="m17.8 17.8 1.6 1.6"/><path d="M2.5 12h2.3"/><path d="M19.2 12h2.3"/><path d="m4.6 19.4 1.6-1.6"/><path d="m17.8 6.2 1.6-1.6"/></svg></span><span>Claro</span>
                 </button>
                 <button type="button" class="theme-toggle-btn" data-theme-choice="aurora" role="radio">
-                  <span class="theme-toggle-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 13.5a8.5 8.5 0 1 1-9-10.9 7 7 0 0 0 9 10.9z"/></svg></span><span>Aurora</span>
+                  <span class="theme-toggle-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 13.5a8.5 8.5 0 1 1-9-10.9 7 7 0 0 0 9 10.9z"/></svg></span><span>Escuro</span>
                 </button>
                 <button type="button" class="theme-toggle-btn" data-theme-choice="eclipse" role="radio">
                   <span class="theme-toggle-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="12" r="7"/><circle cx="14.2" cy="12" r="7" fill="currentColor" stroke="none"/></svg></span><span>Eclipse</span>
@@ -1090,6 +1404,23 @@
                 <button type="button" class="theme-toggle-btn" data-theme-choice="system" role="radio">
                   <span class="theme-toggle-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4.5" width="19" height="13" rx="2"/><path d="M8 21h8"/><path d="M12 17.5V21"/></svg></span><span>Automático</span>
                 </button>
+              </div>
+            </section>
+
+            <p class="settings-section-label">Plano e cobrança</p>
+
+            <section class="panel billing-settings-card" id="billingSettingsCard">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Assinatura</p>
+                  <h2>Seu plano PulseNote</h2>
+                </div>
+                <span class="billing-status-badge" id="billingStatusBadge">Carregando…</span>
+              </div>
+              <p class="task-meta" id="billingStatusText">Consultando os planos disponíveis e o estado da sua assinatura.</p>
+              <div class="billing-plan-grid" id="billingPlanGrid" aria-live="polite"></div>
+              <div class="form-actions billing-actions" id="billingActions" hidden>
+                <button id="billingPortalButton" type="button" class="ghost-button">Gerenciar pagamento e assinatura</button>
               </div>
             </section>
 
@@ -1105,7 +1436,7 @@
 
               <div id="whatsappLinkedBlock" hidden>
                 <p class="task-meta" style="margin-bottom:10px">
-                  <span style="display:inline-flex;align-items:center;gap:4px;color:var(--green)">${""}<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Assistente ativo</span> no número <strong id="whatsappLinkedPhoneLabel"></strong>. Mande uma mensagem tipo
+                  <span style="display:inline-flex;align-items:center;gap:4px;color:var(--green)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Assistente ativo</span> no número <strong id="whatsappLinkedPhoneLabel"></strong>. Mande uma mensagem tipo
                   <em>"gastei 45 no mercado"</em> ou <em>"me lembra de pagar o boleto sexta"</em> que o Pulsinho cuida do resto.
                 </p>
                 <label style="display:flex;align-items:center;gap:8px;margin-bottom:14px;cursor:pointer">
@@ -1132,6 +1463,30 @@
                   <button id="settingsWhatsappGenerateBtn" class="primary-button"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21l1.65-4.95A9 9 0 1 1 8 19.5z"/><path d="M9 10a1 1 0 0 0 1 1h.5a1 1 0 0 0 .9-.6l.2-.4a1 1 0 0 0-.1-1L11 8.5a2.5 2.5 0 0 1 2-1c1 0 2 1 2.5 2 1 2 2.5 3.5 4.5 4.5.5.25 1.5.5 2 0"/></svg><span>Ativar assistente no WhatsApp</span></button>
                 </div>
               </div>
+            </section>
+
+            <section class="panel" id="pulsinhoAiCard">
+              <div class="panel-header"><div><p class="eyebrow">Inteligência</p><h2>Modelo do Pulsinho</h2></div><span class="billing-status-badge is-active">Conversação livre</span></div>
+              <p class="task-meta" style="margin-bottom:14px">O Pulsinho entende frases naturais no aplicativo e no WhatsApp. Escolha sua preferência; se o provedor principal estiver indisponível, o PulseNote usa o modelo seguro configurado como reserva.</p>
+              <label class="settings-ai-model">
+                <span>Preferência de IA</span>
+                <select id="pulsinhoAiPreference">
+                  <option value="auto">Automático (recomendado)</option>
+                  <option value="openai">GPT / OpenAI</option>
+                  <option value="anthropic">Claude / Anthropic</option>
+                </select>
+              </label>
+              <p class="task-meta">A IA recebe apenas um resumo necessário dos seus dados. Mudanças em tarefas, notas ou finanças continuam exigindo confirmação.</p>
+            </section>
+
+            <section class="panel" id="whatsappIntegrationCard">
+              <div class="panel-header"><div><p class="eyebrow">Notificações</p><h2>Lembretes do aplicativo</h2></div></div>
+              <p class="task-meta" style="margin-bottom:12px">Defina o horário e a antecedência em cada tarefa ou compromisso. Os avisos chegam no navegador/PWA e, se você habilitar acima, também no WhatsApp.</p>
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                <input type="checkbox" id="appReminderOptIn" style="width:16px;height:16px" />
+                <span class="task-meta" style="margin:0">Receber lembretes neste aparelho</span>
+              </label>
+              <p class="task-meta" id="appReminderStatus" role="status" style="margin-top:8px"></p>
             </section>
 
             <p class="settings-section-label">Segurança e dados</p>
@@ -1189,6 +1544,17 @@
               </button>
             </section>
 
+            <section id="adminAccessCard" class="panel" hidden>
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Sua conta administrativa</p>
+                  <h2>Central de gestão do PulseNote</h2>
+                </div>
+              </div>
+              <p class="task-meta">Acesse usuários, planos, cobranças, recursos e integrações sem sair da sua conta principal.</p>
+              <a href="/admin" class="primary-button">Abrir administração →</a>
+            </section>
+
             <p class="settings-section-label">Sessão</p>
 
             <section class="panel">
@@ -1219,28 +1585,28 @@
           </div>
         </section><!-- /settingsView -->
 
-      </main><!-- /main-area -->
-    </div><!-- /app-shell -->
+      </main><!-- /bd-main -->
+    </div><!-- /bd-shell -->
 
     <!-- ========== BOTTOM NAV (mobile) ========== -->
-    <nav class="bottom-nav" aria-label="Navegação mobile">
-      <button class="bottom-nav-item active" data-view="dashboard">
-        <span class="bn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11.5L12 4l8 7.5"/><path d="M6.5 10v8.5a1 1 0 001 1H10v-6h4v6h2.5a1 1 0 001-1V10"/></svg></span>
+    <nav class="bd-tabbar" aria-label="Navegação mobile">
+      <button class="bd-tab active" data-bnav data-view="dashboard">
+        <span class="bd-tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11.5L12 4l8 7.5"/><path d="M6.5 10v8.5a1 1 0 001 1H10v-6h4v6h2.5a1 1 0 001-1V10"/></svg></span>
         <span>Início</span>
       </button>
-      <button class="bottom-nav-item" data-view="planner">
-        <span class="bn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17"/><path d="M8 3v4"/><path d="M16 3v4"/><path d="M8.5 14l2 2 4-4"/></svg></span>
+      <button class="bd-tab" data-bnav data-view="planner">
+        <span class="bd-tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17"/><path d="M8 3v4"/><path d="M16 3v4"/><path d="M8.5 14l2 2 4-4"/></svg></span>
         <span>Planner</span>
       </button>
-      <button class="bottom-nav-fab" id="bottomNavFab" onclick="openPlannerQuickAdd()" title="Adicionar tarefa ou compromisso" aria-label="Adicionar">
+      <button class="bd-tab-fab" id="bottomNavFab" onclick="openPlannerQuickAdd()" title="Adicionar tarefa ou compromisso" aria-label="Adicionar">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
       </button>
-      <button class="bottom-nav-item" data-view="notes">
-        <span class="bn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h8"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></span>
+      <button class="bd-tab" data-bnav data-view="notes">
+        <span class="bd-tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h8"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></span>
         <span>Notas</span>
       </button>
-      <button class="bottom-nav-item" data-view="finances">
-        <span class="bn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8a2 2 0 012-2h11a2 2 0 012 2"/><rect x="3" y="8" width="18" height="11" rx="2"/><path d="M16.3 13.2h1.7"/></svg></span>
+      <button class="bd-tab" data-bnav data-view="finances">
+        <span class="bd-tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8a2 2 0 012-2h11a2 2 0 012 2"/><rect x="3" y="8" width="18" height="11" rx="2"/><path d="M16.3 13.2h1.7"/></svg></span>
         <span>Finanças</span>
       </button>
     </nav>
@@ -1319,9 +1685,31 @@
       </div>
     </div>
 
+    <div id="finCardPurchaseModal" class="modal-backdrop" hidden>
+      <div class="modal-card">
+        <div class="modal-header">
+          <div><p class="eyebrow">Nova compra</p><h2 id="finCardPurchaseTitle">Lançar no cartão</h2></div>
+          <button class="icon-button" id="finCloseCardPurchase" aria-label="Fechar">&#10005;</button>
+        </div>
+        <form id="finCardPurchaseForm" class="modal-body fin-card-purchase-form">
+          <input id="finCardPurchaseCardId" type="hidden" />
+          <label class="field"><span class="field-label">Descrição</span><input id="finCardPurchaseDescription" class="field-input" maxlength="80" placeholder="Ex.: Notebook" required /></label>
+          <label class="field"><span class="field-label">Valor total</span><input id="finCardPurchaseAmount" class="field-input" inputmode="decimal" placeholder="0,00" required /></label>
+          <div class="fin-card-purchase-grid">
+            <label class="field"><span class="field-label">Data da compra</span><input id="finCardPurchaseDate" class="field-input" type="date" required /></label>
+            <label class="field"><span class="field-label">Parcelas</span><input id="finCardPurchaseInstallments" class="field-input" type="number" min="1" max="48" value="1" required /></label>
+          </div>
+          <button class="primary-button" type="submit" style="width:100%;justify-content:center">Adicionar à fatura</button>
+        </form>
+      </div>
+    </div>
+
     <script src="/src/pwa-install.js" defer></script>
-    <script src="/src/notifications.js" defer></script>
-    <script type="module" src="/src/app.js"></script>
-    <script type="module" src="/src/push-notifications.js"></script>
+    <script src="/src/finance-projection.js?v=1"></script>
+    <script src="/src/recurring-detector.js?v=1"></script>
+    <script src="/src/card-installments.js?v=1"></script>
+    <script src="/src/notifications.js?v=35" defer></script>
+    <script type="module" src="/src/app.js?v=37"></script>
+    <script type="module" src="/src/push-notifications.js?v=35"></script>
   </body>
 </html>

@@ -4,6 +4,7 @@ frontend/
 {backend,frontend}/
 node_modules/
 .npm-cache/
+.npm-*/
 dist/
 dist-audit/
 dist-audit-current/
@@ -12,6 +13,7 @@ tmp/
 .vercel-global/
 .agent-browser/
 gcm-diagnose.log
+/.tmp-*-profile/
 
 # Sistema
 .DS_Store
