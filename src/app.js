@@ -354,8 +354,8 @@ const appReady = new Promise((resolve) => {
       if (isLocalDesignPreview) {
         currentUser = {
           uid: "local-design-preview",
-          displayName: designPreviewMode === "worst" ? "Aleksandra Wiśniewska-Kowalczyk de Albuquerque" : "Douglas Marques",
-          email: designPreviewMode === "worst" ? "bartholomew.fitzgerald@northwind-industries-holdings.example.com" : "preview@pulsenote.local",
+          displayName: designPreviewMode === "worst" ? "Aleksandra Wiśniewska-Kowalczyk de Albuquerque" : "Lucas Martins",
+          email: designPreviewMode === "worst" ? "bartholomew.fitzgerald@northwind-industries-holdings.example.com" : "lucas.martins@exemplo.com",
           emailVerified: true,
           getIdToken: async () => null,
         };
@@ -730,6 +730,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   const user = getUser();
   const firstName = user?.name?.split(" ")[0] || "Usuário";
   elements.todayLabel.textContent = `${greeting}, ${firstName} · ${dateStr}`;
+  applyViewHeading(activeView);
+  renderShellUser(user);
 
   const greetingMascot = document.querySelector("#greetingMascot");
   if (greetingMascot) {
@@ -844,10 +846,10 @@ function showVerifyEmailGate() {
 }
 
 function renderProfileButton(user) {
-  const topbarActions = document.querySelector(".topbar-actions");
+  const topbarActions = document.querySelector("#bdTopActions");
   if (!topbarActions || document.querySelector(".user-avatar-btn")) return;
 
-  const initial  = (user?.name || "U").charAt(0).toUpperCase();
+  const initial  = bdInitials(user?.name || "U");
   const photoURL = state?.profilePhoto || currentUser?.photoURL || "";
 
   const wrapper = document.createElement("div");
@@ -865,7 +867,7 @@ function renderProfileButton(user) {
       ${avatarContent}
     </button>
   `;
-  topbarActions.prepend(wrapper);
+  topbarActions.append(wrapper);
 
   // Overlay escuro por trás do dropdown (estilo bottom-sheet no mobile)
   const backdrop = document.createElement("div");
@@ -1119,6 +1121,8 @@ async function loadBillingSettings(force = false) {
   billingRequest = billingApi("status").then((data) => {
     const current = data.subscription || {};
     const active = current.status === "active";
+    const planLabel = document.querySelector("#bdUserPlan");
+    if (planLabel) planLabel.textContent = active ? `Plano ${(data.plans || []).find((plan) => plan.id === current.planId)?.name || ""}`.trim() : "Sem plano";
     statusBadge.textContent = active ? "Assinatura ativa" : current.planId ? "Assinatura pausada" : "Sem plano contratado";
     statusBadge.className = `billing-status-badge ${active ? "is-active" : current.planId ? "is-warning" : ""}`;
     statusText.textContent = !data.configured
@@ -1718,7 +1722,7 @@ function bindSettingsView() {
 // Se não houver foto, cai de volta para a inicial do nome (em vez de
 // deixar um ícone de imagem quebrada).
 function updateAllAvatars(photoURL) {
-  const initial = (getUser()?.name || "U").charAt(0).toUpperCase();
+  const initial = bdInitials(getUser()?.name || "U");
   const content = photoURL
     ? `<img src="${escapeHtml(photoURL)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%" alt=""/>`
     : initial;
@@ -1729,6 +1733,7 @@ function updateAllAvatars(photoURL) {
   // Botão principal no topbar
   const mainBtn = document.querySelector(".user-avatar-btn");
   if (mainBtn) mainBtn.innerHTML = content;
+  renderShellUser(getUser());
 
   // Mini avatar no dropdown
   const dropdownAvatar = document.querySelector(".user-dropdown-header div");
@@ -1840,28 +1845,63 @@ function createDesignPreviewState(mode = "1") {
   const monthKey = todayIso.slice(0, 7);
   const day = Number(todayIso.slice(8, 10));
   const dateForDay = (value) => `${monthKey}-${String(Math.max(1, Math.min(28, value))).padStart(2, "0")}`;
+  const prevKey = getPreviousMonthKey(monthKey);
+  const prevPrevKey = getPreviousMonthKey(prevKey);
+  const dayOf = (key, value) => `${key}-${String(value).padStart(2, "0")}`;
   const preview = normalizeState({
     ...loadDefaultState(),
     tasks: [
-      { id: "preview-task-1", title: "Finalizar relatório mensal", status: "Pendente", priority: "Alta", dueDate: todayIso, time: "09:30", subtasks: [], recurrence: null },
-      { id: "preview-task-2", title: "Revisar orçamento de novembro", status: "Pendente", priority: "Media", dueDate: offsetDate(1), time: "11:00", subtasks: [], recurrence: null },
+      { id: "preview-task-1", title: "Revisar relatório mensal", status: "Pendente", priority: "Alta", dueDate: todayIso, dueTime: "12:00", subtasks: [], recurrence: null },
+      { id: "preview-task-2", title: "Planejar metas de fevereiro", status: "Pendente", priority: "Alta", dueDate: offsetDate(1), subtasks: [], recurrence: null },
+      { id: "preview-task-3", title: "Ajustar apresentação de resultados", status: "Pendente", priority: "Media", dueDate: todayIso, dueTime: "18:00", subtasks: [], recurrence: null },
     ],
     events: [
-      { id: "preview-event-1", title: "Consulta no dentista", date: todayIso, time: "14:00", location: "Clínica OdontoPlus", notes: "", reminderMinutes: 30 },
+      { id: "preview-event-1", title: "Reunião de alinhamento", date: offsetDate(1), time: "10:00", location: "", notes: "", reminderMinutes: 30 },
       { id: "preview-event-2", title: "Planejamento da semana", date: offsetDate(2), time: "10:00", location: "", notes: "", reminderMinutes: 60 },
     ],
     goals: [{ id: "preview-goal-1", title: "Reserva de emergência", current: 68, target: 100, milestones: [] }],
     finances: [
-      { id: "preview-fin-1", type: "receita", amount: 7200, category: "salario", description: "Salário", date: dateForDay(5) },
-      { id: "preview-fin-2", type: "despesa", amount: 2100, category: "moradia", description: "Aluguel", date: dateForDay(7) },
-      { id: "preview-fin-3", type: "despesa", amount: 486.40, category: "mercado", description: "Mercado Boa Compra", date: dateForDay(Math.max(8, day - 3)) },
-      { id: "preview-fin-4", type: "despesa", amount: 287.90, category: "contas", description: "Energia e internet", date: dateForDay(Math.max(9, day - 2)) },
+      // Mês atual: receitas 8.500, gastos 3.280
+      { id: "preview-fin-1", type: "receita", amount: 8500, category: "salario", description: "Salário", date: dateForDay(22) },
+      { id: "preview-fin-2", type: "despesa", amount: 1345, category: "moradia", description: "Condomínio e taxas", date: dateForDay(5) },
+      { id: "preview-fin-3", type: "despesa", amount: 420.9, category: "alimentacao", description: "Supermercado", date: dateForDay(Math.min(day, 23)) },
+      { id: "preview-fin-4", type: "despesa", amount: 32, category: "alimentacao", description: "Almoço no restaurante", date: dateForDay(Math.min(day, 24)) },
+      { id: "preview-fin-5", type: "despesa", amount: 203.1, category: "alimentacao", description: "Feira e padaria", date: dateForDay(12) },
+      { id: "preview-fin-6", type: "despesa", amount: 459, category: "transporte", description: "Combustível e transporte", date: dateForDay(10) },
+      { id: "preview-fin-7", type: "despesa", amount: 328, category: "saude", description: "Farmácia e consultas", date: dateForDay(15) },
+      { id: "preview-fin-8", type: "despesa", amount: 149.9, category: "assinaturas", description: "Provedor de internet", date: dateForDay(20) },
+      { id: "preview-fin-9", type: "despesa", amount: 112.1, category: "assinaturas", description: "Streaming e apps", date: dateForDay(8) },
+      { id: "preview-fin-10", type: "despesa", amount: 230, category: "outros", description: "Compras diversas", date: dateForDay(18) },
+      // Mês anterior (base da comparação "vs. mês anterior")
+      { id: "preview-fin-11", type: "despesa", amount: 2733, category: "moradia", description: "Despesas fixas do mês", date: dayOf(prevKey, 3) },
+      { id: "preview-fin-12", type: "receita", amount: 8500, category: "salario", description: "Salário", date: dayOf(prevKey, 5) },
+      { id: "preview-fin-13", type: "despesa", amount: 4537, category: "viagem", description: "Viagem de fim de ano", date: dayOf(prevKey, 25) },
     ],
+    monthClosures: [
+      { id: "preview-close-1", monthKey: prevPrevKey, workspaceId: "personal", receitas: 0, despesas: 0, saldo: 6000 },
+      { id: "preview-close-2", monthKey: prevKey, workspaceId: "personal", receitas: 8500, despesas: 7270, saldo: 7230 },
+    ],
+    finGoals: [{ id: "preview-goal-spend", categoryId: "moradia", limit: 4500, workspaceId: "personal" }],
     finRecurrents: [
-      { id: "preview-rec-1", description: "Fatura do cartão", amount: 1490, type: "despesa", categoryId: "outros", day: Math.min(28, day + 4), skippedMonths: [] },
-      { id: "preview-rec-2", description: "Streaming", amount: 59.90, type: "despesa", categoryId: "assinaturas", day: Math.min(28, day + 7), skippedMonths: [] },
+      { id: "preview-rec-1", description: "Aluguel", amount: 1600, type: "despesa", categoryId: "moradia", day: Math.min(31, day + 1), skippedMonths: [] },
+      { id: "preview-rec-2", description: "Fatura do cartão", amount: 1240, type: "despesa", categoryId: "outros", day: Math.min(31, day + 5), skippedMonths: [] },
+      { id: "preview-rec-3", description: "Internet", amount: 149.9, type: "despesa", categoryId: "assinaturas", day: Math.min(31, day + 7), skippedMonths: [] },
     ],
   });
+  if (mode === "1") {
+    // Conversa de exemplo do Pulsinho (somente no modo demonstração local).
+    pulsinhoConversation.push(
+      { role: "user", content: "Analise meus gastos deste mês e crie uma tarefa para revisar as assinaturas, pois acho que posso economizar." },
+      { role: "assistant", content: "Analisei seus gastos e identifiquei R$ 490,00 em assinaturas mensais (14% do total). Posso criar uma tarefa no seu Planner para você revisar essas assinaturas e avaliar cancelamentos?" },
+    );
+    pendingPulsinhoAction = {
+      type: "create_task",
+      label: "Criar tarefa",
+      summary: "Criar tarefa no Planner",
+      payload: { title: "Revisar assinaturas e avaliar cancelamentos", date: offsetDate(2), reminder: "Às 10:00" },
+      requiresConfirmation: true,
+    };
+  }
   if (mode !== "worst") return preview;
   preview.tasks.unshift({
     id: "preview-task-worst",
@@ -1970,7 +2010,8 @@ function bindNavigation() {
 }
 
 function bindPremiumDashboard() {
-  document.querySelector(".pulse-workspace-switcher")?.addEventListener("click", (event) => {
+  bindBoardsShell();
+  document.querySelector(".bd-ws")?.addEventListener("click", (event) => {
     const button = event.target.closest("[data-workspace]");
     if (button) setActiveFinanceWorkspace(button.dataset.workspace);
   });
@@ -2089,25 +2130,67 @@ async function pulseApi(path, options = {}) {
   return payload;
 }
 
+function bdConfirmRows(action) {
+  const payload = action?.payload || {};
+  const labels = [
+    [["title", "titulo", "description", "descricao"], "Título"],
+    [["date", "dueDate", "data"], "Data sugerida"],
+    [["time", "hora", "dueTime"], "Horário"],
+    [["reminder", "lembrete"], "Lembrete"],
+    [["amount", "valor"], "Valor"],
+    [["category", "categoria"], "Categoria"],
+  ];
+  const rows = [];
+  for (const [keys, label] of labels) {
+    const key = keys.find((k) => payload[k] !== undefined && payload[k] !== "");
+    if (!key) continue;
+    let value = payload[key];
+    if (/^\d{4}-\d{2}-\d{2}$/.test(String(value))) {
+      const d = new Date(`${value}T12:00:00`);
+      value = `${BD_WEEKDAYS[d.getDay()]}, ${String(d.getDate()).padStart(2, "0")} de ${BD_MONTHS[d.getMonth()]} de ${d.getFullYear()}`;
+    } else if (key === "amount" || key === "valor") {
+      value = formatCurrency(Number(value) || 0);
+    }
+    if (label === "Título") {
+      rows.push(`<span class="field-label">${label}</span><div class="field-box">${escapeHtml(String(value))}</div>`);
+    } else {
+      const icon = { "Data sugerida": "calendar", "Horário": "clock", "Lembrete": "bell-ring", "Valor": "wallet", "Categoria": "layers" }[label] || "info";
+      rows.push(`<div class="row">${bdIcon(icon)}<span>${label}</span><b>${escapeHtml(String(value))}</b></div>`);
+    }
+  }
+  return rows.join("");
+}
+
 function renderPulsinhoConversation({ loading = false, error = "" } = {}) {
   const root = document.querySelector("#pulseCommandResponse");
   if (!root) return;
-  root.hidden = false;
   root.classList.toggle("is-loading", loading);
+  const intro = `<div class="bd-msg bd-msg--ai">Olá, ${escapeHtml(bdFirstName())}! Como posso te ajudar hoje? Você pode pedir para criar tarefas, organizar sua rotina, registrar gastos ou analisar suas finanças.</div>`;
   const messages = pulsinhoConversation.map((message) => {
-    const label = message.role === "user" ? "Você" : "Pulsinho";
-    const provider = message.role === "assistant" && message.provider
-      ? `<small>${escapeHtml(message.provider === "pulse-engine" ? "Pulse Engine" : message.provider)}</small>`
-      : "";
     const followUps = message === pulsinhoConversation.at(-1) && Array.isArray(message.followUps) ? message.followUps : [];
-    return `<article class="pulse-chat-message pulse-chat-message--${message.role}"><div><strong>${label}</strong>${provider}</div><p>${escapeHtml(message.content)}</p>${followUps.length ? `<div class="pulse-command-followups">${followUps.map((item) => `<button type="button" data-pulsinho-followup="${escapeHtml(item)}">${escapeHtml(item)}</button>`).join("")}</div>` : ""}</article>`;
+    const followUpHtml = followUps.length
+      ? `<div class="bd-followups">${followUps.map((item) => `<button type="button" data-pulsinho-followup="${escapeHtml(item)}">${escapeHtml(item)}</button>`).join("")}</div>`
+      : "";
+    const side = message.role === "user" ? "user" : "ai";
+    return `<div class="bd-msg bd-msg--${side}">${escapeHtml(message.content)}${followUpHtml}</div>`;
   }).join("");
   const action = pendingPulsinhoAction
-    ? `<section class="pulse-action-confirm"><span>Confirmação necessária</span><strong>${escapeHtml(pendingPulsinhoAction.summary || pendingPulsinhoAction.label)}</strong><div><button type="button" class="primary" data-pulsinho-action-confirm>${escapeHtml(pendingPulsinhoAction.label || "Confirmar ação")}</button><button type="button" data-pulsinho-action-cancel>Agora não</button></div></section>`
+    ? `<section class="bd-confirm is-sheet" aria-label="Confirmação necessária">
+        <div class="bd-confirm-head">
+          <span class="ico">${bdIcon("task-check")}</span>
+          <div><strong>Confirmar ação?</strong><small>${escapeHtml(pendingPulsinhoAction.summary || pendingPulsinhoAction.label || "")}</small></div>
+          <button type="button" class="bd-icon-btn close" data-pulsinho-action-cancel aria-label="Fechar">${bdIcon("x")}</button>
+        </div>
+        ${bdConfirmRows(pendingPulsinhoAction) ? `<div class="bd-confirm-rows">${bdConfirmRows(pendingPulsinhoAction)}</div>` : ""}
+        <div class="bd-confirm-actions">
+          <button type="button" class="bd-btn" data-pulsinho-action-cancel>Cancelar</button>
+          <button type="button" class="bd-btn bd-btn--primary" data-pulsinho-action-confirm>${bdIcon("check")}${escapeHtml(pendingPulsinhoAction.label || "Confirmar")}</button>
+        </div>
+      </section>`
     : "";
-  const loadingMessage = loading ? `<div class="pulse-chat-thinking" aria-label="Pulsinho está pensando"><i></i><i></i><i></i></div>` : "";
-  const errorMessage = error ? `<div class="pulse-chat-error">${escapeHtml(error)}</div>` : "";
-  root.innerHTML = `${messages}${action}${loadingMessage}${errorMessage}`;
+  const loadingMessage = loading ? '<div class="bd-typing" aria-label="Pulsinho está pensando"><i></i><i></i><i></i></div>' : "";
+  const errorMessage = error ? `<div class="bd-chat-error">${escapeHtml(error)}</div>` : "";
+  root.innerHTML = `${intro}${messages}${loadingMessage}${errorMessage}${action}`;
   root.scrollTop = root.scrollHeight;
 }
 
@@ -2314,9 +2397,12 @@ function renderFinanceWorkspaceOptions() {
     select.innerHTML = options.map((option) => `<option value="${escapeHtml(option.id)}">${escapeHtml(option.label)}</option>`).join("");
     select.value = options.some((option) => option.id === previous) ? previous : activeWorkspaceId;
   }
-  const switcher = document.querySelector(".pulse-workspace-switcher");
+  const switcher = document.querySelector(".bd-ws");
   if (switcher) {
-    switcher.innerHTML = options.map((option) => `<button type="button" class="pulse-workspace-option${option.id === activeWorkspaceId ? " active" : ""}" data-workspace="${escapeHtml(option.id)}" aria-pressed="${option.id === activeWorkspaceId}">${escapeHtml(option.id.length > 20 ? option.label.replace("Compartilhado · ", "") : option.label)}</button>`).join("");
+    const shortLabels = { personal: "Pessoal", couple: "Casal", family: "Família", business: "Empresa" };
+    const icons = { personal: "user", couple: "users", family: "house", business: "layers" };
+    const visible = options.filter((option) => option.id !== "business" || option.id === activeWorkspaceId);
+    switcher.innerHTML = visible.map((option) => `<button type="button" class="bd-ws-option${option.id === activeWorkspaceId ? " active" : ""}" data-workspace="${escapeHtml(option.id)}" aria-pressed="${option.id === activeWorkspaceId}">${bdIcon(icons[option.id] || "users")}${escapeHtml(shortLabels[option.id] || option.label.replace("Compartilhado · ", ""))}</button>`).join("");
   }
 }
 
@@ -2961,16 +3047,17 @@ function setView(view, { fromHistory = false } = {}) {
   activeView = view;
   trackUsageArea(view);
   // Sync sidebar nav
-  document.querySelectorAll(".nav-item").forEach((item) => {
+  document.querySelectorAll("[data-nav]").forEach((item) => {
     item.classList.toggle("active", item.dataset.view === view);
   });
   // Sync bottom nav (mobile)
-  document.querySelectorAll(".bottom-nav-item").forEach((item) => {
+  document.querySelectorAll("[data-bnav]").forEach((item) => {
     item.classList.toggle("active", item.dataset.view === view);
   });
   document.querySelectorAll(".view").forEach((section) => section.classList.remove("active-view"));
   target.classList.add("active-view");
-  elements.viewTitle.textContent = viewTitles[view];
+  applyViewHeading(view);
+  if (view === "dashboard") requestAnimationFrame(renderBoardsEvolution);
   // Trocas de area precisam começar no topo imediatamente. O scroll suave
   // deixava o cabecalho parcialmente cortado durante a transicao, sobretudo
   // no mobile e em navegadores que preservam a posicao anterior.
@@ -3350,6 +3437,448 @@ function getAchievementsList() {
   ];
 }
 
+// ============================================================
+// Sistema visual dos quadros — shell e Dashboard
+// ============================================================
+const BD_WEEKDAYS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+const BD_MONTHS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+let bdEvoRange = 30;
+
+function bdIcon(id) {
+  return `<svg class="i" aria-hidden="true"><use href="#i-${id}"/></svg>`;
+}
+
+function bdFirstName() {
+  return (getUser()?.name || "Usuário").trim().split(/\s+/)[0] || "Usuário";
+}
+
+function bdInitials(name) {
+  const parts = String(name || "U").trim().split(/\s+/).filter(Boolean);
+  const first = parts[0]?.charAt(0) || "U";
+  const last = parts.length > 1 ? parts[parts.length - 1].charAt(0) : "";
+  return `${first}${last}`.toUpperCase();
+}
+
+function bdFormatBoardDate(date = new Date()) {
+  return `${BD_WEEKDAYS[date.getDay()]}, ${String(date.getDate()).padStart(2, "0")} de ${BD_MONTHS[date.getMonth()]} de ${date.getFullYear()}`;
+}
+
+// Título + subtítulo do cabeçalho de cada área (seguem os quadros).
+function applyViewHeading(view) {
+  const first = bdFirstName();
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Bom dia" : hour < 18 ? "Boa tarde" : "Boa noite";
+  const headings = {
+    dashboard: [`${greeting}, ${first}! 👋`, "Aqui está o seu panorama de hoje."],
+    planner: ["Planner", "Organize suas tarefas, compromissos e metas."],
+    notes: [`Notas, ${first}! 📝`, "Capture ideias, organize informações e transforme em ação."],
+    finances: ["Finanças", "Organize, acompanhe e evolua suas finanças."],
+    autopilot: ["", ""],
+    profile: ["Perfil", ""],
+    settings: ["Configurações", "Gerencie sua conta, preferências, integrações e segurança."],
+  };
+  const [title, subtitle] = headings[view] || [viewTitles[view] || "", ""];
+  if (elements.viewTitle) {
+    elements.viewTitle.textContent = title;
+    elements.viewTitle.style.display = title ? "" : "none";
+  }
+  const subtitleEl = document.querySelector("#viewSubtitle");
+  if (subtitleEl) subtitleEl.textContent = subtitle;
+  document.body.dataset.view = view;
+  const dateEl = document.querySelector("#bdDateText");
+  if (dateEl) dateEl.textContent = bdFormatBoardDate();
+}
+
+function renderShellUser(user) {
+  const name = user?.name || "Usuário";
+  const photoURL = state?.profilePhoto || currentUser?.photoURL || "";
+  const avatar = document.querySelector("#bdUserAvatar");
+  if (avatar) {
+    avatar.innerHTML = photoURL ? `<img src="${escapeHtml(photoURL)}" alt="" />` : escapeHtml(bdInitials(name));
+  }
+  const nameEl = document.querySelector("#bdUserName");
+  if (nameEl) nameEl.textContent = name;
+  if (isLocalDesignPreview) {
+    const planEl = document.querySelector("#bdUserPlan");
+    if (planEl) planEl.textContent = "Plano Pro";
+  }
+}
+
+// ── Dados do dashboard ─────────────────────────────────────
+function bdWorkspaceFinances() {
+  return (state.finances || []).filter((f) => f.date && (f.workspaceId || "personal") === activeWorkspaceId);
+}
+
+function bdSignedAmount(entry) {
+  const amount = Number(entry.amount) || 0;
+  return entry.type === "receita" ? amount : -amount;
+}
+
+// Mesmo critério do saldo do app: sobra do mês anterior (se fechado) + lançamentos do mês até a data.
+function bdBalanceOn(iso, entries = bdWorkspaceFinances()) {
+  const monthKey = iso.slice(0, 7);
+  return getCarryOverBalance(monthKey, activeWorkspaceId)
+    + entries.filter((f) => f.date.startsWith(monthKey) && f.date <= iso).reduce((sum, f) => sum + bdSignedAmount(f), 0);
+}
+
+function bdBalanceSeries(range) {
+  const entries = bdWorkspaceFinances();
+  const net = new Map();
+  for (const entry of entries) net.set(entry.date, (net.get(entry.date) || 0) + bdSignedAmount(entry));
+  const monthly = range > 120;
+  const days = monthly ? 365 : range;
+  const end = new Date();
+  end.setHours(12, 0, 0, 0);
+  const cursor = new Date(end);
+  cursor.setDate(cursor.getDate() - (days - 1));
+  const points = [];
+  let running = 0;
+  let runningMonth = "";
+  while (cursor <= end) {
+    const iso = toLocalIso(cursor);
+    const monthKey = iso.slice(0, 7);
+    if (monthKey !== runningMonth) {
+      runningMonth = monthKey;
+      running = getCarryOverBalance(monthKey, activeWorkspaceId)
+        + entries.filter((f) => f.date.startsWith(monthKey) && f.date < iso).reduce((sum, f) => sum + bdSignedAmount(f), 0);
+    }
+    running += net.get(iso) || 0;
+    points.push({ date: iso, value: running });
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  if (!monthly) return points;
+  const byMonth = new Map();
+  for (const point of points) byMonth.set(point.date.slice(0, 7), point);
+  return [...byMonth.values()];
+}
+
+function bdNiceStep(raw) {
+  if (!(raw > 0)) return 1;
+  const exp = Math.floor(Math.log10(raw));
+  const base = raw / 10 ** exp;
+  const nice = base <= 1 ? 1 : base <= 2 ? 2 : base <= 2.5 ? 2.5 : base <= 5 ? 5 : 10;
+  return nice * 10 ** exp;
+}
+
+function bdSmoothPath(coords) {
+  if (coords.length < 3) return coords.map((p, i) => `${i ? "L" : "M"}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(" ");
+  let d = `M${coords[0][0].toFixed(1)} ${coords[0][1].toFixed(1)}`;
+  for (let i = 0; i < coords.length - 1; i += 1) {
+    const p0 = coords[i - 1] || coords[i];
+    const p1 = coords[i];
+    const p2 = coords[i + 1];
+    const p3 = coords[i + 2] || p2;
+    const c1x = p1[0] + (p2[0] - p0[0]) / 6;
+    const c1y = p1[1] + (p2[1] - p0[1]) / 6;
+    const c2x = p2[0] - (p3[0] - p1[0]) / 6;
+    const c2y = p2[1] - (p3[1] - p1[1]) / 6;
+    d += ` C${c1x.toFixed(1)} ${c1y.toFixed(1)} ${c2x.toFixed(1)} ${c2y.toFixed(1)} ${p2[0].toFixed(1)} ${p2[1].toFixed(1)}`;
+  }
+  return d;
+}
+
+function bdAxisMoney(value) {
+  return `R$ ${Math.round(value).toLocaleString("pt-BR")}`;
+}
+
+function bdPointLabel(point, monthly) {
+  const [year, month, day] = point.date.split("-").map(Number);
+  return monthly ? `${BD_MONTHS[month - 1]}/${String(year).slice(2)}` : `${day} ${BD_MONTHS[month - 1]}`;
+}
+
+function renderBoardsEvolution() {
+  const host = document.querySelector("#bdEvoChart");
+  if (!host) return;
+  const width = host.clientWidth;
+  const height = host.clientHeight;
+  if (!width || !height) return; // aba escondida: renderiza de novo quando aparecer
+  const monthly = bdEvoRange > 120;
+  const series = bdBalanceSeries(bdEvoRange);
+  if (!bdWorkspaceFinances().length || !series.length) {
+    host.innerHTML = '<div class="bd-empty">Sem lançamentos no período. Registre uma receita ou despesa para ver a evolução.</div>';
+    return;
+  }
+  const values = series.map((p) => p.value);
+  const rawMin = Math.min(...values);
+  const rawMax = Math.max(...values);
+  const step = bdNiceStep((Math.max(rawMax - rawMin, Math.abs(rawMax) * 0.05, 100)) / 5);
+  const yMin = Math.floor(rawMin / step) * step;
+  let yMax = Math.ceil(rawMax / step) * step;
+  if (yMax === yMin) yMax = yMin + step;
+  const pad = { left: 56, right: 16, top: 16, bottom: 24 };
+  const plotW = width - pad.left - pad.right;
+  const plotH = height - pad.top - pad.bottom;
+  const x = (i) => pad.left + (series.length === 1 ? plotW : (i / (series.length - 1)) * plotW);
+  const y = (v) => pad.top + plotH - ((v - yMin) / (yMax - yMin)) * plotH;
+  const coords = series.map((p, i) => [x(i), y(p.value)]);
+  const line = bdSmoothPath(coords);
+  const area = `${line} L${coords.at(-1)[0].toFixed(1)} ${(pad.top + plotH).toFixed(1)} L${coords[0][0].toFixed(1)} ${(pad.top + plotH).toFixed(1)} Z`;
+  const ticks = [];
+  for (let value = yMin; value <= yMax + step / 2; value += step) ticks.push(value);
+  const grid = ticks.map((value) => `<line x1="${pad.left}" x2="${width - pad.right}" y1="${y(value).toFixed(1)}" y2="${y(value).toFixed(1)}"/><text x="${pad.left - 8}" y="${(y(value) + 3.5).toFixed(1)}" text-anchor="end">${bdAxisMoney(value)}</text>`).join("");
+  const labelCount = width < 420 ? 3 : 5;
+  const labelIdx = [...new Set(Array.from({ length: labelCount }, (_, k) => Math.round((k / (labelCount - 1)) * (series.length - 1))))];
+  const xLabels = labelIdx.map((idx, k) => `<text x="${x(idx).toFixed(1)}" y="${height - 6}" text-anchor="${k === 0 ? "start" : k === labelIdx.length - 1 ? "end" : "middle"}">${bdPointLabel(series[idx], monthly)}</text>`).join("");
+  const last = coords.at(-1);
+  const tipText = formatCurrency(series.at(-1).value);
+  const tipW = tipText.length * 6.6 + 18;
+  const tipX = Math.min(Math.max(last[0] - tipW + 10, pad.left), width - tipW - 4);
+  const tipY = Math.max(last[1] - 34, 2);
+  host.innerHTML = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" preserveAspectRatio="none">
+    <defs><linearGradient id="bdEvoFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#22d3ee" stop-opacity=".38"/><stop offset="1" stop-color="#22d3ee" stop-opacity="0"/></linearGradient></defs>
+    <g class="grid">${grid}</g>
+    <path d="${area}" fill="url(#bdEvoFill)"/>
+    <path class="line" d="${line}"/>
+    ${xLabels}
+    <g class="tip"><rect x="${tipX.toFixed(1)}" y="${tipY.toFixed(1)}" width="${tipW.toFixed(1)}" height="24" rx="8"/><text x="${(tipX + tipW / 2).toFixed(1)}" y="${(tipY + 16).toFixed(1)}" text-anchor="middle">${escapeHtml(tipText)}</text></g>
+    <circle class="dot" cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="4.5"/>
+  </svg>`;
+  host.setAttribute("aria-label", `Evolução do saldo: ${tipText} hoje`);
+}
+
+function renderBoardsSparkline(series) {
+  const svg = document.querySelector("#bdBalanceSpark");
+  if (!svg) return;
+  const pts = series.slice(-30);
+  if (pts.length < 2) { svg.innerHTML = ""; return; }
+  const min = Math.min(...pts.map((p) => p.value));
+  const max = Math.max(...pts.map((p) => p.value));
+  const span = max - min || 1;
+  const coords = pts.map((p, i) => [(i / (pts.length - 1)) * 200, 58 - ((p.value - min) / span) * 46]);
+  const line = bdSmoothPath(coords);
+  svg.innerHTML = `<defs><linearGradient id="bdSparkFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#25d388" stop-opacity=".45"/><stop offset="1" stop-color="#25d388" stop-opacity="0"/></linearGradient></defs><path d="${line} L200 70 L0 70 Z" fill="url(#bdSparkFill)"/><path d="${line}" fill="none" stroke="#25d388" stroke-width="1.6" stroke-linecap="round"/>`;
+}
+
+const BD_CATEGORY_ICONS = {
+  moradia: "home", contas: "home", manutencao: "home",
+  alimentacao: "fork", mercado: "fork",
+  transporte: "car", combustivel: "car",
+  saude: "heart", academia: "heart", beleza: "heart",
+  assinaturas: "layers",
+};
+const BD_CATEGORY_SHORT = { alimentacao: "Aliment.", mercado: "Mercado", transporte: "Transp.", assinaturas: "Assin.", investimentos_desp: "Invest." };
+
+function bdCategoryName(id) {
+  if (BD_CATEGORY_SHORT[id]) return BD_CATEGORY_SHORT[id];
+  const label = String(findCategory(id).label || "Outros").replace(/^[^\p{L}\p{N}]+/u, "").trim();
+  return label.length > 9 ? `${label.slice(0, 8)}.` : label;
+}
+
+function renderBoardsCategories(monthEntries) {
+  const host = document.querySelector("#bdCats");
+  if (!host) return;
+  const expenses = monthEntries.filter((f) => f.type === "despesa");
+  const total = expenses.reduce((sum, f) => sum + (Number(f.amount) || 0), 0);
+  if (!total) {
+    host.innerHTML = '<div class="bd-empty" style="grid-column:1/-1;align-self:center">Nenhum gasto neste mês.</div>';
+    return;
+  }
+  const byCat = new Map();
+  for (const f of expenses) byCat.set(f.category || "outros", (byCat.get(f.category || "outros") || 0) + (Number(f.amount) || 0));
+  const sorted = [...byCat.entries()].sort((a, b) => b[1] - a[1]);
+  const top = sorted.slice(0, 5);
+  const restTotal = sorted.slice(5).reduce((sum, [, v]) => sum + v, 0);
+  const rows = top.map(([id, value]) => ({ id, value }));
+  const outrosExisting = rows.find((r) => r.id === "outros");
+  if (restTotal) {
+    if (outrosExisting) outrosExisting.value += restTotal;
+    else rows.push({ id: "outros", value: restTotal });
+  }
+  const maxPct = Math.max(...rows.map((r) => r.value / total));
+  host.style.gridTemplateColumns = `repeat(${rows.length}, 1fr)`;
+  host.innerHTML = rows.map((r) => {
+    const pct = r.value / total;
+    const icon = BD_CATEGORY_ICONS[r.id] || "dots-circle";
+    return `<div class="bd-cat" title="${escapeHtml(findCategory(r.id).label)} · ${escapeHtml(formatCurrency(r.value))}">
+      <span class="bd-cat-pct">${Math.round(pct * 100)}%</span>
+      <span class="bd-cat-track"><i class="bd-cat-bar" style="height:${Math.max(6, (pct / maxPct) * 100).toFixed(1)}%"></i></span>
+      <span class="bd-cat-ico">${bdIcon(icon)}</span>
+      <span class="bd-cat-name">${escapeHtml(bdCategoryName(r.id))}</span>
+    </div>`;
+  }).join("");
+}
+
+function bdDueLabel(dueIso) {
+  const diff = Math.round((new Date(`${dueIso}T12:00:00`) - new Date(`${todayIso}T12:00:00`)) / 86400000);
+  const when = diff === 0 ? "Vence hoje" : diff === 1 ? "Vence amanhã" : `Vence em ${diff} dias`;
+  const d = new Date(`${dueIso}T12:00:00`);
+  return `${when} • ${BD_WEEKDAYS[d.getDay()]}, ${String(d.getDate()).padStart(2, "0")} de ${BD_MONTHS[d.getMonth()]}`;
+}
+
+function bdRecurringIcon(item) {
+  const text = `${item.description || ""} ${item.categoryId || ""}`.toLowerCase();
+  if (/aluguel|moradia|condom/.test(text)) return "home";
+  if (/internet|wifi|net\b/.test(text)) return "wifi";
+  if (/cart|fatura/.test(text)) return "card";
+  return "card";
+}
+
+function renderBoardsToday() {
+  const host = document.querySelector("#bdToday");
+  if (!host) return;
+  const monthKey = todayIso.slice(0, 7);
+  const [year, month] = monthKey.split("-").map(Number);
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const todayDay = Number(todayIso.slice(8, 10));
+  const entries = bdWorkspaceFinances();
+  const items = [];
+
+  for (const item of (state.finRecurrents || []).filter((r) => (r.workspaceId || "personal") === activeWorkspaceId)) {
+    if (isRecurrentSkipped(item, monthKey)) continue;
+    const dueDay = Math.min(Number(item.day) || 1, daysInMonth);
+    if (dueDay < todayDay || dueDay - todayDay > 7) continue;
+    const alreadyLogged = entries.some((e) => e.date.startsWith(monthKey) && e.description === item.description && Number(e.amount) === Number(item.amount));
+    if (alreadyLogged) continue;
+    const dueIso = `${monthKey}-${String(dueDay).padStart(2, "0")}`;
+    items.push({
+      sort: `${dueIso} 99:99`, icon: bdRecurringIcon(item), tone: "tone-violet", title: item.description,
+      sub: bdDueLabel(dueIso), amount: `${item.type === "receita" ? "+ " : ""}${formatCurrency(Number(item.amount) || 0)}`,
+    });
+  }
+  for (const event of state.events.filter((e) => e.date === todayIso)) {
+    items.push({
+      sort: `${event.date} ${event.time || "00:00"}`, icon: "calendar", tone: "tone-blue", title: event.title,
+      sub: `Hoje${event.time ? ` • ${event.time}` : ""}${event.location ? ` · ${event.location}` : ""}`, amount: "",
+    });
+  }
+  items.sort((a, b) => a.sort.localeCompare(b.sort));
+  if (!items.length) {
+    host.innerHTML = '<li class="bd-empty" style="display:block;border:0">Nada para hoje. Aproveite o dia livre.</li>';
+    return;
+  }
+  host.innerHTML = items.slice(0, 4).map((item) => `<li>
+    <span class="bd-li-ico ${item.tone}">${bdIcon(item.icon)}</span>
+    <span class="bd-li-main"><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.sub)}</small></span>
+    ${item.amount ? `<span class="bd-li-amt">${escapeHtml(item.amount)}</span>` : ""}
+  </li>`).join("");
+}
+
+function bdTrendHtml(pct, { inverse = false } = {}) {
+  if (!Number.isFinite(pct)) return "";
+  const up = pct >= 0;
+  const good = inverse ? !up : up;
+  const text = `${up ? "+" : "-"}${Math.abs(pct).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
+  return `<b class="${good ? "" : "down"}">${bdIcon(up ? "arrow-up" : "arrow-down")}${text}</b> vs. mês anterior`;
+}
+
+function renderBoardsDashboard() {
+  if (!document.querySelector("#bdBalance")) return;
+  const monthKey = todayIso.slice(0, 7);
+  const entries = bdWorkspaceFinances();
+  const monthEntries = entries.filter((f) => f.date.startsWith(monthKey));
+  const receitas = monthEntries.filter((f) => f.type === "receita").reduce((s, f) => s + (Number(f.amount) || 0), 0);
+  const despesas = monthEntries.filter((f) => f.type === "despesa").reduce((s, f) => s + (Number(f.amount) || 0), 0);
+  const saldo = getCarryOverBalance(monthKey, activeWorkspaceId) + receitas - despesas;
+
+  document.querySelector("#bdBalance").textContent = formatCurrency(saldo);
+  document.querySelector("#bdSpend").textContent = formatCurrency(despesas);
+  document.querySelector("#bdIncome").textContent = formatCurrency(receitas);
+
+  // Saldo: variação contra o mesmo dia do mês anterior
+  const prevMonthKey = getPreviousMonthKey(monthKey);
+  const prevHasData = entries.some((f) => f.date.startsWith(prevMonthKey)) || isMonthClosed(prevMonthKey);
+  const [py, pm] = prevMonthKey.split("-").map(Number);
+  const prevDay = Math.min(Number(todayIso.slice(8, 10)), new Date(py, pm, 0).getDate());
+  const prevBalance = bdBalanceOn(`${prevMonthKey}-${String(prevDay).padStart(2, "0")}`, entries);
+  const trendEl = document.querySelector("#bdBalanceTrend");
+  if (trendEl) trendEl.innerHTML = prevHasData && prevBalance ? bdTrendHtml(((saldo - prevBalance) / Math.abs(prevBalance)) * 100) : "Saldo do mês até hoje";
+
+  // Gastos: meta (soma dos limites por categoria) ou variação contra o mês anterior
+  const goalTotal = (state.finGoals || []).filter((g) => (g.workspaceId || "personal") === activeWorkspaceId).reduce((s, g) => s + (Number(g.limit) || 0), 0);
+  const spendNote = document.querySelector("#bdSpendNote");
+  const spendProgress = document.querySelector("#bdSpendProgress");
+  const spendBar = document.querySelector("#bdSpendBar");
+  if (goalTotal > 0) {
+    const pct = Math.round((despesas / goalTotal) * 100);
+    spendNote.textContent = `${pct}% da meta (${formatCurrency(goalTotal)})`;
+    spendProgress.hidden = false;
+    spendBar.style.width = `${Math.min(100, pct)}%`;
+    spendBar.className = pct > 100 ? "over" : pct >= 85 ? "warn" : "";
+  } else {
+    const prevSpend = entries.filter((f) => f.date.startsWith(prevMonthKey) && f.type === "despesa").reduce((s, f) => s + (Number(f.amount) || 0), 0);
+    spendProgress.hidden = true;
+    spendNote.innerHTML = prevSpend ? bdTrendHtml(((despesas - prevSpend) / prevSpend) * 100, { inverse: true }) : "Defina metas de gasto em Finanças";
+  }
+
+  const prevIncome = entries.filter((f) => f.date.startsWith(prevMonthKey) && f.type === "receita").reduce((s, f) => s + (Number(f.amount) || 0), 0);
+  const incomeTrend = document.querySelector("#bdIncomeTrend");
+  if (incomeTrend) incomeTrend.innerHTML = prevIncome ? bdTrendHtml(((receitas - prevIncome) / prevIncome) * 100) : "Entradas do mês";
+
+  // Resultado do mês
+  const result = receitas - despesas;
+  document.querySelector("#bdResIn").textContent = formatCurrency(receitas);
+  document.querySelector("#bdResOut").textContent = formatCurrency(despesas);
+  const totalEl = document.querySelector("#bdResTotal");
+  totalEl.textContent = `${result >= 0 ? "+ " : "- "}${formatCurrency(Math.abs(result))}`;
+  totalEl.closest("li")?.classList.toggle("negative", result < 0);
+
+  renderBoardsSparkline(bdBalanceSeries(30));
+  renderBoardsEvolution();
+  renderBoardsCategories(monthEntries);
+  renderBoardsToday();
+
+  const overdue = state.tasks.some((t) => t.status !== "Concluida" && t.status !== "Cancelada" && t.dueDate && t.dueDate < todayIso);
+  const dot = document.querySelector("#bdBellDot");
+  if (dot) dot.hidden = !overdue;
+  const chatRoot = document.querySelector("#pulseCommandResponse");
+  if (chatRoot && !chatRoot.children.length) renderPulsinhoConversation();
+}
+
+function bindBoardsShell() {
+  // Intervalo do gráfico de evolução
+  document.querySelector("#bdEvoRange")?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-range]");
+    if (!button) return;
+    bdEvoRange = Number(button.dataset.range) || 30;
+    document.querySelectorAll("#bdEvoRange button").forEach((item) => item.classList.toggle("active", item === button));
+    renderBoardsEvolution();
+  });
+  const chart = document.querySelector("#bdEvoChart");
+  if (chart && "ResizeObserver" in window) {
+    let lastWidth = 0;
+    new ResizeObserver(() => {
+      if (Math.abs(chart.clientWidth - lastWidth) < 2) return;
+      lastWidth = chart.clientWidth;
+      renderBoardsEvolution();
+    }).observe(chart);
+  }
+  // Carrossel de KPIs (mobile): bolinhas acompanham a rolagem
+  const kpis = document.querySelector("#bdKpis");
+  kpis?.addEventListener("scroll", () => {
+    const max = kpis.scrollWidth - kpis.clientWidth;
+    const count = kpis.querySelectorAll(".bd-kpi").length;
+    const index = max > 0 ? Math.round((kpis.scrollLeft / max) * (count - 1)) : 0;
+    document.querySelectorAll("#bdKpiDots i").forEach((dot, i) => dot.classList.toggle("active", i === Math.min(index, count - 1)));
+  }, { passive: true });
+  // Busca recolhida em ícone
+  const search = document.querySelector(".bd-search");
+  const searchInput = document.querySelector("#globalSearch");
+  document.querySelector("#bdSearchBtn")?.addEventListener("click", () => {
+    const open = search.classList.toggle("open");
+    if (open) searchInput?.focus();
+    else if (searchInput?.value) { searchInput.value = ""; renderAll(); }
+  });
+  searchInput?.addEventListener("blur", () => { if (!searchInput.value.trim()) search?.classList.remove("open"); });
+  searchInput?.addEventListener("keydown", (event) => { if (event.key === "Escape") { searchInput.blur(); search?.classList.remove("open"); } });
+  // Sino → preferências de notificação
+  document.querySelector("#bdBellBtn")?.addEventListener("click", () => setView("settings"));
+  // Logo → Início
+  document.querySelectorAll("[data-nav-home]").forEach((link) => link.addEventListener("click", (event) => { event.preventDefault(); setView("dashboard"); }));
+  // Cartão do Pulsinho na lateral abre a conversa
+  document.querySelector("[data-focus-chat]")?.addEventListener("click", () => {
+    setView("dashboard");
+    requestAnimationFrame(() => {
+      document.querySelector("#bdChat")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      document.querySelector("#pulseCommandInput")?.focus({ preventScroll: true });
+    });
+  });
+  document.querySelector("#bdChatMore")?.addEventListener("click", () => {
+    pulsinhoConversation.length = 0;
+    pendingPulsinhoAction = null;
+    renderPulsinhoConversation();
+  });
+}
+
 function renderDashboard() {
   const doneToday = state.tasks.filter((task) => task.completedAt === todayIso).length;
   const doneTotal = state.tasks.filter((task) => task.status === "Concluida").length;
@@ -3399,6 +3928,7 @@ function renderDashboard() {
   renderChart();
   renderGoalSummary();
   renderDashFinance();
+  renderBoardsDashboard();
   renderPremiumDashboard({
     monthKey,
     monthEntries,
