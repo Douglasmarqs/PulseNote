@@ -7,14 +7,11 @@ const html = fs.readFileSync(path.join(__dirname, "../src/index.html"), "utf8");
 const app = fs.readFileSync(path.join(__dirname, "../src/app.js"), "utf8");
 const css = fs.readFileSync(path.join(__dirname, "../src/product-system.css"), "utf8");
 
-test("evolução do saldo oferece gráfico acessível e intervalos de período", () => {
-  assert.match(html, /id="bdEvoChart" role="img" aria-label=/);
-  for (const range of ["7", "30", "90", "365"]) {
-    assert.match(html, new RegExp(`<button type="button" data-range="${range}"`));
-  }
+test("gráfico de projeção abre detalhes por mouse e teclado", () => {
+  assert.match(html, /class="pulse-forecast-visual" role="button" tabindex="0"/);
   assert.match(html, /id="pulseForecastDetailModal"/);
-  assert.match(app, /function renderBoardsEvolution\(\)/);
-  assert.match(app, /host\.setAttribute\("aria-label"/);
+  assert.match(app, /forecastVisual\?\.addEventListener\("click", openDashboardForecastDetail\)/);
+  assert.match(app, /event\.key !== "Enter" && event\.key !== " "/);
 });
 
 test("detalhes da projeção usam texto seguro e dados do backend", () => {
