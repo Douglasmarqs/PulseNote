@@ -783,6 +783,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   bindFinGoalsModal();
   bindFinRecurModal();
   bindFinControlBoard();
+  bindAutopilotBoard();
   bindGlobalPalette();
   autoApplyRecurrents();
   autoCloseFinMonths();
@@ -3222,6 +3223,7 @@ function setView(view, { fromHistory = false } = {}) {
   document.querySelectorAll(".view").forEach((section) => section.classList.remove("active-view"));
   target.classList.add("active-view");
   applyViewHeading(view);
+  placePulsinhoPanel(view);
   if (view === "dashboard") requestAnimationFrame(renderBoardsEvolution);
   if (view === "notes") renderNotes();
   // Trocas de area precisam começar no topo imediatamente. O scroll suave
@@ -3683,6 +3685,63 @@ function applyViewHeading(view) {
   document.body.dataset.activeView = view;
   const dateEl = document.querySelector("#bdDateText");
   if (dateEl) dateEl.textContent = bdFormatBoardDate();
+}
+
+// O painel do Pulsinho é um só: no Autopilot ele vai para a coluna da direita
+// (como no quadro) e volta para o Início ao sair. A conversa continua a mesma.
+function placePulsinhoPanel(view) {
+  const chat = document.querySelector("#bdChat");
+  const slot = document.querySelector("#apChatSlot");
+  const home = document.querySelector("#dashboardView .bd-dash");
+  if (!chat || !slot || !home) return;
+  if (view === "autopilot") {
+    if (chat.parentElement !== slot) slot.appendChild(chat);
+    renderAutopilotAiPreference();
+  } else if (chat.parentElement !== home) {
+    const confirm = chat.querySelector("#autopilotConfirmModal");
+    if (confirm) { confirm.hidden = true; document.body.appendChild(confirm); }
+    chat.classList.remove("has-ap-confirm");
+    home.appendChild(chat);
+  }
+}
+
+const AP_AI_LABELS = { auto: "Automático · GPT · Claude", openai: "GPT (OpenAI)", anthropic: "Claude (Anthropic)" };
+function renderAutopilotAiPreference() {
+  const pref = state?.aiProviderPreference || "auto";
+  const label = document.querySelector("#apAiLabel");
+  if (label) label.textContent = AP_AI_LABELS[pref] || AP_AI_LABELS.auto;
+  document.querySelectorAll("[data-ai-pref]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.aiPref === pref);
+    button.setAttribute("aria-checked", String(button.dataset.aiPref === pref));
+  });
+  const select = document.querySelector("#pulsinhoAiPreference");
+  if (select && document.activeElement !== select) select.value = pref;
+}
+
+function bindAutopilotBoard() {
+  const button = document.querySelector("#apAiBtn");
+  const menu = document.querySelector("#apAiMenu");
+  if (!button || !menu) return;
+  const close = () => { menu.hidden = true; button.setAttribute("aria-expanded", "false"); };
+  button.addEventListener("click", (event) => {
+    event.stopPropagation();
+    renderAutopilotAiPreference();
+    menu.hidden = !menu.hidden;
+    button.setAttribute("aria-expanded", String(!menu.hidden));
+    if (!menu.hidden) menu.querySelector(".active, [data-ai-pref]")?.focus();
+  });
+  menu.addEventListener("click", (event) => {
+    const option = event.target.closest("[data-ai-pref]");
+    if (!option) return;
+    state.aiProviderPreference = ["openai", "anthropic"].includes(option.dataset.aiPref) ? option.dataset.aiPref : "auto";
+    saveState();
+    renderAutopilotAiPreference();
+    close();
+    showToast(`IA do Pulsinho: ${AP_AI_LABELS[state.aiProviderPreference].split(" · ")[0]}.`);
+  });
+  document.addEventListener("click", (event) => { if (!menu.hidden && !event.target.closest(".ap-ai")) close(); });
+  document.addEventListener("keydown", (event) => { if (event.key === "Escape" && !menu.hidden) { close(); button.focus(); } });
+  renderAutopilotAiPreference();
 }
 
 function renderShellUser(user) {

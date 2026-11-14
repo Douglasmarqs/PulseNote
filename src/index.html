@@ -548,30 +548,79 @@
 
         <!-- Sugestões reais do backend; nenhuma ação é executada sem confirmação. -->
         <section id="autopilotView" class="view" aria-labelledby="autopilotTitle">
-          <div class="autopilot-header">
-            <div>
-              <p class="autopilot-eyebrow">Pulse Autopilot</p>
-              <h2 id="autopilotTitle">Seu próximo passo, com clareza</h2>
-              <p>Prioridades de finanças, planner e notas. Você decide o que executar.</p>
+          <div class="ap">
+            <div class="ap-main">
+              <header class="ap-hero">
+                <div class="ap-hero-copy">
+                  <h2 id="autopilotTitle"><svg class="i"><use href="#i-bolt"/></svg><span>Seu próximo passo, com clareza</span></h2>
+                  <p class="ap-hide-m">O Autopilot analisa suas finanças, tarefas e notas e sugere as melhores ações para você avançar com foco, economia e organização.</p>
+                  <p class="ap-show-m">Sugestões personalizadas para você avançar com foco, economia e organização.</p>
+                </div>
+                <div class="ap-ai">
+                  <button type="button" class="ap-ai-btn" id="apAiBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="apAiMenu">
+                    <span class="ap-ai-ico"><svg class="i"><use href="#i-gear"/></svg></span>
+                    <span class="ap-ai-copy"><strong>IA do Autopilot</strong><small id="apAiLabel">Automático · GPT · Claude</small></span>
+                    <svg class="i ap-ai-chev"><use href="#i-chev-right"/></svg>
+                  </button>
+                  <div class="ap-ai-menu" id="apAiMenu" role="menu" hidden>
+                    <p class="ap-ai-menu-title">Qual IA o Pulsinho usa?</p>
+                    <button type="button" role="menuitemradio" data-ai-pref="auto"><strong>Automático</strong><small>Escolhe entre GPT e Claude conforme a disponibilidade.</small></button>
+                    <button type="button" role="menuitemradio" data-ai-pref="openai"><strong>GPT</strong><small>Sempre a OpenAI.</small></button>
+                    <button type="button" role="menuitemradio" data-ai-pref="anthropic"><strong>Claude</strong><small>Sempre a Anthropic.</small></button>
+                  </div>
+                </div>
+              </header>
+
+              <div class="bd-card ap-features ap-hide-m">
+                <div><span class="ap-feat-ico is-green"><svg class="i"><use href="#i-check"/></svg></span><span><strong>Sugestões personalizadas</strong><small>com base nos seus dados</small></span></div>
+                <div><span class="ap-feat-ico is-violet"><svg class="i"><use href="#i-lock"/></svg></span><span><strong>Seguro e privado</strong><small>nada muda sem você aprovar</small></span></div>
+                <div><span class="ap-feat-ico is-blue"><svg class="i"><use href="#i-bars"/></svg></span><span><strong>Mais foco, menos esforço</strong><small>você aprova o que faz sentido</small></span></div>
+              </div>
+
+              <div class="ap-head">
+                <h3>Sugestões para você agora <span class="bd-info" title="As sugestões são calculadas a partir dos seus dados reais e atualizadas quando eles mudam."><svg class="i"><use href="#i-info"/></svg></span></h3>
+                <div class="ap-filters" id="apFilters" role="group" aria-label="Filtrar sugestões">
+                  <button type="button" class="active" data-ap-filter="all" aria-pressed="true">Todas (<span data-ap-count="all">0</span>)</button>
+                  <button type="button" data-ap-filter="finances" aria-pressed="false">Finanças (<span data-ap-count="finances">0</span>)</button>
+                  <button type="button" data-ap-filter="planner" aria-pressed="false">Planner (<span data-ap-count="planner">0</span>)</button>
+                  <button type="button" data-ap-filter="notes" aria-pressed="false">Notas (<span data-ap-count="notes">0</span>)</button>
+                  <button type="button" id="autopilotRefresh" class="ap-refresh" aria-label="Atualizar sugestões" title="Atualizar sugestões"><svg class="i"><use href="#i-repeat"/></svg></button>
+                </div>
+              </div>
+              <p id="autopilotStatus" class="ap-status" role="status" aria-live="polite">Carregando sugestões…</p>
+              <div id="autopilotList" class="ap-list"></div>
+              <p class="ap-privacy"><svg class="i"><use href="#i-shield"/></svg>Nada é alterado automaticamente. Cada ação exige sua confirmação.</p>
             </div>
-            <button type="button" id="autopilotRefresh" class="ghost-button">Atualizar sugestões</button>
+            <div class="ap-side" id="apChatSlot"></div>
           </div>
-          <p id="autopilotStatus" class="autopilot-status" role="status" aria-live="polite">Carregando sugestões…</p>
-          <div id="autopilotList" class="autopilot-list"></div>
-          <p class="autopilot-privacy">Nada é alterado automaticamente. Cada ação exige sua confirmação.</p>
         </section>
 
-        <div id="autopilotConfirmModal" class="modal-backdrop" hidden>
-          <div class="modal-card autopilot-confirm-card" role="dialog" aria-modal="true" aria-labelledby="autopilotConfirmTitle" aria-describedby="autopilotConfirmDescription">
-            <div class="modal-header">
-              <h2 id="autopilotConfirmTitle">Confirmar ação</h2>
-              <button type="button" id="autopilotConfirmClose" class="icon-button" aria-label="Fechar">✕</button>
+        <!-- Confirmação do Autopilot: fica dentro do painel do Pulsinho no
+             computador e vira uma folha inferior no celular/tablet. -->
+        <div id="autopilotConfirmModal" class="ap-confirm" hidden>
+          <div class="ap-confirm-card" role="dialog" aria-modal="true" aria-labelledby="autopilotConfirmTitle" aria-describedby="autopilotConfirmDescription">
+            <div class="ap-confirm-head">
+              <span class="ap-confirm-ico"><svg class="i"><use href="#i-clipboard-list"/></svg></span>
+              <div><strong id="autopilotConfirmTitle">Confirmar ação?</strong><small id="apConfirmSub"></small></div>
+              <button type="button" id="autopilotConfirmClose" class="ap-x" aria-label="Fechar"><svg class="i"><use href="#i-x"/></svg></button>
             </div>
             <p id="autopilotConfirmDescription"></p>
-            <div class="autopilot-confirm-actions">
-              <button type="button" id="autopilotConfirmCancel" class="ghost-button">Cancelar</button>
-              <button type="button" id="autopilotConfirmApply" class="primary-button">Confirmar</button>
+            <ul class="ap-confirm-rows" id="apConfirmRows"></ul>
+            <div class="ap-confirm-actions">
+              <button type="button" id="autopilotConfirmCancel" class="ap-btn ap-btn--ghost">Cancelar</button>
+              <button type="button" id="autopilotConfirmApply" class="ap-btn ap-btn--primary"><svg class="i"><use href="#i-check"/></svg><span>Aprovar</span></button>
             </div>
+          </div>
+        </div>
+
+        <!-- Detalhes de uma sugestão do Autopilot -->
+        <div id="apDetailModal" class="modal-backdrop" hidden>
+          <div class="modal-card ap-detail" role="dialog" aria-modal="true" aria-labelledby="apDetailTitle">
+            <div class="modal-header">
+              <div><p class="ap-detail-area" id="apDetailArea"></p><h2 id="apDetailTitle">Detalhes</h2></div>
+              <button type="button" class="icon-button" id="apDetailClose" aria-label="Fechar"><svg class="i"><use href="#i-x"/></svg></button>
+            </div>
+            <div class="modal-body ap-detail-body" id="apDetailBody"></div>
           </div>
         </div>
 
