@@ -98,7 +98,7 @@ function aggregateUsage(snapshot) {
   return { trackedUsers, topAreas: ranked(areaCounts, 7), topTransitions: ranked(transitions, 6) };
 }
 
-async function authUserActivity(firebase, days = 30) {
+async function authUserActivity(firebase, days = 30, historyDays = 90) {
   const users = [];
   let cursor;
   do {
@@ -115,33 +115,82 @@ async function authUserActivity(firebase, days = 30) {
   });
   const byDate = new Map(buckets.map((entry) => [entry.date, entry]));
   let active30d = 0;
+  // Contas acumuladas por dia (pela data de criação) para o gráfico de
+  // crescimento; e novas contas nos últimos 30 dias x 30 dias anteriores.
+  const historyStart = new Date(today.getTime() - (historyDays - 1) * 86400000);
+  historyStart.setUTCHours(0, 0, 0, 0);
+  const created = new Map();
+  let beforeHistory = 0;
+  let newUsers30d = 0;
+  let newUsersPrev30d = 0;
+  const prevStart = new Date(start.getTime() - days * 86400000);
   for (const user of users) {
+    const createdAt = timestampValue(user.metadata?.creationTime);
+    if (createdAt) {
+      const date = new Date(createdAt);
+      if (date < historyStart) beforeHistory++;
+      else created.set(createdAt.slice(0, 10), (created.get(createdAt.slice(0, 10)) || 0) + 1);
+      if (date >= start) newUsers30d++;
+      else if (date >= prevStart) newUsersPrev30d++;
+    } else {
+      beforeHistory++;
+    }
     const last = timestampValue(user.metadata?.lastSignInTime);
     if (!last || new Date(last) < start) continue;
     active30d++;
     const bucket = byDate.get(last.slice(0, 10));
     if (bucket) bucket.users++;
   }
-  return { total: users.length, active30d, lastAccessByDay: buckets };
+  let running = beforeHistory;
+  const accountsByDay = Array.from({ length: historyDays }, (_, index) => {
+    const date = new Date(historyStart.getTime() + index * 86400000).toISOString().slice(0, 10);
+    running += created.get(date) || 0;
+    return { date, total: running };
+  });
+  return { total: users.length, active30d, lastAccessByDay: buckets, accountsByDay, newUsers30d, newUsersPrev30d };
+}
+
+function monthlyCents(plan) {
+  const price = Math.max(0, Number(plan?.priceCents) || 0);
+  return plan?.billingInterval === "year" ? Math.round(price / 12) : price;
 }
 
 async function dashboard(firebase, db) {
   const since = new Date(Date.now() - 30 * 86400000).toISOString();
-  const [authActivity, userData, usage, whatsapp, reminders, activeSubscriptions, recentCharges, recentAudit, integrations] = await Promise.all([
+  const sincePrev = new Date(Date.now() - 60 * 86400000).toISOString();
+  const [authActivity, userData, usage, whatsapp, reminders, activeEntitlements, recentCharges, recentAudit, integrations, plans] = await Promise.all([
     authUserActivity(firebase),
     db.collection("userData").limit(2000).get(),
     db.collection("adminUsage").limit(2000).get(),
     db.collection("whatsappProcessedMessages").where("processedAt", ">=", since).count().get().then(countValue),
     db.collection("reminderDeliveries").where("acceptedAt", ">=", since).count().get().then(countValue),
-    db.collection("adminEntitlements").where("status", "==", "active").count().get().then(countValue),
-    db.collection("adminCharges").where("createdAt", ">=", since).limit(500).get(),
+    db.collection("adminEntitlements").where("status", "==", "active").limit(5000).get(),
+    db.collection("adminCharges").where("createdAt", ">=", sincePrev).limit(1000).get(),
     db.collection("adminAudit").orderBy("at", "desc").limit(6).get(),
     integrationStatus(db),
+    db.collection("adminPlans").limit(100).get(),
   ]);
-  const revenueCents30d = recentCharges.docs.reduce((total, entry) => {
+  const received = (charge) => charge.status === "manual_received" || charge.status === "paid";
+  let revenueCents30d = 0;
+  let revenuePrevCents30d = 0;
+  for (const entry of recentCharges.docs) {
     const charge = entry.data();
-    return charge.status === "manual_received" || charge.status === "paid" ? total + (Number(charge.amountCents) || 0) : total;
-  }, 0);
+    if (!received(charge)) continue;
+    if (String(charge.createdAt || "") >= since) revenueCents30d += Number(charge.amountCents) || 0;
+    else revenuePrevCents30d += Number(charge.amountCents) || 0;
+  }
+  const activeSubscriptions = activeEntitlements.docs.length;
+  const planById = new Map(plans.docs.map((entry) => [entry.id, { id: entry.id, ...entry.data() }]));
+  const byPlan = new Map();
+  for (const entry of activeEntitlements.docs) {
+    const planId = text(entry.data()?.planId, 60) || "sem-plano";
+    byPlan.set(planId, (byPlan.get(planId) || 0) + 1);
+  }
+  const planBreakdown = [...byPlan.entries()].map(([planId, count]) => {
+    const plan = planById.get(planId);
+    return { planId, name: plan?.name || planId, count, monthlyCents: monthlyCents(plan) };
+  }).sort((a, b) => b.count - a.count);
+  const mrrCents = planBreakdown.reduce((total, item) => total + item.count * item.monthlyCents, 0);
   const integrationsHealthy = integrations.integrations.filter((item) => item.configured).length;
   const accountSignals = userData.docs.map((entry) => summarizeUserState(entry));
   const usersWithSavedChanges30d = accountSignals.filter((item) => item.lastDataUpdateAt && item.lastDataUpdateAt >= since).length;
@@ -152,12 +201,23 @@ async function dashboard(firebase, db) {
     remindersConfigured: accountSignals.filter((item) => item.whatsappReminderEnabled || item.pushEnabled || item.activity.reminderItems > 0).length,
     planAssigned: activeSubscriptions,
   };
+  const totals = accountSignals.reduce((sum, item) => ({
+    tasks: sum.tasks + item.activity.tasks,
+    notes: sum.notes + item.activity.notes,
+    finances: sum.finances + item.activity.finances,
+    events: sum.events + item.activity.events,
+  }), { tasks: 0, notes: 0, finances: 0, events: 0 });
   return {
     periodDays: 30,
     metrics: { users: authActivity.total, activeUsers30d: authActivity.active30d, activeSubscriptions, revenueCents30d,
       integrationsHealthy, integrationsTotal: integrations.integrations.length,
-      usersWithSavedChanges30d, whatsappReceived30d: whatsapp, reminderDeliveriesAccepted30d: reminders },
+      usersWithSavedChanges30d, whatsappReceived30d: whatsapp, reminderDeliveriesAccepted30d: reminders,
+      newUsers30d: authActivity.newUsers30d, newUsersPrev30d: authActivity.newUsersPrev30d,
+      revenuePrevCents30d, mrrCents, totalTasks: totals.tasks, totalNotes: totals.notes, totalFinances: totals.finances, totalEvents: totals.events },
     lastAccessByDay: authActivity.lastAccessByDay,
+    accountsByDay: authActivity.accountsByDay,
+    planBreakdown,
+    integrations: integrations.integrations.map(({ id, label, configured }) => ({ id, label, configured })),
     journey,
     usageFlow: aggregateUsage(usage),
     recentAudit: recentAudit.docs.map((entry) => ({ id: entry.id, ...entry.data() })),

@@ -22,7 +22,7 @@ const SECTION_LABELS = {
   features: "Recursos", integrations: "Integrações", security: "Segurança", settings: "Configurações",
 };
 const SECTION_SUBTITLES = {
-  overview: "Gerencie usuários, planos, cobranças e a operação do PulseNote.",
+  overview: "Controle usuários, planos, assinaturas, integrações e a operação do PulseNote.",
   users: "Pesquise contas, controle acesso e atribua planos.",
   plans: "Defina preços e recursos disponíveis em cada oferta.",
   subscriptions: "Acompanhe concessões manuais e assinaturas do provedor.",
@@ -32,7 +32,19 @@ const SECTION_SUBTITLES = {
   security: "Gerencie administradores e revise o acesso privilegiado.",
   settings: "Controle manutenção e configurações operacionais.",
 };
-const state = { user: null, config: null, plans: [], users: [], admins: [], usersNextPageToken: null, currentSection: "overview", userFilter: "all", loadSequence: 0, authSequence: 0, isOwner: false };
+const state = { user: null, config: null, plans: [], users: [], admins: [], usersNextPageToken: null, currentSection: "overview", userFilter: "all", loadSequence: 0, authSequence: 0, isOwner: false, dashboard: null, growthRange: 30 };
+const AUDIT_LABELS = {
+  admin_access_granted: ["Acesso de administrador concedido", "shield"],
+  admin_access_revoked: ["Acesso de administrador removido", "shield"],
+  config_updated: ["Configurações gerais alteradas", "gear"],
+  plan_saved: ["Plano salvo", "layers"],
+  entitlement_set: ["Plano de usuário alterado", "repeat"],
+  manual_charge_created: ["Cobrança manual registrada", "wallet"],
+  manual_charge_updated: ["Cobrança manual atualizada", "wallet"],
+  user_disabled: ["Conta desativada", "user"],
+  user_enabled: ["Conta reativada", "user"],
+};
+const INTEGRATION_BADGES = { firebase: ["F", "#f5a623"], whatsapp: ["W", "#25d366"], gemini: ["G", "#4f8cff"], "ai-gateway": ["IA", "#8b7bff"], qstash: ["Q", "#22c3ee"], stripe: ["S", "#635bff"] };
 const $ = (selector) => document.querySelector(selector);
 
 function applyTheme(choice = globalThis.localStorage?.getItem("pulsenote-theme") || "aurora") {
@@ -40,7 +52,7 @@ function applyTheme(choice = globalThis.localStorage?.getItem("pulsenote-theme")
   document.documentElement?.setAttribute("data-theme", normalized);
   globalThis.localStorage?.setItem("pulsenote-theme", normalized);
   $("#adThemeButton")?.setAttribute("aria-label", normalized === "light" ? "Ativar tema escuro" : "Ativar tema claro");
-  if ($("#adThemeButton")) $("#adThemeButton").textContent = normalized === "light" ? "☾" : "☼";
+  if ($("#adThemeButton")) $("#adThemeButton").innerHTML = icon(normalized === "light" ? "moon" : "sun");
 }
 
 applyTheme();
@@ -56,6 +68,33 @@ function renderEnvironmentLabel(hostname = globalThis.location?.hostname || "") 
 }
 
 renderEnvironmentLabel();
+
+function icon(id) {
+  return `<svg class="i" aria-hidden="true"><use href="#i-${id}"/></svg>`;
+}
+
+function initials(value) {
+  return String(value || "PN").split(/\s+|@/).filter(Boolean).slice(0, 2).map((part) => part[0].toUpperCase()).join("") || "PN";
+}
+
+function trendHtml(current, previous, suffix = "vs. 30 dias anteriores") {
+  const now = Number(current) || 0;
+  const before = Number(previous) || 0;
+  if (!before) return now ? `<b class="is-up">${icon("arrow-up")}${now.toLocaleString("pt-BR")}</b> novos em 30 dias` : "Sem variação no período";
+  const pct = ((now - before) / before) * 100;
+  const up = pct >= 0;
+  return `<b class="${up ? "is-up" : "is-down"}">${icon(up ? "arrow-up" : "arrow-down")}${up ? "+" : ""}${pct.toFixed(1).replace(".", ",")}%</b> ${suffix}`;
+}
+
+function sparkPath(values, width = 120, height = 44) {
+  const list = values.length > 1 ? values : [0, ...values, 0];
+  const min = Math.min(...list);
+  const max = Math.max(...list);
+  const span = max - min || 1;
+  const points = list.map((value, index) => [index * (width / (list.length - 1)), height - 6 - ((value - min) / span) * (height - 14)]);
+  const line = points.map(([x, y], index) => `${index ? "L" : "M"}${x.toFixed(1)} ${y.toFixed(1)}`).join(" ");
+  return { line, area: `${line} L${width} ${height} L0 ${height} Z` };
+}
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (character) => ({
@@ -147,9 +186,10 @@ function renderAdminWelcome(user = state.user) {
   const greeting = hour < 12 ? "Bom dia" : hour < 18 ? "Boa tarde" : "Boa noite";
   const firstName = String(user?.displayName || user?.email?.split("@")[0] || "Administrador").trim().split(/\s+/)[0];
   $("#adGreeting").textContent = `${greeting}, ${firstName}. Tudo sob controle.`;
-  $("#adCurrentDate").textContent = new Intl.DateTimeFormat("pt-BR", {
-    timeZone: "America/Sao_Paulo", weekday: "long", day: "2-digit", month: "long",
-  }).format(now);
+  const parts = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", weekday: "short", day: "numeric", month: "short", year: "numeric" }).formatToParts(now);
+  const part = (type) => (parts.find((item) => item.type === type)?.value || "").replace(".", "");
+  const weekday = part("weekday");
+  $("#adCurrentDate").textContent = `${weekday.charAt(0).toUpperCase()}${weekday.slice(1)}, ${part("day")} de ${part("month")} de ${part("year")}`;
 }
 
 function renderStats(metrics) {
@@ -167,7 +207,93 @@ function renderStats(metrics) {
     ["◉", metrics.whatsappReceived30d ?? 0, "mensagens no WhatsApp"],
     ["⌁", metrics.reminderDeliveriesAccepted30d ?? 0, "lembretes aceitos"],
   ].map(([symbol, value, label]) => `<div class="ad-operation"><span aria-hidden="true">${symbol}</span><div><strong>${Number(value).toLocaleString("pt-BR")}</strong><small>${label} nos últimos 30 dias</small></div></div>`).join("");
+  renderKpis(metrics);
   if ($("#adLastRefresh")) $("#adLastRefresh").textContent = `Dados atualizados às ${new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" }).format(new Date())}`;
+}
+
+function renderKpis(metrics = {}) {
+  const set = (index, value, sub, series) => {
+    const valueEl = $(`#adKpi${index}Value`);
+    if (!valueEl) return;
+    valueEl.textContent = value;
+    $(`#adKpi${index}Sub`).innerHTML = sub;
+    const spark = $(`#adKpi${index}Spark`);
+    if (spark) {
+      if (series?.length > 1) {
+        const { line, area } = sparkPath(series);
+        spark.innerHTML = `<defs><linearGradient id="adSpark${index}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="currentColor" stop-opacity=".35"/><stop offset="1" stop-color="currentColor" stop-opacity="0"/></linearGradient></defs><path d="${area}" fill="url(#adSpark${index})"/><path d="${line}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`;
+      } else spark.innerHTML = "";
+    }
+  };
+  const users = Number(metrics.users) || 0;
+  const active = Number(metrics.activeUsers30d) || 0;
+  const subs = Number(metrics.activeSubscriptions) || 0;
+  const growth = (state.dashboard?.accountsByDay || []).slice(-30).map((entry) => Number(entry.total) || 0);
+  set(1, active.toLocaleString("pt-BR"), trendHtml(metrics.newUsers30d, metrics.newUsersPrev30d, "contas novas vs. período anterior").replace("Sem variação no período", `de ${users.toLocaleString("pt-BR")} contas`), growth);
+  set(2, subs.toLocaleString("pt-BR"), users ? `<b class="is-up">${Math.round((subs / users) * 100)}%</b> das contas com plano` : "Nenhuma conta ainda", null);
+  set(3, money(metrics.mrrCents ?? 0), trendHtml(metrics.revenueCents30d, metrics.revenuePrevCents30d, "recebido vs. 30 dias anteriores"), null);
+  set(4, `${Number(metrics.totalTasks || 0).toLocaleString("pt-BR")} tarefas`, `${Number(metrics.totalNotes || 0).toLocaleString("pt-BR")} notas · ${Number(metrics.totalFinances || 0).toLocaleString("pt-BR")} lançamentos`, null);
+}
+
+function renderGrowth(range = state.growthRange) {
+  const root = $("#adGrowthChart");
+  if (!root) return;
+  const entries = (state.dashboard?.accountsByDay || []).slice(-range);
+  if (entries.length < 2) { root.innerHTML = `<div class="ad-empty">Ainda não há histórico suficiente.</div>`; return; }
+  const width = Math.max(280, Math.round(root.clientWidth || 640));
+  const height = Math.max(180, Math.round(root.clientHeight || 220));
+  const pad = { left: 46, right: 14, top: 18, bottom: 28 };
+  const values = entries.map((entry) => Number(entry.total) || 0);
+  const minValue = Math.min(...values);
+  const maxValue = Math.max(...values);
+  const step = Math.max(1, Math.ceil(((maxValue - minValue) || Math.max(1, maxValue)) / 4));
+  const low = Math.max(0, Math.floor(minValue / step) * step - (minValue === maxValue ? step : 0));
+  const high = low + step * 5;
+  const x = (index) => pad.left + (index * (width - pad.left - pad.right)) / (entries.length - 1);
+  const y = (value) => pad.top + (1 - (value - low) / (high - low)) * (height - pad.top - pad.bottom);
+  const line = values.map((value, index) => `${index ? "L" : "M"}${x(index).toFixed(1)} ${y(value).toFixed(1)}`).join(" ");
+  const grid = Array.from({ length: 6 }, (_, index) => low + step * index).map((value) => `<line x1="${pad.left}" x2="${width - pad.right}" y1="${y(value).toFixed(1)}" y2="${y(value).toFixed(1)}"/><text x="${pad.left - 8}" y="${(y(value) + 4).toFixed(1)}" text-anchor="end">${value.toLocaleString("pt-BR")}</text>`).join("");
+  const ticks = 5;
+  const labels = Array.from({ length: ticks }, (_, index) => Math.round((index * (entries.length - 1)) / (ticks - 1))).map((index) => {
+    const label = new Intl.DateTimeFormat("pt-BR", { day: "numeric", month: "short" }).format(new Date(`${entries[index].date}T12:00:00`)).replace(".", "").replace(" de ", " ");
+    return `<text x="${x(index).toFixed(1)}" y="${height - 6}" text-anchor="middle">${escapeHtml(label)}</text>`;
+  }).join("");
+  const last = values[values.length - 1];
+  const lx = x(values.length - 1);
+  const ly = y(last);
+  root.innerHTML = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" class="ad-growth-svg"><defs><linearGradient id="adGrowthFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#22d3ee" stop-opacity=".32"/><stop offset="1" stop-color="#22d3ee" stop-opacity="0"/></linearGradient><linearGradient id="adGrowthLine" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#2f80ff"/><stop offset="1" stop-color="#22d3ee"/></linearGradient></defs><g class="ad-grid">${grid}</g><path d="${line} L${lx.toFixed(1)} ${height - pad.bottom} L${pad.left} ${height - pad.bottom} Z" fill="url(#adGrowthFill)"/><path d="${line}" fill="none" stroke="url(#adGrowthLine)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/><g class="ad-axis">${labels}</g></svg><span class="ad-growth-dot" style="left:${((lx / width) * 100).toFixed(2)}%;top:${((ly / height) * 100).toFixed(2)}%"></span><span class="ad-growth-tip" style="left:${((lx / width) * 100).toFixed(2)}%;top:${((ly / height) * 100).toFixed(2)}%">${last.toLocaleString("pt-BR")}</span>`;
+}
+
+function renderPlanBreakdown(data = state.dashboard) {
+  const root = $("#adPlanBreakdown");
+  if (!root || !data) return;
+  const metrics = data.metrics || {};
+  const plans = Array.isArray(data.planBreakdown) ? data.planBreakdown : [];
+  const total = plans.reduce((sum, item) => sum + item.count, 0);
+  root.innerHTML = plans.length ? plans.slice(0, 5).map((item) => {
+    const pct = total ? (item.count / total) * 100 : 0;
+    return `<div class="ad-plan-bar"><span>${escapeHtml(item.name)}</span><b>${item.count.toLocaleString("pt-BR")}</b><i><em style="width:${pct.toFixed(1)}%"></em></i><small>${pct.toFixed(1).replace(".", ",")}%</small></div>`;
+  }).join("") : `<div class="ad-empty">Nenhuma assinatura ativa ainda.</div>`;
+  $("#adSubsTotals").innerHTML = `<div><dt>Receita (MRR)</dt><dd>${money(metrics.mrrCents ?? 0)}</dd></div><div><dt>Recebido (30 dias)</dt><dd>${money(metrics.revenueCents30d ?? 0)} ${metrics.revenuePrevCents30d ? `<small class="${metrics.revenueCents30d >= metrics.revenuePrevCents30d ? "is-up" : "is-down"}">${metrics.revenueCents30d >= metrics.revenuePrevCents30d ? "+" : ""}${(((metrics.revenueCents30d - metrics.revenuePrevCents30d) / metrics.revenuePrevCents30d) * 100).toFixed(1).replace(".", ",")}%</small>` : ""}</dd></div>`;
+}
+
+function auditWhen(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  const time = new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" }).format(date);
+  const dayKey = (item) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(item);
+  const today = dayKey(new Date());
+  const yesterday = dayKey(new Date(Date.now() - 86400000));
+  if (dayKey(date) === today) return `Hoje, às ${time}`;
+  if (dayKey(date) === yesterday) return `Ontem, às ${time}`;
+  return `${new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short", timeZone: "America/Sao_Paulo" }).format(date).replace(".", "")}, às ${time}`;
+}
+
+function auditRow(event) {
+  const [label, iconName] = AUDIT_LABELS[event.action] || [String(event.action || "Ação administrativa").replace(/_/g, " "), "list"];
+  const email = event.details?.email || "";
+  const target = email || event.target || "";
+  return `<div class="ad-audit-row"><span class="ad-audit-ico">${icon(iconName)}</span><span class="ad-audit-copy"><strong>${escapeHtml(label)}${target && target !== "global" ? `: <em>${escapeHtml(target)}</em>` : ""}</strong><small>${escapeHtml(event.actorEmail || "Administrador")}</small></span><time datetime="${escapeHtml(event.at || "")}">${escapeHtml(auditWhen(event.at))}</time></div>`;
 }
 
 function renderAccessChart(entries = []) {
@@ -214,12 +340,45 @@ function renderUsageFlow(flow = {}) {
 function renderAudit(events) {
   const root = $("#adAuditPreview");
   if (!events?.length) { root.className = "ad-empty"; root.textContent = "Nenhuma ação administrativa registrada ainda."; return; }
-  root.className = "ad-list";
-  root.innerHTML = events.map((event) => `<div class="ad-audit-row"><span><strong>${escapeHtml(event.action)}</strong><br>${escapeHtml(event.actorEmail || "Administrador")}${event.target ? ` · ${escapeHtml(event.target)}` : ""}</span><time>${readableDate(event.at)}</time></div>`).join("");
+  root.className = "ad-audit-list";
+  root.innerHTML = events.slice(0, 5).map(auditRow).join("");
+}
+
+async function openAuditDrawer() {
+  const drawer = $("#adAuditDrawer");
+  const list = $("#adAuditFull");
+  if (!drawer || !list) return;
+  list.innerHTML = `<div class="ad-empty">Carregando…</div>`;
+  drawer.classList.add("is-open");
+  drawer.setAttribute("aria-hidden", "false");
+  try {
+    const data = await request("audit");
+    list.innerHTML = data.events?.length ? data.events.map(auditRow).join("") : `<div class="ad-empty">Nenhuma ação administrativa registrada ainda.</div>`;
+  } catch (error) {
+    list.innerHTML = `<div class="ad-empty">Não foi possível carregar a auditoria: ${escapeHtml(error.message)}</div>`;
+  }
+}
+
+function closeAuditDrawer() {
+  $("#adAuditDrawer")?.classList.remove("is-open");
+  $("#adAuditDrawer")?.setAttribute("aria-hidden", "true");
 }
 
 function renderIntegrationRows(data, selector, compact = false) {
   const symbols = { firebase: "◆", whatsapp: "◉", gemini: "✦", qstash: "▣", stripe: "$" };
+  if (compact) {
+    const pending = data.integrations.filter((item) => !item.configured).length;
+    const summary = $("#adHealthSummary");
+    if (summary) {
+      summary.className = `ad-health-summary ${pending ? "is-warn" : ""}`;
+      summary.innerHTML = `${icon(pending ? "alert" : "check-circle")}${pending ? `${pending} ${pending === 1 ? "integração pendente" : "integrações pendentes"}` : "Tudo operacional"}`;
+    }
+    $(selector).innerHTML = data.integrations.map((item) => {
+      const [letter, color] = INTEGRATION_BADGES[item.id] || [String(item.label || "?")[0], "#7d88a8"];
+      return `<button type="button" class="ad-health-row" data-go="integrations" title="${escapeHtml(item.detail || "")}"><span class="ad-health-badge" style="--c:${color}">${escapeHtml(letter)}</span><span class="ad-health-name">${escapeHtml(item.label)}</span><span class="ad-health-status ${item.configured ? "" : "is-warn"}"><i></i>${item.configured ? "Operacional" : "Pendente"}</span>${icon("chev-right")}</button>`;
+    }).join("");
+    return;
+  }
   $(selector).innerHTML = data.integrations.map((item) => {
     const detail = item.id === "qstash"
       ? `Última execução: ${readableTimestamp(item.lastRunAt)} · ${item.runStatus === "ok" ? "sem falhas" : item.runStatus === "unknown" ? "sem histórico" : item.runStatus}`
@@ -250,6 +409,10 @@ function userRow(user, compact = false) {
   const initial = (user.displayName || user.email || "?").trim()[0]?.toUpperCase() || "?";
   const activityTotal = Object.values(user.activity || {}).reduce((sum, value) => sum + (Number(value) || 0), 0);
   const accessAt = user.lastActiveAt || user.lastSignInAt;
+  if (compact) {
+    const plan = state.plans.find((item) => item.id === user.planId);
+    return `<button class="ad-user-trow" type="button" data-user-detail="${escapeHtml(user.uid)}"><span class="ad-avatar">${escapeHtml(initials(user.displayName || user.email || "?"))}</span><span class="ad-trow-name"><strong>${escapeHtml(user.displayName || user.email || user.uid)}</strong><small>${escapeHtml(user.email || user.uid)}</small></span><span class="ad-trow-email">${escapeHtml(user.email || "—")}</span><span class="ad-trow-plan"><span class="ad-plan-chip">${escapeHtml(plan?.name || "Sem plano")}</span></span><span class="ad-trow-when">${escapeHtml(relativeTime(accessAt))}</span><span class="ad-trow-status"><span class="ad-status ${user.disabled ? "is-off" : ""}"><i></i>${user.disabled ? "Desativado" : "Ativo"}</span></span><span class="ad-trow-more" aria-hidden="true">${icon("dots-h")}</span></button>`;
+  }
   if (compact) return `<button class="ad-user-preview" type="button" data-user-detail="${escapeHtml(user.uid)}"><span class="ad-avatar">${escapeHtml(initial)}</span><span><strong>${escapeHtml(user.displayName || user.email || user.uid)}</strong><small>${escapeHtml(user.email || user.uid)}</small></span><span class="ad-user-preview-meta"><strong>${escapeHtml(relativeTime(accessAt))}</strong><small>${user.lastArea ? `Última área: ${escapeHtml(AREA_LABELS[user.lastArea] || user.lastArea)}` : user.whatsappLinked ? "WhatsApp vinculado" : user.pushEnabled ? "Push habilitado" : "Somente aplicativo"}</small></span><span aria-hidden="true">→</span></button>`;
   const plans = [user.planId ? "" : `<option value="" selected disabled>Acesso legado (sem plano)</option>`, ...state.plans.filter((plan) => plan.active !== false || plan.id === user.planId).map((plan) =>
     `<option value="${escapeHtml(plan.id)}" ${plan.id === user.planId ? "selected" : ""}>${escapeHtml(plan.name)}</option>`)].join("");
@@ -265,7 +428,11 @@ function renderUsers() {
   list.innerHTML = users.length ? `<div class="ad-user-table-head"><span>Usuário</span><span>Último acesso</span><span>Uso</span><span>Plano e estado</span></div>${users.map((user) => userRow(user)).join("")}` : `<div class="ad-empty">Nenhum usuário encontrado neste filtro.</div>`;
   $("#adUsersPageLabel").textContent = `${users.length} de ${state.users.length} conta${state.users.length === 1 ? "" : "s"} nesta página`;
   $("#adUsersNext").disabled = !state.usersNextPageToken;
-  $("#adUsersPreview").innerHTML = state.users.length ? state.users.slice(0, 6).map((user) => userRow(user, true)).join("") : `<div class="ad-empty">Nenhuma conta nesta página.</div>`;
+  $("#adUsersPreview").innerHTML = state.users.length
+    ? `<div class="ad-trow-head"><span>Nome</span><span>E-mail</span><span>Plano</span><span>Último acesso</span><span>Status</span><span></span></div>${state.users.slice(0, 5).map((user) => userRow(user, true)).join("")}`
+    : `<div class="ad-empty">Nenhuma conta nesta página.</div>`;
+  const total = state.dashboard?.metrics?.users;
+  if ($("#adUsersCardTitle")) $("#adUsersCardTitle").textContent = `Usuários (${Number(total ?? state.users.length).toLocaleString("pt-BR")})`;
 }
 
 function openUserDrawer(uid) {
@@ -351,21 +518,30 @@ async function loadAdmins() {
   $("#adAdminsList").innerHTML = state.admins.length ? state.admins.map((admin) => `<div class="ad-admin-row"><div><strong>${escapeHtml(admin.displayName || admin.email)}</strong><small>${escapeHtml(admin.email)} · ${admin.owner ? "Proprietário principal" : "Administrador"}${admin.source === "environment" ? " · Configuração do servidor" : " · Regra no Firebase"}</small></div><div class="ad-plan-actions"><span class="ad-pill ${admin.owner ? "" : "is-off"}">${admin.owner ? "Proprietário" : "Admin"}</span>${state.isOwner && !admin.owner && admin.uid !== state.user?.uid ? `<button class="ad-subtle-button" type="button" data-revoke-admin="${escapeHtml(admin.uid)}">Remover</button>` : ""}</div></div>`).join("") : `<div class="ad-empty">Nenhum administrador adicional cadastrado.</div>`;
 }
 
-async function loadDashboard() {
-  const data = await request("dashboard");
-  renderStats(data.metrics);
+function renderDashboardData(data) {
+  state.dashboard = data;
+  renderStats(data.metrics || {});
+  renderGrowth();
+  renderPlanBreakdown(data);
   renderAccessChart(data.lastAccessByDay);
   renderJourney(data.journey);
   renderUsageFlow(data.usageFlow);
   renderAudit(data.recentAudit);
+  if ($("#adUsersCardTitle")) $("#adUsersCardTitle").textContent = `Usuários (${Number(data.metrics?.users || 0).toLocaleString("pt-BR")})`;
+}
+
+async function loadDashboard() {
+  const data = await request("dashboard");
+  renderDashboardData(data);
 }
 
 async function showSection(section) {
   if (!SECTION_LABELS[section]) return;
   state.currentSection = section;
   const sequence = ++state.loadSequence;
-  $("#adPageTitle").textContent = section === "overview" ? "Administração" : SECTION_LABELS[section];
-  $("#adPageSubtitle").textContent = SECTION_SUBTITLES[section];
+  const compact = typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(max-width: 820px)").matches;
+  $("#adPageTitle").textContent = section === "overview" ? (compact ? "Administração" : "Administração do PulseNote") : SECTION_LABELS[section];
+  $("#adPageSubtitle").textContent = section === "overview" && compact ? "Gerencie a operação do PulseNote." : SECTION_SUBTITLES[section];
   document.querySelectorAll(".pn-console-view").forEach((element) => element.classList.toggle("is-active", element.id === `pn-console-${section}`));
   document.querySelectorAll("[data-section]").forEach((button) => button.classList.toggle("is-active", button.dataset.section === section));
   closeMenu();
@@ -407,6 +583,10 @@ function bindNavigation() {
       closeUserDrawer();
       return;
     }
+    if (event.key === "Escape" && $("#adAuditDrawer")?.classList.contains("is-open")) {
+      closeAuditDrawer();
+      return;
+    }
     if (event.key === "Escape" && $("#pnRail").classList.contains("is-open")) {
       closeMenu();
       $("#adMenuButton").focus();
@@ -419,6 +599,38 @@ function bindActions() {
   $("#adUserClear").addEventListener("click", async () => { $("#adUserEmail").value = ""; try { await loadUsers(); } catch (error) { toast(error.message, true); } });
   $("#adUsersNext").addEventListener("click", async () => { if (state.usersNextPageToken) { try { await loadUsers({ pageToken: state.usersNextPageToken }); } catch (error) { toast(error.message, true); } } });
   $("#adAuditRefresh").addEventListener("click", async () => { try { await loadDashboard(); toast("Atividade atualizada."); } catch (error) { toast(error.message, true); } });
+  $("#adAuditAll")?.addEventListener("click", openAuditDrawer);
+  $("#adAuditDrawerClose")?.addEventListener("click", closeAuditDrawer);
+  $("#adGrowthRange")?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-range]");
+    if (!button) return;
+    state.growthRange = Number(button.dataset.range) || 30;
+    for (const item of event.currentTarget.querySelectorAll("[data-range]")) item.classList.toggle("is-active", item === button);
+    renderGrowth();
+  });
+  if (typeof ResizeObserver === "function" && $("#adGrowthChart")) {
+    let lastWidth = 0;
+    new ResizeObserver((entries) => {
+      const width = Math.round(entries[0]?.contentRect?.width || 0);
+      if (width && Math.abs(width - lastWidth) > 4 && state.dashboard) { lastWidth = width; renderGrowth(); }
+    }).observe($("#adGrowthChart"));
+  }
+  $("#adOvTabs")?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-ov]");
+    if (!button) return;
+    for (const item of event.currentTarget.querySelectorAll("[data-ov]")) {
+      item.classList.toggle("is-active", item === button);
+      item.setAttribute("aria-selected", String(item === button));
+    }
+    $("#adOvGrid").dataset.ovActive = button.dataset.ov;
+  });
+  $("#adKpis")?.addEventListener("scroll", (event) => {
+    const el = event.currentTarget;
+    const index = Math.round((el.scrollLeft / Math.max(1, el.scrollWidth - el.clientWidth)) * 2);
+    $("#adKpiDots")?.querySelectorAll("i").forEach((dot, dotIndex) => dot.classList.toggle("is-on", dotIndex === index));
+  }, { passive: true });
+  // As gavetas ficam fora das seções para abrir de qualquer lugar (inclusive da visão geral).
+  if (document.body) for (const id of ["#adUserDrawer", "#adAuditDrawer"]) { const drawer = $(id); if (drawer) document.body.appendChild(drawer); }
   $("#adUserDrawerClose")?.addEventListener("click", closeUserDrawer);
   $("#adUserFilters")?.addEventListener("click", (event) => {
     const button = event.target.closest("[data-user-filter]");
@@ -581,6 +793,10 @@ function bindActions() {
 
 bindNavigation();
 bindActions();
+if (typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(max-width: 820px)").matches) {
+  $("#adPageTitle").textContent = "Administração";
+  $("#adPageSubtitle").textContent = "Gerencie a operação do PulseNote.";
+}
 onAuthStateChanged(auth, async (user) => {
   const sequence = ++state.authSequence;
   state.user = user;
@@ -608,13 +824,10 @@ onAuthStateChanged(auth, async (user) => {
     $("#adAccount").textContent = user.email || "Administrador";
     $("#adSession").textContent = "Acesso administrativo";
     $("#adAdminName").textContent = user.displayName || user.email || "Administrador";
-    $("#adAdminAvatar").textContent = (user.displayName || user.email || "PN").split(/\s+|@/).filter(Boolean).slice(0, 2).map((part) => part[0].toUpperCase()).join("");
+    $("#adAdminAvatar").textContent = initials(user.displayName || user.email);
     renderAdminWelcome(user);
-    renderStats(data.metrics);
-    renderAccessChart(data.lastAccessByDay);
-    renderJourney(data.journey);
-    renderUsageFlow(data.usageFlow);
-    renderAudit(data.recentAudit);
+    if ($("#adTopAvatar")) $("#adTopAvatar").textContent = initials(user.displayName || user.email);
+    renderDashboardData(data);
     const results = await Promise.allSettled([loadUsers(), loadPlans(), loadIntegrations(), loadConfig(), loadAdmins()]);
     if (sequence !== state.authSequence || state.user !== user) return;
     $("#adAdminRole").textContent = state.isOwner ? "Proprietário principal" : "Administrador";
