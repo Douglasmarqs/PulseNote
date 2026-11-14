@@ -784,6 +784,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   bindFinRecurModal();
   bindFinControlBoard();
   bindAutopilotBoard();
+  bindSettingsBoard();
   bindGlobalPalette();
   autoApplyRecurrents();
   autoCloseFinMonths();
@@ -1101,6 +1102,176 @@ function renderSettings() {
   const aiPreference = document.getElementById("pulsinhoAiPreference");
   if (aiPreference && document.activeElement !== aiPreference) aiPreference.value = state.aiProviderPreference || "auto";
   loadBillingSettings();
+  renderSettingsBoard();
+}
+
+// ============================================================
+// CONFIGURAÇÕES (quadro 10) — visão geral em cartões + detalhes em painel
+// ============================================================
+const ST_TITLES = { conta: "Conta", aparencia: "Aparência", plano: "Plano e cobrança", integracoes: "Integrações", inteligencia: "Inteligência", notificacoes: "Notificações", seguranca: "Segurança e dados" };
+let stBillingSummary = null;
+let stOpenKey = "";
+let stMovedHome = null;
+
+function stIsMobile() { return window.matchMedia("(max-width: 760px)").matches; }
+
+function renderSettingsBoard() {
+  const user = getUser();
+  const name = user?.name || "Usuário";
+  const photoURL = state?.profilePhoto || currentUser?.photoURL || "";
+  const set = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
+  set("stName", name);
+  set("stEmail", user?.email || "");
+  const avatar = document.getElementById("stAvatar");
+  if (avatar) avatar.innerHTML = photoURL ? `<img src="${escapeHtml(photoURL)}" alt=""/>` : escapeHtml(bdInitials(name));
+  const emailInput = document.getElementById("stEmailInput");
+  if (emailInput) emailInput.value = user?.email || "";
+
+  const isAdmin = document.getElementById("adminAccessCard")?.hidden === false;
+  const role = isAdmin ? "Proprietário da organização" : "Conta pessoal";
+  set("stRole", role);
+  set("stOrgRole", isAdmin ? "Proprietário" : "Pessoal");
+  const adminBtn = document.getElementById("stAdminBtn");
+  if (adminBtn) adminBtn.hidden = !isAdmin;
+  const editBtn = document.getElementById("stEditProfileBtn");
+  if (editBtn) editBtn.hidden = isAdmin;
+
+  // Plano
+  const planLabel = document.querySelector("#bdUserPlan")?.textContent?.trim() || "";
+  const summary = stBillingSummary || (isLocalDesignPreview
+    ? { name: planLabel || "Plano Pro", status: "Ativo", tone: "on", desc: "Recursos avançados, IA e integrações." }
+    : { name: planLabel || "Seu plano", status: "…", tone: "", desc: "Consultando sua assinatura…" });
+  set("stPlanName", summary.name);
+  set("stPlanDesc", summary.desc);
+  const chip = document.getElementById("stPlanStatus");
+  if (chip) { chip.textContent = summary.status; chip.className = `st-chip${summary.tone ? ` is-${summary.tone}` : ""}`; }
+  const badge = document.getElementById("stPlanBadge");
+  if (badge) {
+    const short = summary.tone === "on" ? summary.name.replace(/^Plano\s+/i, "") : "";
+    badge.hidden = !short;
+    badge.textContent = short;
+  }
+
+  // Conquistas
+  const achRoot = document.getElementById("stAchievement");
+  if (achRoot && typeof getAchievementsList === "function") {
+    const list = getAchievementsList();
+    const unlocked = list.filter((item) => item.unlocked);
+    const highlight = unlocked[unlocked.length - 1] || list[0];
+    const next = list.find((item) => !item.unlocked);
+    const dots = list.slice(0, 5).map((item) => `<i class="${item.unlocked ? "is-on" : ""}" title="${escapeHtml(item.title)}">${item.unlocked ? bdIcon("check") : ""}</i>`).join("");
+    achRoot.innerHTML = `<span class="st-ach-badge${highlight?.unlocked ? "" : " is-locked"}">${bdIcon(highlight?.unlocked ? "star" : "lock")}</span>
+      <div class="st-ach-copy"><strong>${escapeHtml(highlight?.title || "Primeira conquista")}</strong><small>${escapeHtml(highlight?.unlocked ? highlight.detail : `Próxima: ${next?.detail || highlight?.detail || ""}`)} · ${unlocked.length}/${list.length}</small><div class="st-ach-dots">${dots}</div></div>`;
+  }
+
+  // Integrações e notificações
+  const linked = Boolean(state?.whatsappLinkedPhone);
+  set("stWaStatus", linked ? `Conectado • +${state.whatsappLinkedPhone}` : "Desconectado");
+  document.getElementById("stWaStatus")?.classList.toggle("is-on", linked);
+  const waSwitch = document.getElementById("stWaSwitch");
+  if (waSwitch) waSwitch.setAttribute("aria-checked", String(linked));
+  const push = document.getElementById("appReminderOptIn");
+  const pushOn = Boolean(push?.checked);
+  set("stPushStatus", pushOn ? "Ativo" : "Desativado");
+  document.getElementById("stPushStatus")?.classList.toggle("is-on", pushOn);
+  const pushSwitch = document.getElementById("stPushSwitch");
+  if (pushSwitch) pushSwitch.setAttribute("aria-checked", String(pushOn));
+
+  if (typeof renderAutopilotAiPreference === "function") renderAutopilotAiPreference();
+}
+
+function stSetActiveNav(key) {
+  document.querySelectorAll(".st-nav-item").forEach((item) => {
+    const active = item.dataset.st === key;
+    item.classList.toggle("active", active);
+    if (active) item.setAttribute("aria-current", "true"); else item.removeAttribute("aria-current");
+  });
+}
+
+function openSettingsSection(key) {
+  if (!ST_TITLES[key]) return;
+  stSetActiveNav(key);
+  const inline = key === "aparencia" || key === "inteligencia";
+  if (inline && !stIsMobile()) {
+    closeSettingsDrawer();
+    stSetActiveNav(key);
+    const card = document.querySelector(`[data-st-sec="${key}"]`);
+    card?.scrollIntoView({ behavior: "smooth", block: "center" });
+    card?.classList.remove("is-flash");
+    requestAnimationFrame(() => card?.classList.add("is-flash"));
+    return;
+  }
+  const drawer = document.getElementById("stDrawer");
+  const body = document.getElementById("stDrawerBody");
+  if (!drawer || !body) return;
+  closeSettingsDrawer({ keepNav: true });
+  const panel = inline ? document.querySelector(`[data-st-sec="${key}"]`) : document.querySelector(`[data-st-panel="${key}"]`);
+  if (!panel) return;
+  stMovedHome = { panel, parent: panel.parentElement, next: panel.nextSibling };
+  body.appendChild(panel);
+  document.getElementById("stDrawerTitle").textContent = ST_TITLES[key];
+  const msg = document.getElementById("settingsMessage");
+  if (msg) msg.hidden = true;
+  stOpenKey = key;
+  drawer.hidden = false;
+  document.body.classList.add("st-drawer-open");
+  if (key === "plano") loadBillingSettings(true);
+  renderSettingsBoard();
+  requestAnimationFrame(() => (drawer.querySelector(stIsMobile() ? "#stDrawerBack" : "#stDrawerClose"))?.focus());
+}
+
+function closeSettingsDrawer({ keepNav = false } = {}) {
+  const drawer = document.getElementById("stDrawer");
+  if (stMovedHome) {
+    const { panel, parent, next } = stMovedHome;
+    parent.insertBefore(panel, next && next.parentElement === parent ? next : null);
+    stMovedHome = null;
+  }
+  if (drawer) drawer.hidden = true;
+  document.body.classList.remove("st-drawer-open");
+  if (!keepNav && stOpenKey) stSetActiveNav(stIsMobile() ? "" : "conta");
+  stOpenKey = "";
+}
+
+function bindSettingsBoard() {
+  const view = document.getElementById("settingsView");
+  if (!view) return;
+  view.addEventListener("click", (event) => {
+    const nav = event.target.closest("[data-st]");
+    if (nav) return openSettingsSection(nav.dataset.st);
+    const go = event.target.closest("[data-st-go]");
+    if (go) return openSettingsSection(go.dataset.stGo);
+    const proxy = event.target.closest("[data-st-proxy]");
+    if (proxy) document.getElementById(proxy.dataset.stProxy)?.click();
+  });
+  document.getElementById("stDrawerClose")?.addEventListener("click", () => closeSettingsDrawer());
+  document.getElementById("stDrawerBack")?.addEventListener("click", () => closeSettingsDrawer());
+  document.getElementById("stDrawer")?.addEventListener("click", (event) => { if (event.target.id === "stDrawer") closeSettingsDrawer(); });
+  document.addEventListener("keydown", (event) => { if (event.key === "Escape" && !document.getElementById("stDrawer")?.hidden) closeSettingsDrawer(); });
+
+  document.getElementById("stInteligencia")?.addEventListener("click", (event) => {
+    const option = event.target.closest("[data-ai-pref]");
+    if (!option) return;
+    state.aiProviderPreference = ["openai", "anthropic"].includes(option.dataset.aiPref) ? option.dataset.aiPref : "auto";
+    saveState();
+    renderAutopilotAiPreference();
+    showToast("Preferência do Pulsinho atualizada.");
+  });
+  document.getElementById("stWaSwitch")?.addEventListener("click", () => {
+    if (state.whatsappLinkedPhone) document.getElementById("settingsWhatsappUnlinkBtn")?.click();
+    else startWhatsappLink();
+    setTimeout(renderSettingsBoard, 400);
+  });
+  document.getElementById("stPushSwitch")?.addEventListener("click", () => {
+    const box = document.getElementById("appReminderOptIn");
+    if (!box) return;
+    box.checked = !box.checked;
+    box.dispatchEvent(new Event("change", { bubbles: true }));
+    setTimeout(renderSettingsBoard, 300);
+  });
+  document.getElementById("appReminderOptIn")?.addEventListener("change", () => setTimeout(renderSettingsBoard, 0));
+  window.matchMedia("(max-width: 760px)").addEventListener?.("change", () => { if (stOpenKey) closeSettingsDrawer(); stSetActiveNav(stIsMobile() ? "" : "conta"); });
+  if (stIsMobile()) stSetActiveNav("");
 }
 
 let billingRequest = null;
@@ -1146,6 +1317,14 @@ async function loadBillingSettings(force = false) {
     if (planLabel) planLabel.textContent = active ? `Plano ${(data.plans || []).find((plan) => plan.id === current.planId)?.name || ""}`.trim() : "Sem plano";
     statusBadge.textContent = active ? "Assinatura ativa" : current.planId ? "Assinatura pausada" : "Sem plano contratado";
     statusBadge.className = `billing-status-badge ${active ? "is-active" : current.planId ? "is-warning" : ""}`;
+    const currentPlan = (data.plans || []).find((plan) => plan.id === current.planId);
+    stBillingSummary = {
+      name: currentPlan ? `Plano ${currentPlan.name}` : "Sem plano",
+      status: active ? "Ativo" : current.planId ? "Pausado" : "Inativo",
+      tone: active ? "on" : current.planId ? "warn" : "",
+      desc: currentPlan?.description || (active ? "Recursos do seu plano liberados." : "Escolha um plano para liberar mais recursos."),
+    };
+    renderSettingsBoard();
     statusText.textContent = !data.configured
       ? "Os pagamentos ainda não foram ativados pelo administrador. Seus recursos atuais continuam funcionando normalmente."
       : active ? "Seu acesso é atualizado automaticamente após cada confirmação do provedor de pagamento."
@@ -1342,10 +1521,10 @@ async function checkAdminAccess() {
       headers: { Authorization: `Bearer ${token}` },
     });
     const allowed = response.status === 200;
-    if (card) card.hidden = !(allowed || isPrimaryOwner);
+    if (card) card.hidden = !(allowed || isPrimaryOwner); renderSettingsBoard();
     if (dropdownEntry) dropdownEntry.hidden = !(allowed || isPrimaryOwner);
   } catch {
-    if (card) card.hidden = !isPrimaryOwner;
+    if (card) card.hidden = !isPrimaryOwner; renderSettingsBoard();
     if (dropdownEntry) dropdownEntry.hidden = !isPrimaryOwner;
   }
 }
