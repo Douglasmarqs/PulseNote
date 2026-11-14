@@ -32,7 +32,7 @@
 // ============================================================
 
 const { getFirebaseAdmin } = require("./_lib/firebaseAdmin");
-const { parseTransactionText } = require("./_lib/parseTransactionAI");
+const { parseTransactionText, parseTransactionImage, transcribeAudio } = require("./_lib/parseTransactionAI");
 const { checkUserFeature } = require("./_lib/admin");
 
 async function verifyUser(req) {
@@ -76,7 +76,15 @@ module.exports = async (req, res) => {
 
   // ── 2) Validação básica + chamada à IA (lógica compartilhada com o
   //      webhook do WhatsApp — ver api/_lib/parseTransactionAI.js) ──
-  const { text, categories, today } = req.body || {};
+  const { text, categories, today, mode } = req.body || {};
+
+  // Foto/PDF do comprovante e áudio (botões "Foto / PDF do comprovante" e
+  // "Importar por áudio" em Finanças). Usa a mesma IA do WhatsApp e respeita
+  // a chave "mediaRecognition" do painel administrativo.
+  if (mode === "image" || mode === "audio") {
+    return handleMedia(req, res, uid);
+  }
+
   let result;
   try {
     result = await parseTransactionText({ text, categories, today });
@@ -91,3 +99,49 @@ module.exports = async (req, res) => {
 
   return res.status(200).json(result.entry);
 };
+
+// ── Comprovante (imagem/PDF) e áudio ─────────────────────────────
+// Limites: o corpo de uma função da Vercel aceita ~4,5 MB; o app reduz fotos
+// para JPEG de até 1600px e limita PDF a 2,5 MB e áudio a 3 MB antes de enviar.
+const MAX_MEDIA_BASE64 = 4_300_000;
+const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "application/pdf"]);
+const AUDIO_TYPES = new Set(["audio/wav", "audio/x-wav", "audio/wave", "audio/ogg", "audio/mpeg", "audio/mp3", "audio/mp4", "audio/aac", "audio/x-m4a", "audio/flac", "audio/webm"]);
+
+async function handleMedia(req, res, uid) {
+  const { mode, categories, today } = req.body || {};
+  const mimeType = String(req.body?.mimeType || "").split(";")[0].trim().toLowerCase();
+  const base64 = mode === "image" ? req.body?.imageBase64 : req.body?.audioBase64;
+
+  if (typeof base64 !== "string" || !base64 || !/^[A-Za-z0-9+/=]+$/.test(base64.slice(0, 200))) {
+    return res.status(400).json({ error: mode === "image" ? "invalid_image" : "invalid_audio" });
+  }
+  if (base64.length > MAX_MEDIA_BASE64) return res.status(413).json({ error: "media_too_large" });
+  if (!(mode === "image" ? IMAGE_TYPES : AUDIO_TYPES).has(mimeType)) return res.status(415).json({ error: "unsupported_media" });
+
+  try {
+    const access = await checkUserFeature(getFirebaseAdmin().firestore(), uid, "mediaRecognition");
+    if (!access.allowed) {
+      const status = access.reason === "maintenance" || access.reason === "feature_disabled" ? 503 : 403;
+      return res.status(status).json({ error: access.reason });
+    }
+  } catch (err) {
+    console.error("Falha ao verificar acesso à leitura de mídia:", err?.message || err);
+    return res.status(503).json({ error: "service_unavailable" });
+  }
+
+  try {
+    if (mode === "image") {
+      const result = await parseTransactionImage({ imageBase64: base64, mimeType, categories, today });
+      if (!result.ok) return res.status(result.status).json({ error: result.error });
+      return res.status(200).json(result.entry);
+    }
+    const heard = await transcribeAudio({ audioBase64: base64, mimeType });
+    if (!heard.ok) return res.status(heard.status || 422).json({ error: heard.error || "audio_not_understood" });
+    const result = await parseTransactionText({ text: heard.transcript, categories, today });
+    if (!result.ok) return res.status(result.status === 400 ? 422 : result.status).json({ error: result.error, transcript: heard.transcript });
+    return res.status(200).json({ ...result.entry, transcript: heard.transcript });
+  } catch (err) {
+    console.error("Falha ao interpretar mídia:", err?.message || err);
+    return res.status(502).json({ error: "parser_unavailable" });
+  }
+}

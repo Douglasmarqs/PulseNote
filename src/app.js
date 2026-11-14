@@ -1884,6 +1884,7 @@ function createDesignPreviewState(mode = "1") {
   const prevKey = getPreviousMonthKey(monthKey);
   const prevPrevKey = getPreviousMonthKey(prevKey);
   const dayOf = (key, value) => `${key}-${String(value).padStart(2, "0")}`;
+  const monthsBack = (n) => { const [yy, mm] = monthKey.split("-").map(Number); return toLocalIso(new Date(yy, mm - 1 - n, 1)).slice(0, 7); };
   const preview = normalizeState({
     ...loadDefaultState(),
     onboardingDone: true, // a configuração inicial só aparece no QA com ?onboarding=
@@ -1930,24 +1931,37 @@ function createDesignPreviewState(mode = "1") {
     ] }],
     finances: [
       // Mês atual: receitas 8.500, gastos 3.280
-      { id: "preview-fin-1", type: "receita", amount: 8500, category: "salario", description: "Salário", date: dateForDay(22) },
+      { id: "preview-fin-1", type: "receita", amount: 8500, category: "salario", description: "Salário", date: dateForDay(22), accountId: "preview-acc-itau" },
       { id: "preview-fin-2", type: "despesa", amount: 1345, category: "moradia", description: "Condomínio e taxas", date: dateForDay(5) },
-      { id: "preview-fin-3", type: "despesa", amount: 420.9, category: "alimentacao", description: "Supermercado", date: dateForDay(Math.min(day, 23)) },
-      { id: "preview-fin-4", type: "despesa", amount: 32, category: "alimentacao", description: "Almoço no restaurante", date: dateForDay(Math.min(day, 24)) },
+      { id: "preview-fin-3", type: "despesa", amount: 420.9, category: "alimentacao", description: "Supermercado", date: dateForDay(Math.min(day, 23)), accountId: "preview-acc-nubank" },
+      { id: "preview-fin-4", type: "despesa", amount: 32, category: "alimentacao", description: "Almoço no restaurante", date: dateForDay(Math.min(day, 24)), accountId: "preview-acc-nubank" },
       { id: "preview-fin-5", type: "despesa", amount: 203.1, category: "alimentacao", description: "Feira e padaria", date: dateForDay(12) },
       { id: "preview-fin-6", type: "despesa", amount: 459, category: "transporte", description: "Combustível e transporte", date: dateForDay(10) },
       { id: "preview-fin-7", type: "despesa", amount: 328, category: "saude", description: "Farmácia e consultas", date: dateForDay(15) },
-      { id: "preview-fin-8", type: "despesa", amount: 149.9, category: "assinaturas", description: "Provedor de internet", date: dateForDay(20) },
+      { id: "preview-fin-8", type: "despesa", amount: 149.9, category: "assinaturas", description: "Provedor de internet", date: dateForDay(20), accountId: "preview-acc-itau" },
       { id: "preview-fin-9", type: "despesa", amount: 112.1, category: "assinaturas", description: "Streaming e apps", date: dateForDay(8) },
       { id: "preview-fin-10", type: "despesa", amount: 230, category: "outros", description: "Compras diversas", date: dateForDay(18) },
       // Mês anterior (base da comparação "vs. mês anterior")
       { id: "preview-fin-11", type: "despesa", amount: 2733, category: "moradia", description: "Despesas fixas do mês", date: dayOf(prevKey, 3) },
       { id: "preview-fin-12", type: "receita", amount: 8500, category: "salario", description: "Salário", date: dayOf(prevKey, 5) },
       { id: "preview-fin-13", type: "despesa", amount: 4537, category: "viagem", description: "Viagem de fim de ano", date: dayOf(prevKey, 25) },
+      { id: "preview-hist-0-r", type: "receita", amount: 8200, category: "salario", description: "Salário", date: dayOf(monthsBack(5), 5), accountId: "preview-acc-itau" },
+      { id: "preview-hist-0-d", type: "despesa", amount: 4300, category: "moradia", description: "Despesas do mês", date: dayOf(monthsBack(5), 12), accountId: "preview-acc-itau" },
+      { id: "preview-hist-1-r", type: "receita", amount: 8400, category: "salario", description: "Salário", date: dayOf(monthsBack(4), 5), accountId: "preview-acc-itau" },
+      { id: "preview-hist-1-d", type: "despesa", amount: 5200, category: "moradia", description: "Despesas do mês", date: dayOf(monthsBack(4), 12), accountId: "preview-acc-itau" },
+      { id: "preview-hist-2-r", type: "receita", amount: 8300, category: "salario", description: "Salário", date: dayOf(monthsBack(3), 5), accountId: "preview-acc-itau" },
+      { id: "preview-hist-2-d", type: "despesa", amount: 4600, category: "moradia", description: "Despesas do mês", date: dayOf(monthsBack(3), 12), accountId: "preview-acc-itau" },
+      { id: "preview-hist-3-r", type: "receita", amount: 8600, category: "salario", description: "Salário", date: dayOf(monthsBack(2), 5), accountId: "preview-acc-itau" },
+      { id: "preview-hist-3-d", type: "despesa", amount: 3900, category: "moradia", description: "Despesas do mês", date: dayOf(monthsBack(2), 12), accountId: "preview-acc-itau" },
     ],
     monthClosures: [
       { id: "preview-close-1", monthKey: prevPrevKey, workspaceId: "personal", receitas: 0, despesas: 0, saldo: 6000 },
       { id: "preview-close-2", monthKey: prevKey, workspaceId: "personal", receitas: 8500, despesas: 7270, saldo: 7230 },
+    ],
+    financeAccounts: [
+      { id: "preview-acc-itau", name: "Conta Corrente", institution: "Itaú", type: "checking", workspaceId: "personal", balance: 4820 },
+      { id: "preview-acc-nubank", name: "Conta Digital", institution: "Nubank", type: "checking", workspaceId: "personal", balance: 1250 },
+      { id: "preview-acc-xp", name: "Investimentos", institution: "XP", type: "investment", workspaceId: "personal", balance: 12400 },
     ],
     finGoals: [{ id: "preview-goal-spend", categoryId: "moradia", limit: 4500, workspaceId: "personal" }],
     finRecurrents: [
@@ -2383,7 +2397,7 @@ async function runFinanceSimulation(event) {
     if (result) {
       result.classList.toggle("is-risk", forecast.canAfford === false);
       result.innerHTML = `
-        <div class="fin-simulator-answer"><strong>${forecast.canAfford ? "Cabe na sua projeção" : "Melhor rever esta compra"}</strong><p>${escapeHtml(forecast.summary || "")}</p></div>
+        <div class="fin-simulator-answer"><strong>${forecast.canAfford ? "Sim, pode gastar!" : "Melhor esperar"}</strong><p>${escapeHtml(forecast.summary || "")}</p></div>
         <div class="fin-simulator-metric"><strong>${formatCurrency(forecast.projectedBalanceAfterPurchase)}</strong><span>saldo projetado após a compra</span></div>
         <div class="fin-simulator-metric"><strong>${formatCurrency(forecast.lowestBalance)}</strong><span>menor saldo até o fim do mês</span></div>
         <div class="fin-simulator-metric"><strong>${formatCurrency(forecast.reserve)}</strong><span>reserva preservada na análise</span></div>`;
@@ -2465,8 +2479,7 @@ function renderFinanceWorkspaceOptions() {
     select.innerHTML = options.map((option) => `<option value="${escapeHtml(option.id)}">${escapeHtml(option.label)}</option>`).join("");
     select.value = options.some((option) => option.id === previous) ? previous : activeWorkspaceId;
   }
-  const switcher = document.querySelector(".bd-ws");
-  if (switcher) {
+  for (const switcher of document.querySelectorAll(".bd-ws, #finWsSeg")) {
     const shortLabels = { personal: "Pessoal", couple: "Casal", family: "Família", business: "Empresa" };
     const icons = { personal: "user", couple: "users", family: "house", business: "layers" };
     const visible = options.filter((option) => option.id !== "business" || option.id === activeWorkspaceId);
@@ -2915,36 +2928,21 @@ function bindForms() {
 
 // ── Abas internas de Finanças (Lançamentos / Análise / Controle / Automação) ──
 function bindFinTabs() {
-  const tabs   = document.querySelectorAll(".fin-tab-btn");
-  const panels = document.querySelectorAll(".fin-tab-panel");
-  if (!tabs.length) return;
-  tabs.forEach((tab) => {
+  document.querySelectorAll(".fin-tab-btn").forEach((tab) => {
     tab.addEventListener("click", () => {
-      const target = tab.dataset.finTab;
-      tabs.forEach((t) => {
-        const active = t === tab;
-        t.classList.toggle("active", active);
-        t.setAttribute("aria-selected", String(active));
-      });
-      panels.forEach((p) => { p.hidden = p.dataset.finPanel !== target; });
-      // Garante que a aba clicada fique 100% visível — sem isso, em
-      // telas estreitas onde as 4 abas não cabem, a aba podia ficar
-      // cortada na borda do scroll horizontal.
+      setFinBoardTab(tab.dataset.finTab);
       tab.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
     });
   });
+  bindFinanceBoard();
 }
 
 // Pula direto para um mês específico na aba Lançamentos — usado na lista de
 // "Meses fechados" pra não precisar clicar em ‹ › várias vezes até achar o mês.
 function goToFinMonth(monthKey) {
   finActiveMonth = monthKey;
-  document.querySelectorAll(".fin-tab-btn").forEach((t) => {
-    const active = t.dataset.finTab === "lancamentos";
-    t.classList.toggle("active", active);
-    t.setAttribute("aria-selected", String(active));
-  });
-  document.querySelectorAll(".fin-tab-panel").forEach((p) => { p.hidden = p.dataset.finPanel !== "lancamentos"; });
+  finSelectedDay = null;
+  setFinBoardTab("lancamentos");
   renderFinances();
 }
 
@@ -3625,7 +3623,7 @@ function bdBalanceSeries(range) {
   const net = new Map();
   for (const entry of entries) net.set(entry.date, (net.get(entry.date) || 0) + bdSignedAmount(entry));
   const monthly = range > 120;
-  const days = monthly ? 365 : range;
+  const days = range; // 365 no Início (12 meses), 180 em Finanças (6 meses)
   const end = new Date();
   end.setHours(12, 0, 0, 0);
   const cursor = new Date(end);
@@ -3686,53 +3684,7 @@ function bdPointLabel(point, monthly) {
 }
 
 function renderBoardsEvolution() {
-  const host = document.querySelector("#bdEvoChart");
-  if (!host) return;
-  const width = host.clientWidth;
-  const height = host.clientHeight;
-  if (!width || !height) return; // aba escondida: renderiza de novo quando aparecer
-  const monthly = bdEvoRange > 120;
-  const series = bdBalanceSeries(bdEvoRange);
-  if (!bdWorkspaceFinances().length || !series.length) {
-    host.innerHTML = '<div class="bd-empty">Sem lançamentos no período. Registre uma receita ou despesa para ver a evolução.</div>';
-    return;
-  }
-  const values = series.map((p) => p.value);
-  const rawMin = Math.min(...values);
-  const rawMax = Math.max(...values);
-  const step = bdNiceStep((Math.max(rawMax - rawMin, Math.abs(rawMax) * 0.05, 100)) / 5);
-  const yMin = Math.floor(rawMin / step) * step;
-  let yMax = Math.ceil(rawMax / step) * step;
-  if (yMax === yMin) yMax = yMin + step;
-  const pad = { left: 56, right: 16, top: 16, bottom: 24 };
-  const plotW = width - pad.left - pad.right;
-  const plotH = height - pad.top - pad.bottom;
-  const x = (i) => pad.left + (series.length === 1 ? plotW : (i / (series.length - 1)) * plotW);
-  const y = (v) => pad.top + plotH - ((v - yMin) / (yMax - yMin)) * plotH;
-  const coords = series.map((p, i) => [x(i), y(p.value)]);
-  const line = bdSmoothPath(coords);
-  const area = `${line} L${coords.at(-1)[0].toFixed(1)} ${(pad.top + plotH).toFixed(1)} L${coords[0][0].toFixed(1)} ${(pad.top + plotH).toFixed(1)} Z`;
-  const ticks = [];
-  for (let value = yMin; value <= yMax + step / 2; value += step) ticks.push(value);
-  const grid = ticks.map((value) => `<line x1="${pad.left}" x2="${width - pad.right}" y1="${y(value).toFixed(1)}" y2="${y(value).toFixed(1)}"/><text x="${pad.left - 8}" y="${(y(value) + 3.5).toFixed(1)}" text-anchor="end">${bdAxisMoney(value)}</text>`).join("");
-  const labelCount = width < 420 ? 3 : 5;
-  const labelIdx = [...new Set(Array.from({ length: labelCount }, (_, k) => Math.round((k / (labelCount - 1)) * (series.length - 1))))];
-  const xLabels = labelIdx.map((idx, k) => `<text x="${x(idx).toFixed(1)}" y="${height - 6}" text-anchor="${k === 0 ? "start" : k === labelIdx.length - 1 ? "end" : "middle"}">${bdPointLabel(series[idx], monthly)}</text>`).join("");
-  const last = coords.at(-1);
-  const tipText = formatCurrency(series.at(-1).value);
-  const tipW = tipText.length * 6.6 + 18;
-  const tipX = Math.min(Math.max(last[0] - tipW + 10, pad.left), width - tipW - 4);
-  const tipY = Math.max(last[1] - 34, 2);
-  host.innerHTML = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" preserveAspectRatio="none">
-    <defs><linearGradient id="bdEvoFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#22d3ee" stop-opacity=".38"/><stop offset="1" stop-color="#22d3ee" stop-opacity="0"/></linearGradient></defs>
-    <g class="grid">${grid}</g>
-    <path d="${area}" fill="url(#bdEvoFill)"/>
-    <path class="line" d="${line}"/>
-    ${xLabels}
-    <g class="tip"><rect x="${tipX.toFixed(1)}" y="${tipY.toFixed(1)}" width="${tipW.toFixed(1)}" height="24" rx="8"/><text x="${(tipX + tipW / 2).toFixed(1)}" y="${(tipY + 16).toFixed(1)}" text-anchor="middle">${escapeHtml(tipText)}</text></g>
-    <circle class="dot" cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="4.5"/>
-  </svg>`;
-  host.setAttribute("aria-label", `Evolução do saldo: ${tipText} hoje`);
+  drawBalanceChart(document.querySelector("#bdEvoChart"), bdEvoRange, "bdEvoFill");
 }
 
 function renderBoardsSparkline(series) {
@@ -8231,8 +8183,8 @@ function resetExpenseForm() {
   document.querySelector(".fin-form-card")?.classList.remove("is-receita");
   populateCategorySelect(null, "despesa");
   // Restaura o texto do botão e título do formulário
-  const submitBtn = document.querySelector("#expenseForm button[type=submit]");
-  if (submitBtn) submitBtn.textContent = "➕ Registrar";
+  const submitLabel = document.querySelector("#finSubmitLabel");
+  if (submitLabel) submitLabel.textContent = "Registrar";
   const cancelBtn = document.querySelector("#cancelEditExpense");
   if (cancelBtn) cancelBtn.hidden = true;
 }
@@ -8257,8 +8209,8 @@ function editFinance(id) {
 
   populateCategorySelect(entry.category, entry.type);
 
-  const submitBtn = document.querySelector("#expenseForm button[type=submit]");
-  if (submitBtn) submitBtn.textContent = "💾 Salvar alterações";
+  const submitLabel = document.querySelector("#finSubmitLabel");
+  if (submitLabel) submitLabel.textContent = "Salvar alterações";
   const cancelBtn = document.querySelector("#cancelEditExpense");
   if (cancelBtn) cancelBtn.hidden = false;
 
@@ -8348,6 +8300,668 @@ window.addEventListener("resize", () => {
   }
 });
 
+// ============================================================
+// Finanças — visual dos quadros (cabeçalho, resumo, Lançamentos, Análise)
+// ============================================================
+let finTxTypeFilter = "all";
+let finTxCatFilter = "all";
+let finTxAccountFilter = "all";
+let finTxShowAll = false;
+let finSelectedDay = null;
+let finEvoRange = 180;
+const FIN_TX_PREVIEW = 6;
+const BD_MONTHS_LONG = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+
+function finMonthShort(monthKey) { // "dez/2024"
+  const [y, m] = monthKey.split("-").map(Number);
+  return `${BD_MONTHS[m - 1]}/${y}`;
+}
+
+function finMonthTitle(monthKey) { // "Jan de 2025"
+  const [y, m] = monthKey.split("-").map(Number);
+  const short = BD_MONTHS[m - 1];
+  return `${short.charAt(0).toUpperCase()}${short.slice(1)} de ${y}`;
+}
+
+function finWorkspaceEntries(monthKey) {
+  return (state.finances || []).filter((f) => f.date && f.date.startsWith(monthKey) && (f.workspaceId || "personal") === activeWorkspaceId);
+}
+
+function finMonthTotals(monthKey) {
+  const entries = finWorkspaceEntries(monthKey);
+  const r = entries.filter((f) => f.type === "receita").reduce((s, f) => s + (Number(f.amount) || 0), 0);
+  const d = entries.filter((f) => f.type === "despesa").reduce((s, f) => s + (Number(f.amount) || 0), 0);
+  return { r, d, saldo: getCarryOverBalance(monthKey, activeWorkspaceId) + r - d, count: entries.length };
+}
+
+function finCatName(catId) {
+  return String(findCategory(catId).label || "Outros").replace(/^[^\p{L}\p{N}]+/u, "").trim();
+}
+
+// Ícone do lançamento: primeiro pela descrição (aluguel, internet, mercado), depois pela categoria.
+const FIN_CATEGORY_ICONS = {
+  moradia: "home", contas: "home", manutencao: "home",
+  alimentacao: "fork", mercado: "cart", supermercado: "cart",
+  transporte: "car", combustivel: "car",
+  saude: "heart", academia: "heart", beleza: "heart",
+  assinaturas: "layers", investimentos_desp: "bars",
+  salario: "wallet", freelance: "wallet", vendas: "wallet", investimentos: "bars", outros_receita: "wallet",
+  outros: "dots-circle",
+};
+function finTxIcon(entry) {
+  const text = `${entry.description || ""}`.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  if (/(aluguel|condominio|moradia)/.test(text)) return "home";
+  if (/(internet|wi-?fi|fibra)/.test(text)) return "wifi";
+  if (/(supermercado|mercado|feira)/.test(text)) return "cart";
+  if (/(salario|pagamento recebido|pix recebido)/.test(text)) return "wallet";
+  return FIN_CATEGORY_ICONS[entry.category] || (entry.type === "receita" ? "wallet" : "dots-circle");
+}
+
+function finTrendHtml(current, previous, { inverse = false, prevKey } = {}) {
+  if (!previous) return `<span class="bf-trend-muted">Sem base em ${escapeHtml(finMonthShort(prevKey))}</span>`;
+  const pct = ((current - previous) / Math.abs(previous)) * 100;
+  if (!Number.isFinite(pct)) return "";
+  const up = pct >= 0;
+  const good = inverse ? !up : up;
+  const text = `${up ? "+" : "-"}${Math.abs(pct).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
+  return `<b class="${good ? "good" : "bad"}">${bdIcon(up ? "arrow-up" : "arrow-down")}${text}</b> vs. ${escapeHtml(finMonthShort(prevKey))}`;
+}
+
+function finSparkline(svgSelector, values) {
+  const svg = document.querySelector(svgSelector);
+  if (!svg) return;
+  if (values.length < 2 || values.every((v) => v === values[0])) { svg.innerHTML = ""; return; }
+  const min = Math.min(...values);
+  const span = Math.max(...values) - min || 1;
+  const coords = values.map((v, i) => [(i / (values.length - 1)) * 200, 52 - ((v - min) / span) * 40]);
+  const line = bdSmoothPath(coords);
+  const id = `${svg.id}Fill`;
+  svg.innerHTML = `<defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#25d388" stop-opacity=".42"/><stop offset="1" stop-color="#25d388" stop-opacity="0"/></linearGradient></defs><path d="${line} L200 60 L0 60 Z" fill="url(#${id})"/><path d="${line}" fill="none" stroke="#25d388" stroke-width="1.6" stroke-linecap="round"/>`;
+}
+
+function finLastMonths(monthKey, count) {
+  const [y, m] = monthKey.split("-").map(Number);
+  return Array.from({ length: count }, (_, i) => toLocalIso(new Date(y, m - count + i, 1)).slice(0, 7));
+}
+
+function renderFinKpis(monthKey) {
+  const prevKey = getPreviousMonthKey(monthKey);
+  const cur = finMonthTotals(monthKey);
+  const prev = finMonthTotals(prevKey);
+  const prevHas = prev.count > 0 || isMonthClosed(prevKey);
+  const set = (sel, html) => { const el = document.querySelector(sel); if (el) el.innerHTML = html; };
+  set("#finReceitasTrend", finTrendHtml(cur.r, prevHas ? prev.r : 0, { prevKey }));
+  set("#finDespesasTrend", finTrendHtml(cur.d, prevHas ? prev.d : 0, { inverse: true, prevKey }));
+  set("#finSaldoTrend", finTrendHtml(cur.saldo, prevHas ? prev.saldo : 0, { prevKey }));
+  const months = finLastMonths(monthKey, 6).map(finMonthTotals);
+  finSparkline("#finReceitasSpark", months.map((t) => t.r));
+  finSparkline("#finSaldoSpark", months.map((t) => t.saldo));
+
+  // Contas compartilhadas: membros e espaços reais (api/finance-spaces)
+  const spaces = sharedFinanceSpaces || [];
+  const people = new Map();
+  spaces.forEach((space) => (space.members || []).forEach((member) => {
+    const key = member.email || member.uid || member.name;
+    if (key && !people.has(key)) people.set(key, member.name || member.email || "?");
+  }));
+  const meta = document.querySelector("#finSharedKpiMeta");
+  if (meta) meta.textContent = spaces.length
+    ? `${people.size} membro${people.size === 1 ? "" : "s"} • ${spaces.length} conta${spaces.length === 1 ? "" : "s"}`
+    : "Divida as finanças com seu par ou família";
+  set("#finSharedKpiAvatars", `${[...people.values()].slice(0, 3).map((name) => `<span class="bf-av" title="${escapeHtml(name)}">${escapeHtml(bdInitials(name))}</span>`).join("")}<button type="button" class="bf-av bf-av--add" data-fin-shared-add aria-label="Criar ou abrir espaço compartilhado">${bdIcon("plus")}</button>`);
+}
+
+function renderFinBudget(monthKey, receitas, despesas, saldo) {
+  const limits = (state.finGoals || []).filter((g) => (g.workspaceId || "personal") === activeWorkspaceId).reduce((s, g) => s + (Number(g.limit) || 0), 0);
+  const base = limits > 0 ? limits : receitas;
+  const pct = base > 0 ? Math.round((despesas / base) * 100) : 0;
+  const set = (sel, text) => { const el = document.querySelector(sel); if (el) el.textContent = text; };
+  set("#finBudgetTitle", `Uso do orçamento (${finMonthShort(monthKey)})`);
+  document.querySelector("#finBudgetTitle")?.insertAdjacentHTML("beforeend", ` <span class="bd-info" title="Despesas do mês comparadas ao total dos limites por categoria (ou às receitas, se não houver limites)">${bdIcon("info")}</span>`);
+  set("#finBudgetText", base > 0 ? `${formatCurrency(despesas)} de ${formatCurrency(base)}` : `${formatCurrency(despesas)} gastos`);
+  set("#finBudgetPct", base > 0 ? `${pct}%` : "—");
+  const bar = document.querySelector("#finProgressBar");
+  if (bar) {
+    bar.style.width = `${Math.min(100, pct)}%`;
+    bar.style.background = "";
+    bar.className = pct > 100 ? "over" : pct >= 85 ? "warn" : "";
+  }
+  set("#finUsedLabel", limits > 0 ? `${pct}% do limite mensal usado` : `${pct}% das receitas usadas`);
+  const note = document.querySelector("#finMoodRow");
+  let headline; let message; let tone;
+  if (saldo < 0) { tone = "bad"; headline = "Saldo negativo"; message = "Saldo negativo neste mês. Vale rever as despesas."; }
+  else if (!base) { tone = "neutral"; headline = "Sem orçamento definido"; message = "Defina limites por categoria em Controle para acompanhar aqui."; }
+  else if (pct > 100) { tone = "bad"; headline = "Acima do orçamento"; message = `Você gastou ${pct}% ${limits > 0 ? "do seu limite mensal" : "das receitas do mês"}.`; }
+  else if (pct >= 85) { tone = "warn"; headline = "Perto do limite"; message = `Você já usou ${pct}% ${limits > 0 ? "do seu limite mensal" : "das receitas do mês"}.`; }
+  else { tone = "good"; headline = "Dentro do orçamento"; message = `Você gastou ${pct}% ${limits > 0 ? "do seu limite mensal" : "das receitas do mês"}.`; }
+  set("#finBudgetHeadline", headline);
+  set("#finMoodText", message);
+  if (note) note.dataset.tone = tone;
+  const ico = document.querySelector("#finMoodBlob use");
+  if (ico) ico.setAttribute("href", tone === "good" ? "#i-check" : tone === "neutral" ? "#i-info" : "#i-alert");
+}
+
+function renderFinCategoryBars(entries, despesas, monthKey) {
+  const title = document.querySelector("#finCatsTitle");
+  if (title) title.textContent = `Gastos por categoria (${BD_MONTHS[Number(monthKey.slice(5, 7)) - 1]})`;
+  const byCat = {};
+  entries.filter((f) => f.type === "despesa").forEach((f) => { byCat[f.category] = (byCat[f.category] || 0) + f.amount; });
+  const sorted = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
+  const rows = sorted.slice(0, 5);
+  const rest = sorted.slice(5).reduce((s, [, v]) => s + v, 0);
+  if (rest) {
+    const existing = rows.find(([id]) => id === "outros");
+    if (existing) existing[1] += rest; else rows.push(["outros", rest]);
+  }
+  const root = document.querySelector("#finCategories");
+  if (!root) return byCat;
+  if (!rows.length) {
+    root.innerHTML = '<div class="bd-empty">Sem despesas no período.</div>';
+    return byCat;
+  }
+  const maxPct = Math.max(...rows.map(([, v]) => v / despesas));
+  root.innerHTML = rows.map(([catId, total]) => {
+    const pct = despesas > 0 ? total / despesas : 0;
+    const label = finCatName(catId);
+    return `<div class="bf-cat-row fin-cat-row" data-fin-category="${escapeHtml(catId)}" role="button" tabindex="0" title="${escapeHtml(label)} · ${escapeHtml(formatCurrency(total))}" aria-label="${escapeHtml(label)}: ${Math.round(pct * 100)}% (${escapeHtml(formatCurrency(total))}). Abrir lançamentos">
+      <span class="bf-cat-ico">${bdIcon(FIN_CATEGORY_ICONS[catId] || "dots-circle")}</span>
+      <span class="bf-cat-name">${escapeHtml(label)}</span>
+      <span class="bf-cat-track"><i style="width:${Math.max(4, (pct / maxPct) * 100).toFixed(1)}%"></i></span>
+      <b>${Math.round(pct * 100)}%</b>
+    </div>`;
+  }).join("");
+  return byCat;
+}
+
+function populateFinTxFilters(entries) {
+  const cat = document.querySelector("#finTxCatFilter");
+  const acc = document.querySelector("#finTxAccountFilter");
+  const type = document.querySelector("#finTxTypeFilter");
+  if (type) type.value = finTxTypeFilter;
+  if (cat) {
+    const ids = [...new Set(entries.map((f) => f.category).filter(Boolean))];
+    if (finTxCatFilter !== "all" && !ids.includes(finTxCatFilter)) ids.push(finTxCatFilter);
+    cat.innerHTML = `<option value="all">Todas as categorias</option>${ids.map((id) => `<option value="${escapeHtml(id)}">${escapeHtml(finCatName(id))}</option>`).join("")}`;
+    cat.value = finTxCatFilter;
+  }
+  if (acc) {
+    const accounts = (state.financeAccounts || []).filter((a) => !a.archived && (a.workspaceId || "personal") === activeWorkspaceId);
+    acc.innerHTML = `<option value="all">Todas as contas</option><option value="none">Sem conta</option>${accounts.map((a) => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.name)}</option>`).join("")}`;
+    if (![...acc.options].some((o) => o.value === finTxAccountFilter)) finTxAccountFilter = "all";
+    acc.value = finTxAccountFilter;
+  }
+}
+
+function renderFinTxList(monthKey, entries, query) {
+  populateFinTxFilters(entries);
+  let list = entries;
+  if (finSelectedDay && finSelectedDay.startsWith(monthKey)) {
+    const projected = buildClientFinanceProjection(monthKey).projectedEntries.filter((item) => item.date === finSelectedDay);
+    list = [...entries.filter((f) => f.date === finSelectedDay), ...projected];
+  }
+  if (finTxTypeFilter !== "all") list = list.filter((f) => f.type === finTxTypeFilter);
+  if (finTxCatFilter !== "all") list = list.filter((f) => f.category === finTxCatFilter);
+  if (finTxAccountFilter === "none") list = list.filter((f) => !f.accountId);
+  else if (finTxAccountFilter !== "all") list = list.filter((f) => f.accountId === finTxAccountFilter);
+
+  const chips = [];
+  if (finCategoryDrilldown) chips.push(`<span>Categoria: <strong>${escapeHtml(finCatName(finCategoryDrilldown))}</strong></span><button type="button" onclick="clearFinanceCategory()">Limpar</button>`);
+  if (finSelectedDay) chips.push(`<span>Dia: <strong>${escapeHtml(plannerShortDate(finSelectedDay))}</strong></span><button type="button" onclick="filterFinByDate('${finSelectedDay}')">Limpar</button>`);
+  const filterRoot = document.querySelector("#finTransactionFilter");
+  if (filterRoot) { filterRoot.hidden = !chips.length; filterRoot.innerHTML = chips.join(""); }
+
+  const limit = finTxShowAll ? 50 : FIN_TX_PREVIEW;
+  const toggle = document.querySelector("#finTxToggleAll");
+  if (toggle) {
+    toggle.hidden = list.length <= FIN_TX_PREVIEW;
+    toggle.innerHTML = finTxShowAll ? `Ver menos ${bdIcon("chev-down")}` : `Ver todos ${bdIcon("arrow-right")}`;
+  }
+  const root = document.querySelector("#finTransactions");
+  if (!root) return;
+  root.innerHTML = list.length
+    ? list.slice(0, limit).map(renderFinTransaction).join("")
+    : `<div class="bd-empty">${query ? "Nenhum resultado para essa busca." : finSelectedDay ? "Sem registros ou previsões neste dia." : "Nenhum lançamento no período."}</div>`;
+}
+
+function renderFinTransaction(f) {
+  const isReceita = f.type === "receita";
+  const canEdit = !f.projected && canEditFinanceWorkspace(f.workspaceId || "personal");
+  const [, mm, dd] = f.date.split("-");
+  const date = `${Number(dd)} ${BD_MONTHS[Number(mm) - 1]}`;
+  const ws = workspaceLabel(f.workspaceId || "personal").replace("Compartilhado · ", "");
+  return `<article class="bf-tx${f.projected ? " is-projected" : ""}" data-fin-id="${f.id}">
+    <span class="bf-tx-ico ${isReceita ? "in" : "out"}">${bdIcon(finTxIcon(f))}</span>
+    <div class="bf-tx-main"><strong title="${escapeHtml(f.description)}">${escapeHtml(f.description || finCatName(f.category))}</strong><small>${escapeHtml(finCatName(f.category))}<span class="bf-tx-ws-inline"> • ${escapeHtml(ws)}</span>${f.projected ? " • Previsto" : ""}</small></div>
+    <span class="bf-ws-chip">${bdIcon("user")}${escapeHtml(ws)}</span>
+    <span class="bf-tx-date">${date}</span>
+    <span class="bf-tx-amt ${isReceita ? "in" : "out"}">${isReceita ? "+" : "-"} ${formatCurrency(f.amount)}</span>
+    ${canEdit ? `<button type="button" class="bp-kebab" onclick="openFinTxActions('${f.id}', event)" aria-label="Mais opções: ${escapeHtml(f.description || "")}">${bdIcon("dots-h")}</button>` : '<span class="bf-tx-spacer"></span>'}
+  </article>`;
+}
+
+function renderFinRecentMini(monthKey) {
+  const root = document.querySelector("#finRecentMini");
+  if (!root) return;
+  const list = finWorkspaceEntries(monthKey).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 4);
+  root.innerHTML = list.length ? list.map((f) => {
+    const [, mm, dd] = f.date.split("-");
+    const isIn = f.type === "receita";
+    return `<div class="bf-mini"><span class="bf-tx-ico ${isIn ? "in" : "out"}">${bdIcon(finTxIcon(f))}</span><div><strong>${escapeHtml(f.description || finCatName(f.category))}</strong><small>${escapeHtml(finCatName(f.category))} • ${Number(dd)} ${BD_MONTHS[Number(mm) - 1]}</small></div><b class="${isIn ? "in" : "out"}">${isIn ? "+" : "-"} ${formatCurrency(f.amount)}</b></div>`;
+  }).join("") : '<div class="bd-empty">Nenhum lançamento no mês.</div>';
+}
+
+function closeFinTxActions() { document.querySelector("#finTxActionsSheet")?.remove(); }
+function openFinTxActions(id, event) {
+  event?.stopPropagation();
+  closeFinTxActions();
+  const entry = state.finances.find((f) => f.id === id);
+  if (!entry) return;
+  const sheet = document.createElement("div");
+  sheet.id = "finTxActionsSheet";
+  sheet.className = "modal-backdrop";
+  sheet.innerHTML = `<div class="modal-card planner-action-sheet" role="dialog" aria-modal="true" aria-labelledby="finTxActionsTitle">
+    <div class="modal-header"><h2 id="finTxActionsTitle">${escapeHtml(entry.description || finCatName(entry.category))}</h2><button type="button" class="icon-button" data-close aria-label="Fechar">${bdIcon("x")}</button></div>
+    <div class="modal-body planner-action-sheet-body">
+      <p class="planner-action-sheet-label">${escapeHtml(plannerShortDate(entry.date))} · ${entry.type === "receita" ? "+" : "-"} ${escapeHtml(formatCurrency(entry.amount))}</p>
+      <button type="button" class="planner-action-option" data-edit><span>Editar lançamento</span>${bdIcon("pencil")}</button>
+      <button type="button" class="planner-action-danger" data-delete>${bdIcon("trash")}<span>Excluir lançamento</span></button>
+    </div></div>`;
+  document.body.appendChild(sheet);
+  const onKey = (e) => { if (e.key === "Escape") { closeFinTxActions(); document.removeEventListener("keydown", onKey); } };
+  document.addEventListener("keydown", onKey);
+  sheet.addEventListener("click", (e) => {
+    if (e.target === sheet || e.target.closest("[data-close]")) closeFinTxActions();
+    else if (e.target.closest("[data-edit]")) { closeFinTxActions(); setFinBoardTab("lancamentos"); editFinance(id); }
+    else if (e.target.closest("[data-delete]")) {
+      closeFinTxActions();
+      if (confirm(`Excluir “${entry.description || finCatName(entry.category)}”?`)) deleteFinance(id);
+    }
+  });
+}
+
+function renderFinCalendar(monthKey) {
+  const grid = document.querySelector("#finCalGrid");
+  if (!grid) return;
+  const [year, month] = monthKey.split("-").map(Number);
+  const calLabel = document.querySelector("#finCalMonthLabel");
+  if (calLabel) calLabel.textContent = `${BD_MONTHS_LONG[month - 1]} de ${year}`;
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const lead = new Date(year, month - 1, 1).getDay();
+  const prevDays = new Date(year, month - 1, 0).getDate();
+  const projection = buildClientFinanceProjection(monthKey);
+  const cells = [];
+  for (let i = lead - 1; i >= 0; i -= 1) cells.push(`<span class="bf-day is-out">${prevDays - i}</span>`);
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    const dd = String(day).padStart(2, "0");
+    const iso = `${monthKey}-${dd}`;
+    const data = projection.days[dd] || {};
+    const dots = [
+      data.receita > 0 ? '<i class="in"></i>' : "",
+      data.despesa > 0 ? '<i class="out"></i>' : "",
+      !data.receita && !data.despesa && data.projected?.length ? '<i class="plan"></i>' : "",
+    ].join("");
+    const parts = [`${day} de ${BD_MONTHS_LONG[month - 1].toLowerCase()}`];
+    if (data.receita > 0) parts.push(`entradas ${formatCurrency(data.receita)}`);
+    if (data.despesa > 0) parts.push(`saídas ${formatCurrency(data.despesa)}`);
+    if (data.projected?.length) parts.push(`${data.projected.length} previsto(s)`);
+    parts.push(`saldo previsto ${formatCurrency(data.balance || 0)}`);
+    cells.push(`<button type="button" class="bf-day${iso === todayIso ? " is-today" : ""}${iso === finSelectedDay ? " is-selected" : ""}" onclick="filterFinByDate('${iso}')" aria-pressed="${iso === finSelectedDay}" aria-label="${escapeHtml(parts.join(", "))}"><span>${day}</span><em>${dots}</em></button>`);
+  }
+  let next = 1;
+  while (cells.length % 7) cells.push(`<span class="bf-day is-out">${next++}</span>`);
+  grid.innerHTML = cells.join("");
+}
+
+function filterFinByDate(date) {
+  finSelectedDay = finSelectedDay === date ? null : date;
+  finTxShowAll = false;
+  renderFinances();
+}
+
+// Gráfico de linha do saldo (mesmo desenho do Início), para qualquer contêiner.
+function drawBalanceChart(host, range, gradientId) {
+  if (!host) return;
+  const width = host.clientWidth;
+  const height = host.clientHeight;
+  if (!width || !height) return; // aba escondida: desenha de novo quando aparecer
+  const monthly = range > 120;
+  const series = bdBalanceSeries(range);
+  if (!bdWorkspaceFinances().length || !series.length) {
+    host.innerHTML = '<div class="bd-empty">Sem lançamentos no período. Registre uma receita ou despesa para ver a evolução.</div>';
+    return;
+  }
+  const values = series.map((p) => p.value);
+  const rawMin = Math.min(...values);
+  const rawMax = Math.max(...values);
+  const step = bdNiceStep((Math.max(rawMax - rawMin, Math.abs(rawMax) * 0.05, 100)) / 5);
+  const yMin = Math.floor(rawMin / step) * step;
+  let yMax = Math.ceil(rawMax / step) * step;
+  if (yMax === yMin) yMax = yMin + step;
+  const pad = { left: 62, right: 16, top: 16, bottom: 24 };
+  const plotW = width - pad.left - pad.right;
+  const plotH = height - pad.top - pad.bottom;
+  const x = (i) => pad.left + (series.length === 1 ? plotW : (i / (series.length - 1)) * plotW);
+  const y = (v) => pad.top + plotH - ((v - yMin) / (yMax - yMin)) * plotH;
+  const coords = series.map((p, i) => [x(i), y(p.value)]);
+  const line = bdSmoothPath(coords);
+  const area = `${line} L${coords.at(-1)[0].toFixed(1)} ${(pad.top + plotH).toFixed(1)} L${coords[0][0].toFixed(1)} ${(pad.top + plotH).toFixed(1)} Z`;
+  const ticks = [];
+  for (let value = yMin; value <= yMax + step / 2; value += step) ticks.push(value);
+  const grid = ticks.map((value) => `<line x1="${pad.left}" x2="${width - pad.right}" y1="${y(value).toFixed(1)}" y2="${y(value).toFixed(1)}"/><text x="${pad.left - 8}" y="${(y(value) + 3.5).toFixed(1)}" text-anchor="end">${bdAxisMoney(value)}</text>`).join("");
+  const labelCount = monthly ? Math.min(series.length, width < 420 ? 3 : 6) : (width < 420 ? 3 : 5);
+  const labelIdx = [...new Set(Array.from({ length: labelCount }, (_, k) => Math.round((k / Math.max(labelCount - 1, 1)) * (series.length - 1))))];
+  const xLabels = labelIdx.map((idx, k) => `<text x="${x(idx).toFixed(1)}" y="${height - 6}" text-anchor="${k === 0 ? "start" : k === labelIdx.length - 1 ? "end" : "middle"}">${bdPointLabel(series[idx], monthly)}</text>`).join("");
+  const last = coords.at(-1);
+  const tipText = formatCurrency(series.at(-1).value);
+  const tipW = tipText.length * 6.6 + 18;
+  const tipX = Math.min(Math.max(last[0] - tipW + 10, pad.left), width - tipW - 4);
+  const tipY = Math.max(last[1] - 34, 2);
+  host.innerHTML = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" preserveAspectRatio="none">
+    <defs><linearGradient id="${gradientId}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#22d3ee" stop-opacity=".38"/><stop offset="1" stop-color="#22d3ee" stop-opacity="0"/></linearGradient></defs>
+    <g class="grid">${grid}</g>
+    <path d="${area}" fill="url(#${gradientId})"/>
+    <path class="line" d="${line}"/>
+    ${xLabels}
+    <g class="tip"><rect x="${tipX.toFixed(1)}" y="${tipY.toFixed(1)}" width="${tipW.toFixed(1)}" height="24" rx="8"/><text x="${(tipX + tipW / 2).toFixed(1)}" y="${(tipY + 16).toFixed(1)}" text-anchor="middle">${escapeHtml(tipText)}</text></g>
+    <circle class="dot" cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="4.5"/>
+  </svg>`;
+  host.setAttribute("aria-label", `Evolução do saldo: ${tipText} hoje`);
+}
+
+function renderFinSaldoEvolution() {
+  drawBalanceChart(document.querySelector("#finSaldoEvolution"), finEvoRange, "finEvoFill");
+}
+
+function renderFinChart6m() {
+  const el = document.querySelector("#finChart6m");
+  if (!el) return;
+  const width = el.clientWidth;
+  const height = el.clientHeight;
+  if (!width || !height) return;
+  const months = finLastMonths(finActiveMonth, 6);
+  const data = months.map((mk) => ({ mk, lbl: `${BD_MONTHS[Number(mk.slice(5, 7)) - 1]}/${mk.slice(2, 4)}`, ...finMonthTotals(mk) }));
+  if (!data.some((d) => d.r || d.d)) {
+    el.innerHTML = '<div class="bd-empty">Sem movimentações nos últimos 6 meses.</div>';
+    return;
+  }
+  const step = bdNiceStep(Math.max(...data.flatMap((d) => [d.r, d.d]), 1) / 5);
+  const top = Math.ceil(Math.max(...data.flatMap((d) => [d.r, d.d]), 1) / step) * step;
+  const pad = { left: 62, right: 8, top: 10, bottom: 24 };
+  const plotW = width - pad.left - pad.right;
+  const plotH = height - pad.top - pad.bottom;
+  const y = (v) => pad.top + plotH - (v / top) * plotH;
+  const ticks = [];
+  for (let v = 0; v <= top + step / 2; v += step) ticks.push(v);
+  const groupW = plotW / data.length;
+  const barW = Math.max(6, Math.min(18, groupW * 0.3));
+  const grid = ticks.map((v) => `<line x1="${pad.left}" x2="${width - pad.right}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}"/><text x="${pad.left - 8}" y="${(y(v) + 3.5).toFixed(1)}" text-anchor="end">${bdAxisMoney(v)}</text>`).join("");
+  const bars = data.map((d, i) => {
+    const cx = pad.left + groupW * i + groupW / 2;
+    const active = d.mk === finActiveMonth;
+    const bar = (v, xx, cls) => `<rect class="${cls}" x="${xx.toFixed(1)}" y="${y(v).toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(1, pad.top + plotH - y(v)).toFixed(1)}" rx="3"/>`;
+    return `<g class="bf-cmp-group${active ? " is-active" : ""}" data-fin-month="${d.mk}" role="button" tabindex="0" aria-label="${escapeHtml(finMonthTitle(d.mk))}: receitas ${escapeHtml(formatCurrency(d.r))}, despesas ${escapeHtml(formatCurrency(d.d))}">
+      <rect x="${(cx - groupW / 2).toFixed(1)}" y="${pad.top}" width="${groupW.toFixed(1)}" height="${plotH}" fill="transparent"/>
+      ${bar(d.r, cx - barW - 1.5, "in")}${bar(d.d, cx + 1.5, "out")}
+      <text x="${cx.toFixed(1)}" y="${height - 6}" text-anchor="middle">${d.lbl}</text>
+      <title>${escapeHtml(finMonthTitle(d.mk))}: receitas ${escapeHtml(formatCurrency(d.r))}, despesas ${escapeHtml(formatCurrency(d.d))}</title>
+    </g>`;
+  }).join("");
+  el.innerHTML = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}"><g class="grid">${grid}</g>${bars}</svg>`;
+}
+
+function setFinBoardTab(target) {
+  document.querySelectorAll(".fin-tab-btn").forEach((t) => {
+    const active = t.dataset.finTab === target;
+    t.classList.toggle("active", active);
+    t.setAttribute("aria-selected", String(active));
+  });
+  document.querySelectorAll(".fin-tab-panel").forEach((p) => { p.hidden = p.dataset.finPanel !== target; });
+  const board = document.querySelector(".bf");
+  if (board) board.dataset.tab = target;
+  if (target === "analise") requestAnimationFrame(() => { renderFinSaldoEvolution(); renderFinChart6m(); });
+}
+
+// Lê a foto/PDF do comprovante ou o áudio e preenche o formulário (mesma IA do WhatsApp).
+const FIN_MEDIA_ERRORS = {
+  ai_not_configured: "A leitura por IA ainda não foi configurada no servidor.",
+  feature_disabled: "A leitura de comprovantes e áudios está desligada no momento.",
+  maintenance: "O PulseNote está em manutenção. Tente de novo em instantes.",
+  unauthorized: "Sua sessão expirou. Recarregue a página e entre de novo.",
+  media_too_large: "Arquivo grande demais. Use uma foto ou um PDF de até 2,5 MB.",
+  unsupported_media: "Formato não suportado. Use foto (JPG, PNG, WEBP), PDF ou áudio.",
+  audio_not_understood: "Não consegui entender o áudio. Tente falar mais perto do microfone.",
+  ai_rate_limited: "O limite da IA foi atingido por agora. Tente em alguns minutos.",
+};
+
+async function finCallParser(body) {
+  const token = await currentUser?.getIdToken();
+  const response = await fetch("/api/parse-transaction", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ ...body, categories: buildCategoryPayload(), today: todayIso }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw { handled: true, code: data.error, transcript: data.transcript };
+  return data;
+}
+
+function finBlobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(",")[1] || "");
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
+// Fotos viram JPEG de até 1600px (cabe no limite de envio e lê melhor na IA).
+async function finCompressImage(file) {
+  const bitmap = await createImageBitmap(file).catch(() => null);
+  if (!bitmap) return { base64: await finBlobToBase64(file), mimeType: file.type || "image/jpeg" };
+  const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
+  canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.82));
+  return { base64: await finBlobToBase64(blob), mimeType: "image/jpeg" };
+}
+
+function finMediaBusy(button, busy, text) {
+  if (!button) return;
+  button.disabled = busy;
+  button.classList.toggle("is-busy", busy);
+  const label = button.querySelector("span");
+  if (label && text) label.textContent = text;
+}
+
+async function handleFinReceipt(file) {
+  const button = document.querySelector("#finReceiptBtn");
+  if (!file) return;
+  const isPdf = file.type === "application/pdf";
+  if (!isPdf && !file.type.startsWith("image/")) { showToast(FIN_MEDIA_ERRORS.unsupported_media); return; }
+  if (isPdf && file.size > 2.5 * 1024 * 1024) { showToast(FIN_MEDIA_ERRORS.media_too_large); return; }
+  finMediaBusy(button, true, "Lendo comprovante…");
+  try {
+    const media = isPdf ? { base64: await finBlobToBase64(file), mimeType: "application/pdf" } : await finCompressImage(file);
+    const data = await finCallParser({ mode: "image", imageBase64: media.base64, mimeType: media.mimeType });
+    if (!data.amount) throw { handled: true, code: "unreadable" };
+    fillExpenseFormFrom(data);
+    showToast("Comprovante lido! Confira os dados e toque em Registrar.");
+  } catch (err) {
+    if (!err?.handled) console.error("Falha ao ler comprovante:", err);
+    showToast(FIN_MEDIA_ERRORS[err?.code] || "Não consegui ler esse comprovante. Tente uma foto mais nítida ou preencha manualmente.");
+  } finally {
+    finMediaBusy(button, false, "Foto / PDF do comprovante");
+  }
+}
+
+async function handleFinAudioBlob(blob, mimeType) {
+  const button = document.querySelector("#finAudioBtn");
+  finMediaBusy(button, true, "Entendendo o áudio…");
+  try {
+    const data = await finCallParser({ mode: "audio", audioBase64: await finBlobToBase64(blob), mimeType });
+    if (!data.amount) throw { handled: true, code: "no_amount", transcript: data.transcript };
+    fillExpenseFormFrom(data);
+    showToast(`Entendi: “${data.transcript || data.description}”. Confira e toque em Registrar.`);
+  } catch (err) {
+    if (!err?.handled) console.error("Falha ao ler áudio:", err);
+    if (err?.transcript) showToast(`Ouvi “${err.transcript}”, mas não encontrei o valor. Diga, por exemplo: “almoço 32 reais hoje”.`);
+    else showToast(FIN_MEDIA_ERRORS[err?.code] || "Não consegui processar o áudio agora. Tente de novo ou preencha manualmente.");
+  } finally {
+    finMediaBusy(button, false, "Importar por áudio");
+  }
+}
+
+// Gravador WAV (16 kHz, mono): formato que a IA lê em qualquer navegador.
+let finRecorder = null;
+async function startFinRecording() {
+  const button = document.querySelector("#finAudioBtn");
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  if (!navigator.mediaDevices?.getUserMedia || !AudioCtx) { document.querySelector("#finAudioInput")?.click(); return; }
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch {
+    showToast("Sem acesso ao microfone. Você pode escolher um arquivo de áudio.");
+    document.querySelector("#finAudioInput")?.click();
+    return;
+  }
+  const ctx = new AudioCtx();
+  const source = ctx.createMediaStreamSource(stream);
+  const processor = ctx.createScriptProcessor(4096, 1, 1);
+  const chunks = [];
+  processor.onaudioprocess = (e) => chunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+  source.connect(processor);
+  processor.connect(ctx.destination);
+  const timer = setTimeout(() => stopFinRecording(), 30000);
+  finRecorder = { stream, ctx, source, processor, chunks, timer, rate: ctx.sampleRate };
+  button?.classList.add("is-recording");
+  button?.setAttribute("aria-pressed", "true");
+  const label = button?.querySelector("span");
+  if (label) label.textContent = "Gravando… toque para parar";
+  const iconUse = button?.querySelector("use");
+  if (iconUse) iconUse.setAttribute("href", "#i-stop");
+}
+
+function finEncodeWav(chunks, inputRate, outRate = 16000) {
+  const total = chunks.reduce((s, c) => s + c.length, 0);
+  const merged = new Float32Array(total);
+  let offset = 0;
+  chunks.forEach((c) => { merged.set(c, offset); offset += c.length; });
+  const ratio = inputRate / outRate;
+  const length = Math.floor(merged.length / ratio);
+  const buffer = new ArrayBuffer(44 + length * 2);
+  const view = new DataView(buffer);
+  const write = (o, s) => { for (let i = 0; i < s.length; i += 1) view.setUint8(o + i, s.charCodeAt(i)); };
+  write(0, "RIFF"); view.setUint32(4, 36 + length * 2, true); write(8, "WAVE"); write(12, "fmt ");
+  view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+  view.setUint32(24, outRate, true); view.setUint32(28, outRate * 2, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+  write(36, "data"); view.setUint32(40, length * 2, true);
+  for (let i = 0; i < length; i += 1) {
+    const sample = Math.max(-1, Math.min(1, merged[Math.floor(i * ratio)] || 0));
+    view.setInt16(44 + i * 2, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
+  }
+  return new Blob([buffer], { type: "audio/wav" });
+}
+
+function stopFinRecording() {
+  if (!finRecorder) return;
+  const { stream, ctx, source, processor, chunks, timer, rate } = finRecorder;
+  finRecorder = null;
+  clearTimeout(timer);
+  source.disconnect(); processor.disconnect();
+  stream.getTracks().forEach((t) => t.stop());
+  ctx.close().catch(() => {});
+  const button = document.querySelector("#finAudioBtn");
+  button?.classList.remove("is-recording");
+  button?.setAttribute("aria-pressed", "false");
+  button?.querySelector("use")?.setAttribute("href", "#i-mic");
+  const seconds = chunks.reduce((s, c) => s + c.length, 0) / rate;
+  if (seconds < 0.8) { finMediaBusy(button, false, "Importar por áudio"); showToast("Áudio muito curto. Toque, fale o lançamento e toque de novo para parar."); return; }
+  handleFinAudioBlob(finEncodeWav(chunks, rate), "audio/wav");
+}
+
+function bindFinanceBoard() {
+  // Espaço + mês sobem para o cabeçalho (aparecem só na tela de Finanças)
+  const slot = document.querySelector("#bdTopSlot");
+  const controls = document.querySelector("#finTopControls");
+  if (slot && controls) slot.append(controls);
+
+  document.querySelector("#finWsSeg")?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-workspace]");
+    if (button) setActiveFinanceWorkspace(button.dataset.workspace);
+  });
+
+  const moreBtn = document.querySelector("#finMoreBtn");
+  const moreMenu = document.querySelector("#finMoreMenu");
+  moreBtn?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    moreMenu.hidden = !moreMenu.hidden;
+    moreBtn.setAttribute("aria-expanded", String(!moreMenu.hidden));
+  });
+  moreMenu?.addEventListener("click", () => { moreMenu.hidden = true; moreBtn?.setAttribute("aria-expanded", "false"); });
+  document.addEventListener("click", (event) => {
+    if (moreMenu && !moreMenu.hidden && !event.target.closest(".bf-more")) { moreMenu.hidden = true; moreBtn?.setAttribute("aria-expanded", "false"); }
+  });
+
+  document.querySelectorAll("[data-fin-cal]").forEach((button) => button.addEventListener("click", () => {
+    document.querySelector(button.dataset.finCal === "-1" ? "#finMonthPrev" : "#finMonthNext")?.click();
+  }));
+  document.querySelector("#finMonthPrev")?.addEventListener("click", () => { finSelectedDay = null; });
+  document.querySelector("#finMonthNext")?.addEventListener("click", () => { finSelectedDay = null; });
+
+  const filterBind = (selector, setter) => document.querySelector(selector)?.addEventListener("change", (event) => { setter(event.target.value); finTxShowAll = false; renderFinances(); });
+  filterBind("#finTxTypeFilter", (v) => { finTxTypeFilter = v; });
+  filterBind("#finTxCatFilter", (v) => { finTxCatFilter = v; });
+  filterBind("#finTxAccountFilter", (v) => { finTxAccountFilter = v; });
+  document.querySelector("#finTxToggleAll")?.addEventListener("click", () => { finTxShowAll = !finTxShowAll; renderFinances(); });
+
+  document.querySelector("#finEvoRange")?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-range]");
+    if (!button) return;
+    finEvoRange = Number(button.dataset.range) || 180;
+    document.querySelectorAll("#finEvoRange button").forEach((b) => b.classList.toggle("active", b === button));
+    renderFinSaldoEvolution();
+  });
+  if ("ResizeObserver" in window) {
+    for (const [selector, draw] of [["#finSaldoEvolution", renderFinSaldoEvolution], ["#finChart6m", renderFinChart6m]]) {
+      const el = document.querySelector(selector);
+      if (!el) continue;
+      let lastWidth = 0;
+      new ResizeObserver(() => { if (Math.abs(el.clientWidth - lastWidth) < 2) return; lastWidth = el.clientWidth; draw(); }).observe(el);
+    }
+  }
+
+  document.querySelectorAll("[data-fin-goto]").forEach((button) => button.addEventListener("click", () => setFinBoardTab(button.dataset.finGoto)));
+  document.querySelector("#finSharedKpi")?.addEventListener("click", (event) => {
+    if (!event.target.closest("[data-fin-shared-add]")) return;
+    setFinBoardTab("controle");
+    requestAnimationFrame(() => document.querySelector("#finSharedSpacesList")?.closest("section")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  });
+
+  const kpis = document.querySelector("#finKpis");
+  kpis?.addEventListener("scroll", () => {
+    const max = kpis.scrollWidth - kpis.clientWidth;
+    const count = 3;
+    const index = max > 0 ? Math.round((kpis.scrollLeft / max) * (count - 1)) : 0;
+    document.querySelectorAll("#finKpiDots i").forEach((dot, i) => dot.classList.toggle("active", i === index));
+  }, { passive: true });
+
+  const receiptInput = document.querySelector("#finReceiptInput");
+  document.querySelector("#finReceiptBtn")?.addEventListener("click", () => receiptInput?.click());
+  receiptInput?.addEventListener("change", () => { handleFinReceipt(receiptInput.files?.[0]); receiptInput.value = ""; });
+  const audioInput = document.querySelector("#finAudioInput");
+  document.querySelector("#finAudioBtn")?.addEventListener("click", () => { if (finRecorder) stopFinRecording(); else startFinRecording(); });
+  audioInput?.addEventListener("change", () => {
+    const file = audioInput.files?.[0];
+    audioInput.value = "";
+    if (!file) return;
+    if (file.size > 3 * 1024 * 1024) { showToast("Áudio grande demais. Envie até 3 MB (cerca de 1 minuto)."); return; }
+    handleFinAudioBlob(file, file.type || "audio/ogg");
+  });
+}
+
 function renderFinances() {
   if (!document.querySelector("#financesView")) return;
   if (!state.finances) state.finances = [];
@@ -8363,7 +8977,7 @@ function renderFinances() {
   const reopenBtn = document.querySelector("#finReopenMonth");
   const formCard  = document.querySelector(".fin-form-card");
 
-  if (labelEl)  labelEl.textContent = finMonthLabel(monthKey);
+  if (labelEl)  labelEl.textContent = finMonthTitle(monthKey);
   const workspaceEl = document.querySelector("#finWorkspaceSelect");
   if (workspaceEl) workspaceEl.value = activeWorkspaceId;
   if (badgeEl)  badgeEl.hidden = !closed;
@@ -8407,53 +9021,17 @@ function renderFinances() {
       ? `Inclui ${formatCurrency(Math.abs(saldoAnterior))} ${saldoAnterior >= 0 ? "de saldo" : "de saldo negativo"} vindo do mês anterior`
       : "";
   }
-  document.querySelector("#finProgressBar").style.width = `${usedPct}%`;
-  document.querySelector("#finProgressBar").style.background = usedPct > 80 ? "var(--red)" : usedPct > 60 ? "var(--orange)" : "var(--green)";
-  document.querySelector("#finUsedLabel").textContent = `${usedPct}% das receitas usadas`;
-  updateFinMood(saldo, usedPct);
+  void usedPct;
+  renderFinBudget(monthKey, receitas, despesas, saldo);
 
-  // Distribuição por categoria
-  const byCat = {};
-  entries.filter((f) => f.type === "despesa").forEach((f) => {
-    byCat[f.category] = (byCat[f.category] || 0) + f.amount;
-  });
-
-  const catHtml = Object.entries(byCat)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([catId, total]) => {
-      const cat = findCategory(catId);
-      const pct = despesas > 0 ? Math.round((total / despesas) * 100) : 0;
-      return `
-        <div class="fin-cat-row" data-fin-category="${escapeHtml(catId)}" role="button" tabindex="0" aria-label="Abrir lançamentos de ${escapeHtml(cat.label)}">
-          <div class="fin-cat-info">
-            <span class="fin-cat-dot" style="background:${cat.color}"></span>
-            <span class="fin-cat-label">${escapeHtml(cat.label)}</span>
-          </div>
-          <div class="fin-cat-bar-wrap">
-            <div class="fin-cat-bar" style="width:${pct}%;background:${cat.color}20;outline:2px solid ${cat.color}40"></div>
-          </div>
-          <span class="fin-cat-value">${formatCurrency(total)}</span>
-        </div>`;
-    }).join("") || `<div class="empty-state" style="padding:12px">Sem despesas no período</div>`;
-
-  document.querySelector("#finCategories").innerHTML = catHtml;
-  const filterRoot = document.querySelector("#finTransactionFilter");
-  if (filterRoot) {
-    filterRoot.hidden = !finCategoryDrilldown;
-    filterRoot.innerHTML = finCategoryDrilldown
-      ? `<span>Filtrando por <strong>${escapeHtml(findCategory(finCategoryDrilldown).label)}</strong></span><button type="button" onclick="clearFinanceCategory()">Limpar filtro</button>`
-      : "";
-  }
+  const byCat = renderFinCategoryBars(entries, despesas, monthKey);
   renderFinInsights(monthKey, entries, receitas, despesas, byCat);
 
-  const listHtml = entries.length
-    ? entries.slice(0, 50).map((f) => renderFinTransaction(f)).join("")
-    : `<div class="empty-state">${query ? "Nenhum resultado para essa busca 🔍" : "Nenhum registro no período 📭"}</div>`;
+  renderFinTxList(monthKey, entries, query);
 
-  document.querySelector("#finTransactions").innerHTML = listHtml;
-
-  renderFinCalendar(monthKey, entries);
+  renderFinCalendar(monthKey);
+  renderFinKpis(monthKey);
+  renderFinRecentMini(monthKey);
   renderFinChart6m();
   renderFinSaldoEvolution();
   renderFinGoals();
@@ -8607,41 +9185,6 @@ function updateFinMood(saldo, usedPct) {
   text.textContent = message;
 }
 
-function renderFinTransaction(f) {
-  const cat = findCategory(f.category);
-  const isReceita = f.type === "receita";
-  // Antes, toda receita aparecia igual ("💰" + "Receita"), não importa qual
-  // categoria (Salário, Freelance, Vendas...) tivesse sido escolhida no
-  // formulário. Agora mostramos sempre o ícone/cor/nome da categoria
-  // realmente selecionada — igual já acontecia para despesas.
-  const icon    = cat.label.split(" ")[0];
-  const catName = cat.label.replace(/^\S+\s*/, "");
-  const canEdit = !f.projected && canEditFinanceWorkspace(f.workspaceId || "personal");
-  // Layout em 2 linhas: título+valor numa linha, categoria/data+ações na
-  // outra. Antes tudo (ícone + título + valor + editar + excluir) disputava
-  // uma única linha, sobrando pouquíssimo espaço pro título — por isso
-  // descrições como "Alimentação" apareciam cortadas em "Alimen...".
-  return `
-    <article class="fin-transaction" data-fin-id="${f.id}">
-      <div class="fin-tx-icon" style="background:${cat.color}22;color:${cat.color}">
-        ${icon}
-      </div>
-      <div class="fin-tx-main">
-        <div class="fin-tx-top">
-          <strong class="fin-tx-title" title="${escapeHtml(f.description)}">${escapeHtml(f.description)}</strong>
-          <span class="fin-tx-amount ${isReceita ? "receita" : "despesa"}">${isReceita ? "+" : "-"}${formatCurrency(f.amount)}</span>
-        </div>
-        <div class="fin-tx-bottom">
-          <span class="task-meta fin-tx-meta">${escapeHtml(catName)} · ${formatDate(f.date)}${f.projected ? " · Previsto" : ""}</span>
-          <div class="fin-tx-actions"${canEdit ? "" : " hidden"}>
-            <button class="mini-button" onclick="editFinance('${f.id}')" title="Editar">✏️</button>
-            <button class="mini-button" onclick="deleteFinance('${f.id}')" title="Excluir">🗑️</button>
-          </div>
-        </div>
-      </div>
-    </article>`;
-}
-
 function compactProjectedBalance(value) {
   const amount = Number(value) || 0;
   const absolute = Math.abs(amount);
@@ -8665,50 +9208,6 @@ function buildClientFinanceProjection(monthKey) {
   });
 }
 
-function renderFinCalendar(monthKey, entries) {
-  const grid = document.querySelector("#finCalGrid");
-  if (!grid) return;
-  // Sincroniza o título do calendário com o mês ativo
-  const calLabel = document.querySelector("#finCalMonthLabel");
-  if (calLabel) calLabel.textContent = finMonthLabel(monthKey);
-  const [year, month] = monthKey.split("-").map(Number);
-  const daysInMonth = new Date(year, month, 0).getDate();
-  const projection = buildClientFinanceProjection(monthKey);
-  const days = [...Array(daysInMonth)].map((_, i) => {
-    const d = String(i + 1).padStart(2, "0");
-    const data = projection.days[d];
-    const dateStr = `${monthKey}-${d}`;
-    const isToday = dateStr === todayIso;
-    const hasMovement = data && (data.receita > 0 || data.despesa > 0);
-    const hasProjection = data?.projected?.length > 0;
-    let dot = "";
-    if (hasMovement) {
-      if (data.receita > 0 && data.despesa > 0) dot = `<span class="fin-day-dot both"></span>`;
-      else if (data.receita > 0) dot = `<span class="fin-day-dot receita"></span>`;
-      else if (data.despesa > 0) dot = `<span class="fin-day-dot despesa"></span>`;
-    }
-    const readableBalance = formatCurrency(data?.balance || 0);
-    return `<button class="fin-cal-day ${isToday ? "today" : ""} ${hasMovement ? "has-data" : ""} ${hasProjection ? "has-projection" : ""}" onclick="filterFinByDate('${dateStr}')" aria-label="Dia ${i + 1}. Saldo previsto ${readableBalance}${hasProjection ? ". Há lançamentos previstos" : ""}"><span class="fin-cal-day-top"><strong>${i + 1}</strong>${dot}</span><span class="fin-day-balance ${Number(data?.balance) < 0 ? "is-negative" : ""}">${compactProjectedBalance(data?.balance || 0)}</span></button>`;
-  });
-  grid.innerHTML = days.join("");
-}
-
-function filterFinByDate(date) {
-  const projected = buildClientFinanceProjection(date.slice(0, 7)).projectedEntries.filter((item) => item.date === date);
-  const entries = [
-    ...state.finances.filter((f) => f.date === date && (f.workspaceId || "personal") === activeWorkspaceId),
-    ...projected,
-  ];
-  const listHtml = entries.length
-    ? entries.map((f) => renderFinTransaction(f)).join("")
-    : `<div class="empty-state">Sem registros ou previsões neste dia 📭</div>`;
-  document.querySelector("#finTransactions").innerHTML = listHtml;
-}
-
-// Preenche o <select> (oculto, mantido só por compatibilidade/valueOf) de
-// categorias com as fixas + customizadas do usuário. Se selectedId for
-// passado, marca essa opção como selecionada. Depois sincroniza o botão
-// visível (#expenseCategoryTrigger) que o usuário realmente vê e toca.
 function populateCategorySelect(selectedId, type = document.querySelector("#expenseType")?.value || "despesa") {
   const select = document.querySelector("#expenseCategory");
   if (!select) return;
@@ -8728,7 +9227,7 @@ function populateCategorySelect(selectedId, type = document.querySelector("#expe
   const label = document.querySelector("#expenseCategoryLabel");
   const description = document.querySelector("#expenseDescription");
   if (label) label.textContent = type === "receita" ? "De onde veio" : "Categoria";
-  if (description) description.placeholder = type === "receita" ? "Ex.: Salário de junho, Venda do sofá..." : "Ex.: Almoço, Uber...";
+  if (description) description.placeholder = type === "receita" ? "Ex.: Salário de janeiro" : "Ex.: Almoço no restaurante";
 }
 
 // Atualiza o texto/ícone do botão visível de categoria a partir do valor
@@ -9358,152 +9857,6 @@ function highlightItem(itemId) {
 // ============================================================
 // GRÁFICO COMPARATIVO DE 6 MESES (SVG inline)
 // ============================================================
-function renderFinChart6m() {
-  const el = document.querySelector("#finChart6m");
-  if (!el) return;
-
-  // Coleta os últimos 6 meses (incluindo o mês ativo)
-  const months = [];
-  const [ay, am] = finActiveMonth.split("-").map(Number);
-  for (let i = 5; i >= 0; i--) {
-    const d = new Date(ay, am - 1 - i, 1);
-    months.push(toLocalIso(d).slice(0, 7));
-  }
-
-  const data = months.map((mk) => {
-    const entries = (state.finances || []).filter((f) => f.date.startsWith(mk) && (f.workspaceId || "personal") === activeWorkspaceId);
-    const r = entries.filter((f) => f.type === "receita").reduce((s, f) => s + f.amount, 0);
-    const d = entries.filter((f) => f.type === "despesa").reduce((s, f) => s + f.amount, 0);
-    const [y, m] = mk.split("-").map(Number);
-    const lbl = safeFormatDate(new Date(y, m - 1, 1), { month: "short" }, "-");
-    return { mk, lbl, r, d };
-  });
-
-  // Sem nenhuma receita/despesa nos 6 meses, o gráfico de barras viraria
-  // só tracinhos mínimos no rodapé (altura mínima de 2px) com um enorme
-  // vazio em cima — parecia quebrado. Mostra um estado vazio, como já
-  // acontece na lista "Por categoria".
-  const totalMovimentado = data.reduce((s, d) => s + d.r + d.d, 0);
-  if (totalMovimentado === 0) {
-    el.innerHTML = `<div class="empty-state">Sem movimentações nos últimos 6 meses</div>`;
-    return;
-  }
-
-  const maxVal = Math.max(...data.flatMap((d) => [d.r, d.d]), 1);
-  const W = 100, H = 80, pad = 4, barW = 6, gap = 2;
-  const groupW = barW * 2 + gap + 4;
-  const totalW = groupW * data.length;
-  const activeData = data.find((item) => item.mk === finActiveMonth) || data[data.length - 1];
-  const previousData = data[data.length - 2];
-  const expenseChange = activeData.d - previousData.d;
-  const expenseTrend = expenseChange === 0
-    ? "igual ao mês anterior"
-    : `${formatCurrency(Math.abs(expenseChange))} ${expenseChange > 0 ? "a mais" : "a menos"} em despesas`;
-  const gridLines = [0.25, 0.5, 0.75].map((ratio) =>
-    `<line x1="${pad}" y1="${(H - H * ratio + pad).toFixed(2)}" x2="${totalW + pad}" y2="${(H - H * ratio + pad).toFixed(2)}" stroke="var(--line)" stroke-width="0.45" stroke-dasharray="1.5 2"/>`
-  ).join("");
-
-  const bars = data.map((item, i) => {
-    const x = i * groupW + pad;
-    const rH = Math.max(2, (item.r / maxVal) * H);
-    const dH = Math.max(2, (item.d / maxVal) * H);
-    const isActive = item.mk === finActiveMonth;
-    return `
-      <g data-fin-month="${item.mk}" role="button" tabindex="0" aria-label="Abrir ${item.lbl}: receitas ${formatCurrency(item.r)}, despesas ${formatCurrency(item.d)}">
-        <rect x="${x - 2}" y="${pad}" width="${barW * 2 + gap + 4}" height="${H + 13}" rx="3" fill="transparent" />
-        <rect x="${x}" y="${H - rH + pad}" width="${barW}" height="${rH}" rx="2" fill="${isActive ? "var(--green)" : "var(--green-soft)"}" stroke="${isActive ? "var(--green)" : "none"}" stroke-width="1"><title>${item.lbl}: receitas ${formatCurrency(item.r)}</title></rect>
-        <rect x="${x + barW + gap}" y="${H - dH + pad}" width="${barW}" height="${dH}" rx="2" fill="${isActive ? "var(--red)" : "var(--red-soft)"}" stroke="${isActive ? "var(--red)" : "none"}" stroke-width="1"><title>${item.lbl}: despesas ${formatCurrency(item.d)}</title></rect>
-        <text x="${x + barW}" y="${H + pad + 10}" text-anchor="middle" font-size="5" fill="var(--muted)" font-family="inherit">${item.lbl}</text>
-      </g>`;
-  }).join("");
-
-  const legendLine = `
-    <rect x="${pad}" y="${H + pad + 14}" width="6" height="4" rx="1" fill="var(--green)"/>
-    <text x="${pad + 8}" y="${H + pad + 18}" font-size="4.5" fill="var(--muted)" font-family="inherit">Receitas</text>
-    <rect x="${pad + 36}" y="${H + pad + 14}" width="6" height="4" rx="1" fill="var(--red)"/>
-    <text x="${pad + 44}" y="${H + pad + 18}" font-size="4.5" fill="var(--muted)" font-family="inherit">Despesas</text>`;
-
-  el.innerHTML = `<div class="fin-chart-metrics"><span><b>${formatCurrency(activeData.r)}</b> receitas</span><span><b>${formatCurrency(activeData.d)}</b> despesas</span><small>${expenseTrend}</small></div><svg role="img" aria-label="Comparação de receitas e despesas dos últimos seis meses" viewBox="0 0 ${totalW + pad * 2} ${H + pad * 2 + 22}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto"><title>Receitas e despesas dos últimos seis meses</title>${gridLines}${bars}${legendLine}</svg>`;
-}
-
-// Gráfico de linha com o saldo acumulado (receitas - despesas de TODO o
-// histórico até cada mês) — mostra a tendência real da "vida financeira",
-// independente de o mês ter sido fechado ou não.
-function renderFinSaldoEvolution() {
-  const el = document.querySelector("#finSaldoEvolution");
-  if (!el) return;
-
-  const months = [];
-  const [ay, am] = finActiveMonth.split("-").map(Number);
-  for (let i = 5; i >= 0; i--) {
-    const d = new Date(ay, am - 1 - i, 1);
-    months.push(toLocalIso(d).slice(0, 7));
-  }
-
-  // Sem nenhum lançamento no histórico inteiro, o saldo fica sempre em
-  // zero e a linha vira um traço reto colado embaixo do gráfico — parecia
-  // quebrado. Mostra um estado vazio em vez de um gráfico "fantasma".
-  const workspaceFinances = (state.finances || []).filter((f) => (f.workspaceId || "personal") === activeWorkspaceId);
-  if (workspaceFinances.length === 0) {
-    el.innerHTML = `<div class="empty-state">Sem dados suficientes para mostrar a evolução</div>`;
-    return;
-  }
-
-  const firstMonth = months[0];
-  const baseline = workspaceFinances
-    .filter((f) => f.date.slice(0, 7) < firstMonth)
-    .reduce((s, f) => s + (f.type === "receita" ? f.amount : -f.amount), 0);
-
-  let running = baseline;
-  const data = months.map((mk) => {
-    const entries = workspaceFinances.filter((f) => f.date.startsWith(mk));
-    const net = entries.reduce((s, f) => s + (f.type === "receita" ? f.amount : -f.amount), 0);
-    running += net;
-    const [y, m] = mk.split("-").map(Number);
-    const lbl = safeFormatDate(new Date(y, m - 1, 1), { month: "short" }, "-");
-    return { mk, lbl, saldo: running };
-  });
-
-  const values = data.map((d) => d.saldo);
-  const maxVal = Math.max(...values, 0);
-  const minVal = Math.min(...values, 0);
-  const range  = Math.max(maxVal - minVal, 1);
-
-  const W = 100, H = 60, pad = 6;
-  const stepX = (W - pad * 2) / Math.max(data.length - 1, 1);
-  const zeroY = pad + H - ((0 - minVal) / range) * H;
-
-  const points = data.map((d, i) => ({
-    x: pad + i * stepX,
-    y: pad + H - ((d.saldo - minVal) / range) * H,
-    ...d,
-  }));
-
-  const pathD = points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(" ");
-  const last = points[points.length - 1];
-  const previous = points[points.length - 2];
-  const balanceChange = last.saldo - previous.saldo;
-  const areaD = `${pathD} L ${last.x.toFixed(2)} ${(pad + H).toFixed(2)} L ${points[0].x.toFixed(2)} ${(pad + H).toFixed(2)} Z`;
-
-  const dots = points.map((p) => {
-    const isActive = p.mk === finActiveMonth;
-    const color = p.saldo >= 0 ? "var(--green)" : "var(--red)";
-    return `<circle cx="${p.x.toFixed(2)}" cy="${p.y.toFixed(2)}" r="${isActive ? 2.1 : 1.4}" fill="${color}" stroke="var(--surface)" stroke-width="0.6"><title>${p.lbl}: saldo ${formatCurrency(p.saldo)}</title></circle>`;
-  }).join("");
-
-  const labels = points.map((p) =>
-    `<text x="${p.x.toFixed(2)}" y="${(pad + H + 8).toFixed(2)}" text-anchor="middle" font-size="4.5" fill="var(--muted)" font-family="inherit">${p.lbl}</text>`
-  ).join("");
-
-  el.innerHTML = `<div class="fin-chart-metrics"><span><b>${formatCurrency(last.saldo)}</b> saldo acumulado</span><small>${balanceChange === 0 ? "Sem variação desde o mês anterior" : `${formatCurrency(Math.abs(balanceChange))} ${balanceChange > 0 ? "de alta" : "de queda"} desde o mês anterior`}</small></div><svg role="img" aria-label="Evolução do saldo acumulado nos últimos seis meses" viewBox="0 0 ${W} ${H + pad * 2 + 10}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto"><title>Saldo acumulado nos últimos seis meses</title>
-    <line x1="${pad}" y1="${zeroY.toFixed(2)}" x2="${W - pad}" y2="${zeroY.toFixed(2)}" stroke="var(--line)" stroke-width="0.5" stroke-dasharray="2,2"/>
-    <path d="${areaD}" fill="var(--accent-soft)" opacity="0.5"/>
-    <path d="${pathD}" fill="none" stroke="var(--accent)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
-    ${dots}
-    ${labels}
-  </svg>`;
-}
-
 // ============================================================
 // METAS DE GASTO POR CATEGORIA
 // ============================================================
@@ -9935,6 +10288,7 @@ window.toggleNoteChecklistItem = toggleNoteChecklistItem;
 window.convertNoteToTask = convertNoteToTask;
 window.deleteNote = deleteNote;
 window.openNoteDetail = openNoteDetail;
+window.openFinTxActions = openFinTxActions;
 window.exportNoteMarkdown = exportNoteMarkdown;
 window.dragTask = dragTask;
 window.toggleTask = toggleTask;

@@ -151,6 +151,11 @@
         <symbol id="i-list-num" viewBox="0 0 24 24"><path d="M10 6h10M10 12h10M10 18h10M4 5h1.500v4M3.800 9h3.400M3.800 14.200a1.500 1.500 0 012.800.6c0 1-2.800 2.200-2.800 3.200h3"/></symbol>
         <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4.500 4.500 0 006.400 0l3-3a4.500 4.500 0 00-6.400-6.400l-1 1"/><path d="M14 10a4.500 4.500 0 00-6.400 0l-3 3a4.500 4.500 0 006.400 6.400l1-1"/></symbol>
         <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 5.500A2.500 2.500 0 016.500 3H20v15H6.500A2.500 2.500 0 004 20.500z"/><path d="M4 20.500A2.500 2.500 0 006.500 23H20v-5"/></symbol>
+        <symbol id="i-cart" viewBox="0 0 24 24"><path d="M3 4h2.200l2.300 11h10.600l2-8H6.300"/><circle cx="9" cy="19.500" r="1.400"/><circle cx="17" cy="19.500" r="1.400"/></symbol>
+        <symbol id="i-image" viewBox="0 0 24 24"><rect x="3.500" y="4.500" width="17" height="15" rx="2.500"/><circle cx="9" cy="10" r="1.700"/><path d="M20.500 16l-5-5L5 19.500"/></symbol>
+        <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.500 11a6.500 6.500 0 0013 0M12 17.500V21M8.500 21h7"/></symbol>
+        <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></symbol>
+        <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6.500" y="6.500" width="11" height="11" rx="2.500"/></symbol>
         <symbol id="i-trophy" viewBox="0 0 24 24"><path d="M7 4h10v5a5 5 0 01-10 0zM7 6H4v1.500A3.500 3.500 0 007.500 11M17 6h3v1.500A3.500 3.500 0 0116.500 11M12 14v4M8.500 20.500h7"/></symbol>
       </defs>
     </svg>
@@ -204,6 +209,7 @@
             <h1 id="viewTitle">Seu dia em foco</h1>
             <p id="viewSubtitle" class="bd-subtitle"></p>
           </div>
+          <div class="bd-top-slot" id="bdTopSlot"></div>
           <div class="bd-top-actions" id="bdTopActions">
             <div class="bd-date-pill" id="bdDatePill"><svg class="i"><use href="#i-calendar"/></svg><span id="bdDateText">—</span></div>
             <label class="bd-search" title="Filtra esta tela — Enter busca em tudo (ou Ctrl/Cmd+K)">
@@ -982,89 +988,78 @@
 
         <!-- ===== FINANCES VIEW ===== -->
         <section id="financesView" class="view">
+          <div class="bf">
 
-          <!-- Cabeçalho fixo: mês ativo + resumo do período (contexto visível em todas as abas) -->
-          <div class="fin-header">
-            <div class="fin-month-nav">
-              <button class="fin-month-arrow" id="finMonthPrev">‹</button>
-              <div class="fin-month-center">
-                <span id="finMonthLabel" class="fin-month-label">Julho 2026</span>
-                <label class="sr-only" for="finWorkspaceSelect">Espaço financeiro</label>
-                <select id="finWorkspaceSelect" class="fin-workspace-label" aria-label="Espaço financeiro ativo"><option value="personal">Pessoal</option><option value="couple">Casal</option><option value="family">Família</option><option value="business">Empresa</option></select>
-                <span id="finClosedBadge" class="fin-closed-badge" hidden><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Fechado</span>
+            <!-- Espaço + mês: no computador sobem para o cabeçalho (ver bindFinanceBoard) -->
+            <div class="bf-topctl" id="finTopControls">
+              <div class="bf-ws" id="finWsSeg" role="group" aria-label="Espaço financeiro"></div>
+              <label class="sr-only" for="finWorkspaceSelect">Espaço financeiro</label>
+              <select id="finWorkspaceSelect" class="fin-workspace-label" aria-label="Espaço financeiro ativo"><option value="personal">Pessoal</option><option value="couple">Casal</option><option value="family">Família</option><option value="business">Empresa</option></select>
+              <div class="bf-month">
+                <button type="button" class="bd-icon-btn" id="finMonthPrev" aria-label="Mês anterior"><svg class="i"><use href="#i-chev-left"/></svg></button>
+                <span class="bf-month-label"><svg class="i"><use href="#i-calendar"/></svg><span id="finMonthLabel">Mês</span><span id="finClosedBadge" class="bf-lock" title="Mês fechado" hidden><svg class="i"><use href="#i-lock"/></svg></span></span>
+                <button type="button" class="bd-icon-btn" id="finMonthNext" aria-label="Próximo mês"><svg class="i"><use href="#i-chev-right"/></svg></button>
               </div>
-              <button class="fin-month-arrow" id="finMonthNext">›</button>
-            </div>
-
-            <div class="fin-month-actions">
-              <button id="finCloseMonth" class="fin-action-btn close"><span class="fin-action-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg></span>Fechar mês</button>
-              <button id="finReopenMonth" class="fin-action-btn reopen" hidden><span class="fin-action-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 017.5-1.7"/></svg></span>Reabrir</button>
-              <button id="finExportReport" class="fin-action-btn export"><span class="fin-action-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v11"/><path d="M7.5 10.5L12 15l4.5-4.5"/><path d="M5 21h14"/></svg></span>Exportar PDF</button>
-            </div>
-
-            <div class="fin-summary-grid">
-              <div class="fin-summary-card receita">
-                <span class="fin-sum-label"><span class="fin-sum-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16l6-6 4 4 6-7"/><path d="M15.5 6.5H21V12"/></svg></span>Receitas</span>
-                <strong id="finReceitas">R$ 0,00</strong>
-              </div>
-              <div class="fin-summary-card despesa">
-                <span class="fin-sum-label"><span class="fin-sum-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8l6 6 4-4 6 7"/><path d="M15.5 17.5H21V12"/></svg></span>Despesas</span>
-                <strong id="finDespesas">R$ 0,00</strong>
-              </div>
-              <div class="fin-summary-card saldo" id="finSaldoCard">
-                <span class="fin-sum-label"><span class="fin-sum-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="12.5" width="3.4" height="7.5" rx="1"/><rect x="10.3" y="7.5" width="3.4" height="12.5" rx="1"/><rect x="16.6" y="3.5" width="3.4" height="16.5" rx="1"/></svg></span>Saldo</span>
-                <strong id="finSaldo">R$ 0,00</strong>
-              </div>
-            </div>
-
-            <div class="panel fin-budget-bar">
-              <div class="fin-mood-row" id="finMoodRow">
-                <div class="pulsinho pulsinho--sm fin-mood-pulsinho" id="finMoodBlob">
-                  <div class="pulsinho__face">
-                    <div class="pulsinho__eyes"><span class="pulsinho__eye"></span><span class="pulsinho__eye"></span></div>
-                    <svg class="pulsinho__pulse" viewBox="0 0 120 26"><path d="M0,13 L28,13 L36,3 L44,23 L52,13 L64,13 L70,6 L76,20 L82,13 L120,13"/></svg>
-                  </div>
+              <div class="bn-menu-wrap bf-more">
+                <button type="button" class="bd-icon-btn" id="finMoreBtn" aria-haspopup="true" aria-expanded="false" aria-label="Mais ações do mês"><svg class="i"><use href="#i-dots-v"/></svg></button>
+                <div class="bn-menu" id="finMoreMenu" hidden>
+                  <button type="button" id="finCloseMonth"><svg class="i"><use href="#i-lock"/></svg><span>Fechar mês</span></button>
+                  <button type="button" id="finReopenMonth" hidden><svg class="i"><use href="#i-repeat"/></svg><span>Reabrir mês</span></button>
+                  <button type="button" id="finExportReport"><svg class="i"><use href="#i-note"/></svg><span>Exportar relatório</span></button>
                 </div>
-                <span class="fin-mood-text" id="finMoodText">Analisando o mês...</span>
-              </div>
-              <div class="fin-budget-bar-top">
-                <span class="fin-budget-bar-title">Uso do orçamento</span>
-                <span id="finUsedLabel" class="fin-budget-bar-label">0% das receitas usadas</span>
-              </div>
-              <div class="progress-track fin-budget-track">
-                <div id="finProgressBar" class="fin-budget-fill" style="width:0%"></div>
               </div>
             </div>
-          </div><!-- /fin-header -->
 
-          <!-- Abas: separam o lançamento do dia a dia da análise/controle/automação -->
-          <div class="fin-tabs" role="tablist" aria-label="Seções de Finanças">
-            <button class="fin-tab-btn active" data-fin-tab="lancamentos" role="tab" aria-selected="true">
-              <span class="fin-tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg></span>Lançamentos
-            </button>
-            <button class="fin-tab-btn" data-fin-tab="analise" role="tab" aria-selected="false">
-              <span class="fin-tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="12.5" width="3.4" height="7.5" rx="1"/><rect x="10.3" y="7.5" width="3.4" height="12.5" rx="1"/><rect x="16.6" y="3.5" width="3.4" height="16.5" rx="1"/></svg></span>Análise
-            </button>
-            <button class="fin-tab-btn" data-fin-tab="controle" role="tab" aria-selected="false">
-              <span class="fin-tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.8"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/></svg></span>Controle
-            </button>
-            <button class="fin-tab-btn" data-fin-tab="automacao" role="tab" aria-selected="false">
-              <span class="fin-tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0115-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 01-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg></span>Automação
-            </button>
-          </div>
+            <!-- Resumo do mês -->
+            <div class="bf-kpis" id="finKpis">
+              <article class="bd-card bf-kpi bf-kpi--in">
+                <span class="bf-kpi-ico"><svg class="i"><use href="#i-wallet"/></svg></span>
+                <div class="bf-kpi-body"><span>Receitas</span><strong id="finReceitas">R$ 0,00</strong><small class="bf-trend" id="finReceitasTrend"></small></div>
+                <svg class="bf-spark" id="finReceitasSpark" viewBox="0 0 200 60" preserveAspectRatio="none" aria-hidden="true"></svg>
+              </article>
+              <article class="bd-card bf-kpi bf-kpi--out">
+                <span class="bf-kpi-ico"><svg class="i"><use href="#i-arrow-down"/></svg></span>
+                <div class="bf-kpi-body"><span>Despesas</span><strong id="finDespesas">R$ 0,00</strong><small class="bf-trend" id="finDespesasTrend"></small></div>
+              </article>
+              <article class="bd-card bf-kpi bf-kpi--bal" id="finSaldoCard">
+                <span class="bf-kpi-ico"><svg class="i"><use href="#i-card"/></svg></span>
+                <div class="bf-kpi-body"><span>Saldo</span><strong id="finSaldo">R$ 0,00</strong><small class="bf-trend" id="finSaldoTrend"></small></div>
+                <svg class="bf-spark" id="finSaldoSpark" viewBox="0 0 200 60" preserveAspectRatio="none" aria-hidden="true"></svg>
+              </article>
+              <article class="bd-card bf-kpi bf-kpi--shared" id="finSharedKpi">
+                <span class="bf-kpi-ico"><svg class="i"><use href="#i-users"/></svg></span>
+                <div class="bf-kpi-body"><span>Contas compartilhadas</span><small id="finSharedKpiMeta">Nenhuma ainda</small><div class="bf-avatars" id="finSharedKpiAvatars"></div></div>
+              </article>
+            </div>
+            <div class="bd-dots bf-dots" id="finKpiDots" aria-hidden="true"><i class="active"></i><i></i><i></i></div>
 
-          <!-- ABA: LANÇAMENTOS — registrar + calendário + histórico do mês -->
-          <div class="fin-tab-panel" data-fin-panel="lancamentos" role="tabpanel">
-            <div class="fin-layout">
-              <div class="fin-left">
-                <div class="editor-panel fin-form-card">
-                  <div class="ai-quick-entry">
-                    <label for="aiQuickText" class="ai-quick-entry-label"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m11 2.5 1.6 4.5 4.4 1.6-4.4 1.6L11 14.7l-1.6-4.5L5 8.6l4.4-1.6z"/><path d="M18.5 14l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/></svg>Lançar por texto</label>
-                    <div class="ai-quick-entry-row">
-                      <input id="aiQuickText" type="text" placeholder="Ex.: almoço 32 reais ontem" maxlength="120" />
-                      <button type="button" id="aiQuickSubmit" class="primary-button">
-                        <span id="aiQuickSubmitLabel">Preencher</span>
-                      </button>
+            <!-- Abas -->
+            <div class="bf-tabs fin-tabs" role="tablist" aria-label="Seções de Finanças">
+              <button class="fin-tab-btn active" data-fin-tab="lancamentos" role="tab" aria-selected="true">Lançamentos</button>
+              <button class="fin-tab-btn" data-fin-tab="analise" role="tab" aria-selected="false">Análise</button>
+              <button class="fin-tab-btn" data-fin-tab="controle" role="tab" aria-selected="false">Controle</button>
+              <button class="fin-tab-btn" data-fin-tab="automacao" role="tab" aria-selected="false">Automação</button>
+            </div>
+
+            <!-- ABA: LANÇAMENTOS -->
+            <div class="fin-tab-panel" data-fin-panel="lancamentos" role="tabpanel">
+              <div class="bf-launch">
+                <section class="bd-card bf-form fin-form-card" aria-labelledby="finFormTitle">
+                  <header class="bf-form-head">
+                    <span class="bf-plus"><svg class="i"><use href="#i-plus"/></svg></span>
+                    <div class="bf-form-titles"><h3 id="finFormTitle">Novo lançamento</h3><p>Adicione uma receita ou despesa à sua conta.</p></div>
+                    <div class="bf-type fin-type-toggle" role="group" aria-label="Tipo">
+                      <button type="button" class="fin-type-btn active" data-fin-type="despesa"><svg class="i"><use href="#i-arrow-down"/></svg>Despesa</button>
+                      <button type="button" class="fin-type-btn" data-fin-type="receita"><svg class="i"><use href="#i-arrow-up"/></svg>Receita</button>
+                    </div>
+                  </header>
+
+                  <div class="bf-ai ai-quick-entry">
+                    <label for="aiQuickText" class="bf-ai-label"><svg class="i"><use href="#i-sparkle"/></svg>Adicionar com IA (linguagem natural)</label>
+                    <div class="bf-ai-row">
+                      <svg class="i bf-ai-spark" aria-hidden="true"><use href="#i-sparkle"/></svg>
+                      <input id="aiQuickText" type="text" placeholder="Ex.: almoço 32 reais ontem" maxlength="120" autocomplete="off" />
+                      <button type="button" id="aiQuickSubmit" aria-label="Preencher com IA"><span id="aiQuickSubmitLabel" class="sr-only">Preencher</span><svg class="i"><use href="#i-arrow-right"/></svg></button>
                     </div>
                     <div class="ai-quick-mascot" id="aiQuickMascot" hidden>
                       <div class="pulsinho pulsinho--sm" id="aiQuickMascotBlob">
@@ -1076,80 +1071,97 @@
                       <span class="ai-quick-mascot-text" id="aiQuickMascotText">Pulsinho tá com a IA nisso...</span>
                     </div>
                   </div>
-                  <div class="fin-type-toggle">
-                    <button class="fin-type-btn active" data-fin-type="despesa"><span class="fin-type-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8l6 6 4-4 6 7"/><path d="M15.5 17.5H21V12"/></svg></span>Despesa</button>
-                    <button class="fin-type-btn" data-fin-type="receita"><span class="fin-type-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16l6-6 4 4 6-7"/><path d="M15.5 6.5H21V12"/></svg></span>Receita</button>
-                  </div>
-                  <form id="expenseForm">
+                  <p class="bf-or">ou preencha os dados manualmente:</p>
+
+                  <form id="expenseForm" class="bf-fields">
                     <input id="expenseId" type="hidden" value="" />
                     <input id="expenseType" type="hidden" value="despesa" />
-                    <div class="fin-form-row">
-                      <div class="fin-amount-field">
-                        <span class="fin-currency-sign">R$</span>
-                        <input id="expenseAmount" type="text" inputmode="decimal" placeholder="0,00" required />
+                    <label class="bf-field"><span>Valor <i>*</i></span>
+                      <span class="bf-input bf-amount"><b>R$</b><input id="expenseAmount" type="text" inputmode="decimal" placeholder="0,00" required /></span>
+                    </label>
+                    <label class="bf-field"><span>Data <i>*</i></span>
+                      <span class="bf-input"><svg class="i"><use href="#i-calendar"/></svg><input id="expenseDate" type="date" class="fin-date-input" /></span>
+                    </label>
+                    <label class="bf-field bf-wide"><span>Descrição <i>*</i></span>
+                      <span class="bf-input"><input id="expenseDescription" placeholder="Ex.: Almoço no restaurante" autocomplete="off" /></span>
+                    </label>
+                    <div class="bf-field"><span>Categoria <i>*</i></span>
+                      <div class="bf-catpick">
+                        <button type="button" id="expenseCategoryTrigger" class="bf-input bf-cat-trigger fin-cat-trigger" aria-haspopup="true">
+                          <span id="expenseCategoryTriggerIcon" class="fin-cat-trigger-icon">🍔</span>
+                          <span id="expenseCategoryTriggerLabel" class="fin-cat-trigger-label">Selecione uma categoria</span>
+                          <svg class="i bf-chev"><use href="#i-chev-down"/></svg>
+                        </button>
+                        <select id="expenseCategory" hidden aria-hidden="true" tabindex="-1"><option value="alimentacao">🍔 Alimentação</option></select>
+                        <button type="button" id="newCategoryBtn" class="bd-icon-btn bf-cat-add" title="Nova categoria" aria-label="Nova categoria"><svg class="i"><use href="#i-plus"/></svg></button>
                       </div>
-                      <input id="expenseDate" type="date" class="fin-date-input" />
                     </div>
-                    <input id="expenseDescription" placeholder="Descrição (ex.: Almoço, Uber...)" />
-                    <div class="fin-cat-select-row">
-                      <button type="button" id="expenseCategoryTrigger" class="fin-cat-trigger" aria-haspopup="true">
-                        <span id="expenseCategoryTriggerIcon" class="fin-cat-trigger-icon">🍔</span>
-                        <span id="expenseCategoryTriggerLabel" class="fin-cat-trigger-label">Alimentação</span>
-                        <svg class="fin-cat-trigger-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
-                      </button>
-                      <select id="expenseCategory" hidden aria-hidden="true" tabindex="-1"><option value="alimentacao">🍔 Alimentação</option></select>
-                      <button type="button" id="newCategoryBtn" class="fin-cat-add-btn" title="Nova categoria">＋</button>
+                    <label class="bf-field"><span>Conta</span>
+                      <span class="bf-input bf-select"><svg class="i"><use href="#i-card"/></svg><select id="expenseAccount" class="fin-account-select" aria-label="Conta"><option value="">Sem conta específica</option></select><svg class="i bf-chev"><use href="#i-chev-down"/></svg></span>
+                    </label>
+                    <div class="bf-form-foot bf-wide">
+                      <button type="button" class="bd-btn bf-media" id="finReceiptBtn"><svg class="i"><use href="#i-image"/></svg><span>Foto / PDF do comprovante</span></button>
+                      <button type="button" class="bd-btn bf-media" id="finAudioBtn" aria-pressed="false"><svg class="i"><use href="#i-mic"/></svg><span>Importar por áudio</span></button>
+                      <button type="submit" class="bd-btn bd-btn--primary bf-submit"><svg class="i"><use href="#i-check"/></svg><span id="finSubmitLabel">Registrar</span></button>
                     </div>
-                    <label class="fin-account-select-label" for="expenseAccount">Conta</label>
-                    <select id="expenseAccount" class="fin-account-select"><option value="">Sem conta específica</option></select>
-                    <button type="submit" class="primary-button" style="width:100%;justify-content:center;height:44px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg><span>Registrar</span></button>
+                    <input type="file" id="finReceiptInput" accept="image/*,application/pdf" hidden />
+                    <input type="file" id="finAudioInput" accept="audio/*" hidden />
                     <button type="button" id="cancelEditExpense" hidden style="width:100%;height:36px;border-radius:10px;border:1.5px solid var(--line);background:var(--surface2);color:var(--text2);cursor:pointer;font-weight:600;font-family:inherit;margin-top:6px">Cancelar edição</button>
                   </form>
-                </div>
-              </div><!-- /fin-left -->
+                </section>
 
-              <div class="fin-right">
-                <div class="panel fin-calendar-card">
-                  <div class="panel-header">
-                    <div><p class="eyebrow">Calendário</p><h2 id="finCalMonthLabel">Financeiro</h2></div>
-                    <div style="display:flex;gap:6px;flex-wrap:wrap">
-                      <span class="pill" style="background:var(--green-soft);color:var(--green);border-color:var(--green)">● Entrada</span>
-                      <span class="pill" style="background:var(--red-soft);color:var(--red);border-color:var(--red)">● Saída</span>
-                      <span class="pill">Saldo previsto por dia</span>
-                    </div>
+                <section class="bd-card bf-cal" aria-label="Calendário financeiro">
+                  <header class="bf-cal-head">
+                    <button type="button" class="bd-icon-btn" data-fin-cal="-1" aria-label="Mês anterior"><svg class="i"><use href="#i-chev-left"/></svg></button>
+                    <h3 id="finCalMonthLabel">Mês</h3>
+                    <button type="button" class="bd-icon-btn" data-fin-cal="1" aria-label="Próximo mês"><svg class="i"><use href="#i-chev-right"/></svg></button>
+                  </header>
+                  <div class="bf-cal-week" aria-hidden="true"><span>D</span><span>S</span><span>T</span><span>Q</span><span>Q</span><span>S</span><span>S</span></div>
+                  <div id="finCalGrid" class="bf-cal-grid fin-cal-grid"></div>
+                  <p class="bf-cal-legend"><span><i class="in"></i>Entrada</span><span><i class="out"></i>Saída</span></p>
+                </section>
+
+                <section class="bd-card bf-recent" aria-label="Lançamentos recentes">
+                  <header class="bd-card-head"><h3>Lançamentos recentes</h3><button type="button" class="bd-link" id="finTxToggleAll">Ver todos <svg class="i"><use href="#i-arrow-right"/></svg></button></header>
+                  <div class="bf-filters">
+                    <span class="bf-input bf-select bf-filter"><svg class="i"><use href="#i-sliders"/></svg><select id="finTxTypeFilter" aria-label="Tipo"><option value="all">Todos</option><option value="despesa">Despesas</option><option value="receita">Receitas</option></select><svg class="i bf-chev"><use href="#i-chev-down"/></svg></span>
+                    <span class="bf-input bf-select bf-filter"><svg class="i"><use href="#i-layers"/></svg><select id="finTxCatFilter" aria-label="Categoria"><option value="all">Todas as categorias</option></select><svg class="i bf-chev"><use href="#i-chev-down"/></svg></span>
+                    <span class="bf-input bf-select bf-filter"><svg class="i"><use href="#i-card"/></svg><select id="finTxAccountFilter" aria-label="Conta"><option value="all">Todas as contas</option></select><svg class="i bf-chev"><use href="#i-chev-down"/></svg></span>
                   </div>
-                  <div id="finCalGrid" class="fin-cal-grid"></div>
-                </div>
-
-                <div class="panel">
-                  <div class="panel-header">
-                    <div><p class="eyebrow">Histórico</p><h2>Transações</h2></div>
-                  </div>
-                  <div id="finTransactionFilter" class="fin-transaction-filter" hidden></div>
-                  <div id="finTransactions" class="fin-tx-list"></div>
-                </div>
-              </div><!-- /fin-right -->
-            </div><!-- /fin-layout -->
-          </div><!-- /aba lançamentos -->
-
-          <!-- ABA: ANÁLISE — para onde o dinheiro está indo -->
-          <div class="fin-tab-panel" data-fin-panel="analise" role="tabpanel" hidden>
-            <div class="fin-analysis-intro">
-              <div>
-                <p class="eyebrow">Leitura do mês</p>
-                <h2>Decisões mais claras, sem planilhas</h2>
+                  <div id="finTransactionFilter" class="bf-active-filter fin-transaction-filter" hidden></div>
+                  <div id="finTransactions" class="bf-tx-list fin-tx-list"></div>
+                </section>
               </div>
-              <p>Compare seu ritmo de gastos, identifique a principal categoria e acompanhe a evolução do saldo.</p>
-            </div>
-            <div id="finInsights" class="fin-insights-grid" aria-live="polite"></div>
-            <section class="panel fin-simulator" aria-labelledby="finSimulatorTitle">
+            </div><!-- /aba lançamentos -->
+
+            <!-- ABA: ANÁLISE -->
+            <div class="fin-tab-panel" data-fin-panel="analise" role="tabpanel" hidden>
+              <div class="bf-an">
+                <section class="bd-card bf-evo">
+                  <header class="bd-card-head">
+                    <h3>Evolução do saldo <span class="bd-info" title="Saldo acumulado no período"><svg class="i"><use href="#i-info"/></svg></span></h3>
+                    <div class="bd-seg" id="finEvoRange" role="group" aria-label="Período">
+                      <button type="button" data-range="7">7 dias</button>
+                      <button type="button" data-range="30">30 dias</button>
+                      <button type="button" data-range="90">3 meses</button>
+                      <button type="button" data-range="180" class="active">6 meses</button>
+                    </div>
+                  </header>
+                  <div id="finSaldoEvolution" class="bf-evo-chart" role="img" aria-label="Evolução do saldo"></div>
+                </section>
+                <section class="bd-card bf-cats">
+                  <header class="bd-card-head"><h3 id="finCatsTitle">Gastos por categoria</h3></header>
+                  <div id="finCategories" class="bf-cat-list fin-cat-list"></div>
+                </section>
+                <div class="bf-sim-slot" data-sim-slot="analise">
+                  <section class="bd-card bf-sim fin-simulator" id="finSimulatorCard" aria-labelledby="finSimulatorTitle">
               <div class="fin-simulator-copy">
                 <p class="eyebrow">Planejamento inteligente</p>
-                <h2 id="finSimulatorTitle">Posso gastar isso?</h2>
+                <h2 id="finSimulatorTitle">Posso gastar?</h2>
                 <p>Teste uma compra antes de fazê-la. A projeção considera saldo, contas recorrentes, faturas e sua reserva de segurança.</p>
               </div>
               <form id="finSimulatorForm" class="fin-simulator-form">
-                <label for="finSimulatorAmount">Valor da compra</label>
+                <label for="finSimulatorAmount">Quanto você pretende gastar?</label>
                 <div class="fin-simulator-control">
                   <span>R$</span>
                   <input id="finSimulatorAmount" name="amount" inputmode="decimal" autocomplete="off" placeholder="0,00" required />
@@ -1158,114 +1170,113 @@
               </form>
               <div id="finSimulatorResult" class="fin-simulator-result" role="status" aria-live="polite" hidden></div>
             </section>
-            <div class="fin-analise-grid">
-              <div class="panel wide">
-                <div class="panel-header">
-                  <div><p class="eyebrow">Análise</p><h2>Por categoria</h2></div>
                 </div>
-                <div id="finCategories" class="fin-cat-list"></div>
+                <section class="bd-card bf-cmp">
+                  <header class="bd-card-head"><h3>Comparativo (últimos 6 meses)</h3><p class="bf-legend"><span><i class="in"></i>Receitas</span><span><i class="out"></i>Despesas</span></p></header>
+                  <div id="finChart6m" class="bf-cmp-chart fin-chart6m"></div>
+                </section>
+                <section class="bd-card bf-budget" id="finBudgetCard">
+                  <header class="bd-card-head"><h3 id="finBudgetTitle">Uso do orçamento <span class="bd-info" title="Despesas do mês comparadas ao total dos limites por categoria (ou às receitas, se não houver limites)"><svg class="i"><use href="#i-info"/></svg></span></h3></header>
+                  <div class="bf-budget-top"><span id="finBudgetText">R$ 0,00</span><b id="finBudgetPct">0%</b></div>
+                  <div class="bf-bar"><i id="finProgressBar" style="width:0%"></i></div>
+                  <span id="finUsedLabel" class="sr-only">0% das receitas usadas</span>
+                  <div class="bf-budget-note" id="finMoodRow">
+                    <span class="bf-budget-ico" id="finMoodBlob"><svg class="i"><use href="#i-check"/></svg></span>
+                    <div><strong id="finBudgetHeadline">Dentro do orçamento</strong><span id="finMoodText">Analisando o mês...</span></div>
+                  </div>
+                </section>
+                <section class="bd-card bf-recent-mini">
+                  <header class="bd-card-head"><h3>Lançamentos recentes</h3><button type="button" class="bd-link" data-fin-goto="lancamentos">Ver todos <svg class="i"><use href="#i-arrow-right"/></svg></button></header>
+                  <div id="finRecentMini" class="bf-mini-list"></div>
+                </section>
+                <div id="finInsights" class="fin-insights-grid" aria-live="polite" hidden></div>
               </div>
+            </div><!-- /aba análise -->
 
-              <div class="panel fin-chart-panel">
+            <!-- ABA: CONTROLE — metas de gasto por categoria -->
+            <div class="fin-tab-panel" data-fin-panel="controle" role="tabpanel" hidden>
+              <section class="panel fin-shared-spaces-panel" aria-labelledby="finSharedSpacesTitle">
                 <div class="panel-header">
-                  <div><p class="eyebrow">Histórico</p><h2>Últimos 6 meses</h2></div>
+                  <div><p class="eyebrow">Conta conjunta</p><h2 id="finSharedSpacesTitle">Espaços compartilhados</h2></div>
+                  <button class="mini-button" id="finCreateSpaceToggle">+ Criar espaço</button>
                 </div>
-                <div id="finChart6m" class="fin-chart6m"></div>
-              </div>
-
-              <div class="panel fin-chart-panel">
-                <div class="panel-header">
-                  <div><p class="eyebrow">Evolução</p><h2>Saldo acumulado</h2></div>
-                </div>
-                <div id="finSaldoEvolution" class="fin-chart6m"></div>
-              </div>
-            </div>
-          </div><!-- /aba análise -->
-
-          <!-- ABA: CONTROLE — metas de gasto por categoria -->
-          <div class="fin-tab-panel" data-fin-panel="controle" role="tabpanel" hidden>
-            <section class="panel fin-shared-spaces-panel" aria-labelledby="finSharedSpacesTitle">
-              <div class="panel-header">
-                <div><p class="eyebrow">Conta conjunta</p><h2 id="finSharedSpacesTitle">Espaços compartilhados</h2></div>
-                <button class="mini-button" id="finCreateSpaceToggle">+ Criar espaço</button>
-              </div>
-              <p class="fin-accounts-help">Compartilhe apenas as finanças deste espaço com seu parceiro ou família. Notas, tarefas e dados pessoais continuam privados.</p>
-              <form id="finCreateSpaceForm" class="fin-shared-create" hidden>
-                <label>Nome<input id="finSharedSpaceName" maxlength="70" placeholder="Ex.: Casa Douglas e Ana" required /></label>
-                <label>Tipo<select id="finSharedSpaceType"><option value="couple">Casal</option><option value="family">Família</option><option value="group">Grupo</option></select></label>
-                <div><button type="button" id="finCreateSpaceCancel">Cancelar</button><button type="submit">Criar e usar</button></div>
-              </form>
-              <div id="finSharedInvites" class="fin-shared-invites" hidden></div>
-              <div id="finSharedSpacesList" class="fin-shared-spaces-list"><div class="empty-state">Carregando espaços compartilhados…</div></div>
-            </section>
-            <div class="panel fin-accounts-panel">
-              <div class="panel-header">
-                <div><p class="eyebrow">Patrimônio</p><h2>Contas e saldos</h2></div>
-                <button class="mini-button" id="finAddAccount">+ Conta</button>
-              </div>
-              <p class="fin-accounts-help">Organize conta corrente, carteira, poupança e investimentos por espaço. Os saldos alimentam o simulador financeiro.</p>
-              <div id="finAccountFormWrap" class="fin-account-form-wrap" hidden>
-                <form id="finAccountForm" class="fin-account-form">
-                  <input id="finAccountId" type="hidden" />
-                  <label>Nome<input id="finAccountName" maxlength="50" placeholder="Ex.: Nubank principal" required /></label>
-                  <label>Tipo<select id="finAccountType"><option value="checking">Conta corrente</option><option value="savings">Poupança</option><option value="cash">Carteira</option><option value="investment">Investimentos</option><option value="other">Outra conta</option></select></label>
-                  <label>Espaço<select id="finAccountWorkspace"><option value="personal">Pessoal</option><option value="couple">Casal</option><option value="family">Família</option><option value="business">Empresa</option></select></label>
-                  <label>Saldo atual<input id="finAccountBalance" inputmode="decimal" placeholder="0,00" /></label>
-                  <div class="fin-account-form-actions"><button type="button" id="finAccountCancel">Cancelar</button><button type="submit">Salvar conta</button></div>
+                <p class="fin-accounts-help">Compartilhe apenas as finanças deste espaço com seu parceiro ou família. Notas, tarefas e dados pessoais continuam privados.</p>
+                <form id="finCreateSpaceForm" class="fin-shared-create" hidden>
+                  <label>Nome<input id="finSharedSpaceName" maxlength="70" placeholder="Ex.: Casa Douglas e Ana" required /></label>
+                  <label>Tipo<select id="finSharedSpaceType"><option value="couple">Casal</option><option value="family">Família</option><option value="group">Grupo</option></select></label>
+                  <div><button type="button" id="finCreateSpaceCancel">Cancelar</button><button type="submit">Criar e usar</button></div>
                 </form>
+                <div id="finSharedInvites" class="fin-shared-invites" hidden></div>
+                <div id="finSharedSpacesList" class="fin-shared-spaces-list"><div class="empty-state">Carregando espaços compartilhados…</div></div>
+              </section>
+              <div class="panel fin-accounts-panel">
+                <div class="panel-header">
+                  <div><p class="eyebrow">Patrimônio</p><h2>Contas e saldos</h2></div>
+                  <button class="mini-button" id="finAddAccount">+ Conta</button>
+                </div>
+                <p class="fin-accounts-help">Organize conta corrente, carteira, poupança e investimentos por espaço. Os saldos alimentam o simulador financeiro.</p>
+                <div id="finAccountFormWrap" class="fin-account-form-wrap" hidden>
+                  <form id="finAccountForm" class="fin-account-form">
+                    <input id="finAccountId" type="hidden" />
+                    <label>Nome<input id="finAccountName" maxlength="50" placeholder="Ex.: Nubank principal" required /></label>
+                    <label>Tipo<select id="finAccountType"><option value="checking">Conta corrente</option><option value="savings">Poupança</option><option value="cash">Carteira</option><option value="investment">Investimentos</option><option value="other">Outra conta</option></select></label>
+                    <label>Espaço<select id="finAccountWorkspace"><option value="personal">Pessoal</option><option value="couple">Casal</option><option value="family">Família</option><option value="business">Empresa</option></select></label>
+                    <label>Saldo atual<input id="finAccountBalance" inputmode="decimal" placeholder="0,00" /></label>
+                    <div class="fin-account-form-actions"><button type="button" id="finAccountCancel">Cancelar</button><button type="submit">Salvar conta</button></div>
+                  </form>
+                </div>
+                <div id="finAccountsList" class="fin-accounts-list"></div>
               </div>
-              <div id="finAccountsList" class="fin-accounts-list"></div>
-            </div>
-            <section class="panel fin-cards-panel" aria-labelledby="finCardsTitle">
-              <div class="panel-header">
-                <div><p class="eyebrow">Crédito</p><h2 id="finCardsTitle">Cartões e faturas</h2></div>
-                <button class="mini-button" id="finAddCard">+ Cartão</button>
+              <section class="panel fin-cards-panel" aria-labelledby="finCardsTitle">
+                <div class="panel-header">
+                  <div><p class="eyebrow">Crédito</p><h2 id="finCardsTitle">Cartões e faturas</h2></div>
+                  <button class="mini-button" id="finAddCard">+ Cartão</button>
+                </div>
+                <p class="fin-accounts-help">Acompanhe a fatura e distribua compras parceladas automaticamente nos próximos meses.</p>
+                <form id="finCardForm" class="fin-card-form" hidden>
+                  <label>Nome<input id="finCardName" maxlength="40" placeholder="Ex.: Nubank" required /></label>
+                  <label>Final<input id="finCardLast4" inputmode="numeric" maxlength="4" pattern="[0-9]{0,4}" placeholder="1234" /></label>
+                  <label>Limite<input id="finCardLimit" inputmode="decimal" placeholder="0,00" required /></label>
+                  <label>Fecha dia<input id="finCardClosingDay" type="number" min="1" max="31" value="1" required /></label>
+                  <label>Vence dia<input id="finCardDueDay" type="number" min="1" max="31" value="10" required /></label>
+                  <div class="fin-card-form-actions"><button type="button" id="finCardCancel">Cancelar</button><button type="submit">Salvar cartão</button></div>
+                </form>
+                <div id="finCardsList" class="fin-cards-list"></div>
+              </section>
+              <div class="panel">
+                <div class="panel-header">
+                  <div><p class="eyebrow">Controle</p><h2>Metas de gasto</h2></div>
+                  <button class="mini-button" id="finOpenGoalsModal">+ Meta</button>
+                </div>
+                <div id="finGoalsList" class="fin-goals-list">
+                  <div class="empty-state">Nenhuma meta definida.<br>Adicione limites por categoria.</div>
+                </div>
               </div>
-              <p class="fin-accounts-help">Acompanhe a fatura e distribua compras parceladas automaticamente nos próximos meses.</p>
-              <form id="finCardForm" class="fin-card-form" hidden>
-                <label>Nome<input id="finCardName" maxlength="40" placeholder="Ex.: Nubank" required /></label>
-                <label>Final<input id="finCardLast4" inputmode="numeric" maxlength="4" pattern="[0-9]{0,4}" placeholder="1234" /></label>
-                <label>Limite<input id="finCardLimit" inputmode="decimal" placeholder="0,00" required /></label>
-                <label>Fecha dia<input id="finCardClosingDay" type="number" min="1" max="31" value="1" required /></label>
-                <label>Vence dia<input id="finCardDueDay" type="number" min="1" max="31" value="10" required /></label>
-                <div class="fin-card-form-actions"><button type="button" id="finCardCancel">Cancelar</button><button type="submit">Salvar cartão</button></div>
-              </form>
-              <div id="finCardsList" class="fin-cards-list"></div>
-            </section>
-            <div class="panel">
-              <div class="panel-header">
-                <div><p class="eyebrow">Controle</p><h2>Metas de gasto</h2></div>
-                <button class="mini-button" id="finOpenGoalsModal">+ Meta</button>
-              </div>
-              <div id="finGoalsList" class="fin-goals-list">
-                <div class="empty-state">Nenhuma meta definida.<br>Adicione limites por categoria.</div>
-              </div>
-            </div>
 
-            <div class="panel" style="margin-top:14px">
-              <div class="panel-header">
-                <div><p class="eyebrow">Histórico</p><h2>Meses fechados</h2></div>
+              <div class="panel" style="margin-top:14px">
+                <div class="panel-header">
+                  <div><p class="eyebrow">Histórico</p><h2>Meses fechados</h2></div>
+                </div>
+                <div id="finClosuresList" class="fin-closures-list">
+                  <div class="empty-state">Nenhum mês fechado ainda.</div>
+                </div>
               </div>
-              <div id="finClosuresList" class="fin-closures-list">
-                <div class="empty-state">Nenhum mês fechado ainda.</div>
-              </div>
-            </div>
-          </div><!-- /aba controle -->
+            </div><!-- /aba controle -->
 
-          <!-- ABA: AUTOMAÇÃO — lançamentos recorrentes -->
-          <div class="fin-tab-panel" data-fin-panel="automacao" role="tabpanel" hidden>
-            <div id="finRecurringSuggestions" class="panel fin-recurring-suggestions" hidden></div>
-            <div class="panel">
-              <div class="panel-header">
-                <div><p class="eyebrow">Automação</p><h2>Recorrentes</h2></div>
-                <button class="mini-button" id="finOpenRecurModal">+ Novo</button>
+            <!-- ABA: AUTOMAÇÃO — lançamentos recorrentes -->
+            <div class="fin-tab-panel" data-fin-panel="automacao" role="tabpanel" hidden>
+              <div id="finRecurringSuggestions" class="panel fin-recurring-suggestions" hidden></div>
+              <div class="panel">
+                <div class="panel-header">
+                  <div><p class="eyebrow">Automação</p><h2>Recorrentes</h2></div>
+                  <button class="mini-button" id="finOpenRecurModal">+ Novo</button>
+                </div>
+                <div id="finRecurList" class="fin-recur-list">
+                  <div class="empty-state">Nenhum lançamento recorrente.<br>Adicione assinaturas, salário, aluguel…</div>
+                </div>
               </div>
-              <div id="finRecurList" class="fin-recur-list">
-                <div class="empty-state">Nenhum lançamento recorrente.<br>Adicione assinaturas, salário, aluguel…</div>
-              </div>
-            </div>
-          </div><!-- /aba automação -->
-
+            </div><!-- /aba automação -->
+          </div><!-- /bf -->
         </section><!-- /financesView -->
 
         <!-- ===== PROFILE VIEW (NOVO) =====
