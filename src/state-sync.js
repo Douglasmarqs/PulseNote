@@ -3,6 +3,7 @@
 const COLLECTION_KEYS = new Set([
   "finances", "tasks", "events", "goals", "notes", "customCategories",
   "monthClosures", "finGoals", "finRecurrents", "financeAccounts",
+  "savingsGoals", "finRules", "finActivity", "scheduledFinances",
 ]);
 
 export function cloneState(value) {

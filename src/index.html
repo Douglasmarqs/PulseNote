@@ -156,6 +156,16 @@
         <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.500 11a6.500 6.500 0 0013 0M12 17.500V21M8.500 21h7"/></symbol>
         <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></symbol>
         <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6.500" y="6.500" width="11" height="11" rx="2.500"/></symbol>
+        <symbol id="i-plane" viewBox="0 0 24 24"><path d="M17.8 19.2L16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/></symbol>
+        <symbol id="i-piggy" viewBox="0 0 24 24"><path d="M19 5c-1.5 0-2.8 1.4-3 2-3.5-1.5-11-.3-11 5 0 1.8 0 3 2 4.5V20h4v-2h3v2h4v-4c1-.5 1.7-1 2-2h2v-4h-2c0-1-.5-1.5-1-2V5z"/><path d="M2 9v1c0 1.1.9 2 2 2h1M16 11h.01"/></symbol>
+        <symbol id="i-bank" viewBox="0 0 24 24"><path d="M3.500 9.500L12 4.500l8.500 5M5 9.500h14M6.500 10v7M10 10v7M14 10v7M17.500 10v7M4 19.500h16"/></symbol>
+        <symbol id="i-crown" viewBox="0 0 24 24"><path d="M4 17.500l-1-10 5.500 4.500L12 5l3.500 7L21 7.500l-1 10z"/><path d="M4.500 20h15"/></symbol>
+        <symbol id="i-pause" viewBox="0 0 24 24"><path d="M9 6v12M15 6v12"/></symbol>
+        <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.500v13l10.500-6.500z"/></symbol>
+        <symbol id="i-dumbbell" viewBox="0 0 24 24"><path d="M6.500 7v10M17.500 7v10M3.500 9.500v5M20.500 9.500v5M6.500 12h11"/></symbol>
+        <symbol id="i-building" viewBox="0 0 24 24"><path d="M5.500 20.500V5a1 1 0 011-1h11a1 1 0 011 1v15.500M3.500 20.500h17M9 8h1.500M13.500 8H15M9 11.500h1.500M13.500 11.500H15M9 15h1.500M13.500 15H15M10.500 20.500v-3h3v3"/></symbol>
+        <symbol id="i-camera" viewBox="0 0 24 24"><path d="M4 8h3l1.500-2.500h7L17 8h3a1 1 0 011 1v9.500a1 1 0 01-1 1H4a1 1 0 01-1-1V9a1 1 0 011-1z"/><circle cx="12" cy="13.500" r="3.500"/></symbol>
+        <symbol id="i-coin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.500"/><path d="M14.800 9.300c-.5-.9-1.600-1.500-2.800-1.500-1.600 0-2.800.9-2.800 2.100 0 2.900 5.800 1.400 5.800 4.200 0 1.200-1.300 2.100-3 2.100-1.300 0-2.400-.6-2.900-1.600M12 6.300v1.500M12 16.200v1.500"/></symbol>
         <symbol id="i-trophy" viewBox="0 0 24 24"><path d="M7 4h10v5a5 5 0 01-10 0zM7 6H4v1.500A3.500 3.500 0 007.500 11M17 6h3v1.500A3.500 3.500 0 0116.500 11M12 14v4M8.500 20.500h7"/></symbol>
       </defs>
     </svg>
@@ -1193,87 +1203,147 @@
               </div>
             </div><!-- /aba análise -->
 
-            <!-- ABA: CONTROLE — metas de gasto por categoria -->
+            <!-- ABA: CONTROLE — orçamentos, metas, contas, cartões e membros -->
             <div class="fin-tab-panel" data-fin-panel="controle" role="tabpanel" hidden>
-              <section class="panel fin-shared-spaces-panel" aria-labelledby="finSharedSpacesTitle">
-                <div class="panel-header">
-                  <div><p class="eyebrow">Conta conjunta</p><h2 id="finSharedSpacesTitle">Espaços compartilhados</h2></div>
-                  <button class="mini-button" id="finCreateSpaceToggle">+ Criar espaço</button>
-                </div>
-                <p class="fin-accounts-help">Compartilhe apenas as finanças deste espaço com seu parceiro ou família. Notas, tarefas e dados pessoais continuam privados.</p>
-                <form id="finCreateSpaceForm" class="fin-shared-create" hidden>
-                  <label>Nome<input id="finSharedSpaceName" maxlength="70" placeholder="Ex.: Casa Douglas e Ana" required /></label>
-                  <label>Tipo<select id="finSharedSpaceType"><option value="couple">Casal</option><option value="family">Família</option><option value="group">Grupo</option></select></label>
-                  <div><button type="button" id="finCreateSpaceCancel">Cancelar</button><button type="submit">Criar e usar</button></div>
-                </form>
-                <div id="finSharedInvites" class="fin-shared-invites" hidden></div>
-                <div id="finSharedSpacesList" class="fin-shared-spaces-list"><div class="empty-state">Carregando espaços compartilhados…</div></div>
-              </section>
-              <div class="panel fin-accounts-panel">
-                <div class="panel-header">
-                  <div><p class="eyebrow">Patrimônio</p><h2>Contas e saldos</h2></div>
-                  <button class="mini-button" id="finAddAccount">+ Conta</button>
-                </div>
-                <p class="fin-accounts-help">Organize conta corrente, carteira, poupança e investimentos por espaço. Os saldos alimentam o simulador financeiro.</p>
-                <div id="finAccountFormWrap" class="fin-account-form-wrap" hidden>
-                  <form id="finAccountForm" class="fin-account-form">
-                    <input id="finAccountId" type="hidden" />
-                    <label>Nome<input id="finAccountName" maxlength="50" placeholder="Ex.: Nubank principal" required /></label>
-                    <label>Tipo<select id="finAccountType"><option value="checking">Conta corrente</option><option value="savings">Poupança</option><option value="cash">Carteira</option><option value="investment">Investimentos</option><option value="other">Outra conta</option></select></label>
-                    <label>Espaço<select id="finAccountWorkspace"><option value="personal">Pessoal</option><option value="couple">Casal</option><option value="family">Família</option><option value="business">Empresa</option></select></label>
-                    <label>Saldo atual<input id="finAccountBalance" inputmode="decimal" placeholder="0,00" /></label>
-                    <div class="fin-account-form-actions"><button type="button" id="finAccountCancel">Cancelar</button><button type="submit">Salvar conta</button></div>
-                  </form>
-                </div>
-                <div id="finAccountsList" class="fin-accounts-list"></div>
-              </div>
-              <section class="panel fin-cards-panel" aria-labelledby="finCardsTitle">
-                <div class="panel-header">
-                  <div><p class="eyebrow">Crédito</p><h2 id="finCardsTitle">Cartões e faturas</h2></div>
-                  <button class="mini-button" id="finAddCard">+ Cartão</button>
-                </div>
-                <p class="fin-accounts-help">Acompanhe a fatura e distribua compras parceladas automaticamente nos próximos meses.</p>
-                <form id="finCardForm" class="fin-card-form" hidden>
-                  <label>Nome<input id="finCardName" maxlength="40" placeholder="Ex.: Nubank" required /></label>
-                  <label>Final<input id="finCardLast4" inputmode="numeric" maxlength="4" pattern="[0-9]{0,4}" placeholder="1234" /></label>
-                  <label>Limite<input id="finCardLimit" inputmode="decimal" placeholder="0,00" required /></label>
-                  <label>Fecha dia<input id="finCardClosingDay" type="number" min="1" max="31" value="1" required /></label>
-                  <label>Vence dia<input id="finCardDueDay" type="number" min="1" max="31" value="10" required /></label>
-                  <div class="fin-card-form-actions"><button type="button" id="finCardCancel">Cancelar</button><button type="submit">Salvar cartão</button></div>
-                </form>
-                <div id="finCardsList" class="fin-cards-list"></div>
-              </section>
-              <div class="panel">
-                <div class="panel-header">
-                  <div><p class="eyebrow">Controle</p><h2>Metas de gasto</h2></div>
-                  <button class="mini-button" id="finOpenGoalsModal">+ Meta</button>
-                </div>
-                <div id="finGoalsList" class="fin-goals-list">
-                  <div class="empty-state">Nenhuma meta definida.<br>Adicione limites por categoria.</div>
-                </div>
-              </div>
+              <div class="bf-ctl">
+                <section class="bd-card bf-budgets" aria-labelledby="finBudgetsTitle">
+                  <header class="bd-card-head">
+                    <h3 id="finBudgetsTitle"><span class="bf-h3t"><span class="bf-hide-m">Orçamentos por categoria</span><span class="bf-show-m">Orçamentos</span> (<span id="finBudgetsMonth">mês</span>)</span> <span class="bd-info bf-hide-m" title="Limite mensal de gasto por categoria. A barra fica amarela perto do limite e vermelha quando ultrapassa."><svg class="i"><use href="#i-info"/></svg></span></h3>
+                    <button type="button" class="bf-head-btn" id="finOpenGoalsModal"><svg class="i bf-hide-m"><use href="#i-pencil"/></svg><span>Editar limites</span><svg class="i bf-show-m"><use href="#i-chev-right"/></svg></button>
+                  </header>
+                  <div id="finGoalsList" class="bf-budget-list"></div>
+                </section>
 
-              <div class="panel" style="margin-top:14px">
-                <div class="panel-header">
-                  <div><p class="eyebrow">Histórico</p><h2>Meses fechados</h2></div>
-                </div>
-                <div id="finClosuresList" class="fin-closures-list">
-                  <div class="empty-state">Nenhum mês fechado ainda.</div>
-                </div>
+                <section class="bd-card bf-savings" aria-labelledby="finSavingsTitle">
+                  <header class="bd-card-head">
+                    <h3 id="finSavingsTitle">Metas financeiras <span class="bd-info bf-hide-m" title="Objetivos de economia: quanto você já guardou e quanto falta."><svg class="i"><use href="#i-info"/></svg></span></h3>
+                    <button type="button" class="bf-head-btn" id="finOpenSavingsModal"><svg class="i"><use href="#i-plus"/></svg><span>Nova meta</span></button>
+                  </header>
+                  <div id="finSavingsList" class="bf-savings-list"></div>
+                </section>
+
+                <div class="bf-sim-slot" data-sim-slot="controle"></div>
+
+                <section class="bd-card bf-accounts" aria-labelledby="finAccountsTitle">
+                  <header class="bd-card-head">
+                    <h3 id="finAccountsTitle">Contas <span class="bd-info" title="Saldos das suas contas. Eles alimentam o simulador “Posso gastar?”."><svg class="i"><use href="#i-info"/></svg></span></h3>
+                    <button type="button" class="bf-head-btn" id="finAddAccount"><svg class="i"><use href="#i-plus"/></svg><span>Nova conta</span></button>
+                  </header>
+                  <div id="finAccountFormWrap" class="bf-pop" hidden>
+                    <form id="finAccountForm" class="bf-pop-card">
+                      <h4 class="bf-pop-title">Conta</h4>
+                      <input id="finAccountId" type="hidden" />
+                      <label>Nome<input id="finAccountName" maxlength="50" placeholder="Ex.: Conta Corrente" required /></label>
+                      <label>Instituição<input id="finAccountInstitution" maxlength="40" placeholder="Ex.: Itaú, Nubank, XP" /></label>
+                      <label>Tipo<select id="finAccountType"><option value="checking">Conta corrente</option><option value="savings">Poupança</option><option value="cash">Carteira</option><option value="investment">Investimentos</option><option value="other">Outra conta</option></select></label>
+                      <label>Espaço<select id="finAccountWorkspace"><option value="personal">Pessoal</option><option value="couple">Casal</option><option value="family">Família</option><option value="business">Empresa</option></select></label>
+                      <label>Saldo atual<input id="finAccountBalance" inputmode="decimal" placeholder="0,00" /></label>
+                      <div class="fin-account-form-actions"><button type="button" id="finAccountCancel">Cancelar</button><button type="submit">Salvar conta</button></div>
+                    </form>
+                  </div>
+                  <div id="finAccountsList" class="bf-rows"></div>
+                </section>
+
+                <section class="bd-card bf-cards" aria-labelledby="finCardsTitle">
+                  <header class="bd-card-head">
+                    <h3 id="finCardsTitle">Cartões <span class="bd-info" title="Faturas abertas e compras parceladas distribuídas nos próximos meses."><svg class="i"><use href="#i-info"/></svg></span></h3>
+                    <button type="button" class="bf-head-btn" id="finAddCard"><svg class="i"><use href="#i-plus"/></svg><span>Novo cartão</span></button>
+                  </header>
+                  <div class="bf-pop" id="finCardFormWrap" hidden>
+                    <form id="finCardForm" class="bf-pop-card">
+                      <h4 class="bf-pop-title">Novo cartão</h4>
+                      <label>Nome<input id="finCardName" maxlength="40" placeholder="Ex.: Nubank" required /></label>
+                      <label>Final<input id="finCardLast4" inputmode="numeric" maxlength="4" pattern="[0-9]{0,4}" placeholder="1234" /></label>
+                      <label>Limite<input id="finCardLimit" inputmode="decimal" placeholder="0,00" required /></label>
+                      <label>Fecha dia<input id="finCardClosingDay" type="number" min="1" max="31" value="1" required /></label>
+                      <label>Vence dia<input id="finCardDueDay" type="number" min="1" max="31" value="10" required /></label>
+                      <div class="fin-card-form-actions"><button type="button" id="finCardCancel">Cancelar</button><button type="submit">Salvar cartão</button></div>
+                    </form>
+                  </div>
+                  <div id="finCardsList" class="bf-cardlist"></div>
+                </section>
+
+                <section class="bd-card bf-members" aria-labelledby="finSharedSpacesTitle">
+                  <header class="bd-card-head">
+                    <h3 id="finSharedSpacesTitle"><span class="bf-h3t">Membros do espaço<span class="bf-hide-narrow"> compartilhado</span></span> <span class="bd-info" title="Só as finanças do espaço são compartilhadas. Notas, tarefas e dados pessoais continuam privados."><svg class="i"><use href="#i-info"/></svg></span></h3>
+                    <button type="button" class="bf-head-btn" id="finSpacesManage" aria-expanded="false" aria-controls="finSpacesManager"><svg class="i"><use href="#i-gear"/></svg><span>Permissões</span></button>
+                  </header>
+                  <div id="finMembersList" class="bf-members-list"></div>
+                  <div id="finSharedInvites" class="bf-invites" hidden></div>
+                  <div id="finSpacesManager" class="bf-pop" hidden>
+                    <div class="bf-pop-card bf-spaces-card" role="dialog" aria-modal="true" aria-labelledby="finSpacesManagerTitle">
+                      <div class="bf-pop-head"><h4 class="bf-pop-title" id="finSpacesManagerTitle">Espaços compartilhados</h4><button type="button" class="icon-button" id="finSpacesManagerClose" aria-label="Fechar"><svg class="i"><use href="#i-x"/></svg></button></div>
+                      <p class="bf-pop-help">Convide quem divide as contas com você e defina quem pode editar ou apenas visualizar.</p>
+                      <div id="finSharedSpacesList" class="fin-shared-spaces-list"><div class="empty-state">Carregando espaços compartilhados…</div></div>
+                      <button type="button" class="bf-ghost-btn" id="finCreateSpaceToggle"><svg class="i"><use href="#i-plus"/></svg>Criar espaço</button>
+                      <form id="finCreateSpaceForm" class="bf-space-create" hidden>
+                        <label>Nome<input id="finSharedSpaceName" maxlength="70" placeholder="Ex.: Casa Lucas e Ana" required /></label>
+                        <label>Tipo<select id="finSharedSpaceType"><option value="couple">Casal</option><option value="family">Família</option><option value="group">Grupo</option></select></label>
+                        <div><button type="button" id="finCreateSpaceCancel">Cancelar</button><button type="submit">Criar e usar</button></div>
+                      </form>
+                    </div>
+                  </div>
+                </section>
               </div>
             </div><!-- /aba controle -->
 
-            <!-- ABA: AUTOMAÇÃO — lançamentos recorrentes -->
+            <!-- ABA: AUTOMAÇÃO — recorrências, agendadas, regras, sugestões, fechamento e atividade -->
             <div class="fin-tab-panel" data-fin-panel="automacao" role="tabpanel" hidden>
-              <div id="finRecurringSuggestions" class="panel fin-recurring-suggestions" hidden></div>
-              <div class="panel">
-                <div class="panel-header">
-                  <div><p class="eyebrow">Automação</p><h2>Recorrentes</h2></div>
-                  <button class="mini-button" id="finOpenRecurModal">+ Novo</button>
+              <div class="bf-auto" id="finAutoBoard">
+                <div class="bf-auto-actions">
+                  <button type="button" class="bd-card bf-action" id="finOpenRecurModal"><span class="bf-action-ico"><svg class="i"><use href="#i-calendar"/></svg></span><span class="bf-action-copy"><strong>Nova recorrência</strong><small>Registrar um gasto ou receita recorrente.</small></span><svg class="i bf-action-go"><use href="#i-arrow-right"/></svg></button>
+                  <button type="button" class="bd-card bf-action" id="finOpenRuleModal"><span class="bf-action-ico"><svg class="i"><use href="#i-bolt"/></svg></span><span class="bf-action-copy"><strong>Criar regra</strong><small>Automatize lançamentos por condição.</small></span><svg class="i bf-action-go"><use href="#i-arrow-right"/></svg></button>
+                  <button type="button" class="bd-card bf-action" id="finReviewSuggestions"><span class="bf-action-ico"><svg class="i"><use href="#i-sparkle"/></svg></span><span class="bf-action-copy"><strong>Revisar sugestões</strong><small id="finSuggestActionText">Nenhuma sugestão pendente.</small></span><svg class="i bf-action-go"><use href="#i-arrow-right"/></svg></button>
                 </div>
-                <div id="finRecurList" class="fin-recur-list">
-                  <div class="empty-state">Nenhum lançamento recorrente.<br>Adicione assinaturas, salário, aluguel…</div>
+
+                <nav class="bf-auto-nav" aria-label="Seções de automação">
+                  <button type="button" class="bd-card bf-nav-row" data-auto-open="recur"><span class="bf-action-ico"><svg class="i"><use href="#i-calendar"/></svg></span><span class="bf-action-copy"><strong>Recorrências (<span data-count="recur">0</span>)</strong><small id="finNavRecur">Nenhuma cadastrada</small></span><svg class="i"><use href="#i-chev-right"/></svg></button>
+                  <button type="button" class="bd-card bf-nav-row" data-auto-open="sched"><span class="bf-action-ico"><svg class="i"><use href="#i-card"/></svg></span><span class="bf-action-copy"><strong>Contas agendadas (<span data-count="sched">0</span>)</strong><small id="finNavSched">Nada agendado</small></span><svg class="i"><use href="#i-chev-right"/></svg></button>
+                  <button type="button" class="bd-card bf-nav-row" data-auto-open="suggest"><span class="bf-action-ico"><svg class="i"><use href="#i-sparkle"/></svg></span><span class="bf-action-copy"><strong>Sugestões inteligentes (<span data-count="suggest">0</span>)</strong><small id="finNavSuggest">Nenhuma sugestão pendente</small></span><svg class="i"><use href="#i-chev-right"/></svg></button>
+                  <button type="button" class="bd-card bf-nav-row" data-auto-open="rules"><span class="bf-action-ico"><svg class="i"><use href="#i-bolt"/></svg></span><span class="bf-action-copy"><strong>Regras de automação (<span data-count="rules">0</span>)</strong><small id="finNavRules">Nenhuma regra criada</small></span><svg class="i"><use href="#i-chev-right"/></svg></button>
+                  <button type="button" class="bd-card bf-nav-row" data-auto-open="ingest"><span class="bf-action-ico"><svg class="i"><use href="#i-whatsapp"/></svg></span><span class="bf-action-copy"><strong>Ingestão de lançamentos</strong><small>WhatsApp, foto e áudio</small></span><svg class="i"><use href="#i-chev-right"/></svg></button>
+                  <button type="button" class="bd-card bf-nav-row" data-auto-open="close"><span class="bf-action-ico"><svg class="i"><use href="#i-lock"/></svg></span><span class="bf-action-copy"><strong>Fechamento mensal</strong><small id="finNavClose">Manual</small></span><svg class="i"><use href="#i-chev-right"/></svg></button>
+                  <button type="button" class="bd-card bf-nav-row" data-auto-open="log"><span class="bf-action-ico"><svg class="i"><use href="#i-clock"/></svg></span><span class="bf-action-copy"><strong>Registro de atividade</strong><small id="finNavLog">Sem atividade recente</small></span><svg class="i"><use href="#i-chev-right"/></svg></button>
+                </nav>
+
+                <div class="bf-auto-cols">
+                  <div class="bf-auto-col">
+                    <section class="bd-card bf-auto-sec" data-auto-sec="recur" aria-labelledby="finRecurTitle">
+                      <header class="bd-card-head"><button type="button" class="bf-back" data-auto-back aria-label="Voltar"><svg class="i"><use href="#i-chev-left"/></svg></button><h3 id="finRecurTitle"><span class="bf-h3t">Recorrências cadastradas (<span data-count="recur">0</span>)</span></h3><button type="button" class="bd-link" data-auto-more="recur" hidden>Ver todas <svg class="i"><use href="#i-arrow-right"/></svg></button></header>
+                      <div id="finRecurList" class="bf-auto-list"></div>
+                    </section>
+                    <section class="bd-card bf-auto-sec" data-auto-sec="rules" aria-labelledby="finRulesTitle">
+                      <header class="bd-card-head"><button type="button" class="bf-back" data-auto-back aria-label="Voltar"><svg class="i"><use href="#i-chev-left"/></svg></button><h3 id="finRulesTitle"><span class="bf-h3t">Regras de automação (<span data-count="rules">0</span>)</span></h3><button type="button" class="bd-link" data-auto-more="rules" hidden>Ver todas <svg class="i"><use href="#i-arrow-right"/></svg></button></header>
+                      <div id="finRulesList" class="bf-auto-list"></div>
+                    </section>
+                  </div>
+                  <div class="bf-auto-col">
+                    <section class="bd-card bf-auto-sec" data-auto-sec="sched" aria-labelledby="finSchedTitle">
+                      <header class="bd-card-head"><button type="button" class="bf-back" data-auto-back aria-label="Voltar"><svg class="i"><use href="#i-chev-left"/></svg></button><h3 id="finSchedTitle"><span class="bf-h3t">Contas agendadas (<span data-count="sched">0</span>)</span></h3><span class="bf-head-tools"><button type="button" class="bf-icon-btn" id="finOpenSchedModal" aria-label="Agendar conta" title="Agendar conta"><svg class="i"><use href="#i-plus"/></svg></button><button type="button" class="bd-link" data-auto-more="sched" hidden>Ver todas <svg class="i"><use href="#i-arrow-right"/></svg></button></span></header>
+                      <div id="finScheduledList" class="bf-auto-list"></div>
+                    </section>
+                    <section class="bd-card bf-auto-sec" data-auto-sec="suggest" aria-labelledby="finSuggestTitle">
+                      <header class="bd-card-head"><button type="button" class="bf-back" data-auto-back aria-label="Voltar"><svg class="i"><use href="#i-chev-left"/></svg></button><h3 id="finSuggestTitle"><span class="bf-h3t">Sugestões inteligentes (<span data-count="suggest">0</span>)</span> <span class="bd-info" title="Lançamentos parecidos em meses diferentes. Confirme para transformá-los em recorrências."><svg class="i"><use href="#i-info"/></svg></span></h3><button type="button" class="bd-link" data-auto-more="suggest" hidden>Revisar todas <svg class="i"><use href="#i-arrow-right"/></svg></button></header>
+                      <div id="finRecurringSuggestions" class="bf-auto-list"></div>
+                    </section>
+                  </div>
+                  <div class="bf-auto-col">
+                    <section class="bd-card bf-auto-sec" data-auto-sec="ingest" aria-labelledby="finIngestTitle">
+                      <header class="bd-card-head"><button type="button" class="bf-back" data-auto-back aria-label="Voltar"><svg class="i"><use href="#i-chev-left"/></svg></button><h3 id="finIngestTitle">Ingestão de lançamentos</h3></header>
+                      <div id="finIngestList" class="bf-auto-list"></div>
+                    </section>
+                    <section class="bd-card bf-auto-sec" data-auto-sec="close" aria-labelledby="finAutoCloseTitle">
+                      <header class="bd-card-head"><button type="button" class="bf-back" data-auto-back aria-label="Voltar"><svg class="i"><use href="#i-chev-left"/></svg></button><h3 id="finAutoCloseTitle"><span class="bf-h3t">Fechamento mensal (<span id="finAutoCloseMode">manual</span>)</span></h3></header>
+                      <div id="finAutoCloseCard" class="bf-close-card"></div>
+                      <div id="finClosuresList" class="bf-closures"></div>
+                    </section>
+                    <section class="bd-card bf-auto-sec" data-auto-sec="log" aria-labelledby="finActivityTitle">
+                      <header class="bd-card-head"><button type="button" class="bf-back" data-auto-back aria-label="Voltar"><svg class="i"><use href="#i-chev-left"/></svg></button><h3 id="finActivityTitle">Registro de atividade</h3><button type="button" class="bd-link" data-auto-more="log" hidden>Ver histórico <svg class="i"><use href="#i-arrow-right"/></svg></button></header>
+                      <ol id="finActivityList" class="bf-timeline"></ol>
+                    </section>
+                  </div>
                 </div>
+                <button type="button" class="bf-fab" id="finAutoFab" aria-label="Nova recorrência"><svg class="i"><use href="#i-plus"/></svg></button>
               </div>
             </div><!-- /aba automação -->
           </div><!-- /bf -->
@@ -1647,8 +1717,8 @@
     <div id="finGoalsModal" class="modal-backdrop" hidden>
       <div class="modal-card">
         <div class="modal-header">
-          <h2>Nova meta de gasto</h2>
-          <button class="icon-button" id="finCloseGoalsModal">✕</button>
+          <h2 id="finGoalsModalTitle">Limite por categoria</h2>
+          <button class="icon-button" id="finCloseGoalsModal" aria-label="Fechar">✕</button>
         </div>
         <div class="modal-body" style="display:grid;gap:12px">
           <label class="field">
@@ -1659,8 +1729,92 @@
             <span class="field-label">Limite mensal (R$)</span>
             <input id="goalLimit" type="number" min="1" step="0.01" class="field-input" placeholder="ex.: 500">
           </label>
-          <button id="finSaveGoal" class="primary-button" style="width:100%;justify-content:center"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg><span>Salvar meta</span></button>
+          <div id="finGoalsCurrent" class="bf-goals-current"></div>
+          <div class="bf-modal-actions"><button type="button" class="bf-danger-btn" id="finDeleteGoal" hidden><svg class="i"><use href="#i-trash"/></svg>Remover limite</button>
+          <button id="finSaveGoal" class="primary-button"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg><span>Salvar limite</span></button></div>
         </div>
+      </div>
+    </div>
+
+    <!-- Modal: Meta financeira (objetivo de economia) -->
+    <div id="finSavingsModal" class="modal-backdrop" hidden>
+      <div class="modal-card bf-modal" role="dialog" aria-modal="true" aria-labelledby="finSavingsModalTitle">
+        <div class="modal-header">
+          <h2 id="finSavingsModalTitle">Nova meta financeira</h2>
+          <button type="button" class="icon-button" data-modal-close aria-label="Fechar"><svg class="i"><use href="#i-x"/></svg></button>
+        </div>
+        <form id="finSavingsForm" class="modal-body bf-modal-form">
+          <input type="hidden" id="savingsId" />
+          <label class="field"><span class="field-label">Nome da meta</span><input id="savingsName" class="field-input" maxlength="50" placeholder="Ex.: Viagem de férias" required /></label>
+          <div class="bf-modal-grid">
+            <label class="field"><span class="field-label">Valor da meta</span><input id="savingsTarget" class="field-input" inputmode="decimal" placeholder="0,00" required /></label>
+            <label class="field"><span class="field-label">Já guardado</span><input id="savingsSaved" class="field-input" inputmode="decimal" placeholder="0,00" /></label>
+          </div>
+          <fieldset class="bf-icon-pick" id="savingsIconPick">
+            <legend class="field-label">Ícone</legend>
+            <label><input type="radio" name="savingsIcon" value="plane" checked /><span><svg class="i"><use href="#i-plane"/></svg></span></label>
+            <label><input type="radio" name="savingsIcon" value="piggy" /><span><svg class="i"><use href="#i-piggy"/></svg></span></label>
+            <label><input type="radio" name="savingsIcon" value="house" /><span><svg class="i"><use href="#i-house"/></svg></span></label>
+            <label><input type="radio" name="savingsIcon" value="car" /><span><svg class="i"><use href="#i-car"/></svg></span></label>
+            <label><input type="radio" name="savingsIcon" value="book" /><span><svg class="i"><use href="#i-book"/></svg></span></label>
+            <label><input type="radio" name="savingsIcon" value="heart" /><span><svg class="i"><use href="#i-heart"/></svg></span></label>
+            <label><input type="radio" name="savingsIcon" value="star" /><span><svg class="i"><use href="#i-star"/></svg></span></label>
+          </fieldset>
+          <div class="bf-modal-deposit" id="savingsDepositRow" hidden>
+            <label class="field"><span class="field-label">Guardar mais</span><input id="savingsDeposit" class="field-input" inputmode="decimal" placeholder="0,00" /></label>
+            <button type="button" class="bf-ghost-btn" id="savingsDepositBtn"><svg class="i"><use href="#i-plus"/></svg>Adicionar</button>
+          </div>
+          <div class="bf-modal-actions">
+            <button type="button" class="bf-danger-btn" id="savingsDelete" hidden><svg class="i"><use href="#i-trash"/></svg>Excluir</button>
+            <button type="submit" class="primary-button">Salvar meta</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Modal: Regra de automação -->
+    <div id="finRuleModal" class="modal-backdrop" hidden>
+      <div class="modal-card bf-modal" role="dialog" aria-modal="true" aria-labelledby="finRuleModalTitle">
+        <div class="modal-header">
+          <h2 id="finRuleModalTitle">Nova regra</h2>
+          <button type="button" class="icon-button" data-modal-close aria-label="Fechar"><svg class="i"><use href="#i-x"/></svg></button>
+        </div>
+        <form id="finRuleForm" class="modal-body bf-modal-form">
+          <input type="hidden" id="ruleId" />
+          <p class="bf-modal-help">Quando um lançamento tiver o texto abaixo na descrição, o PulseNote já preenche o tipo e a categoria — no formulário, na leitura por IA, foto ou áudio.</p>
+          <label class="field"><span class="field-label">Se a descrição contiver</span><input id="ruleMatch" class="field-input" maxlength="40" placeholder="Ex.: Uber, Salário, Netflix" required /></label>
+          <div class="bf-modal-grid">
+            <label class="field"><span class="field-label">Classificar como</span><select id="ruleType" class="field-input"><option value="despesa">Despesa</option><option value="receita">Receita</option></select></label>
+            <label class="field"><span class="field-label">Categoria</span><select id="ruleCategory" class="field-input"></select></label>
+          </div>
+          <label class="field"><span class="field-label">Nome da regra (opcional)</span><input id="ruleName" class="field-input" maxlength="70" placeholder="Ex.: Corridas de app são transporte" /></label>
+          <div class="bf-modal-actions">
+            <button type="button" class="bf-danger-btn" id="ruleDelete" hidden><svg class="i"><use href="#i-trash"/></svg>Excluir</button>
+            <button type="submit" class="primary-button">Salvar regra</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Modal: Conta agendada -->
+    <div id="finSchedModal" class="modal-backdrop" hidden>
+      <div class="modal-card bf-modal" role="dialog" aria-modal="true" aria-labelledby="finSchedModalTitle">
+        <div class="modal-header">
+          <h2 id="finSchedModalTitle">Agendar conta</h2>
+          <button type="button" class="icon-button" data-modal-close aria-label="Fechar"><svg class="i"><use href="#i-x"/></svg></button>
+        </div>
+        <form id="finSchedForm" class="modal-body bf-modal-form">
+          <label class="field"><span class="field-label">Descrição</span><input id="schedDesc" class="field-input" maxlength="80" placeholder="Ex.: Condomínio, IPVA, Matrícula" required /></label>
+          <div class="bf-modal-grid">
+            <label class="field"><span class="field-label">Valor</span><input id="schedAmount" class="field-input" inputmode="decimal" placeholder="0,00" required /></label>
+            <label class="field"><span class="field-label">Vencimento</span><input id="schedDate" class="field-input" type="date" required /></label>
+          </div>
+          <div class="bf-modal-grid">
+            <label class="field"><span class="field-label">Tipo</span><select id="schedType" class="field-input"><option value="despesa">Despesa</option><option value="receita">Receita</option></select></label>
+            <label class="field"><span class="field-label">Categoria</span><select id="schedCategory" class="field-input"></select></label>
+          </div>
+          <div class="bf-modal-actions"><span></span><button type="submit" class="primary-button">Agendar</button></div>
+        </form>
       </div>
     </div>
 

@@ -782,8 +782,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   bindFinanceMonthControls();
   bindFinGoalsModal();
   bindFinRecurModal();
+  bindFinControlBoard();
   bindGlobalPalette();
   autoApplyRecurrents();
+  autoCloseFinMonths();
   // Registra a tela atual no primeiro carregamento. Isso faz o botão/gesto
   // de voltar percorrer as telas do app antes de deixar a aplicação.
   const viewFromHistory = history.state?.pnView;
@@ -1802,6 +1804,10 @@ function normalizeState(parsed) {
   if (!parsed.finRecurrents) parsed.finRecurrents = [];
   if (!parsed.creditCards) parsed.creditCards = [];
   if (!parsed.scheduledFinances) parsed.scheduledFinances = [];
+  if (!Array.isArray(parsed.savingsGoals)) parsed.savingsGoals = [];
+  if (!Array.isArray(parsed.finRules)) parsed.finRules = [];
+  if (!Array.isArray(parsed.finActivity)) parsed.finActivity = [];
+  if (!parsed.financialSettings || typeof parsed.financialSettings !== "object") parsed.financialSettings = { safetyReserve: 0 };
   // O servidor de lembretes usa este fuso para converter um compromisso
   // salvo como data/hora local em um instante real. Sem persistir o fuso,
   // um usuário no Brasil recebia alerta com o horário UTC da Vercel.
@@ -1859,6 +1865,9 @@ function loadDefaultState() {
     finRecurrents: [],
     creditCards: [],
     scheduledFinances: [],
+    savingsGoals: [],
+    finRules: [],
+    finActivity: [],
     financeAccounts: [],
     financialSettings: { safetyReserve: 0 },
     timeZone: appTimeZone,
@@ -1953,6 +1962,12 @@ function createDesignPreviewState(mode = "1") {
       { id: "preview-hist-2-d", type: "despesa", amount: 4600, category: "moradia", description: "Despesas do mês", date: dayOf(monthsBack(3), 12), accountId: "preview-acc-itau" },
       { id: "preview-hist-3-r", type: "receita", amount: 8600, category: "salario", description: "Salário", date: dayOf(monthsBack(2), 5), accountId: "preview-acc-itau" },
       { id: "preview-hist-3-d", type: "despesa", amount: 3900, category: "moradia", description: "Despesas do mês", date: dayOf(monthsBack(2), 12), accountId: "preview-acc-itau" },
+      // Gastos que se repetem e viram "Sugestões inteligentes" na Automação
+      ...[4, 3, 2].flatMap((n) => [
+        { id: `preview-sug-stream-${n}`, type: "despesa", amount: 39.9, category: "assinaturas", description: "Assinatura de streaming", date: dayOf(monthsBack(n), 9) },
+        { id: `preview-sug-phone-${n}`, type: "despesa", amount: 89.9, category: "contas", description: "Plano de celular", date: dayOf(monthsBack(n), 14) },
+        { id: `preview-sug-soft-${n}`, type: "despesa", amount: 59.9, category: "assinaturas", description: "Assinatura de software", date: dayOf(monthsBack(n), 17) },
+      ]),
     ],
     monthClosures: [
       { id: "preview-close-1", monthKey: prevPrevKey, workspaceId: "personal", receitas: 0, despesas: 0, saldo: 6000 },
@@ -1963,11 +1978,46 @@ function createDesignPreviewState(mode = "1") {
       { id: "preview-acc-nubank", name: "Conta Digital", institution: "Nubank", type: "checking", workspaceId: "personal", balance: 1250 },
       { id: "preview-acc-xp", name: "Investimentos", institution: "XP", type: "investment", workspaceId: "personal", balance: 12400 },
     ],
-    finGoals: [{ id: "preview-goal-spend", categoryId: "moradia", limit: 4500, workspaceId: "personal" }],
+    // Limites por categoria (somam R$ 4.500 — a "meta" do card Gastos do mês)
+    finGoals: [
+      { id: "preview-goal-moradia", categoryId: "moradia", limit: 1900, workspaceId: "personal" },
+      { id: "preview-goal-alimentacao", categoryId: "alimentacao", limit: 1000, workspaceId: "personal" },
+      { id: "preview-goal-transporte", categoryId: "transporte", limit: 600, workspaceId: "personal" },
+      { id: "preview-goal-saude", categoryId: "saude", limit: 400, workspaceId: "personal" },
+      { id: "preview-goal-assinaturas", categoryId: "assinaturas", limit: 280, workspaceId: "personal" },
+      { id: "preview-goal-outros", categoryId: "outros", limit: 320, workspaceId: "personal" },
+    ],
+    savingsGoals: [
+      { id: "preview-save-trip", name: "Viagem de férias", target: 6000, saved: 3200, icon: "plane", workspaceId: "personal" },
+      { id: "preview-save-emergency", name: "Reserva de emergência", target: 15000, saved: 12000, icon: "piggy", workspaceId: "personal" },
+    ],
+    creditCards: [
+      { id: "preview-card-nubank", name: "Nubank", last4: "1234", limit: 5000, closingDay: 26, dueDay: 3, workspaceId: "personal", archived: false,
+        invoices: [{ id: "preview-inv-nubank", dueDate: dayOf(monthsBack(-1), 3), amount: 420.9, status: "open", purchases: [] }] },
+      { id: "preview-card-visa", name: "Visa", last4: "5678", limit: 8000, closingDay: 2, dueDay: 10, workspaceId: "personal", archived: false,
+        invoices: [{ id: "preview-inv-visa", dueDate: dayOf(monthsBack(-1), 10), amount: 1600, status: "open", purchases: [] }] },
+    ],
+    scheduledFinances: [
+      { id: "preview-sched-condo", description: "Condomínio", amount: 420.9, type: "despesa", categoryId: "moradia", date: dayOf(monthsBack(-1), 15), status: "scheduled", workspaceId: "personal" },
+    ],
+    finRules: [
+      { id: "preview-rule-rent", name: "Aluguel sempre em Moradia", match: "aluguel", type: "despesa", categoryId: "moradia", active: true, hits: 3, workspaceId: "personal" },
+      { id: "preview-rule-salary", name: "Se receber saldo via PIX “Salário”, classificar como receita", match: "salário", type: "receita", categoryId: "salario", active: true, hits: 1, workspaceId: "personal" },
+    ],
+    finActivity: [
+      { id: "preview-log-1", at: new Date(`${todayIso}T09:41:00`).toISOString(), kind: "entry", text: "Lançamento via WhatsApp: R$ 49,90", workspaceId: "personal" },
+      { id: "preview-log-2", at: new Date(`${todayIso}T08:20:00`).toISOString(), kind: "rule", text: "Regra executada: Aluguel (R$ 1.600,00)", workspaceId: "personal" },
+      { id: "preview-log-3", at: new Date(`${offsetDate(-1)}T17:36:00`).toISOString(), kind: "suggestion", text: "Sugestão gerada: Plano de celular", workspaceId: "personal" },
+      { id: "preview-log-4", at: new Date(`${offsetDate(-1)}T14:02:00`).toISOString(), kind: "closure", text: `Fechamento mensal concluído (${BD_MONTHS[Number(prevKey.slice(5, 7)) - 1]}/${prevKey.slice(0, 4)})`, workspaceId: "personal" },
+    ],
+    financialSettings: { safetyReserve: 0, autoCloseMonth: true },
+    whatsappLinkedPhone: "5511987654321",
     finRecurrents: [
       { id: "preview-rec-1", description: "Aluguel", amount: 1600, type: "despesa", categoryId: "moradia", day: Math.min(31, day + 1), skippedMonths: [] },
       { id: "preview-rec-2", description: "Fatura do cartão", amount: 1240, type: "despesa", categoryId: "outros", day: Math.min(31, day + 5), skippedMonths: [] },
       { id: "preview-rec-3", description: "Internet", amount: 149.9, type: "despesa", categoryId: "assinaturas", day: Math.min(31, day + 7), skippedMonths: [] },
+      { id: "preview-rec-4", description: "Academia", amount: 129.9, type: "despesa", categoryId: "saude", day: Math.min(31, day + 3), skippedMonths: [] },
+      { id: "preview-rec-5", description: "Salário", amount: 8500, type: "receita", categoryId: "salario", day: 22, skippedMonths: [] },
     ],
   });
   if (mode === "1") {
@@ -2403,8 +2453,23 @@ async function runFinanceSimulation(event) {
         <div class="fin-simulator-metric"><strong>${formatCurrency(forecast.reserve)}</strong><span>reserva preservada na análise</span></div>`;
     }
   } catch {
-    if (result) result.innerHTML = '<div class="fin-simulator-answer"><strong>Não foi possível simular</strong><p>Nenhum dado foi alterado. Atualize a página e tente novamente.</p></div>';
+    // Sem a projeção do servidor (offline ou demonstração), responde pelo
+    // orçamento do mês: limites por categoria ou, sem limites, o saldo.
+    if (result) {
+      const local = finLocalForecast(amount);
+      result.classList.toggle("is-risk", !local.canAfford);
+      result.innerHTML = local.canAfford
+        ? `<div class="fin-simulator-answer"><strong>Sim, pode gastar!</strong><p>Você ainda tem <b>${formatCurrency(local.available)}</b> disponíveis no orçamento deste mês.</p></div>`
+        : `<div class="fin-simulator-answer"><strong>Melhor esperar</strong><p>${local.available > 0 ? `Sobram só <b>${formatCurrency(local.available)}</b> no orçamento deste mês.` : "O orçamento deste mês já foi todo usado."}</p></div>`;
+    }
   }
+}
+
+function finLocalForecast(amount) {
+  const totals = finMonthTotals(todayIso.slice(0, 7));
+  const limits = (state.finGoals || []).filter((g) => (g.workspaceId || "personal") === activeWorkspaceId).reduce((sum, g) => sum + (Number(g.limit) || 0), 0);
+  const available = Math.round(((limits > 0 ? limits - totals.d : totals.saldo) - 0) * 100) / 100;
+  return { available: Math.max(0, available), canAfford: amount <= available };
 }
 
 function openFinanceCategory(categoryId) {
@@ -2479,15 +2544,33 @@ function renderFinanceWorkspaceOptions() {
     select.innerHTML = options.map((option) => `<option value="${escapeHtml(option.id)}">${escapeHtml(option.label)}</option>`).join("");
     select.value = options.some((option) => option.id === previous) ? previous : activeWorkspaceId;
   }
+  // No seletor rápido, um espaço compartilhado do tipo Casal/Família ocupa o
+  // botão "Casal"/"Família" (é o que o quadro mostra). O espaço privado de
+  // mesmo nome continua disponível no menu completo e aparece aqui se estiver em uso.
+  const shortLabels = { personal: "Pessoal", couple: "Casal", family: "Família", business: "Empresa" };
+  const icons = { personal: "user", couple: "users", family: "house", business: "layers" };
+  const sharedByType = {};
+  sharedFinanceSpaces.forEach((space) => { if ((space.type === "couple" || space.type === "family") && !sharedByType[space.type]) sharedByType[space.type] = space; });
+  const mappedIds = new Set(Object.values(sharedByType).map((space) => space.id));
+  const segment = [];
+  for (const option of options) {
+    if (option.id === "business" && option.id !== activeWorkspaceId) continue;
+    if (mappedIds.has(option.id)) continue;
+    const mapped = sharedByType[option.id];
+    if (mapped) {
+      segment.push({ id: mapped.id, label: shortLabels[option.id], icon: icons[option.id], title: mapped.name });
+      if (activeWorkspaceId === option.id) segment.push({ id: option.id, label: `${shortLabels[option.id]} privado`, icon: "lock" });
+      continue;
+    }
+    segment.push({ id: option.id, label: shortLabels[option.id] || option.label.replace("Compartilhado · ", ""), icon: icons[option.id] || "users" });
+  }
   for (const switcher of document.querySelectorAll(".bd-ws, #finWsSeg")) {
-    const shortLabels = { personal: "Pessoal", couple: "Casal", family: "Família", business: "Empresa" };
-    const icons = { personal: "user", couple: "users", family: "house", business: "layers" };
-    const visible = options.filter((option) => option.id !== "business" || option.id === activeWorkspaceId);
-    switcher.innerHTML = visible.map((option) => `<button type="button" class="bd-ws-option${option.id === activeWorkspaceId ? " active" : ""}" data-workspace="${escapeHtml(option.id)}" aria-pressed="${option.id === activeWorkspaceId}">${bdIcon(icons[option.id] || "users")}${escapeHtml(shortLabels[option.id] || option.label.replace("Compartilhado · ", ""))}</button>`).join("");
+    switcher.innerHTML = segment.map((option) => `<button type="button" class="bd-ws-option${option.id === activeWorkspaceId ? " active" : ""}" data-workspace="${escapeHtml(option.id)}" aria-pressed="${option.id === activeWorkspaceId}"${option.title ? ` title="${escapeHtml(option.title)}"` : ""}>${bdIcon(option.icon)}${escapeHtml(option.label)}</button>`).join("");
   }
 }
 
 function renderSharedFinanceSpaces() {
+  renderFinMembers();
   const root = document.querySelector("#finSharedSpacesList");
   const invitesRoot = document.querySelector("#finSharedInvites");
   if (!root || !invitesRoot) return;
@@ -2517,12 +2600,23 @@ function applyFinanceSpacePermissions() {
   const space = sharedFinanceSpace(activeWorkspaceId);
   const readOnly = Boolean(space && !space.canEdit);
   document.querySelector("#financesView")?.classList.toggle("is-readonly-space", readOnly);
-  for (const selector of ["#expenseForm input", "#expenseForm select", "#expenseForm button", "#aiQuickSubmit", "#finCloseMonth", "#finReopenMonth", "#finAddAccount", "#finAddCard", "#finCardForm input", "#finCardForm button", "#finOpenGoalsModal", "#finOpenRecurModal"]) {
+  for (const selector of ["#expenseForm input", "#expenseForm select", "#expenseForm button", "#aiQuickSubmit", "#finCloseMonth", "#finReopenMonth", "#finAddAccount", "#finAddCard", "#finCardForm input", "#finCardForm button", "#finOpenGoalsModal", "#finOpenRecurModal", "#finOpenSavingsModal", "#finOpenRuleModal", "#finOpenSchedModal", "#finAutoFab"]) {
     document.querySelectorAll(selector).forEach((element) => { element.disabled = readOnly; });
   }
 }
 
 async function loadFinanceSpaces({ silent = false } = {}) {
+  if (isLocalDesignPreview && currentUser && !sharedFinanceSpaces.length && designPreviewMode !== "empty") {
+    // Demonstração: um espaço "Casal" com a Ana, como no quadro.
+    sharedFinanceSpaces = [{
+      id: "preview-space-casal", name: "Casa Lucas e Ana", type: "couple", role: "owner", canEdit: true, revision: 0,
+      members: [
+        { uid: currentUser.uid, name: currentUser.displayName || "Você", email: currentUser.email || "", role: "owner" },
+        { uid: "preview-ana", name: "Ana Pereira", email: "ana.pereira@exemplo.com", role: "editor" },
+      ],
+      data: null,
+    }];
+  }
   if (!currentUser || isLocalDesignPreview) {
     renderFinanceWorkspaceOptions();
     renderSharedFinanceSpaces();
@@ -2618,7 +2712,7 @@ function scheduleSharedSpaceSync(workspaceId) {
 
 async function syncSharedFinanceSpace(workspaceId) {
   const space = sharedFinanceSpace(workspaceId);
-  if (!space?.canEdit || !currentUser) return;
+  if (!space?.canEdit || !currentUser || isLocalDesignPreview) return;
   try {
     const payload = await pulseApi("/api/finance-spaces", {
       method: "POST",
@@ -2672,6 +2766,8 @@ function toggleFinanceAccountForm(open, account = null) {
   }
   document.querySelector("#finAccountId").value = account?.id || "";
   document.querySelector("#finAccountName").value = account?.name || "";
+  const institution = document.querySelector("#finAccountInstitution");
+  if (institution) institution.value = account?.institution || "";
   document.querySelector("#finAccountType").value = account?.type || "checking";
   document.querySelector("#finAccountWorkspace").value = account?.workspaceId || activeWorkspaceId;
   document.querySelector("#finAccountBalance").value = account ? String(account.balance || 0).replace(".", ",") : "";
@@ -2684,6 +2780,7 @@ function saveFinanceAccount(event) {
   const name = valueOf("#finAccountName").trim();
   const balance = parseSignedMoneyInput(valueOf("#finAccountBalance"));
   const type = valueOf("#finAccountType") || "checking";
+  const institution = valueOf("#finAccountInstitution").trim().slice(0, 40);
   const workspaceId = valueOf("#finAccountWorkspace") || "personal";
   if (!requireFinanceWorkspaceEdit(workspaceId)) return;
   if (name.length < 2) {
@@ -2693,11 +2790,11 @@ function saveFinanceAccount(event) {
   state.financeAccounts ||= [];
   if (id) {
     state.financeAccounts = state.financeAccounts.map((account) => account.id === id
-      ? { ...account, name, balance, type, workspaceId, updatedAt: new Date().toISOString() }
+      ? { ...account, name, institution, balance, type, workspaceId, updatedAt: new Date().toISOString() }
       : account);
   } else {
     state.financeAccounts.push({
-      id: crypto.randomUUID(), name, balance, type, workspaceId,
+      id: crypto.randomUUID(), name, institution, balance, type, workspaceId,
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), archived: false,
     });
   }
@@ -2729,7 +2826,9 @@ window.archiveFinanceAccount = archiveFinanceAccount;
 function toggleCreditCardForm(open) {
   const form = document.querySelector("#finCardForm");
   if (!form) return;
-  form.hidden = !open;
+  const wrap = document.querySelector("#finCardFormWrap");
+  if (wrap) wrap.hidden = !open;
+  else form.hidden = !open;
   if (!open) {
     form.reset();
     document.querySelector("#finCardClosingDay").value = "1";
@@ -3775,7 +3874,7 @@ function renderBoardsToday() {
   const items = [];
 
   for (const item of (state.finRecurrents || []).filter((r) => (r.workspaceId || "personal") === activeWorkspaceId)) {
-    if (isRecurrentSkipped(item, monthKey)) continue;
+    if (item.active === false || isRecurrentSkipped(item, monthKey)) continue;
     const dueDay = Math.min(Number(item.day) || 1, daysInMonth);
     if (dueDay < todayDay || dueDay - todayDay > 7) continue;
     const alreadyLogged = entries.some((e) => e.date.startsWith(monthKey) && e.description === item.description && Number(e.amount) === Number(item.amount));
@@ -4001,7 +4100,7 @@ function renderPremiumDashboard({ monthKey, monthEntries, monthReceitas, monthDe
     ? state.finRecurrents.filter((item) => (item.workspaceId || "personal") === activeWorkspaceId)
     : [];
   const futureRecurring = recurring.filter((item) => {
-    if (isRecurrentSkipped(item, monthKey)) return false;
+    if (item.active === false || isRecurrentSkipped(item, monthKey)) return false;
     const dueDay = Math.min(Number(item.day) || 1, daysInMonth);
     if (dueDay <= currentDay) return false;
     return !(state.finances || []).some((entry) =>
@@ -6870,7 +6969,7 @@ function getCarryOverBalance(monthKey, workspaceId = activeWorkspaceId) {
 }
 
 // Registra o fechamento do mês ativo com um snapshot completo do período
-function closeMonth(monthKey) {
+function closeMonth(monthKey, { silent = false } = {}) {
   if (!requireFinanceWorkspaceEdit()) return;
   if (!state.monthClosures) state.monthClosures = [];
   if (isMonthClosed(monthKey)) { showToast("✓ Mês já fechado."); return; }
@@ -6895,7 +6994,7 @@ function closeMonth(monthKey) {
     ? `Saldo do mês: ${formatCurrency(saldoProprio)}\nSaldo acumulado (com o mês anterior): ${formatCurrency(saldoFinal)}`
     : `Saldo: ${formatCurrency(saldoProprio)}`;
 
-  if (!confirm(`Fechar ${finMonthLabel(monthKey)}?\nReceitas: ${formatCurrency(receitas)}\nDespesas: ${formatCurrency(despesas)}\n${detalheSaldo}\n\nEsse saldo será somado automaticamente ao mês seguinte. Depois de fechar, não será possível adicionar ou editar lançamentos neste mês sem reabri-lo.`)) return;
+  if (!silent && !confirm(`Fechar ${finMonthLabel(monthKey)}?\nReceitas: ${formatCurrency(receitas)}\nDespesas: ${formatCurrency(despesas)}\n${detalheSaldo}\n\nEsse saldo será somado automaticamente ao mês seguinte. Depois de fechar, não será possível adicionar ou editar lançamentos neste mês sem reabri-lo.`)) return;
 
   state.monthClosures.push({
     monthKey,
@@ -6905,10 +7004,13 @@ function closeMonth(monthKey) {
     despesas,
     saldo: saldoFinal, // acumulado — é o que entra no mês seguinte
     entriesCount: entries.length,
+    automatic: silent,
   });
+  finLogActivity("closure", `Fechamento mensal concluído (${finMonthShort(monthKey)})`);
   saveState();
   renderFinances();
-  showMonthCloseRecap(monthKey, receitas, despesas, saldoFinal);
+  if (silent) showToast(`🔒 ${finMonthLabel(monthKey)} foi fechado automaticamente. Saldo final: ${formatCurrency(saldoFinal)}.`);
+  else showMonthCloseRecap(monthKey, receitas, despesas, saldoFinal);
 }
 
 // Fechar o mês é um momento natural de parar e olhar pro resultado —
@@ -7955,7 +8057,7 @@ function parseFinanceText(text) {
 // Preenche o formulário de Finanças com o que foi reconhecido (pela IA ou
 // pela heurística local) — o usuário ainda revisa e confirma clicando em
 // "Registrar"; nada é salvo automaticamente.
-function fillExpenseFormFrom(result) {
+function fillExpenseFormFrom(result, source = "") {
   document.querySelectorAll("[data-fin-type]").forEach((b) => b.classList.toggle("active", b.dataset.finType === result.type));
   document.querySelector("#expenseType").value = result.type;
   document.querySelector(".fin-form-card")?.classList.toggle("is-receita", result.type === "receita");
@@ -7964,6 +8066,8 @@ function fillExpenseFormFrom(result) {
   document.querySelector("#expenseAmount").value      = result.amount.toFixed(2).replace(".", ",");
   document.querySelector("#expenseDescription").value = result.description || "";
   document.querySelector("#expenseDate").value        = result.date;
+  finPendingEntrySource = source;
+  finApplyRuleToForm(result.description);
 
   document.querySelector("#expenseAmount")?.scrollIntoView({ behavior: "smooth", block: "center" });
 }
@@ -8036,7 +8140,7 @@ function bindAiQuickEntry() {
       }
 
       input.value = "";
-      fillExpenseFormFrom(data);
+      fillExpenseFormFrom(data, "IA");
       showAiQuickMascot("done");
       showToast("✨ Preenchido pela IA! Confira os dados e clique em Registrar.");
     } catch (err) {
@@ -8061,7 +8165,7 @@ function bindAiQuickEntry() {
       }
 
       input.value = "";
-      fillExpenseFormFrom(local);
+      fillExpenseFormFrom(local, "IA");
       const friendly = ERROR_MESSAGES[err?.code];
       showToast(friendly ? `${friendly} Usei o reconhecimento local — confira os dados.` : "✨ Preenchido (modo local)! Confira os dados e clique em Registrar.");
     } finally {
@@ -8164,6 +8268,13 @@ function saveExpense(event) {
       workspaceId: activeWorkspaceId,
     };
     state.finances.unshift(entry);
+    const rule = finPendingRuleId ? (state.finRules || []).find((item) => item.id === finPendingRuleId) : null;
+    if (rule && entry.category === rule.categoryId) {
+      rule.hits = (Number(rule.hits) || 0) + 1;
+      rule.lastRunAt = new Date().toISOString();
+      finLogActivity("rule", `Regra executada: ${entry.description} (${formatCurrency(amount)})`);
+    }
+    if (finPendingEntrySource) finLogActivity("entry", `Lançamento via ${finPendingEntrySource}: ${formatCurrency(amount)}`);
     showToast(type === "receita" ? "Receita adicionada!" : "Despesa registrada!");
   }
 
@@ -8174,6 +8285,8 @@ function saveExpense(event) {
 }
 
 function resetExpenseForm() {
+  finPendingEntrySource = "";
+  finPendingRuleId = "";
   document.querySelector("#expenseForm").reset();
   document.querySelector("#expenseId").value = "";
   document.querySelector("#expenseDate").value = todayIso;
@@ -8718,6 +8831,12 @@ function setFinBoardTab(target) {
   document.querySelectorAll(".fin-tab-panel").forEach((p) => { p.hidden = p.dataset.finPanel !== target; });
   const board = document.querySelector(".bf");
   if (board) board.dataset.tab = target;
+  const slot = document.querySelector(`[data-sim-slot="${target}"]`);
+  const sim = document.querySelector("#finSimulatorCard");
+  if (slot && sim && sim.parentElement !== slot) slot.appendChild(sim);
+  const simLabel = document.querySelector('label[for="finSimulatorAmount"]');
+  if (simLabel) simLabel.textContent = target === "controle" ? "Quanto você pode gastar hoje?" : "Quanto você pretende gastar?";
+  if (target === "automacao" && finAutoOpen) setFinAutoSection("");
   if (target === "analise") requestAnimationFrame(() => { renderFinSaldoEvolution(); renderFinChart6m(); });
 }
 
@@ -8786,7 +8905,7 @@ async function handleFinReceipt(file) {
     const media = isPdf ? { base64: await finBlobToBase64(file), mimeType: "application/pdf" } : await finCompressImage(file);
     const data = await finCallParser({ mode: "image", imageBase64: media.base64, mimeType: media.mimeType });
     if (!data.amount) throw { handled: true, code: "unreadable" };
-    fillExpenseFormFrom(data);
+    fillExpenseFormFrom(data, "foto");
     showToast("Comprovante lido! Confira os dados e toque em Registrar.");
   } catch (err) {
     if (!err?.handled) console.error("Falha ao ler comprovante:", err);
@@ -8802,7 +8921,7 @@ async function handleFinAudioBlob(blob, mimeType) {
   try {
     const data = await finCallParser({ mode: "audio", audioBase64: await finBlobToBase64(blob), mimeType });
     if (!data.amount) throw { handled: true, code: "no_amount", transcript: data.transcript };
-    fillExpenseFormFrom(data);
+    fillExpenseFormFrom(data, "áudio");
     showToast(`Entendi: “${data.transcript || data.description}”. Confira e toque em Registrar.`);
   } catch (err) {
     if (!err?.handled) console.error("Falha ao ler áudio:", err);
@@ -9039,6 +9158,7 @@ function renderFinances() {
   renderFinRecurrents();
   renderFinanceAccounts();
   renderCreditCards();
+  renderFinAutomationExtras();
 }
 
 function populateFinanceAccountSelect() {
@@ -9050,74 +9170,7 @@ function populateFinanceAccountSelect() {
   if ([...select.options].some((option) => option.value === selected)) select.value = selected;
 }
 
-function renderFinanceAccounts() {
-  const root = document.querySelector("#finAccountsList");
-  if (!root) return;
-  populateFinanceAccountSelect();
-  const accounts = (state.financeAccounts || []).filter((item) => !item.archived && (item.workspaceId || "personal") === activeWorkspaceId);
-  if (!accounts.length) {
-    root.innerHTML = '<div class="empty-state">Adicione suas contas para ver saldos separados e melhorar as projeções.</div>';
-    return;
-  }
-  const typeLabels = { checking: "Conta corrente", savings: "Poupança", cash: "Carteira", investment: "Investimentos", other: "Outra conta" };
-  const canEdit = canEditFinanceWorkspace();
-  root.innerHTML = accounts.map((account) => `
-    <article class="fin-account-card">
-      <div class="fin-account-icon" aria-hidden="true">${account.type === "cash" ? "◫" : account.type === "investment" ? "↗" : "▣"}</div>
-      <div class="fin-account-copy"><strong>${escapeHtml(account.name)}</strong><span>${typeLabels[account.type] || "Conta"} · ${workspaceLabel(account.workspaceId || "personal")}</span></div>
-      <strong class="fin-account-balance">${formatCurrency(account.balance || 0)}</strong>
-      ${canEdit ? `<div class="fin-account-actions"><button type="button" onclick="editFinanceAccount('${account.id}')">Editar</button><button type="button" onclick="archiveFinanceAccount('${account.id}')" aria-label="Arquivar ${escapeHtml(account.name)}">Arquivar</button></div>` : '<span class="task-meta">Somente leitura</span>'}
-    </article>`).join("");
-}
 
-function renderCreditCards() {
-  const root = document.querySelector("#finCardsList");
-  if (!root) return;
-  const cards = (state.creditCards || []).filter((card) => !card.archived && (card.workspaceId || "personal") === activeWorkspaceId);
-  if (!cards.length) {
-    root.innerHTML = '<div class="empty-state">Nenhum cartão cadastrado. Adicione um para acompanhar faturas e parcelas.</div>';
-    return;
-  }
-  const canEdit = canEditFinanceWorkspace();
-  root.innerHTML = cards.map((card) => {
-    const openInvoices = (card.invoices || [])
-      .filter((invoice) => invoice.status !== "paid")
-      .sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)));
-    const nextInvoice = openInvoices.find((invoice) => invoice.dueDate >= todayIso) || openInvoices[0] || null;
-    const committed = openInvoices.reduce((sum, invoice) => sum + Number(invoice.amount || 0), 0);
-    const limit = Math.max(0, Number(card.limit || 0));
-    const usage = limit > 0 ? Math.min(100, Math.round((committed / limit) * 100)) : 0;
-    const installments = openInvoices.flatMap((invoice) => invoice.purchases || []).filter((purchase) => Number(purchase.totalInstallments) > 1).length;
-    return `
-      <article class="fin-card-item">
-        <div class="fin-card-item-head">
-          <div class="fin-card-identity">
-            <span class="fin-card-chip" aria-hidden="true"></span>
-            <div><strong>${escapeHtml(card.name)}</strong><span>${card.last4 ? `final ${escapeHtml(card.last4)}` : "cartão de crédito"}</span></div>
-          </div>
-          ${canEdit ? `<button type="button" class="fin-card-archive" data-card-action="archive" data-card-id="${escapeHtml(card.id)}" aria-label="Arquivar ${escapeHtml(card.name)}">Arquivar</button>` : '<span class="task-meta">Somente leitura</span>'}
-        </div>
-        <div class="fin-card-invoice">
-          <div><span>Próxima fatura</span><strong>${nextInvoice ? formatCurrency(nextInvoice.amount) : "R$ 0,00"}</strong></div>
-          <div><span>Vencimento</span><strong>${nextInvoice ? formatDate(nextInvoice.dueDate) : `dia ${card.dueDay}`}</strong></div>
-          <div><span>Parcelas futuras</span><strong>${installments}</strong></div>
-        </div>
-        <div class="fin-card-limit-head"><span>${formatCurrency(committed)} comprometidos</span><span>${usage}% do limite</span></div>
-        <div class="fin-card-limit-track"><i style="width:${usage}%"></i></div>
-        <div class="fin-card-actions"${canEdit ? "" : " hidden"}>
-          <button type="button" data-card-action="purchase" data-card-id="${escapeHtml(card.id)}">+ Adicionar compra</button>
-          ${nextInvoice ? `<button type="button" class="primary" data-card-action="pay" data-card-id="${escapeHtml(card.id)}" data-invoice-id="${escapeHtml(nextInvoice.id)}">Marcar fatura paga</button>` : ""}
-        </div>
-      </article>`;
-  }).join("");
-  root.querySelectorAll("[data-card-action]").forEach((button) => {
-    button.addEventListener("click", () => {
-      if (button.dataset.cardAction === "purchase") openCreditCardPurchase(button.dataset.cardId);
-      if (button.dataset.cardAction === "pay") payCreditCardInvoice(button.dataset.cardId, button.dataset.invoiceId);
-      if (button.dataset.cardAction === "archive") archiveCreditCard(button.dataset.cardId);
-    });
-  });
-}
 
 function renderFinInsights(monthKey, entries, receitas, despesas, byCat) {
   const root = document.querySelector("#finInsights");
@@ -9860,114 +9913,1006 @@ function highlightItem(itemId) {
 // ============================================================
 // METAS DE GASTO POR CATEGORIA
 // ============================================================
-function renderFinGoals() {
-  const el = document.querySelector("#finGoalsList");
-  if (!el) return;
-  const goals = (state.finGoals || []).filter((g) => (g.workspaceId || "personal") === activeWorkspaceId);
-  if (!goals.length) {
-    el.innerHTML = emptyStateHtml({
-      iconName: "target",
-      title: "Defina limites por categoria",
-      desc: "Escolha uma categoria e um teto de gasto mensal — a barra muda de cor conforme você se aproxima do limite.",
-    });
-    return;
-  }
-  const monthKey = getActiveFinMonth();
-  const canEdit = canEditFinanceWorkspace();
-  const byCat = {};
-  (state.finances || []).filter((f) => f.date.startsWith(monthKey) && f.type === "despesa" && (f.workspaceId || "personal") === activeWorkspaceId)
-    .forEach((f) => { byCat[f.category] = (byCat[f.category] || 0) + f.amount; });
-
-  el.innerHTML = goals.map((g) => {
-    const cat   = findCategory(g.categoryId);
-    const spent = byCat[g.categoryId] || 0;
-    const pct   = Math.min(100, Math.round((spent / g.limit) * 100));
-    const over  = spent > g.limit;
-    const color = over ? "var(--red)" : pct > 80 ? "var(--orange)" : "var(--green)";
-    return `
-      <div class="fin-goal-row">
-        <div class="fin-goal-top">
-          <span class="fin-goal-label">${escapeHtml(cat.label)}</span>
-          <span class="fin-goal-val" style="color:${color}">${formatCurrency(spent)} / ${formatCurrency(g.limit)}</span>
-          ${canEdit ? `<button class="icon-button" style="padding:2px 6px;font-size:0.7rem" onclick="deleteFinGoal('${g.id}')">${icon("x", 12)}</button>` : ""}
-        </div>
-        <div class="progress-track" style="height:6px;margin-top:4px">
-          <div style="width:${pct}%;height:100%;border-radius:999px;background:${color};transition:width 400ms"></div>
-        </div>
-        <span style="font-size:0.72rem;color:var(--muted)">${over ? `<span style="display:inline-flex;align-items:center;gap:3px;color:var(--red)">${icon("alertTriangle", 11)}Limite ultrapassado!</span>` : `${pct}% usado`}</span>
-      </div>`;
-  }).join("");
-}
 
 // Lista os meses já fechados, com atalho pra revisar/editar ou reabrir
 // cada um sem precisar navegar mês a mês com as setas ‹ ›.
-function renderFinClosures() {
-  const el = document.querySelector("#finClosuresList");
+
+
+
+// ============================================================
+// CONTROLE E AUTOMAÇÃO (quadros 07 e 08)
+// Orçamentos por categoria (finGoals), metas financeiras (savingsGoals),
+// contas, cartões, membros do espaço, recorrências, contas agendadas,
+// regras (finRules), sugestões, fechamento automático e registro de
+// atividade (finActivity). Tudo por espaço (workspaceId), como o resto.
+// ============================================================
+const FIN_BUDGET_TONES = { saude: "green", outros: "sky" };
+const FIN_SAVINGS_TONES = { plane: "violet", piggy: "rose", house: "blue", car: "amber", book: "cyan", heart: "rose", star: "amber" };
+const FIN_ACCOUNT_ICONS = { checking: "bank", savings: "piggy", cash: "wallet", investment: "coin", other: "card" };
+const FIN_ACCOUNT_TYPES = { checking: "Conta corrente", savings: "Poupança", cash: "Carteira", investment: "Investimentos", other: "Outra conta" };
+const FIN_AUTO_PREVIEW = { recur: 4, sched: 3, rules: 2, suggest: 3, log: 4 };
+const finAutoShowAll = { recur: false, sched: false, rules: false, suggest: false, log: false };
+let finAutoOpen = "";
+let finClosuresShowAll = false;
+let finPendingEntrySource = "";
+let finPendingRuleId = "";
+
+function finInWs(item) { return (item?.workspaceId || "personal") === activeWorkspaceId; }
+function finDayMonth(iso) {
+  const [, m, d] = String(iso || "").split("-").map(Number);
+  return m && d ? `${String(d).padStart(2, "0")} ${BD_MONTHS[m - 1]}` : "";
+}
+function finSigned(type, amount) { return `${type === "receita" ? "+" : "−"} ${formatCurrency(Number(amount) || 0)}`; }
+function finNormalize(text) { return String(text || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim(); }
+function finJoinNames(names) {
+  const list = names.filter(Boolean);
+  if (list.length <= 1) return list[0] || "";
+  return `${list.slice(0, -1).join(", ")} e ${list[list.length - 1]}`;
+}
+
+// Folha de ações genérica (mesmo visual da folha dos lançamentos).
+function finActionSheet({ title, sub = "", actions = [] }) {
+  document.querySelector("#finActionSheet")?.remove();
+  const sheet = document.createElement("div");
+  sheet.id = "finActionSheet";
+  sheet.className = "modal-backdrop";
+  sheet.innerHTML = `<div class="modal-card planner-action-sheet" role="dialog" aria-modal="true" aria-labelledby="finActionSheetTitle">
+    <div class="modal-header"><h2 id="finActionSheetTitle">${escapeHtml(title)}</h2><button type="button" class="icon-button" data-close aria-label="Fechar">${bdIcon("x")}</button></div>
+    <div class="modal-body planner-action-sheet-body">
+      ${sub ? `<p class="planner-action-sheet-label">${escapeHtml(sub)}</p>` : ""}
+      ${actions.map((action, index) => action.danger
+        ? `<button type="button" class="planner-action-danger" data-index="${index}">${bdIcon(action.icon || "trash")}<span>${escapeHtml(action.label)}</span></button>`
+        : `<button type="button" class="planner-action-option" data-index="${index}"><span>${escapeHtml(action.label)}</span>${bdIcon(action.icon || "chev-right")}</button>`).join("")}
+    </div></div>`;
+  document.body.appendChild(sheet);
+  const close = () => { sheet.remove(); document.removeEventListener("keydown", onKey); };
+  const onKey = (event) => { if (event.key === "Escape") close(); };
+  document.addEventListener("keydown", onKey);
+  sheet.addEventListener("click", (event) => {
+    if (event.target === sheet || event.target.closest("[data-close]")) return close();
+    const button = event.target.closest("[data-index]");
+    if (!button) return;
+    close();
+    actions[Number(button.dataset.index)]?.run?.();
+  });
+  requestAnimationFrame(() => sheet.querySelector("[data-index]")?.focus());
+}
+
+function finOpenModal(selector) {
+  const modal = document.querySelector(selector);
+  if (!modal) return null;
+  modal.hidden = false;
+  requestAnimationFrame(() => modal.querySelector("input:not([type=hidden]):not([type=radio]), select")?.focus());
+  return modal;
+}
+function finCloseModal(selector) { const modal = document.querySelector(selector); if (modal) modal.hidden = true; }
+
+// ---------- Registro de atividade ----------
+function finLogActivity(kind, text, workspaceId = activeWorkspaceId) {
+  state.finActivity ||= [];
+  state.finActivity.unshift({ id: crypto.randomUUID(), at: new Date().toISOString(), kind, text: String(text).slice(0, 140), workspaceId });
+  if (state.finActivity.length > 60) state.finActivity.length = 60;
+}
+
+function finActivityItems() {
+  const own = (state.finActivity || []).filter(finInWs).map((item) => ({ at: item.at, text: item.text, kind: item.kind }));
+  const known = new Set(own.map((item) => item.text));
+  const whatsapp = (state.finances || [])
+    .filter((entry) => finInWs(entry) && entry.source === "whatsapp" && entry.createdAt)
+    .map((entry) => ({ at: entry.createdAt, kind: "whatsapp", text: `Lançamento via WhatsApp: ${formatCurrency(entry.amount)}` }))
+    .filter((item) => !known.has(item.text));
+  return [...own, ...whatsapp].filter((item) => item.at).sort((a, b) => String(b.at).localeCompare(String(a.at)));
+}
+
+function finActivityWhen(at) {
+  const date = new Date(at);
+  if (Number.isNaN(date.getTime())) return "";
+  const iso = toLocalIso(date);
+  const time = `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+  if (iso === todayIso) return `Hoje, ${time}`;
+  if (iso === offsetDate(-1)) return `Ontem, ${time}`;
+  return `${finDayMonth(iso)}, ${time}`;
+}
+
+function renderFinActivity() {
+  const root = document.querySelector("#finActivityList");
+  if (!root) return;
+  const items = finActivityItems();
+  const limit = finAutoShowAll.log ? 30 : FIN_AUTO_PREVIEW.log;
+  finSetMore("log", items.length > FIN_AUTO_PREVIEW.log, finAutoShowAll.log ? "Mostrar menos" : "Ver histórico");
+  const nav = document.querySelector("#finNavLog");
+  if (nav) nav.textContent = items[0] ? `${finActivityWhen(items[0].at)} · ${items[0].text}` : "Sem atividade recente";
+  root.innerHTML = items.length
+    ? items.slice(0, limit).map((item) => `<li><time>${escapeHtml(finActivityWhen(item.at))}</time><span title="${escapeHtml(item.text)}">${escapeHtml(item.text)}</span></li>`).join("")
+    : '<li class="bf-empty-line">As ações automáticas e os lançamentos por WhatsApp, foto e áudio aparecem aqui.</li>';
+}
+
+// ---------- Orçamentos por categoria ----------
+function finMonthExpensesByCategory(monthKey) {
+  const byCat = {};
+  (state.finances || []).filter((f) => f.date?.startsWith(monthKey) && f.type === "despesa" && finInWs(f))
+    .forEach((f) => { byCat[f.category] = (byCat[f.category] || 0) + (Number(f.amount) || 0); });
+  return byCat;
+}
+
+function renderFinGoals() {
+  const el = document.querySelector("#finGoalsList");
   if (!el) return;
-  const closures = (state.monthClosures || [])
-    .filter((c) => (c.workspaceId || "personal") === activeWorkspaceId)
-    .sort((a, b) => b.monthKey.localeCompare(a.monthKey));
-  if (!closures.length) {
-    el.innerHTML = emptyStateHtml({
-      iconName: "calendarCheck",
-      title: "Nenhum mês fechado ainda",
-      desc: "Quando você fechar um mês, ele aparece aqui com o saldo final, pra revisar ou reabrir quando quiser.",
-    });
+  const monthKey = getActiveFinMonth();
+  const monthLabel = document.querySelector("#finBudgetsMonth");
+  if (monthLabel) monthLabel.textContent = BD_MONTHS[Number(monthKey.slice(5, 7)) - 1];
+  const goals = (state.finGoals || []).filter(finInWs);
+  if (!goals.length) {
+    el.innerHTML = `<div class="bf-empty">${bdIcon("target")}<strong>Defina limites por categoria</strong><span>Escolha uma categoria e um teto mensal — a barra avisa quando você se aproxima do limite.</span><button type="button" class="bf-ghost-btn" data-budget-edit="">${bdIcon("plus")}Criar limite</button></div>`;
     return;
   }
-  const canEdit = canEditFinanceWorkspace();
-  el.innerHTML = closures.map((c) => `
-    <div class="fin-closure-row">
-      <div class="fin-closure-top">
-        <span class="fin-closure-label">${finMonthLabel(c.monthKey)}</span>
-        <span class="fin-closure-val" style="color:${c.saldo >= 0 ? "var(--green)" : "var(--red)"}">${formatCurrency(c.saldo)}</span>
-      </div>
-      <div class="fin-closure-actions">
-        <button class="mini-button" onclick="goToFinMonth('${c.monthKey}')">Ver / editar</button>
-        ${canEdit ? `<button class="mini-button" onclick="reopenMonth('${c.monthKey}')">Reabrir</button>` : ""}
-      </div>
-    </div>`).join("");
+  const byCat = finMonthExpensesByCategory(monthKey);
+  el.innerHTML = goals.map((goal) => {
+    const spent = byCat[goal.categoryId] || 0;
+    const limit = Number(goal.limit) || 0;
+    const pct = limit > 0 ? Math.round((spent / limit) * 100) : 0;
+    const tone = pct > 100 ? "red" : pct >= 90 ? "amber" : (FIN_BUDGET_TONES[goal.categoryId] || "blue");
+    const name = finCatName(goal.categoryId);
+    return `<button type="button" class="bf-brow is-${tone}" data-budget-edit="${escapeHtml(goal.categoryId)}" aria-label="${escapeHtml(`${name}: ${formatCurrency(spent)} de ${formatCurrency(limit)} (${pct}%)`)}">
+      <span class="bf-brow-ico">${bdIcon(FIN_CATEGORY_ICONS[goal.categoryId] || "dots-circle")}</span>
+      <span class="bf-brow-name">${escapeHtml(name)}</span>
+      <span class="bf-bar"><i style="width:${Math.min(100, pct)}%"></i></span>
+      <span class="bf-brow-val">${formatCurrency(spent)} de ${formatCurrency(limit)}</span>
+      <b class="bf-brow-pct">${pct}%${pct >= 90 ? bdIcon("alert") : ""}</b>
+    </button>`;
+  }).join("");
 }
 
 function deleteFinGoal(id) {
   if (!requireFinanceWorkspaceEdit()) return;
   state.finGoals = (state.finGoals || []).filter((g) => g.id !== id);
   saveState();
-  renderFinGoals();
-  showToast("Meta removida.");
+  renderFinances();
+  showToast("Limite removido.");
+}
+
+function finExpenseCategoriesForGoals() {
+  const seen = new Set();
+  return getAllCategories("despesa").filter((cat) => (seen.has(cat.id) ? false : seen.add(cat.id)));
+}
+
+function openFinGoalsModal(categoryId = "") {
+  if (!requireFinanceWorkspaceEdit()) return;
+  const select = document.querySelector("#goalCategory");
+  if (!select) return;
+  const goals = (state.finGoals || []).filter(finInWs);
+  select.innerHTML = finExpenseCategoriesForGoals().map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(finCatName(c.id))}${goals.some((g) => g.categoryId === c.id) ? " • com limite" : ""}</option>`).join("");
+  const firstFree = finExpenseCategoriesForGoals().find((c) => !goals.some((g) => g.categoryId === c.id));
+  select.value = categoryId || firstFree?.id || select.options[0]?.value || "";
+  syncFinGoalsModal();
+  finOpenModal("#finGoalsModal");
+}
+
+function syncFinGoalsModal() {
+  const categoryId = valueOf("#goalCategory");
+  const goal = (state.finGoals || []).find((g) => g.categoryId === categoryId && finInWs(g));
+  const input = document.querySelector("#goalLimit");
+  if (input) input.value = goal ? String(goal.limit) : "";
+  const del = document.querySelector("#finDeleteGoal");
+  if (del) { del.hidden = !goal; del.dataset.goalId = goal?.id || ""; }
+  const current = document.querySelector("#finGoalsCurrent");
+  const goals = (state.finGoals || []).filter(finInWs);
+  if (current) current.innerHTML = goals.length
+    ? `<span class="field-label">Limites atuais</span><div>${goals.map((g) => `<button type="button" class="bf-chip-btn${g.categoryId === categoryId ? " active" : ""}" data-goal-pick="${escapeHtml(g.categoryId)}">${escapeHtml(finCatName(g.categoryId))} · ${escapeHtml(formatCurrency(g.limit))}</button>`).join("")}</div>`
+    : "";
 }
 
 function bindFinGoalsModal() {
-  const modal   = document.querySelector("#finGoalsModal");
-  const catSel  = document.querySelector("#goalCategory");
-  const openBtn = document.querySelector("#finOpenGoalsModal");
-  const closeBtn= document.querySelector("#finCloseGoalsModal");
-  const saveBtn = document.querySelector("#finSaveGoal");
-
-  openBtn?.addEventListener("click", () => {
-    // Popula select com categorias de despesa
-    catSel.innerHTML = expenseCategories.concat(state.customCategories?.filter((c) => (c.type || "despesa") === "despesa") || [])
-      .map((c) => `<option value="${c.id}">${escapeHtml(c.label)}</option>`).join("");
-    modal.hidden = false;
+  const modal = document.querySelector("#finGoalsModal");
+  document.querySelector("#finOpenGoalsModal")?.addEventListener("click", () => openFinGoalsModal());
+  document.querySelector("#finGoalsList")?.addEventListener("click", (event) => {
+    const row = event.target.closest("[data-budget-edit]");
+    if (row) openFinGoalsModal(row.dataset.budgetEdit);
   });
-  closeBtn?.addEventListener("click", () => { modal.hidden = true; });
-  modal?.addEventListener("click", (e) => { if (e.target === modal) modal.hidden = true; });
-
-  saveBtn?.addEventListener("click", () => {
+  document.querySelector("#finCloseGoalsModal")?.addEventListener("click", () => { modal.hidden = true; });
+  modal?.addEventListener("click", (event) => {
+    if (event.target === modal) modal.hidden = true;
+    const pick = event.target.closest("[data-goal-pick]");
+    if (pick) { document.querySelector("#goalCategory").value = pick.dataset.goalPick; syncFinGoalsModal(); }
+  });
+  document.querySelector("#goalCategory")?.addEventListener("change", syncFinGoalsModal);
+  document.querySelector("#finDeleteGoal")?.addEventListener("click", (event) => {
+    const id = event.currentTarget.dataset.goalId;
+    if (!id) return;
+    deleteFinGoal(id);
+    syncFinGoalsModal();
+  });
+  document.querySelector("#finSaveGoal")?.addEventListener("click", () => {
     if (!requireFinanceWorkspaceEdit()) return;
-    const catId = catSel.value;
-    const limit = parseFloat(document.querySelector("#goalLimit").value.replace(",", "."));
-    if (!catId || !limit || limit <= 0) { showToast("Preencha a categoria e o limite."); return; }
-    if (!state.finGoals) state.finGoals = [];
-    // Atualiza se já existir meta para essa categoria
-    const existing = state.finGoals.find((g) => g.categoryId === catId && (g.workspaceId || "personal") === activeWorkspaceId);
-    if (existing) { existing.limit = limit; }
-    else { state.finGoals.push({ id: crypto.randomUUID(), categoryId: catId, limit, workspaceId: activeWorkspaceId }); }
+    const catId = valueOf("#goalCategory");
+    const limit = parseMoneyInput(valueOf("#goalLimit"));
+    if (!catId || !limit || limit <= 0) { showToast("Escolha a categoria e informe o limite."); return; }
+    state.finGoals ||= [];
+    const existing = state.finGoals.find((g) => g.categoryId === catId && finInWs(g));
+    if (existing) existing.limit = limit;
+    else state.finGoals.push({ id: crypto.randomUUID(), categoryId: catId, limit, workspaceId: activeWorkspaceId });
     saveState();
-    renderFinGoals();
+    renderFinances();
     modal.hidden = true;
-    document.querySelector("#goalLimit").value = "";
-    showToast("✅ Meta salva!");
+    showToast(`Limite de ${finCatName(catId)} salvo.`);
+  });
+}
+
+// ---------- Metas financeiras (objetivos de economia) ----------
+function renderFinSavings() {
+  const root = document.querySelector("#finSavingsList");
+  if (!root) return;
+  const goals = (state.savingsGoals || []).filter(finInWs);
+  if (!goals.length) {
+    root.innerHTML = `<div class="bf-empty">${bdIcon("piggy")}<strong>Guarde para o que importa</strong><span>Crie uma meta — viagem, reserva de emergência, carro — e acompanhe quanto já foi guardado.</span><button type="button" class="bf-ghost-btn" data-savings-new>${bdIcon("plus")}Criar meta</button></div>`;
+    return;
+  }
+  root.innerHTML = goals.map((goal) => {
+    const target = Math.max(0, Number(goal.target) || 0);
+    const saved = Math.max(0, Number(goal.saved) || 0);
+    const pct = target > 0 ? Math.round((saved / target) * 100) : 0;
+    const done = pct >= 100;
+    return `<button type="button" class="bf-goal tone-${FIN_SAVINGS_TONES[goal.icon] || "violet"}${done ? " is-done" : ""}" data-savings-id="${escapeHtml(goal.id)}">
+      <span class="bf-goal-ico">${bdIcon(goal.icon || "star")}</span>
+      <span class="bf-goal-body">
+        <strong>${escapeHtml(goal.name)}</strong>
+        <span class="bf-goal-line"><span>${formatCurrency(saved)} de ${formatCurrency(target)}</span><b>${done ? "Concluída" : `${pct}%`}</b></span>
+        <span class="bf-bar ${pct >= 75 ? "is-green" : "is-cyan"}"><i style="width:${Math.min(100, pct)}%"></i></span>
+      </span>
+    </button>`;
+  }).join("");
+}
+
+function openFinSavingsModal(id = "") {
+  if (!requireFinanceWorkspaceEdit()) return;
+  const goal = (state.savingsGoals || []).find((g) => g.id === id);
+  const form = document.querySelector("#finSavingsForm");
+  form?.reset();
+  document.querySelector("#savingsId").value = goal?.id || "";
+  document.querySelector("#savingsName").value = goal?.name || "";
+  const money = (value) => (Number(value) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  document.querySelector("#savingsTarget").value = goal ? money(goal.target) : "";
+  document.querySelector("#savingsSaved").value = goal ? money(goal.saved) : "";
+  const radio = document.querySelector(`input[name="savingsIcon"][value="${goal?.icon || "plane"}"]`);
+  if (radio) radio.checked = true;
+  document.querySelector("#savingsDelete").hidden = !goal;
+  document.querySelector("#savingsDepositRow").hidden = !goal;
+  document.querySelector("#finSavingsModalTitle").textContent = goal ? "Editar meta" : "Nova meta financeira";
+  finOpenModal("#finSavingsModal");
+}
+
+function saveFinSavings(event) {
+  event.preventDefault();
+  if (!requireFinanceWorkspaceEdit()) return;
+  const id = valueOf("#savingsId");
+  const name = valueOf("#savingsName").trim();
+  const target = parseMoneyInput(valueOf("#savingsTarget"));
+  const saved = parseMoneyInput(valueOf("#savingsSaved")) || 0;
+  const icon = document.querySelector('input[name="savingsIcon"]:checked')?.value || "star";
+  if (name.length < 2 || !target || target <= 0 || saved < 0) { showToast("Informe o nome e o valor da meta."); return; }
+  state.savingsGoals ||= [];
+  const now = new Date().toISOString();
+  const existing = state.savingsGoals.find((g) => g.id === id);
+  if (existing) Object.assign(existing, { name, target, saved, icon, updatedAt: now });
+  else state.savingsGoals.push({ id: crypto.randomUUID(), name, target, saved, icon, workspaceId: activeWorkspaceId, createdAt: now, updatedAt: now });
+  saveState();
+  renderFinSavings();
+  finCloseModal("#finSavingsModal");
+  showToast(existing ? "Meta atualizada." : "Meta criada!");
+}
+
+function depositFinSavings() {
+  const goal = (state.savingsGoals || []).find((g) => g.id === valueOf("#savingsId"));
+  const amount = parseMoneyInput(valueOf("#savingsDeposit"));
+  if (!goal || !amount || amount <= 0) { showToast("Informe quanto você guardou."); return; }
+  if (!requireFinanceWorkspaceEdit()) return;
+  goal.saved = Math.round(((Number(goal.saved) || 0) + amount) * 100) / 100;
+  goal.updatedAt = new Date().toISOString();
+  finLogActivity("savings", `Meta “${goal.name}”: + ${formatCurrency(amount)}`);
+  saveState();
+  renderFinances();
+  document.querySelector("#savingsSaved").value = (Number(goal.saved) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  document.querySelector("#savingsDeposit").value = "";
+  showToast(goal.saved >= goal.target ? `🎉 Meta “${goal.name}” concluída!` : `${formatCurrency(amount)} guardados em “${goal.name}”.`);
+}
+
+function deleteFinSavings() {
+  const goal = (state.savingsGoals || []).find((g) => g.id === valueOf("#savingsId"));
+  if (!goal || !requireFinanceWorkspaceEdit()) return;
+  if (!confirm(`Excluir a meta “${goal.name}”?`)) return;
+  state.savingsGoals = state.savingsGoals.filter((g) => g.id !== goal.id);
+  saveState();
+  renderFinSavings();
+  finCloseModal("#finSavingsModal");
+  showToast("Meta excluída.");
+}
+
+// ---------- Contas ----------
+function renderFinanceAccounts() {
+  const root = document.querySelector("#finAccountsList");
+  if (!root) return;
+  populateFinanceAccountSelect();
+  const accounts = (state.financeAccounts || []).filter((item) => !item.archived && finInWs(item));
+  if (!accounts.length) {
+    root.innerHTML = `<div class="bf-empty">${bdIcon("bank")}<strong>Nenhuma conta ainda</strong><span>Adicione suas contas para ver saldos separados e melhorar as projeções.</span></div>`;
+    return;
+  }
+  root.innerHTML = accounts.map((account) => {
+    const balance = Number(account.balance) || 0;
+    return `<button type="button" class="bf-row bf-acc" data-account-id="${escapeHtml(account.id)}">
+      <span class="bf-row-ico">${bdIcon(FIN_ACCOUNT_ICONS[account.type] || "card")}</span>
+      <span class="bf-row-copy"><strong>${escapeHtml(account.name)}</strong><small>${escapeHtml(account.institution || FIN_ACCOUNT_TYPES[account.type] || "Conta")}</small></span>
+      <b class="bf-acc-bal${balance < 0 ? " is-neg" : ""}">${formatCurrency(balance)}</b>
+      ${bdIcon("chev-right")}
+    </button>`;
+  }).join("");
+}
+
+function openFinAccountActions(id) {
+  const account = (state.financeAccounts || []).find((item) => item.id === id);
+  if (!account) return;
+  const sub = `${FIN_ACCOUNT_TYPES[account.type] || "Conta"}${account.institution ? ` · ${account.institution}` : ""} · ${formatCurrency(account.balance || 0)}`;
+  if (!canEditFinanceWorkspace(account.workspaceId || "personal")) return finActionSheet({ title: account.name, sub: `${sub} · somente leitura` });
+  finActionSheet({ title: account.name, sub, actions: [
+    { label: "Editar conta", icon: "pencil", run: () => editFinanceAccount(id) },
+    { label: "Ver lançamentos desta conta", icon: "list", run: () => { finTxAccountFilter = id; setFinBoardTab("lancamentos"); renderFinances(); } },
+    { label: "Arquivar conta", icon: "trash", danger: true, run: () => archiveFinanceAccount(id) },
+  ] });
+}
+
+// ---------- Cartões ----------
+function finCardBrand(card) {
+  const name = finNormalize(card.name);
+  if (/nubank|\bnu\b/.test(name)) return { cls: "nu", label: "nu" };
+  if (/visa/.test(name)) return { cls: "visa", label: "VISA" };
+  if (/master/.test(name)) return { cls: "master", label: "" };
+  if (/amex|american/.test(name)) return { cls: "amex", label: "AMEX" };
+  if (/\belo\b/.test(name)) return { cls: "elo", label: "elo" };
+  return { cls: "generic", label: bdInitials(card.name || "C") };
+}
+
+function finCardInvoiceInfo(card) {
+  const open = (card.invoices || []).filter((invoice) => invoice.status !== "paid").sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)));
+  const next = open.find((invoice) => invoice.dueDate >= todayIso) || open[0] || null;
+  const committed = open.reduce((sum, invoice) => sum + Number(invoice.amount || 0), 0);
+  const limit = Math.max(0, Number(card.limit || 0));
+  return { open, next, committed, limit, usage: limit > 0 ? Math.min(100, Math.round((committed / limit) * 100)) : 0 };
+}
+
+function renderCreditCards() {
+  const root = document.querySelector("#finCardsList");
+  if (!root) return;
+  const cards = (state.creditCards || []).filter((card) => !card.archived && finInWs(card));
+  if (!cards.length) {
+    root.innerHTML = `<div class="bf-empty">${bdIcon("card")}<strong>Nenhum cartão cadastrado</strong><span>Adicione um cartão para acompanhar faturas e parcelas.</span></div>`;
+    return;
+  }
+  root.innerHTML = cards.map((card) => {
+    const brand = finCardBrand(card);
+    const { next } = finCardInvoiceInfo(card);
+    const overdue = next && next.dueDate < todayIso;
+    const due = next ? `${overdue ? "Venceu em" : "Vence em"} ${finDayMonth(next.dueDate)}` : `Vence dia ${card.dueDay}`;
+    return `<button type="button" class="bf-ccard" data-card-id="${escapeHtml(card.id)}">
+      <span class="bf-brand is-${brand.cls}" aria-hidden="true">${escapeHtml(brand.label)}</span>
+      <span class="bf-row-copy"><strong>${escapeHtml(card.name)}${card.last4 ? ` <em>• Final ${escapeHtml(card.last4)}</em>` : ""}</strong><small>Fatura atual</small></span>
+      <span class="bf-ccard-val"><b>${formatCurrency(next ? next.amount : 0)}</b><small${overdue ? ' class="is-late"' : ""}>${due}</small></span>
+    </button>`;
+  }).join("");
+}
+
+function openFinCardActions(cardId) {
+  const card = (state.creditCards || []).find((item) => item.id === cardId);
+  if (!card) return;
+  const { next, committed, usage, open } = finCardInvoiceInfo(card);
+  const installments = open.flatMap((invoice) => invoice.purchases || []).filter((purchase) => Number(purchase.totalInstallments) > 1).length;
+  const sub = `${formatCurrency(committed)} comprometidos · ${usage}% do limite${installments ? ` · ${installments} parcela${installments === 1 ? "" : "s"} futura${installments === 1 ? "" : "s"}` : ""}`;
+  if (!canEditFinanceWorkspace(card.workspaceId || "personal")) return finActionSheet({ title: card.name, sub: `${sub} · somente leitura` });
+  const actions = [{ label: "Adicionar compra", icon: "plus", run: () => openCreditCardPurchase(cardId) }];
+  if (next) actions.push({ label: `Marcar fatura paga (${formatCurrency(next.amount)})`, icon: "check", run: () => payCreditCardInvoice(cardId, next.id) });
+  actions.push({ label: "Arquivar cartão", icon: "trash", danger: true, run: () => archiveCreditCard(cardId) });
+  finActionSheet({ title: `${card.name}${card.last4 ? ` • Final ${card.last4}` : ""}`, sub, actions });
+}
+
+// ---------- Membros do espaço compartilhado ----------
+function finMemberSpace() {
+  return sharedFinanceSpace(activeWorkspaceId) || sharedFinanceSpaces[0] || null;
+}
+
+function finIsMe(member) {
+  const email = String(currentUser?.email || "").toLowerCase();
+  return Boolean((member.uid && member.uid === currentUser?.uid) || (member.email && email && member.email.toLowerCase() === email));
+}
+
+function renderFinMembers() {
+  const root = document.querySelector("#finMembersList");
+  if (!root) return;
+  const space = finMemberSpace();
+  const roleLabel = { owner: "Administrador", editor: "Editor", viewer: "Leitor" };
+  const row = (member, me) => `<div class="bf-member">
+      <span class="bf-av">${escapeHtml(bdInitials(member.name || member.email || "?"))}</span>
+      <span class="bf-member-name">${escapeHtml(member.name || member.email || "Membro")}${me ? " (você)" : ""}${member.role === "owner" ? `<span class="bf-crown" title="Administrador">${bdIcon("crown")}</span>` : ""}</span>
+      <span class="bf-member-role">${roleLabel[member.role] || "Leitor"}</span>
+    </div>`;
+  if (!space) {
+    const me = { name: currentUser?.displayName || state.profileName || "Você", email: currentUser?.email || "", role: "owner" };
+    root.innerHTML = `${row(me, true)}
+      <button type="button" class="bf-invite" data-members-invite>${bdIcon("plus")}<span>Convidar membro</span></button>
+      <p class="bf-members-hint">Crie um espaço compartilhado para dividir só as finanças com seu par ou família.</p>`;
+    return;
+  }
+  const owner = space.role === "owner";
+  const members = [...(space.members || [])].sort((a, b) => (a.role === "owner" ? -1 : b.role === "owner" ? 1 : 0));
+  root.innerHTML = `<p class="bf-members-space">${bdIcon(space.type === "family" ? "house" : "users")}<span>${escapeHtml(space.name)}</span>${space.id === activeWorkspaceId ? '<em>em uso</em>' : `<button type="button" class="bd-link" data-shared-action="open" data-space-id="${escapeHtml(space.id)}">Abrir</button>`}</p>
+    ${members.map((member) => row(member, finIsMe(member))).join("")}
+    ${owner ? `<button type="button" class="bf-invite" data-members-invite>${bdIcon("plus")}<span>Convidar membro</span></button>
+    <form class="fin-shared-invite-form bf-invite-form" data-space-id="${escapeHtml(space.id)}" hidden><input type="email" name="email" autocomplete="email" placeholder="E-mail para convidar" aria-label="E-mail para convidar" required><select name="role" aria-label="Permissão"><option value="editor">Pode editar</option><option value="viewer">Somente leitura</option></select><button type="submit">Convidar</button></form>` : ""}`;
+}
+
+function openFinSpacesManager(open = true, { create = false } = {}) {
+  const manager = document.querySelector("#finSpacesManager");
+  if (!manager) return;
+  manager.hidden = !open;
+  document.querySelector("#finSpacesManage")?.setAttribute("aria-expanded", String(open));
+  if (open && create) {
+    const form = document.querySelector("#finCreateSpaceForm");
+    if (form) { form.hidden = false; requestAnimationFrame(() => document.querySelector("#finSharedSpaceName")?.focus()); }
+  }
+}
+
+// ---------- Recorrências ----------
+function finRecurNext(rec) {
+  const [y, m] = todayIso.slice(0, 7).split("-").map(Number);
+  for (let offset = 0; offset < 14; offset += 1) {
+    const date = new Date(y, m - 1 + offset, 1);
+    const key = toLocalIso(date).slice(0, 7);
+    if (isRecurrentSkipped(rec, key)) continue;
+    const last = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+    const iso = `${key}-${String(Math.min(Number(rec.day) || 1, last)).padStart(2, "0")}`;
+    if (offset === 0) {
+      const launched = (state.finances || []).some((f) => f.date?.startsWith(key) && f.description === rec.description && Number(f.amount) === Number(rec.amount) && (f.workspaceId || "personal") === (rec.workspaceId || "personal"));
+      if (launched || iso < todayIso) continue;
+    }
+    return iso;
+  }
+  return "";
+}
+
+function finRecurIcon(rec) {
+  const text = finNormalize(`${rec.description} ${rec.categoryId}`);
+  if (rec.type === "receita") return /salario/.test(text) ? "calendar" : "wallet";
+  if (/academia|gym|crossfit|pilates/.test(text)) return "dumbbell";
+  if (/condom/.test(text)) return "building";
+  if (/fatura|cartao/.test(text)) return "card";
+  return bdRecurringIcon(rec) === "card" ? (FIN_CATEGORY_ICONS[rec.categoryId] || "repeat") : bdRecurringIcon(rec);
+}
+
+function finSetMore(key, visible, label) {
+  document.querySelectorAll(`[data-auto-more="${key}"]`).forEach((button) => {
+    button.hidden = !visible;
+    button.firstChild.textContent = `${label} `;
+  });
+}
+function finSetCount(key, value) { document.querySelectorAll(`[data-count="${key}"]`).forEach((el) => { el.textContent = String(value); }); }
+
+function renderFinRecurrents() {
+  renderRecurringSuggestions();
+  const el = document.querySelector("#finRecurList");
+  if (!el) return;
+  const recurrents = (state.finRecurrents || []).filter(finInWs);
+  finSetCount("recur", recurrents.length);
+  finSetMore("recur", recurrents.length > FIN_AUTO_PREVIEW.recur, finAutoShowAll.recur ? "Mostrar menos" : "Ver todas");
+  const nav = document.querySelector("#finNavRecur");
+  if (nav) nav.textContent = recurrents.length ? finJoinNames(recurrents.slice(0, 4).map((r) => r.description)) + (recurrents.length > 4 ? "…" : "") : "Nenhuma cadastrada";
+  if (!recurrents.length) {
+    el.innerHTML = `<div class="bf-empty">${bdIcon("repeat")}<strong>Automatize o que se repete</strong><span>Assinaturas, salário, aluguel — cadastre uma vez e o lançamento entra sozinho no dia.</span></div>`;
+    return;
+  }
+  const canEdit = canEditFinanceWorkspace();
+  const list = finAutoShowAll.recur ? recurrents : recurrents.slice(0, FIN_AUTO_PREVIEW.recur);
+  el.innerHTML = list.map((r) => {
+    const paused = r.active === false;
+    const skipped = !paused && isRecurrentSkipped(r, finActiveMonth);
+    const next = paused ? "" : finRecurNext(r);
+    return `<div class="bf-arow${paused ? " is-paused" : ""}" data-recur-id="${escapeHtml(r.id)}">
+      <span class="bf-row-ico">${bdIcon(finRecurIcon(r))}</span>
+      <strong class="bf-arow-name" title="${escapeHtml(r.description)}">${escapeHtml(r.description)}</strong>
+      <span class="bf-chip ${paused ? "is-off" : skipped ? "is-warn" : "is-on"}">${paused ? "Pausada" : skipped ? "Pulada" : "Ativa"}</span>
+      <span class="bf-arow-next">${next ? `Próx: ${finDayMonth(next)}` : paused ? "—" : `Dia ${r.day}`}</span>
+      <b class="bf-amt is-${r.type === "receita" ? "in" : "out"}">${finSigned(r.type, r.amount)}</b>
+      ${canEdit ? `<button type="button" class="bf-icon-btn" data-recur-pause="${escapeHtml(r.id)}" aria-label="${paused ? "Retomar" : "Pausar"} ${escapeHtml(r.description)}" title="${paused ? "Retomar" : "Pausar"}">${bdIcon(paused ? "play" : "pause")}</button>
+      <button type="button" class="bf-icon-btn" data-recur-menu="${escapeHtml(r.id)}" aria-haspopup="true" aria-label="Mais ações">${bdIcon("dots-h")}</button>` : ""}
+    </div>`;
+  }).join("");
+}
+
+function toggleRecurrentPause(id) {
+  const rec = (state.finRecurrents || []).find((r) => r.id === id);
+  if (!rec || !requireFinanceWorkspaceEdit(rec.workspaceId || "personal")) return;
+  rec.active = rec.active === false;
+  finLogActivity("recurring", `Recorrência ${rec.active ? "retomada" : "pausada"}: ${rec.description}`, rec.workspaceId || "personal");
+  saveState();
+  renderFinances();
+  showToast(rec.active ? `“${rec.description}” voltou a ser lançada automaticamente.` : `“${rec.description}” pausada. Nada será lançado até você retomar.`);
+}
+
+// ---------- Sugestões inteligentes ----------
+function renderRecurringSuggestions() {
+  const root = document.querySelector("#finRecurringSuggestions");
+  if (!root) return;
+  const suggestions = canEditFinanceWorkspace() ? recurringSuggestionsForWorkspace() : [];
+  const count = suggestions.length;
+  finSetCount("suggest", count);
+  finSetMore("suggest", count > FIN_AUTO_PREVIEW.suggest, finAutoShowAll.suggest ? "Mostrar menos" : "Revisar todas");
+  const text = count ? `${count} ${count === 1 ? "recorrência aguardando" : "recorrências aguardando"} confirmação.` : "Nenhuma sugestão pendente.";
+  const action = document.querySelector("#finSuggestActionText");
+  if (action) action.textContent = text;
+  const nav = document.querySelector("#finNavSuggest");
+  if (nav) nav.textContent = text.replace(/\.$/, "");
+  if (!count) {
+    root.innerHTML = `<div class="bf-empty">${bdIcon("sparkle")}<strong>Nenhuma sugestão agora</strong><span>Quando um gasto se repetir em meses diferentes, ele aparece aqui para virar recorrência.</span></div>`;
+    return;
+  }
+  const list = finAutoShowAll.suggest ? suggestions : suggestions.slice(0, FIN_AUTO_PREVIEW.suggest);
+  root.innerHTML = list.map((suggestion) => `<div class="bf-srow">
+      <span class="bf-row-ico">${bdIcon("sparkle")}</span>
+      <button type="button" class="bf-srow-copy" data-review-recurring="${escapeHtml(suggestion.key)}" title="Revisar antes de confirmar"><strong>${escapeHtml(suggestion.description)}</strong><small>Detectada ${suggestion.occurrences}x (${formatCurrency(suggestion.amount)})</small></button>
+      <button type="button" class="bf-confirm" data-confirm-recurring="${escapeHtml(suggestion.key)}">Confirmar</button>
+    </div>`).join("");
+}
+
+function confirmRecurringSuggestion(key) {
+  if (!requireFinanceWorkspaceEdit()) return;
+  const suggestion = recurringSuggestionsForWorkspace().find((item) => item.key === key);
+  if (!suggestion) return renderRecurringSuggestions();
+  state.finRecurrents ||= [];
+  state.finRecurrents.push({
+    id: crypto.randomUUID(), description: suggestion.description, amount: suggestion.amount, type: suggestion.type,
+    categoryId: suggestion.categoryId || (suggestion.type === "receita" ? "outros_receita" : "outros"),
+    day: suggestion.day, workspaceId: activeWorkspaceId, skippedMonths: [],
+  });
+  finLogActivity("suggestion", `Sugestão confirmada: ${suggestion.description}`);
+  saveState();
+  renderFinances();
+  showToast(`“${suggestion.description}” virou recorrência (todo dia ${suggestion.day}).`);
+}
+
+// ---------- Contas agendadas ----------
+function finScheduledItems() {
+  const scheduled = (state.scheduledFinances || [])
+    .filter((item) => finInWs(item) && !["cancelled", "paid"].includes(item.status) && item.date)
+    .map((item) => ({ kind: "scheduled", id: item.id, date: item.date, description: item.description || "Conta agendada", amount: Number(item.amount) || 0, type: item.type === "receita" ? "receita" : "despesa", icon: /condom/.test(finNormalize(item.description)) ? "building" : finTxIcon({ description: item.description, category: item.categoryId || item.category }) }));
+  const invoices = (state.creditCards || []).filter((card) => !card.archived && finInWs(card)).flatMap((card) =>
+    (card.invoices || []).filter((invoice) => invoice.status !== "paid" && invoice.dueDate && Number(invoice.amount) > 0)
+      .map((invoice) => ({ kind: "invoice", id: invoice.id, cardId: card.id, date: invoice.dueDate, description: `Fatura ${card.name}`, amount: Number(invoice.amount) || 0, type: "despesa", icon: "card" })));
+  return [...scheduled, ...invoices].sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function renderFinScheduled() {
+  const root = document.querySelector("#finScheduledList");
+  if (!root) return;
+  const items = finScheduledItems();
+  finSetCount("sched", items.length);
+  finSetMore("sched", items.length > FIN_AUTO_PREVIEW.sched, finAutoShowAll.sched ? "Mostrar menos" : "Ver todas");
+  const nav = document.querySelector("#finNavSched");
+  if (nav) nav.textContent = items.length ? finJoinNames(items.slice(0, 3).map((item) => item.description)) : "Nada agendado";
+  if (!items.length) {
+    root.innerHTML = `<div class="bf-empty">${bdIcon("calendar")}<strong>Nada agendado</strong><span>Agende boletos e contas avulsas — eles entram na projeção do “Posso gastar?”.</span><button type="button" class="bf-ghost-btn" data-sched-new>${bdIcon("plus")}Agendar conta</button></div>`;
+    return;
+  }
+  const list = finAutoShowAll.sched ? items : items.slice(0, FIN_AUTO_PREVIEW.sched);
+  root.innerHTML = list.map((item) => {
+    const late = item.date < todayIso;
+    return `<button type="button" class="bf-row bf-sched" data-sched-kind="${item.kind}" data-sched-id="${escapeHtml(item.id)}"${item.cardId ? ` data-card-id="${escapeHtml(item.cardId)}"` : ""}>
+      <span class="bf-row-ico">${bdIcon(item.icon)}</span>
+      <span class="bf-row-copy"><strong>${escapeHtml(item.description)}</strong><small${late ? ' class="is-late"' : ""}>${late ? "Vencida" : "Venc"}: ${finDayMonth(item.date)}</small></span>
+      <b class="bf-amt is-${item.type === "receita" ? "in" : "out"}">${finSigned(item.type, item.amount)}</b>
+    </button>`;
+  }).join("");
+}
+
+function openFinScheduledActions(button) {
+  if (button.dataset.schedKind === "invoice") return openFinCardActions(button.dataset.cardId);
+  const item = (state.scheduledFinances || []).find((entry) => entry.id === button.dataset.schedId);
+  if (!item) return;
+  const sub = `Vence em ${finDayMonth(item.date)} · ${finSigned(item.type, item.amount)}`;
+  if (!canEditFinanceWorkspace(item.workspaceId || "personal")) return finActionSheet({ title: item.description, sub: `${sub} · somente leitura` });
+  finActionSheet({ title: item.description, sub, actions: [
+    { label: item.type === "receita" ? "Marcar como recebida" : "Marcar como paga", icon: "check", run: () => settleFinScheduled(item.id) },
+    { label: "Cancelar agendamento", icon: "trash", danger: true, run: () => cancelFinScheduled(item.id) },
+  ] });
+}
+
+function settleFinScheduled(id) {
+  const item = (state.scheduledFinances || []).find((entry) => entry.id === id);
+  if (!item || !requireFinanceWorkspaceEdit(item.workspaceId || "personal")) return;
+  if (isMonthClosed(todayIso.slice(0, 7), item.workspaceId || "personal")) { showToast("O mês atual está fechado. Reabra-o para registrar o pagamento."); return; }
+  state.finances ||= [];
+  state.finances.unshift({
+    id: crypto.randomUUID(), type: item.type === "receita" ? "receita" : "despesa", amount: Number(item.amount) || 0,
+    category: item.categoryId || item.category || (item.type === "receita" ? "outros_receita" : "outros"),
+    description: item.description, date: todayIso, workspaceId: item.workspaceId || "personal", scheduledId: item.id,
+  });
+  item.status = "paid";
+  item.paidAt = new Date().toISOString();
+  finLogActivity("scheduled", `Conta paga: ${item.description} (${formatCurrency(item.amount)})`, item.workspaceId || "personal");
+  saveState();
+  renderFinances();
+  lastForecastFetchAt = 0;
+  refreshDashboardForecast(true);
+  showToast(`“${item.description}” registrada nos lançamentos de hoje.`);
+}
+
+function cancelFinScheduled(id) {
+  const item = (state.scheduledFinances || []).find((entry) => entry.id === id);
+  if (!item || !requireFinanceWorkspaceEdit(item.workspaceId || "personal")) return;
+  if (!confirm(`Cancelar o agendamento “${item.description}”?`)) return;
+  item.status = "cancelled";
+  item.updatedAt = new Date().toISOString();
+  saveState();
+  renderFinances();
+  showToast("Agendamento cancelado.");
+}
+
+function openFinSchedModal() {
+  if (!requireFinanceWorkspaceEdit()) return;
+  document.querySelector("#finSchedForm")?.reset();
+  document.querySelector("#schedDate").value = offsetDate(7);
+  syncFinCategoryOptions("#schedCategory", "despesa");
+  finOpenModal("#finSchedModal");
+}
+
+function syncFinCategoryOptions(selector, type, selected = "") {
+  const select = document.querySelector(selector);
+  if (!select) return;
+  select.innerHTML = getAllCategories(type).map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(finCatName(c.id))}</option>`).join("");
+  if (selected && [...select.options].some((option) => option.value === selected)) select.value = selected;
+}
+
+function saveFinScheduled(event) {
+  event.preventDefault();
+  if (!requireFinanceWorkspaceEdit()) return;
+  const description = valueOf("#schedDesc").trim();
+  const amount = parseMoneyInput(valueOf("#schedAmount"));
+  const date = valueOf("#schedDate");
+  const type = valueOf("#schedType") === "receita" ? "receita" : "despesa";
+  if (description.length < 2 || !amount || amount <= 0 || !/^\d{4}-\d{2}-\d{2}$/.test(date)) { showToast("Preencha descrição, valor e vencimento."); return; }
+  state.scheduledFinances ||= [];
+  state.scheduledFinances.push({ id: crypto.randomUUID(), description, amount, date, type, categoryId: valueOf("#schedCategory"), status: "scheduled", workspaceId: activeWorkspaceId, createdAt: new Date().toISOString() });
+  finLogActivity("scheduled", `Conta agendada: ${description} (${finDayMonth(date)})`);
+  saveState();
+  renderFinances();
+  lastForecastFetchAt = 0;
+  refreshDashboardForecast(true);
+  finCloseModal("#finSchedModal");
+  showToast("Conta agendada.");
+}
+
+// ---------- Regras de automação ----------
+function finRuleTitle(rule) {
+  if (rule.name) return rule.name;
+  return `Se a descrição contiver “${rule.match}”, classificar como ${rule.type === "receita" ? "receita" : "despesa"}`;
+}
+
+function finMatchRule(description) {
+  const text = finNormalize(description);
+  if (!text) return null;
+  return (state.finRules || []).find((rule) => finInWs(rule) && rule.active !== false && rule.match && text.includes(finNormalize(rule.match))) || null;
+}
+
+// Aplica a primeira regra que combina com a descrição ao formulário.
+function finApplyRuleToForm(description) {
+  const rule = finMatchRule(description);
+  if (!rule) { finPendingRuleId = ""; return null; }
+  const type = rule.type === "receita" ? "receita" : "despesa";
+  document.querySelectorAll("[data-fin-type]").forEach((b) => b.classList.toggle("active", b.dataset.finType === type));
+  document.querySelector("#expenseType").value = type;
+  document.querySelector(".fin-form-card")?.classList.toggle("is-receita", type === "receita");
+  populateCategorySelect(rule.categoryId, type);
+  finPendingRuleId = rule.id;
+  return rule;
+}
+
+function renderFinRules() {
+  const root = document.querySelector("#finRulesList");
+  if (!root) return;
+  const rules = (state.finRules || []).filter(finInWs);
+  finSetCount("rules", rules.length);
+  finSetMore("rules", rules.length > FIN_AUTO_PREVIEW.rules, finAutoShowAll.rules ? "Mostrar menos" : "Ver todas");
+  const nav = document.querySelector("#finNavRules");
+  if (nav) nav.textContent = rules.length ? `Ex.: ${finRuleTitle(rules[0])}` : "Nenhuma regra criada";
+  if (!rules.length) {
+    root.innerHTML = `<div class="bf-empty">${bdIcon("bolt")}<strong>Crie sua primeira regra</strong><span>Ex.: tudo que tiver “Uber” na descrição vira Transporte automaticamente.</span></div>`;
+    return;
+  }
+  const canEdit = canEditFinanceWorkspace();
+  const list = finAutoShowAll.rules ? rules : rules.slice(0, FIN_AUTO_PREVIEW.rules);
+  root.innerHTML = list.map((rule) => {
+    const paused = rule.active === false;
+    return `<div class="bf-rrow${paused ? " is-paused" : ""}">
+      <span class="bf-row-ico">${bdIcon(rule.type === "receita" ? "arrow-down" : "bolt")}</span>
+      <span class="bf-row-copy"><strong>${escapeHtml(finRuleTitle(rule))}</strong><small>Categoria: ${escapeHtml(finCatName(rule.categoryId))}${rule.hits ? ` · usada ${rule.hits}x` : ""}</small></span>
+      <span class="bf-chip ${paused ? "is-off" : "is-on"}">${paused ? "Pausada" : "Ativa"}</span>
+      ${canEdit ? `<button type="button" class="bf-icon-btn" data-rule-pause="${escapeHtml(rule.id)}" aria-label="${paused ? "Retomar" : "Pausar"} regra" title="${paused ? "Retomar" : "Pausar"}">${bdIcon(paused ? "play" : "pause")}</button>
+      <button type="button" class="bf-icon-btn" data-rule-menu="${escapeHtml(rule.id)}" aria-label="Mais ações">${bdIcon("dots-h")}</button>` : ""}
+    </div>`;
+  }).join("");
+}
+
+function openFinRuleModal(id = "") {
+  if (!requireFinanceWorkspaceEdit()) return;
+  const rule = (state.finRules || []).find((item) => item.id === id);
+  document.querySelector("#finRuleForm")?.reset();
+  document.querySelector("#ruleId").value = rule?.id || "";
+  document.querySelector("#ruleMatch").value = rule?.match || "";
+  document.querySelector("#ruleName").value = rule?.name || "";
+  document.querySelector("#ruleType").value = rule?.type || "despesa";
+  syncFinCategoryOptions("#ruleCategory", rule?.type || "despesa", rule?.categoryId);
+  document.querySelector("#ruleDelete").hidden = !rule;
+  document.querySelector("#finRuleModalTitle").textContent = rule ? "Editar regra" : "Nova regra";
+  finOpenModal("#finRuleModal");
+}
+
+function saveFinRule(event) {
+  event.preventDefault();
+  if (!requireFinanceWorkspaceEdit()) return;
+  const id = valueOf("#ruleId");
+  const match = valueOf("#ruleMatch").trim();
+  const type = valueOf("#ruleType") === "receita" ? "receita" : "despesa";
+  const categoryId = valueOf("#ruleCategory");
+  const name = valueOf("#ruleName").trim();
+  if (match.length < 2 || !categoryId) { showToast("Informe o texto e a categoria da regra."); return; }
+  state.finRules ||= [];
+  const existing = state.finRules.find((rule) => rule.id === id);
+  if (existing) Object.assign(existing, { match, type, categoryId, name, updatedAt: new Date().toISOString() });
+  else state.finRules.push({ id: crypto.randomUUID(), match, type, categoryId, name, active: true, hits: 0, workspaceId: activeWorkspaceId, createdAt: new Date().toISOString() });
+  saveState();
+  renderFinRules();
+  finCloseModal("#finRuleModal");
+  showToast(existing ? "Regra atualizada." : "Regra criada! Ela vale para os próximos lançamentos.");
+}
+
+function deleteFinRule(id) {
+  const rule = (state.finRules || []).find((item) => item.id === id);
+  if (!rule || !requireFinanceWorkspaceEdit()) return;
+  if (!confirm(`Excluir a regra “${finRuleTitle(rule)}”?`)) return;
+  state.finRules = state.finRules.filter((item) => item.id !== id);
+  saveState();
+  renderFinRules();
+  finCloseModal("#finRuleModal");
+  showToast("Regra excluída.");
+}
+
+function toggleFinRule(id) {
+  const rule = (state.finRules || []).find((item) => item.id === id);
+  if (!rule || !requireFinanceWorkspaceEdit()) return;
+  rule.active = rule.active === false;
+  saveState();
+  renderFinRules();
+  showToast(rule.active ? "Regra retomada." : "Regra pausada.");
+}
+
+// ---------- Ingestão (WhatsApp, foto, áudio) ----------
+function renderFinIngest() {
+  const root = document.querySelector("#finIngestList");
+  if (!root) return;
+  const linked = Boolean(state.whatsappLinkedPhone);
+  const rows = [
+    { key: "whatsapp", icon: "whatsapp", title: "WhatsApp", sub: linked ? "Ativa • Lê gastos e recibos" : "Registre gastos mandando mensagem", chip: linked ? '<span class="bf-chip is-on">Conectado</span>' : '<span class="bf-chip is-link">Conectar</span>' },
+    { key: "photo", icon: "camera", title: "Foto", sub: "Ativa • Lê notas e boletos", chip: '<span class="bf-chip is-on">Ativo</span>' },
+    { key: "audio", icon: "mic", title: "Áudio", sub: "Ativa • Transcreve e categoriza", chip: '<span class="bf-chip is-on">Ativo</span>' },
+  ];
+  root.innerHTML = rows.map((row) => `<button type="button" class="bf-row bf-ingest" data-ingest="${row.key}">
+      <span class="bf-row-ico${row.key === "whatsapp" ? " is-wa" : ""}">${bdIcon(row.icon)}</span>
+      <span class="bf-row-copy"><strong>${row.title}</strong><small>${row.sub}</small></span>${row.chip}
+    </button>`).join("");
+}
+
+function openFinIngest(key) {
+  if (key === "whatsapp") {
+    setView("settings");
+    requestAnimationFrame(() => document.querySelector("#whatsappLinkedBlock")?.closest("section, .panel, .settings-card")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    return;
+  }
+  setFinBoardTab("lancamentos");
+  requestAnimationFrame(() => document.querySelector(key === "photo" ? "#finReceiptBtn" : "#finAudioBtn")?.click());
+}
+
+// ---------- Fechamento mensal ----------
+function renderFinAutoClose() {
+  const root = document.querySelector("#finAutoCloseCard");
+  if (!root) return;
+  const auto = Boolean(state.financialSettings?.autoCloseMonth);
+  const mode = document.querySelector("#finAutoCloseMode");
+  if (mode) mode.textContent = auto ? "automático" : "manual";
+  const nav = document.querySelector("#finNavClose");
+  if (nav) nav.textContent = auto ? "Automático · todo dia 1" : "Manual · feche quando quiser";
+  const monthKey = getActiveFinMonth();
+  const closed = isMonthClosed(monthKey);
+  const canEdit = canEditFinanceWorkspace();
+  root.innerHTML = `<div class="bf-close-row">
+      <span class="bf-row-ico">${bdIcon("calendar")}</span>
+      <span class="bf-row-copy"><strong>Fechar mês e gerar resumo</strong><small>${auto ? "Todo dia 1, ao abrir o PulseNote" : "Ative para fechar o mês anterior sozinho"}</small></span>
+      <button type="button" class="bf-chip bf-chip-toggle ${auto ? "is-on" : "is-off"}" id="finAutoCloseToggle" role="switch" aria-checked="${auto}"${canEdit ? "" : " disabled"}>${auto ? "Ativa" : "Desligada"}</button>
+    </div>
+    ${canEdit && !closed ? `<button type="button" class="bf-ghost-btn bf-close-now" data-close-now>${bdIcon("lock")}Fechar ${escapeHtml(finMonthLabel(monthKey))} agora</button>` : ""}`;
+}
+
+function renderFinClosures() {
+  const el = document.querySelector("#finClosuresList");
+  if (!el) return;
+  const closures = (state.monthClosures || []).filter(finInWs).sort((a, b) => b.monthKey.localeCompare(a.monthKey));
+  if (!closures.length) { el.innerHTML = ""; return; }
+  const canEdit = canEditFinanceWorkspace();
+  const list = finClosuresShowAll ? closures : closures.slice(0, 2);
+  el.innerHTML = `<span class="bf-closures-label">Meses fechados</span>${list.map((c) => `
+    <div class="bf-closure">
+      <span>${escapeHtml(finMonthShort(c.monthKey))}</span>
+      <b class="${c.saldo >= 0 ? "is-in" : "is-out"}">${formatCurrency(c.saldo)}</b>
+      <button type="button" class="bd-link" onclick="goToFinMonth('${c.monthKey}')">Ver</button>
+      ${canEdit ? `<button type="button" class="bd-link" onclick="reopenMonth('${c.monthKey}')">Reabrir</button>` : ""}
+    </div>`).join("")}${closures.length > 2 ? `<button type="button" class="bd-link bf-closures-more" data-closures-more>${finClosuresShowAll ? "Mostrar menos" : `Ver todos (${closures.length})`}</button>` : ""}`;
+}
+
+// Fecha o mês anterior sozinho quando a opção está ligada (roda ao abrir o app).
+function autoCloseFinMonths() {
+  if (!state.financialSettings?.autoCloseMonth) return;
+  const previous = getPreviousMonthKey(todayIso.slice(0, 7));
+  if (isMonthClosed(previous) || !canEditFinanceWorkspace()) return;
+  const hasEntries = (state.finances || []).some((f) => f.date?.startsWith(previous) && finInWs(f));
+  if (hasEntries) closeMonth(previous, { silent: true });
+}
+
+// ---------- Navegação mobile da Automação ----------
+function setFinAutoSection(key = "") {
+  finAutoOpen = key;
+  const board = document.querySelector("#finAutoBoard");
+  if (board) board.dataset.open = key;
+  if (key) requestAnimationFrame(() => document.querySelector(`[data-auto-sec="${key}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" }));
+}
+
+function renderFinAutomationExtras() {
+  renderFinSavings();
+  renderFinMembers();
+  renderFinScheduled();
+  renderFinRules();
+  renderFinIngest();
+  renderFinAutoClose();
+  renderFinActivity();
+}
+
+function bindFinControlBoard() {
+  if (bindFinControlBoard.bound) return;
+  bindFinControlBoard.bound = true;
+  const on = (selector, type, handler) => document.querySelector(selector)?.addEventListener(type, handler);
+
+  // Metas financeiras
+  on("#finOpenSavingsModal", "click", () => openFinSavingsModal());
+  on("#finSavingsList", "click", (event) => {
+    const row = event.target.closest("[data-savings-id]");
+    if (row) openFinSavingsModal(row.dataset.savingsId);
+    else if (event.target.closest("[data-savings-new]")) openFinSavingsModal();
+  });
+  on("#finSavingsForm", "submit", saveFinSavings);
+  on("#savingsDepositBtn", "click", depositFinSavings);
+  on("#savingsDelete", "click", deleteFinSavings);
+
+  // Contas, cartões e membros
+  on("#finAccountsList", "click", (event) => { const row = event.target.closest("[data-account-id]"); if (row) openFinAccountActions(row.dataset.accountId); });
+  on("#finCardsList", "click", (event) => { const row = event.target.closest("[data-card-id]"); if (row) openFinCardActions(row.dataset.cardId); });
+  on("#finSpacesManage", "click", () => openFinSpacesManager(document.querySelector("#finSpacesManager")?.hidden !== false));
+  on("#finSpacesManagerClose", "click", () => openFinSpacesManager(false));
+  on("#finSpacesManager", "click", (event) => { if (event.target.id === "finSpacesManager") openFinSpacesManager(false); });
+  on("#finMembersList", "submit", inviteToFinanceSpace);
+  on("#finMembersList", "click", (event) => {
+    if (event.target.closest("[data-shared-action]")) return handleSharedSpaceAction(event);
+    if (!event.target.closest("[data-members-invite]")) return;
+    const form = document.querySelector("#finMembersList .bf-invite-form");
+    if (form) { form.hidden = !form.hidden; if (!form.hidden) form.querySelector("input")?.focus(); }
+    else openFinSpacesManager(true, { create: true });
+  });
+
+  // Automação
+  on("#finOpenRuleModal", "click", () => openFinRuleModal());
+  on("#finRuleForm", "submit", saveFinRule);
+  on("#ruleDelete", "click", () => deleteFinRule(valueOf("#ruleId")));
+  on("#ruleType", "change", () => syncFinCategoryOptions("#ruleCategory", valueOf("#ruleType")));
+  on("#finRulesList", "click", (event) => {
+    const pause = event.target.closest("[data-rule-pause]");
+    if (pause) return toggleFinRule(pause.dataset.rulePause);
+    const menu = event.target.closest("[data-rule-menu]");
+    if (!menu) return;
+    const rule = (state.finRules || []).find((item) => item.id === menu.dataset.ruleMenu);
+    if (rule) finActionSheet({ title: finRuleTitle(rule), sub: `Categoria: ${finCatName(rule.categoryId)}`, actions: [
+      { label: "Editar regra", icon: "pencil", run: () => openFinRuleModal(rule.id) },
+      { label: "Excluir regra", icon: "trash", danger: true, run: () => deleteFinRule(rule.id) },
+    ] });
+  });
+  on("#finOpenSchedModal", "click", openFinSchedModal);
+  on("#finSchedForm", "submit", saveFinScheduled);
+  on("#schedType", "change", () => syncFinCategoryOptions("#schedCategory", valueOf("#schedType")));
+  on("#finScheduledList", "click", (event) => {
+    if (event.target.closest("[data-sched-new]")) return openFinSchedModal();
+    const row = event.target.closest("[data-sched-kind]");
+    if (row) openFinScheduledActions(row);
+  });
+  on("#finRecurList", "click", (event) => {
+    const pause = event.target.closest("[data-recur-pause]");
+    if (pause) return toggleRecurrentPause(pause.dataset.recurPause);
+    const menu = event.target.closest("[data-recur-menu]");
+    if (menu) { event.stopPropagation(); openRecurrentActionMenu(menu, menu.dataset.recurMenu); }
+  });
+  on("#finRecurringSuggestions", "click", (event) => {
+    const confirmBtn = event.target.closest("[data-confirm-recurring]");
+    if (confirmBtn) return confirmRecurringSuggestion(confirmBtn.dataset.confirmRecurring);
+    const review = event.target.closest("[data-review-recurring]");
+    if (review) reviewRecurringSuggestion(review.dataset.reviewRecurring);
+  });
+  on("#finReviewSuggestions", "click", () => {
+    if (window.matchMedia("(max-width: 760px)").matches) return setFinAutoSection("suggest");
+    const section = document.querySelector('[data-auto-sec="suggest"]');
+    section?.scrollIntoView({ behavior: "smooth", block: "center" });
+    section?.classList.remove("is-flash");
+    requestAnimationFrame(() => section?.classList.add("is-flash"));
+  });
+  on("#finIngestList", "click", (event) => { const row = event.target.closest("[data-ingest]"); if (row) openFinIngest(row.dataset.ingest); });
+  on("#finAutoCloseCard", "click", (event) => {
+    if (event.target.closest("[data-close-now]")) return closeMonth(getActiveFinMonth());
+    if (!event.target.closest("#finAutoCloseToggle") || !requireFinanceWorkspaceEdit()) return;
+    state.financialSettings ||= { safetyReserve: 0 };
+    state.financialSettings.autoCloseMonth = !state.financialSettings.autoCloseMonth;
+    saveState();
+    renderFinAutoClose();
+    if (state.financialSettings.autoCloseMonth) {
+      showToast("Fechamento automático ligado: todo dia 1 o mês anterior é fechado com resumo.");
+      autoCloseFinMonths();
+    } else showToast("Fechamento automático desligado.");
+  });
+  on("#finClosuresList", "click", (event) => {
+    if (!event.target.closest("[data-closures-more]")) return;
+    finClosuresShowAll = !finClosuresShowAll;
+    renderFinClosures();
+  });
+  document.querySelectorAll("[data-auto-more]").forEach((button) => button.addEventListener("click", () => {
+    const key = button.dataset.autoMore;
+    finAutoShowAll[key] = !finAutoShowAll[key];
+    renderFinances();
+  }));
+  document.querySelectorAll("[data-auto-open]").forEach((button) => button.addEventListener("click", () => setFinAutoSection(button.dataset.autoOpen)));
+  document.querySelectorAll("[data-auto-back]").forEach((button) => button.addEventListener("click", () => setFinAutoSection("")));
+  on("#finAutoFab", "click", () => {
+    if (finAutoOpen === "rules") return openFinRuleModal();
+    if (finAutoOpen === "sched") return openFinSchedModal();
+    if (finAutoOpen === "suggest") return setFinAutoSection("suggest");
+    document.querySelector("#finOpenRecurModal")?.click();
+  });
+  // Mobile: o "Posso gastar?" da aba Controle abre/fecha tocando no título.
+  document.querySelector("#finSimulatorCard .fin-simulator-copy")?.addEventListener("click", () => {
+    const card = document.querySelector("#finSimulatorCard");
+    if (!card?.closest('[data-sim-slot="controle"]') || !window.matchMedia("(max-width: 760px)").matches) return;
+    card.classList.toggle("is-open");
+    if (card.classList.contains("is-open")) document.querySelector("#finSimulatorAmount")?.focus();
+  });
+  if (isLocalDesignPreview && designPreviewMode !== "empty") {
+    const simInput = document.querySelector("#finSimulatorAmount");
+    if (simInput && !simInput.value) { simInput.value = "500,00"; runFinanceSimulation(); }
+  }
+
+  // Modais novos: fechar no X e no fundo
+  for (const id of ["#finSavingsModal", "#finRuleModal", "#finSchedModal"]) {
+    const modal = document.querySelector(id);
+    modal?.addEventListener("click", (event) => { if (event.target === modal || event.target.closest("[data-modal-close]")) modal.hidden = true; });
+  }
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    for (const id of ["#finSavingsModal", "#finRuleModal", "#finSchedModal", "#finGoalsModal"]) finCloseModal(id);
+    openFinSpacesManager(false);
+  });
+
+  // Regras: ao terminar de digitar a descrição, já sugere tipo e categoria.
+  on("#expenseDescription", "change", (event) => {
+    if (valueOf("#expenseId")) return;
+    const rule = finApplyRuleToForm(event.target.value);
+    if (rule) showToast(`Regra aplicada: ${finCatName(rule.categoryId)}.`);
   });
 }
 
@@ -9984,44 +10929,6 @@ function recurringSuggestionsForWorkspace() {
   });
 }
 
-function renderRecurringSuggestions() {
-  const root = document.querySelector("#finRecurringSuggestions");
-  if (!root) return;
-  const suggestions = canEditFinanceWorkspace() ? recurringSuggestionsForWorkspace() : [];
-  root.hidden = suggestions.length === 0;
-  if (!suggestions.length) {
-    root.replaceChildren();
-    return;
-  }
-
-  root.innerHTML = `
-    <div class="fin-recurring-suggestions-head">
-      <div>
-        <p class="eyebrow">Detecção inteligente</p>
-        <h2>Sugestões encontradas</h2>
-        <p>Encontramos lançamentos parecidos em meses diferentes. Revise antes de automatizar.</p>
-      </div>
-      <span class="fin-recurring-suggestions-count">${suggestions.length}</span>
-    </div>
-    <div class="fin-recurring-suggestions-list">
-      ${suggestions.map((suggestion) => `
-        <article class="fin-recurring-suggestion-row">
-          <div class="fin-recurring-suggestion-mark" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg>
-          </div>
-          <div class="fin-recurring-suggestion-copy">
-            <strong>${escapeHtml(suggestion.description)}</strong>
-            <span>${suggestion.occurrences} meses · dia ${suggestion.day} · ${suggestion.type === "receita" ? "receita" : "despesa"}</span>
-          </div>
-          <strong class="fin-recurring-suggestion-amount">${formatCurrency(suggestion.amount)}</strong>
-          <button class="mini-button" type="button" data-review-recurring="${escapeHtml(suggestion.key)}">Revisar</button>
-        </article>`).join("")}
-    </div>`;
-
-  root.querySelectorAll("[data-review-recurring]").forEach((button) => {
-    button.addEventListener("click", () => reviewRecurringSuggestion(button.dataset.reviewRecurring));
-  });
-}
 
 function reviewRecurringSuggestion(key) {
   if (!requireFinanceWorkspaceEdit()) return;
@@ -10045,50 +10952,6 @@ function reviewRecurringSuggestion(key) {
   document.querySelector("#recurDesc")?.focus();
 }
 
-function renderFinRecurrents() {
-  renderRecurringSuggestions();
-  const el = document.querySelector("#finRecurList");
-  if (!el) return;
-  const recurrents = (state.finRecurrents || []).filter((r) => (r.workspaceId || "personal") === activeWorkspaceId);
-  if (!recurrents.length) {
-    el.innerHTML = emptyStateHtml({
-      iconName: "compass",
-      title: "Automatize o que se repete",
-      desc: "Assinaturas, salário, aluguel — cadastre uma vez e o lançamento entra sozinho todo mês.",
-    });
-    return;
-  }
-  const canEdit = canEditFinanceWorkspace();
-  el.innerHTML = recurrents.map((r) => {
-    const cat     = findCategory(r.categoryId);
-    const isRec   = r.type === "receita";
-    const skipped = isRecurrentSkipped(r, finActiveMonth);
-    return `
-      <div class="fin-recur-row${skipped ? " is-skipped" : ""}" data-recur-id="${r.id}">
-        <span class="fin-recur-icon" style="background:${cat.color}22;color:${cat.color}">${cat.label.split(" ")[0]}</span>
-        <div class="fin-recur-info">
-          <strong>${escapeHtml(r.description)}</strong>
-          <span class="task-meta">Dia ${r.day} · ${escapeHtml(cat.label.replace(/^\S+\s*/, ""))}${skipped ? ` · pulado em ${finMonthLabel(finActiveMonth)}` : ""}</span>
-        </div>
-        <span class="fin-recur-amount ${isRec ? "receita" : "despesa"}">${isRec ? "+" : "-"}${formatCurrency(r.amount)}</span>
-        <div class="fin-recur-status" aria-hidden="true">${skipped ? '<span class="fin-recur-status-dot skipped"></span>' : '<span class="fin-recur-status-dot"></span>'}</div>
-        <button class="fin-recur-menu-btn" type="button" data-recur-menu="${r.id}" aria-haspopup="true" aria-label="Mais ações"${canEdit ? "" : " hidden"}>
-          <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="19" cy="12" r="1.9"/></svg>
-        </button>
-      </div>`;
-  }).join("");
-
-  // Único botão de menu por card em vez de 3 botões lado a lado — ao tocar,
-  // mostra as ações (Lançar agora / Pular ou reativar / Remover) num
-  // pequeno menu contextual, mantendo a lista limpa e alinhada.
-  el.querySelectorAll("[data-recur-menu]").forEach((btn) => {
-    btn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      const id = btn.dataset.recurMenu;
-      openRecurrentActionMenu(btn, id);
-    });
-  });
-}
 
 // Menu contextual (estilo "•••") das recorrências: substitui os antigos
 // três botões (▶ ⏭ ✕) por uma única ação que abre um pequeno menu flutuante.
@@ -10197,6 +11060,7 @@ function applyRecurrent(id) {
     date,
     workspaceId: rec.workspaceId || "personal",
   });
+  finLogActivity("recurring", `Recorrência lançada: ${rec.description} (${formatCurrency(rec.amount)})`, rec.workspaceId || "personal");
   saveState();
   renderFinances();
   showToast(`✅ "${rec.description}" lançado em ${formatDate(date)}!`);
@@ -10233,7 +11097,8 @@ function bindFinRecurModal() {
       return;
     }
     if (!state.finRecurrents) state.finRecurrents = [];
-    state.finRecurrents.push({ id: crypto.randomUUID(), description: desc, amount, type, categoryId: catId, day, workspaceId: activeWorkspaceId });
+    state.finRecurrents.push({ id: crypto.randomUUID(), description: desc, amount, type, categoryId: catId, day, workspaceId: activeWorkspaceId, skippedMonths: [] });
+    finLogActivity("recurring", `Recorrência criada: ${desc} (todo dia ${day})`);
     saveState();
     renderFinRecurrents();
     modal.hidden = true;
@@ -10255,6 +11120,7 @@ function autoApplyRecurrents() {
     if (!canEditFinanceWorkspace(workspaceId)) return;
     if (isMonthClosed(monthKey, workspaceId)) return;
     if (rec.day !== dd) return;
+    if (rec.active === false) return;
     if (isRecurrentSkipped(rec, monthKey)) return;
     const alreadyLaunched = (state.finances || []).some(
       (f) => f.date === today && f.description === rec.description && f.amount === rec.amount && (f.workspaceId || "personal") === workspaceId
@@ -10270,6 +11136,7 @@ function autoApplyRecurrents() {
       workspaceId,
     });
     applied = true;
+    finLogActivity("recurring", `Recorrência lançada: ${rec.description} (${formatCurrency(rec.amount)})`, workspaceId);
     // Escalona os toasts quando mais de um recorrente cai no mesmo dia,
     // já que só existe um toast na tela por vez.
     window.setTimeout(() => showToast(`🔁 Recorrente lançado: ${rec.description}`), toastDelay);
