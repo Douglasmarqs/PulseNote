@@ -128,14 +128,22 @@ function pushNotificationsAreRegistered() {
 // ── Verificações específicas por área do app ──────────────────
 
 // Tarefas com vencimento hoje ou atrasadas
+// Preferências escolhidas no onboarding/Configurações. Ausente = ligado.
+function notificationPrefEnabled(category) {
+  const prefs = window.PulseNoteState?.notificationPrefs;
+  return !(prefs && typeof prefs === "object" && prefs[category] === false);
+}
+
 function checkTaskNotifications() {
   if (!window.PulseNoteState.tasks) return;
+  const tasksOn = notificationPrefEnabled("tasks");
+  const summaryOn = notificationPrefEnabled("dailySummary");
   const now = new Date();
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 
   // Tarefas com horário recebem alerta no minuto definido pela pessoa. As
   // tarefas antigas, sem horário, continuam no resumo diário logo abaixo.
-  window.PulseNoteState.tasks.forEach((task) => {
+  if (tasksOn) window.PulseNoteState.tasks.forEach((task) => {
     if (task.status === "Concluida" || task.status === "Cancelada" || !task.dueDate || !task.dueTime) return;
     if (task.reminder === false || task.reminder === "none") return;
     const dueAt = new Date(`${task.dueDate}T${task.dueTime}`);
@@ -163,7 +171,7 @@ function checkTaskNotifications() {
       && t.reminder !== false && t.reminder !== "none" && t.dueDate === today && !t.dueTime
   );
 
-  if (overdue.length > 0 && !alreadyNotifiedToday("tasks_overdue")) {
+  if (tasksOn && overdue.length > 0 && !alreadyNotifiedToday("tasks_overdue")) {
     fireNotification(
       "⏰ Tarefas atrasadas",
       overdue.length === 1
@@ -173,7 +181,7 @@ function checkTaskNotifications() {
       "planner",
       overdue.length === 1 ? overdue[0].id : null
     );
-  } else if (dueToday.length > 0 && !alreadyNotifiedToday("tasks_today")) {
+  } else if (summaryOn && dueToday.length > 0 && !alreadyNotifiedToday("tasks_today")) {
     fireNotification(
       "📋 Tarefas para hoje",
       dueToday.length === 1
@@ -188,7 +196,7 @@ function checkTaskNotifications() {
 
 // Compromissos da agenda — respeita o campo "reminder" (minutos antes) de cada evento
 function checkEventNotifications() {
-  if (!window.PulseNoteState.events) return;
+  if (!window.PulseNoteState.events || !notificationPrefEnabled("agenda")) return;
   const now = new Date();
 
   window.PulseNoteState.events.forEach((event) => {
@@ -218,7 +226,7 @@ function checkEventNotifications() {
 
 // Metas perto do prazo ou quase completas (incentivo, não cobrança)
 function checkGoalNotifications() {
-  if (!window.PulseNoteState.goals) return;
+  if (!window.PulseNoteState.goals || !notificationPrefEnabled("tasks")) return;
 
   window.PulseNoteState.goals.forEach((goal) => {
     const percent = goal.target > 0 ? (goal.current / goal.target) * 100 : 0;
@@ -237,7 +245,7 @@ function checkGoalNotifications() {
 // Resumo financeiro: avisa quando o usuário já gastou uma fatia grande
 // das receitas do mês (ajuda a evitar surpresa no fim do mês)
 function checkFinanceNotifications() {
-  if (!window.PulseNoteState.finances) return;
+  if (!window.PulseNoteState.finances || !notificationPrefEnabled("spending")) return;
   const now = new Date();
   const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   const entries = window.PulseNoteState.finances.filter((f) => f.date.startsWith(currentMonthKey));

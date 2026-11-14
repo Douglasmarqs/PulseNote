@@ -2,6 +2,8 @@
 // PulseNote — Autenticação e sincronização via Firebase
 // ============================================================
 import { auth, db } from "./firebase-init.js";
+import { createOnboarding, hasUserData } from "./onboarding.js";
+import { defaultNotificationPrefs, normalizeNotificationPrefs } from "./notification-prefs.js";
 import { createAutopilotUI } from "./autopilot-ui.js";
 import { deleteAccountDataAndIdentity } from "./account-deletion.mjs";
 import { cloneState, changedStateKeys, mergeDirtyState } from "./state-sync.js";
@@ -454,7 +456,12 @@ const appReady = new Promise((resolve) => {
             });
         }
 
+        // O espaço escolhido na configuração inicial vira o espaço ao abrir o app.
+        if (firstSnapshotForUser && state.preferredWorkspace && state.preferredWorkspace !== "personal") {
+          setActiveFinanceWorkspace(state.preferredWorkspace);
+        }
         renderAll(); // re-renderiza com os dados confirmados do servidor
+        if (onboardingReady) getOnboarding()?.sync();
         autopilotUi.invalidate();
         if (firstSnapshotForUser && Object.keys(dirtyBases).length) scheduleSyncToServer();
         firstSnapshotForUser = false;
@@ -758,6 +765,17 @@ document.addEventListener("DOMContentLoaded", async () => {
   bindForms();
   bindActions();
   bindSettingsView();
+
+  // Configuração inicial: só abre para conta nova (sem dados). O QA visual pode
+  // forçar um passo com ?designPreview=1&onboarding=1|2|3|done.
+  onboardingReady = true;
+  getOnboarding()?.sync();
+  const onboardingPreviewStep = new URLSearchParams(window.location.search).get("onboarding");
+  if (isLocalDesignPreview && onboardingPreviewStep) {
+    // Só no modo demonstração: simula o número já vinculado para mostrar o sucesso.
+    if (onboardingPreviewStep === "done") state.whatsappLinkedPhone = "5511987654321";
+    getOnboarding()?.preview(onboardingPreviewStep);
+  }
   checkAdminAccess();
   bindThemeToggle();
   bindFinTabs();
@@ -1170,6 +1188,23 @@ async function loadBillingSettings(force = false) {
 // ainda válido). Chamada sempre que renderSettings() roda — inclusive
 // quando o onSnapshot do Firestore traz a confirmação do vínculo feita
 // pelo webhook, então a tela atualiza sozinha, sem precisar recarregar.
+// Gera o código de vinculação (vale 10 min) e abre o WhatsApp oficial com
+// "vincular <código>" pré-preenchido. Usado por Configurações e pela
+// configuração inicial (onboarding).
+function startWhatsappLink() {
+  const code = String(Math.floor(Math.random() * 1000000)).padStart(6, "0");
+  state.whatsappLinkCode = code;
+  state.whatsappLinkCodeExpiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+  saveState();
+  renderWhatsAppSettings();
+
+  const prefilledText = encodeURIComponent(`vincular ${code}`);
+  const waLink = `https://wa.me/${WHATSAPP_BOT_NUMBER_DIGITS}?text=${prefilledText}`;
+  window.open(waLink, "_blank", "noopener,noreferrer");
+
+  showToast("Abrindo o WhatsApp — é só apertar enviar! 🚀");
+}
+
 function renderWhatsAppSettings() {
   const linkedBlock   = document.getElementById("whatsappLinkedBlock");
   const unlinkedBlock = document.getElementById("whatsappUnlinkedBlock");
@@ -1470,17 +1505,7 @@ function bindSettingsView() {
   // (ex.: desktop sem WhatsApp instalado, ou pop-up bloqueado).
   document.getElementById("settingsWhatsappGenerateBtn")?.addEventListener("click", () => {
     hideSettingsMsg();
-    const code = String(Math.floor(Math.random() * 1000000)).padStart(6, "0");
-    state.whatsappLinkCode = code;
-    state.whatsappLinkCodeExpiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 min
-    saveState();
-    renderWhatsAppSettings();
-
-    const prefilledText = encodeURIComponent(`vincular ${code}`);
-    const waLink = `https://wa.me/${WHATSAPP_BOT_NUMBER_DIGITS}?text=${prefilledText}`;
-    window.open(waLink, "_blank", "noopener,noreferrer");
-
-    showToast("Abrindo o WhatsApp — é só apertar enviar! 🚀");
+    startWhatsappLink();
   });
 
   // ── WhatsApp: opt-in de lembretes (tarefas/eventos/metas/orçamento
@@ -1800,6 +1825,12 @@ function normalizeState(parsed) {
     parsed.appReminderOptIn = parsed.fcmTokens.length > 0;
   }
   if (!["auto", "openai", "anthropic"].includes(parsed.aiProviderPreference)) parsed.aiProviderPreference = "auto";
+  // Preferências de aviso (4 categorias) e configuração inicial. Contas antigas
+  // não têm esses campos: avisos ficam todos ligados (como sempre foi) e quem
+  // já tem dados nunca vê a configuração inicial.
+  parsed.notificationPrefs = normalizeNotificationPrefs(parsed.notificationPrefs);
+  if (!["personal", "couple", "family", "business"].includes(parsed.preferredWorkspace)) parsed.preferredWorkspace = "personal";
+  if (typeof parsed.onboardingDone !== "boolean") parsed.onboardingDone = hasUserData(parsed);
   // Retrocompatibilidade: lançamentos, tarefas e metas antigos não tinham
   // esses campos — garantimos que existam pra não quebrar o restante do app.
   parsed.tasks.forEach((t) => {
@@ -1838,6 +1869,11 @@ function loadDefaultState() {
     whatsappReminderOptIn: false,
     appReminderOptIn: false,
     aiProviderPreference: "auto",
+    // Configuração inicial (ver onboarding.js): contas novas começam em falso;
+    // contas antigas com dados são marcadas como concluídas em normalizeState.
+    onboardingDone: false,
+    preferredWorkspace: "personal",
+    notificationPrefs: defaultNotificationPrefs(),
   };
 }
 
@@ -3464,6 +3500,30 @@ function bdFormatBoardDate(date = new Date()) {
 }
 
 // Título + subtítulo do cabeçalho de cada área (seguem os quadros).
+let onboardingController = null;
+let onboardingReady = false;
+function getOnboarding() {
+  if (onboardingController) return onboardingController;
+  const root = document.querySelector("#onboardingRoot");
+  if (!root) return null;
+  onboardingController = createOnboarding({
+    root,
+    getState: () => state,
+    patchState: (patch) => { Object.assign(state, patch); saveState(); renderAll(); },
+    setWorkspace: (workspaceId) => setActiveFinanceWorkspace(workspaceId),
+    startWhatsappLink,
+    requestPush: () => window.requestNotificationPermission?.(),
+    botNumber: WHATSAPP_BOT_NUMBER,
+    openView: (viewName, options = {}) => {
+      setView(viewName);
+      if (options.focus) requestAnimationFrame(() => document.querySelector(options.focus)?.scrollIntoView({ behavior: "smooth", block: "center" }));
+    },
+    toast: (message) => showToast(message),
+    firstName: () => bdFirstName(),
+  });
+  return onboardingController;
+}
+
 function applyViewHeading(view) {
   const first = bdFirstName();
   const hour = new Date().getHours();

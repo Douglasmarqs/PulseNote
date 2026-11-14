@@ -33,7 +33,7 @@
 // v25: entrega o novo painel administrativo e a área de assinatura.
 // v27: invalida os recursos antigos após corrigir a navegação do painel
 // que alguns bloqueadores de conteúdo ocultavam como se fosse publicidade.
-const CACHE_NAME = "pulsenote-v35";
+const CACHE_NAME = "pulsenote-v36";
 
 // ── Firebase Cloud Messaging (push em segundo plano) ──────────────
 // Isso é o que permite uma notificação aparecer mesmo com o PulseNote
@@ -98,6 +98,8 @@ const CORE_ASSETS = [
   "/src/forgot-password.html",
   "/src/styles.css",
   "/src/auth.css",
+  "/src/boards.css",
+  "/src/auth-boards.css",
   "/src/mobile.css",
   "/src/manifest.json",
   "/src/icons/icon-192.png",

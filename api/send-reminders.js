@@ -48,6 +48,7 @@
 // ============================================================
 
 const { FieldValue, getFirebaseAdmin } = require("./_lib/firebaseAdmin");
+const { isNotificationEnabled } = require("./_lib/notificationPrefs");
 const crypto = require("node:crypto");
 const { Receiver } = require("@upstash/qstash");
 const { getRuntimeConfig } = require("./_lib/adminConfig");
@@ -349,7 +350,7 @@ function buildNotifications(state, todayIso, now, timeZone = DEFAULT_TIME_ZONE) 
     }
   }
 
-  return results;
+  return results.filter((item) => isNotificationEnabled(state.notificationPrefs, item.key));
 }
 
 // Receipts live outside the app snapshot, so a stale browser cannot erase them.

@@ -128,27 +128,19 @@ test("primeira visita pelo admin mostra Entrar, não Criar conta", () => {
     .find((code) => code.includes('new URLSearchParams(location.search).get("next")'));
   assert.ok(script, "script de seleção inicial da aba de autenticação");
   for (const [search, expected] of [["?next=%2Fadmin", "login"], ["", "register"]]) {
-    const loginTab = fakeElement();
-    const registerTab = fakeElement();
     const loginForm = fakeElement();
     const registerForm = fakeElement();
-    loginTab.dataset = { tab: "login" };
-    registerTab.dataset = { tab: "register" };
     loginForm.id = "loginForm";
     registerForm.id = "registerForm";
-    loginTab.classList.add("active");
     loginForm.classList.add("active-form");
     vm.runInNewContext(script, {
       location: { search },
       URLSearchParams,
       localStorage: { getItem: () => null },
       document: {
-        querySelectorAll: (selector) => selector === ".auth-tab"
-          ? [loginTab, registerTab] : [loginForm, registerForm],
+        querySelectorAll: () => [loginForm, registerForm],
       },
     }, { filename: "src/login.html:inline-script" });
-    assert.equal(loginTab.classList.contains("active"), expected === "login", search);
-    assert.equal(registerTab.classList.contains("active"), expected === "register", search);
     assert.equal(loginForm.classList.contains("active-form"), expected === "login", search);
     assert.equal(registerForm.classList.contains("active-form"), expected === "register", search);
   }
