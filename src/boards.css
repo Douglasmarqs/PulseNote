@@ -2470,3 +2470,17 @@ body.st-drawer-open { overflow: hidden; }
 #settingsView .st-drawer-body .st-theme-prev { height: 90px; }
 #settingsView .st-drawer-body .st-themes .theme-toggle-btn { padding: 10px; font-size: 14px; }
 @media (max-width: 1180px) and (min-width: 761px) { .st-profile { grid-column: span 7; } .st-ach { grid-column: span 5; } }
+
+/* Marca: rostinho do Pulsinho no lugar da linha de pulso */
+.bd-mascot { --s: 32px; position: relative; display: inline-flex !important; flex-direction: column; align-items: center; justify-content: center; gap: calc(var(--s) * .1); width: var(--s) !important; height: var(--s) !important; min-width: var(--s); flex: none; padding: 0 0 calc(var(--s) * .04) !important; border-radius: 58% 42% 53% 47% / 55% 48% 52% 45%; background: linear-gradient(155deg, #7c6cff, #c07dff) !important; box-shadow: 0 6px 16px -6px rgba(124,108,255,.65); animation: pulsinhoMorph 6s ease-in-out infinite; box-sizing: border-box; }
+.bd-mascot .bd-mascot__eyes { display: flex !important; gap: calc(var(--s) * .14); justify-content: center; width: auto !important; height: auto !important; background: none !important; }
+.bd-mascot .bd-mascot__eyes i { display: block; width: calc(var(--s) * .14) !important; height: calc(var(--s) * .14) !important; border-radius: 50%; background: #0c0d1c !important; animation: pulsinhoBlink 4.4s ease-in-out infinite; }
+.bd-mascot .bd-mascot__pulse { display: block; width: calc(var(--s) * .64) !important; height: calc(var(--s) * .14) !important; overflow: visible; }
+.bd-mascot .bd-mascot__pulse path { fill: none; stroke: rgba(255,255,255,.95); stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; vector-effect: none; }
+.bd-mobile-brand .bd-mascot { --s: 30px; }
+@media (prefers-reduced-motion: reduce) { .bd-mascot, .bd-mascot__eyes i { animation: none; } }
+/* A abertura acompanha as cores dos quadros */
+.app-loading-overlay { background: var(--bd-bg) !important; }
+.app-loading-word { color: var(--bd-text); font-family: var(--bd-font); font-size: 22px; letter-spacing: -.01em; }
+.app-loading-track { background: var(--bd-line); }
+

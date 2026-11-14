@@ -433,3 +433,16 @@ body { background: var(--bd-bg); background-image: var(--bd-bg-glow); background
 .ad-user-drawer h2 { font-size: 22px; }
 .ad-user-drawer p { font-size: 13px; color: var(--bd-text-2); }
 .ad-plan { align-items: center; }
+
+/* Marca: rostinho do Pulsinho */
+@keyframes pulsinhoMorph { 0%, 100% { border-radius: 58% 42% 53% 47% / 55% 48% 52% 45%; } 50% { border-radius: 46% 54% 44% 56% / 48% 55% 45% 52%; } }
+@keyframes pulsinhoBlink { 0%, 92%, 100% { transform: scaleY(1); } 96% { transform: scaleY(0.1); } }
+.bd-mascot { --s: 32px; position: relative; display: inline-flex !important; flex-direction: column; align-items: center; justify-content: center; gap: calc(var(--s) * .1); width: var(--s) !important; height: var(--s) !important; min-width: var(--s); flex: none; padding: 0 0 calc(var(--s) * .04) !important; border-radius: 58% 42% 53% 47% / 55% 48% 52% 45%; background: linear-gradient(155deg, #7c6cff, #c07dff) !important; box-shadow: 0 6px 16px -6px rgba(124,108,255,.65); animation: pulsinhoMorph 6s ease-in-out infinite; box-sizing: border-box; }
+.bd-mascot .bd-mascot__eyes { display: flex !important; gap: calc(var(--s) * .14); justify-content: center; width: auto !important; height: auto !important; background: none !important; }
+.bd-mascot .bd-mascot__eyes i { display: block; width: calc(var(--s) * .14) !important; height: calc(var(--s) * .14) !important; border-radius: 50%; background: #0c0d1c !important; animation: pulsinhoBlink 4.4s ease-in-out infinite; }
+.bd-mascot .bd-mascot__pulse { display: block; width: calc(var(--s) * .64) !important; height: calc(var(--s) * .14) !important; overflow: visible; }
+.bd-mascot .bd-mascot__pulse path { fill: none; stroke: rgba(255,255,255,.95); stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; vector-effect: none; }
+.ad-brand-mark .bd-mascot { --s: 34px; }
+.ad-topbar-title .bd-mascot { --s: 30px; }
+.ad-brand-mark { width: auto; height: auto; }
+@media (prefers-reduced-motion: reduce) { .bd-mascot, .bd-mascot__eyes i { animation: none; } }

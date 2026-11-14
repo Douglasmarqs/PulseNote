@@ -686,20 +686,15 @@ document.addEventListener("DOMContentLoaded", async () => {
   // que dá pra animar; o splash "de fábrica" do PWA (antes do JS rodar)
   // só aceita imagem estática, então essa é a primeira coisa animada
   // que a pessoa vê.
-  const overlay = document.createElement("div");
-  overlay.id = "appLoadingOverlay";
-  overlay.className = "app-loading-overlay";
-  overlay.innerHTML = `
-    <div class="pulsinho">
-      <div class="pulsinho__face">
-        <div class="pulsinho__eyes"><span class="pulsinho__eye"></span><span class="pulsinho__eye"></span></div>
-        <svg class="pulsinho__pulse" viewBox="0 0 120 26"><path d="M0,13 L28,13 L36,3 L44,23 L52,13 L64,13 L70,6 L76,20 L82,13 L120,13"/></svg>
-      </div>
-    </div>
-    <strong class="app-loading-word">PulseNote</strong>
-    <div class="app-loading-track"><span></span></div>
-  `;
-  document.body.appendChild(overlay);
+  // A abertura já vem no HTML (aparece antes do JS); só cria aqui se faltar.
+  let overlay = document.getElementById("appLoadingOverlay");
+  if (!overlay) {
+    overlay = document.createElement("div");
+    overlay.id = "appLoadingOverlay";
+    overlay.className = "app-loading-overlay";
+    overlay.innerHTML = `<div class="pulsinho"><div class="pulsinho__face"><div class="pulsinho__eyes"><span class="pulsinho__eye"></span><span class="pulsinho__eye"></span></div><svg class="pulsinho__pulse" viewBox="0 0 120 26"><path d="M0,13 L28,13 L36,3 L44,23 L52,13 L64,13 L70,6 L76,20 L82,13 L120,13"/></svg></div></div><strong class="app-loading-word">PulseNote</strong><div class="app-loading-track"><span></span></div>`;
+    document.body.appendChild(overlay);
+  }
 
   // Rede de segurança: se por algum motivo o Firebase/Firestore travar (rede
   // muito lenta, etc.) e appReady nunca resolver, garante que o overlay some

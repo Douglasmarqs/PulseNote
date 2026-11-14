@@ -44,6 +44,34 @@
       })();
     </script>
 
+    <style>
+      /* Fundo e abertura corretos já na primeira pintura (evita o "flash" do app vazio). */
+      html { background: #f6f7fc; } html[data-theme="aurora"], html[data-theme="eclipse"] { background: #0a1020; }
+      @media (prefers-color-scheme: dark) { html:not([data-theme="light"]) { background: #0a1020; } }
+      /* Abertura completa sem depender de CSS externo: aparece pronta já no 1º quadro. */
+      #appLoadingOverlay { position: fixed; inset: 0; z-index: 9998; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; background-color: #f6f7fc; color: #121633; font-family: Inter, "Segoe UI", system-ui, -apple-system, Roboto, sans-serif; transition: opacity .32s ease; }
+      #appLoadingOverlay .pulsinho { width: 96px; height: 96px; display: flex; align-items: center; justify-content: center; border-radius: 58% 42% 53% 47% / 55% 48% 52% 45%; background: linear-gradient(155deg, #7c6cff, #c07dff); box-shadow: 0 16px 36px -10px rgba(124,108,255,.6); animation: pnSplashBob 3.2s ease-in-out infinite, pnSplashMorph 6s ease-in-out infinite; }
+      #appLoadingOverlay .pulsinho__face { width: 66px; }
+      #appLoadingOverlay .pulsinho__eyes { display: flex; justify-content: center; gap: 15px; margin-bottom: 9px; }
+      #appLoadingOverlay .pulsinho__eye { display: block; width: 11px; height: 11px; padding: 0; border-radius: 50%; background: #0c0d1c; animation: pnSplashBlink 4.4s ease-in-out infinite; }
+      #appLoadingOverlay .pulsinho__pulse { display: block; width: 66px; height: 15px; overflow: visible; }
+      #appLoadingOverlay .pulsinho__pulse path { fill: none; stroke: rgba(255,255,255,.92); stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+      #appLoadingOverlay .app-loading-word { font-size: 22px; font-weight: 800; letter-spacing: -.01em; color: inherit; }
+      #appLoadingOverlay .app-loading-track { width: 120px; height: 3px; border-radius: 3px; background: rgba(18,22,51,.1); overflow: hidden; }
+      #appLoadingOverlay .app-loading-track span { display: block; width: 40%; height: 100%; border-radius: 3px; background: linear-gradient(90deg, #6d5dfc, #22c3a6); animation: pnSplashSlide 1.1s ease-in-out infinite; }
+      html[data-theme="aurora"] #appLoadingOverlay, html[data-theme="eclipse"] #appLoadingOverlay { background-color: #0a1020; color: #eef1ff; }
+      html[data-theme="aurora"] #appLoadingOverlay .app-loading-track, html[data-theme="eclipse"] #appLoadingOverlay .app-loading-track { background: rgba(255,255,255,.12); }
+      @media (prefers-color-scheme: dark) {
+        html:not([data-theme="light"]) #appLoadingOverlay { background-color: #0a1020; color: #eef1ff; }
+        html:not([data-theme="light"]) #appLoadingOverlay .app-loading-track { background: rgba(255,255,255,.12); }
+      }
+      @keyframes pnSplashBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+      @keyframes pnSplashMorph { 0%, 100% { border-radius: 58% 42% 53% 47% / 55% 48% 52% 45%; } 50% { border-radius: 46% 54% 44% 56% / 48% 55% 45% 52%; } }
+      @keyframes pnSplashBlink { 0%, 92%, 100% { transform: scaleY(1); } 96% { transform: scaleY(.1); } }
+      @keyframes pnSplashSlide { 0% { transform: translateX(-150%); } 100% { transform: translateX(350%); } }
+      @media (prefers-reduced-motion: reduce) { #appLoadingOverlay * { animation: none !important; } }
+    </style>
+
     <!-- PWA: instalação e ícone na tela inicial -->
     <link rel="manifest" href="manifest.json?v=20260922" />
     <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png" />
@@ -79,9 +107,17 @@
     <!-- Camada de experiência: uma linguagem única para todas as áreas. -->
     <link rel="stylesheet" href="/src/experience.css?v=3" />
     <!-- Sistema visual dos quadros (claro/escuro, desktop/mobile). Carrega por último. -->
-    <link rel="stylesheet" href="/src/boards.css?v=3" />
+    <link rel="stylesheet" href="/src/boards.css?v=4" />
   </head>
   <body class="bd">
+    <!-- Tela de abertura já no HTML: aparece na primeira pintura, antes de
+         qualquer JS, e o app.js só a remove quando os dados chegam. Antes ela
+         era criada pelo app.js, e o app vazio aparecia por um instante. -->
+    <div id="appLoadingOverlay" class="app-loading-overlay" role="status" aria-label="Carregando o PulseNote">
+      <div class="pulsinho"><div class="pulsinho__face"><div class="pulsinho__eyes"><span class="pulsinho__eye"></span><span class="pulsinho__eye"></span></div><svg class="pulsinho__pulse" viewBox="0 0 120 26"><path d="M0,13 L28,13 L36,3 L44,23 L52,13 L64,13 L70,6 L76,20 L82,13 L120,13"/></svg></div></div>
+      <strong class="app-loading-word">PulseNote</strong>
+      <div class="app-loading-track"><span></span></div>
+    </div>
     <!-- Ícones do sistema visual (use: <svg class="i"><use href="#i-nome"/></svg>) -->
     <svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
       <defs>
@@ -174,7 +210,7 @@
       <!-- ========== SIDEBAR (desktop) ========== -->
       <aside class="bd-sidebar" aria-label="Barra lateral">
         <a class="bd-brand" href="#" data-nav-home aria-label="PulseNote — Início">
-          <svg class="bd-brand-mark"><use href="#i-logo"/></svg>
+          <span class="bd-brand-mark bd-mascot" aria-hidden="true"><span class="bd-mascot__eyes"><i></i><i></i></span><svg class="bd-mascot__pulse" viewBox="0 0 120 26"><path d="M0,13 L28,13 L36,3 L44,23 L52,13 L64,13 L70,6 L76,20 L82,13 L120,13"/></svg></span>
           <strong>PulseNote</strong>
         </a>
 
@@ -213,7 +249,7 @@
 
         <!-- TOP BAR -->
         <header class="bd-topbar">
-          <a class="bd-mobile-brand" href="#" data-nav-home aria-label="PulseNote — Início"><svg class="bd-brand-mark"><use href="#i-logo"/></svg><strong>PulseNote</strong></a>
+          <a class="bd-mobile-brand" href="#" data-nav-home aria-label="PulseNote — Início"><span class="bd-brand-mark bd-mascot" aria-hidden="true"><span class="bd-mascot__eyes"><i></i><i></i></span><svg class="bd-mascot__pulse" viewBox="0 0 120 26"><path d="M0,13 L28,13 L36,3 L44,23 L52,13 L64,13 L70,6 L76,20 L82,13 L120,13"/></svg></span><strong>PulseNote</strong></a>
           <div class="bd-titles">
             <p id="todayLabel" class="sr-only">Hoje</p>
             <h1 id="viewTitle">Seu dia em foco</h1>
@@ -1955,7 +1991,7 @@
     <script src="/src/recurring-detector.js?v=1"></script>
     <script src="/src/card-installments.js?v=1"></script>
     <script src="/src/notifications.js?v=36" defer></script>
-    <script type="module" src="/src/app.js?v=39"></script>
+    <script type="module" src="/src/app.js?v=40"></script>
     <script type="module" src="/src/push-notifications.js?v=35"></script>
     <!-- Configuração inicial (primeiro acesso) — ver src/onboarding.js -->
   <div id="onboardingRoot" class="bdo" role="dialog" aria-modal="true" aria-labelledby="bdoTitle" hidden></div>
