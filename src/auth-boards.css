@@ -124,3 +124,18 @@ body.bda {
   .bda-submit { height: 50px; }
   .bda-legal { margin-top: 26px; }
 }
+
+/* Telas de uma coluna (recuperar senha) */
+.bda-shell--single { grid-template-columns: minmax(0, 1fr); width: min(460px, 100%); min-height: 0; }
+.bda-shell--single .bda-card { padding: 40px 40px 28px; }
+.bda-shell--single .bda-brand--mobile { display: inline-flex; margin-bottom: 26px; }
+.bda-badge-ico { display: grid; place-items: center; width: 52px; height: 52px; margin-bottom: 16px; border: 1px solid var(--bd-line-strong); border-radius: 15px; background: var(--bd-violet-soft); color: var(--bd-violet); }
+.bda-badge-ico .i { width: 26px; height: 26px; }
+.bda-badge-ico.is-success { border-color: var(--bd-green); background: var(--bd-green-soft); color: var(--bd-green); }
+.bda-badge-ico.is-success .i { stroke-width: 2.6; }
+.bda-back { margin-top: 18px; }
+.bda-back .bda-link { display: inline-flex; align-items: center; gap: 6px; justify-self: center; }
+.bda-back .bda-link .i { width: 15px; height: 15px; }
+@media (max-width: 560px) {
+  .bda-shell--single .bda-card { padding: 0; }
+}

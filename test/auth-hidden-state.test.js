@@ -17,7 +17,9 @@ test("alertas vazios de login e cadastro permanecem ocultos", () => {
   // esconde qualquer elemento [hidden] — inclusive o alerta de erro.
   assert.match(authBoardsCss, /\.bda \[hidden\]\s*\{\s*display:\s*none\s*!important;/);
   assert.match(html, /auth-boards\.css\?v=1/);
-  assert.match(recoveryHtml, /auth\.css\?v=37/);
+  // Recuperar senha usa o mesmo layout do login; o alerta de erro nasce oculto.
+  assert.match(recoveryHtml, /auth-boards\.css\?v=1/);
+  assert.match(recoveryHtml, /id="forgotError" class="auth-error" hidden/);
   assert.match(appHtml, /auth\.css\?v=37/);
 });
 

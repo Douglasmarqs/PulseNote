@@ -137,6 +137,17 @@
         <symbol id="i-check-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12.500l2.800 2.800L16 9.700"/></symbol>
         <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 5.500A2.500 2.500 0 016.500 3h11A2.500 2.500 0 0120 5.500v8a2.500 2.500 0 01-2.500 2.500H10l-4.500 4v-4A2.500 2.500 0 014 13.500z"/></symbol>
         <symbol id="i-pulse-line" viewBox="0 0 24 24"><path d="M2 12h4.500l2.500-6 4 12 2.500-6H22"/></symbol>
+        <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.500" cy="6" r="1" fill="currentColor"/><circle cx="4.500" cy="12" r="1" fill="currentColor"/><circle cx="4.500" cy="18" r="1" fill="currentColor"/></symbol>
+        <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2.500v2.200M12 19.300v2.200M4.600 4.600l1.600 1.600M17.800 17.800l1.600 1.600M2.500 12h2.200M19.300 12h2.200M4.600 19.400l1.600-1.600M17.800 6.200l1.600-1.600"/></symbol>
+        <symbol id="i-calendar-week" viewBox="0 0 24 24"><rect x="3.500" y="5" width="17" height="15.500" rx="3"/><path d="M3.500 10h17M8 3v4M16 3v4M8 14h8"/></symbol>
+        <symbol id="i-calendar-grid" viewBox="0 0 24 24"><rect x="3.500" y="5" width="17" height="15.500" rx="3"/><path d="M3.500 10h17M8 3v4M16 3v4M8.500 14h.01M12 14h.01M15.500 14h.01M8.500 17.200h.01M12 17.200h.01"/></symbol>
+        <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.500"/><circle cx="12" cy="12" r="4.700"/><circle cx="12" cy="12" r="1.300" fill="currentColor"/></symbol>
+        <symbol id="i-flag" viewBox="0 0 24 24"><path d="M5 21V4M5 4h11l-1.800 4L16 12H5"/></symbol>
+        <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M4 20l1-4.200L16.600 4.200a2 2 0 012.800 0l.4.4a2 2 0 010 2.800L8.200 19z"/><path d="M14.500 6.300l3.200 3.200"/></symbol>
+        <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 002 1.800h6a2 2 0 002-1.800l1-12M9 7V4.500A1.500 1.500 0 0110.500 3h3A1.500 1.500 0 0115 4.500V7"/></symbol>
+        <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3.500l9.500 16.500h-19z"/><path d="M12 10v4.500M12 17.200v.1"/></symbol>
+        <symbol id="i-repeat" viewBox="0 0 24 24"><path d="M17 3l3.500 3.500L17 10M3.500 11.500v-1A4 4 0 017.500 6.500h13M7 21l-3.500-3.500L7 14M20.500 12.500v1a4 4 0 01-4 4h-13"/></symbol>
+        <symbol id="i-clipboard-list" viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="17" rx="2.500"/><path d="M9 4h6v3H9zM9 12h6M9 16h4"/></symbol>
         <symbol id="i-trophy" viewBox="0 0 24 24"><path d="M7 4h10v5a5 5 0 01-10 0zM7 6H4v1.500A3.500 3.500 0 007.500 11M17 6h3v1.500A3.500 3.500 0 0116.500 11M12 14v4M8.500 20.500h7"/></symbol>
       </defs>
     </svg>
@@ -599,10 +610,10 @@
                     <span class="pqa-row-icon" style="color:var(--purple)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/></svg></span>
                     <span class="pqa-row-label">Prioridade</span>
                     <select id="pqaTaskPriority" class="pqa-row-control">
-                      <option>Baixa</option>
-                      <option selected>Media</option>
-                      <option>Alta</option>
-                      <option>Urgente</option>
+                      <option value="Baixa">Baixa</option>
+                      <option value="Media" selected>Média</option>
+                      <option value="Alta">Alta</option>
+                      <option value="Urgente">Urgente</option>
                     </select>
                   </label>
                   <label class="pqa-icon-row">
@@ -637,6 +648,11 @@
                     <input id="pqaEventDate" type="date" />
                     <input id="pqaEventTime" type="time" />
                   </div>
+                  <label class="pqa-icon-row" style="margin-top:10px">
+                    <span class="pqa-row-icon" style="color:var(--teal)">◷</span>
+                    <span class="pqa-row-label">Término</span>
+                    <input id="pqaEventEndTime" type="time" class="pqa-row-control" />
+                  </label>
                   <input id="pqaEventLocation" placeholder="Local ou link" style="margin-top:10px" />
                   <select id="pqaEventReminder" style="margin-top:10px">
                     <option value="none" selected>Sem lembrete</option>
@@ -679,105 +695,108 @@
              state.events, state.goals) — só a apresentação é nova, então
              nenhum dado existente corre risco. -->
         <section id="plannerView" class="view">
-          <div class="planner-shell">
+          <div class="bp-shell">
 
-            <!-- Cabeçalho: título + seletor de visão + busca já herdada do topo -->
-            <div class="planner-header">
-              <div class="planner-header-title">
-                <p class="eyebrow">Planner</p>
-                <h2 id="plannerHeaderLabel">Tudo em um só lugar</h2>
+            <!-- Barra de visões + nova tarefa -->
+            <div class="bp-bar-row">
+              <p class="bp-mobile-date" id="plannerMobileDate"><svg class="i"><use href="#i-calendar"/></svg><span></span></p>
+              <div class="bp-tabs planner-tabs" role="tablist" aria-label="Visão do planner">
+                <button type="button" class="active" role="tab" data-planner-tab="list"><svg class="i"><use href="#i-list"/></svg><span>Lista</span></button>
+                <button type="button" role="tab" data-planner-tab="day"><svg class="i"><use href="#i-sun"/></svg><span>Dia</span></button>
+                <button type="button" role="tab" data-planner-tab="week"><svg class="i"><use href="#i-calendar-week"/></svg><span>Semana</span></button>
+                <button type="button" role="tab" data-planner-tab="month"><svg class="i"><use href="#i-calendar-grid"/></svg><span>Mês</span></button>
               </div>
-              <div id="plannerProgressRing" class="planner-progress-ring"></div>
-              <div class="planner-header-actions">
-                <button class="mini-button" type="button" id="plannerNewTaskBtn">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
-                  <span>Nova tarefa</span>
-                </button>
-                <div class="segmented planner-tabs" role="tablist" aria-label="Visão do planner">
-                  <button class="active" data-planner-tab="list"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg><span>Lista</span></button>
-                  <button data-planner-tab="day"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg><span>Dia</span></button>
-                  <button data-planner-tab="week"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="3"/><path d="M16 2.5v4"/><path d="M8 2.5v4"/><path d="M3 10h18"/><path d="M8 14.5h.01"/><path d="M12 14.5h.01"/><path d="M16 14.5h.01"/></svg><span>Semana</span></button>
-                  <button data-planner-tab="month"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="3"/><path d="M16 2.5v4"/><path d="M8 2.5v4"/><path d="M3 10h18"/><path d="M7.5 14.5h2"/><path d="M14.5 14.5h2"/><path d="M7.5 18h2"/><path d="M14.5 18h2"/></svg><span>Mês</span></button>
-                </div>
-              </div>
+              <button class="bd-btn bd-btn--primary bp-new" type="button" id="plannerNewTaskBtn"><svg class="i"><use href="#i-plus"/></svg><span>Nova tarefa</span></button>
             </div>
-
-            <!-- Metas em foco — fita horizontal sempre visível, qualquer
-                 que seja a visão ativa (Lista/Dia/...), porque metas não
-                 têm data fixa e não fariam sentido "dentro" de um dia. -->
-            <section class="panel planner-goals-panel">
-              <div class="panel-header">
-                <div>
-                  <p class="eyebrow">Foco da semana</p>
-                  <h2>Metas</h2>
-                </div>
-                <button class="mini-button" type="button" id="plannerNewGoalBtn">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.8"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/></svg>
-                  <span>Nova meta</span>
-                </button>
-              </div>
-              <div id="plannerGoalsStrip" class="planner-goals-strip"></div>
-            </section>
 
             <!-- ===== LISTA ===== -->
             <div class="planner-subview active" data-planner-subview="list">
-              <div id="plannerListBody" class="planner-list-body"></div>
+              <div class="bp-grid">
+                <div class="bp-main">
+                  <section class="bd-card bp-focus" id="plannerFocus" aria-label="Foco da semana"></section>
+                  <div class="bp-two">
+                    <section class="bd-card bp-tasks" aria-label="Tarefas">
+                      <header class="bd-card-head"><h3>Tarefas <span class="bp-count" id="plannerTaskCount">0 tarefas</span></h3></header>
+                      <div id="plannerListBody" class="bp-task-groups"></div>
+                    </section>
+                    <section class="bd-card bp-week" aria-label="Compromissos da semana">
+                      <header class="bd-card-head bp-week-head"><div><h3>Compromissos da semana</h3><p id="plannerWeekRange"></p></div></header>
+                      <div id="plannerWeekAgenda" class="bp-hours"></div>
+                    </section>
+                  </div>
+                </div>
+                <aside class="bd-card bp-agenda" id="plannerAgenda" aria-label="Agenda do dia">
+                  <header class="bp-agenda-head">
+                    <div><h3 id="plannerAgendaTitle">Agenda do dia</h3><p id="plannerAgendaDate"></p></div>
+                    <div class="bp-agenda-nav">
+                      <button type="button" class="bd-icon-btn" id="plannerAgendaPrev" aria-label="Dia anterior"><svg class="i"><use href="#i-chev-left"/></svg></button>
+                      <button type="button" class="bd-icon-btn" id="plannerAgendaNext" aria-label="Próximo dia"><svg class="i"><use href="#i-chev-right"/></svg></button>
+                    </div>
+                  </header>
+                  <div class="bp-agenda-chips" role="group" aria-label="Mostrar">
+                    <button type="button" class="active" data-agenda-mode="events"><svg class="i"><use href="#i-calendar"/></svg><span id="plannerAgendaEventsChip">0 compromissos</span></button>
+                    <button type="button" data-agenda-mode="tasks"><svg class="i"><use href="#i-check"/></svg><span id="plannerAgendaTasksChip">0 tarefas</span></button>
+                  </div>
+                  <div id="plannerAgendaBody" class="bp-agenda-body"></div>
+                  <div class="bp-tip" id="plannerTip"></div>
+                </aside>
+              </div>
             </div>
 
             <!-- ===== DIA ===== -->
             <div class="planner-subview" data-planner-subview="day">
-              <div class="planner-day-nav">
-                <button class="icon-button" id="plannerDayPrev" title="Dia anterior"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></button>
-                <div class="planner-day-nav-label">
-                  <strong id="plannerDayLabel">Hoje</strong>
-                  <button class="mini-button" id="plannerDayToday">Ir para hoje</button>
-                </div>
-                <button class="icon-button" id="plannerDayNext" title="Próximo dia"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></button>
+              <div class="bp-nav">
+                <button type="button" class="bd-icon-btn" id="plannerDayPrev" title="Dia anterior" aria-label="Dia anterior"><svg class="i"><use href="#i-chev-left"/></svg></button>
+                <div class="bp-nav-label"><strong id="plannerDayLabel">Hoje</strong><button type="button" class="bd-btn bp-nav-today" id="plannerDayToday">Ir para hoje</button></div>
+                <button type="button" class="bd-icon-btn" id="plannerDayNext" title="Próximo dia" aria-label="Próximo dia"><svg class="i"><use href="#i-chev-right"/></svg></button>
               </div>
               <div id="plannerDayStrip" class="planner-day-strip"></div>
-              <div class="panel planner-day-allday-panel">
-                <p class="eyebrow">Tarefas do dia</p>
-                <div id="plannerDayAllday" class="planner-list-body"></div>
-              </div>
-              <div class="panel planner-day-timeline-panel">
-                <p class="eyebrow">Compromissos</p>
-                <div id="plannerDayTimeline" class="planner-timeline"></div>
+              <div class="bp-day-grid">
+                <section class="bd-card bp-panel"><header class="bd-card-head"><h3>Tarefas do dia</h3></header><div id="plannerDayAllday" class="bp-task-list"></div></section>
+                <section class="bd-card bp-panel"><header class="bd-card-head"><h3>Compromissos</h3></header><div id="plannerDayTimeline" class="planner-timeline"></div></section>
               </div>
             </div>
 
             <!-- ===== SEMANA ===== -->
             <div class="planner-subview" data-planner-subview="week">
-              <div class="planner-day-nav">
-                <button class="icon-button" id="plannerWeekPrev" title="Semana anterior"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></button>
-                <div class="planner-day-nav-label">
-                  <strong id="plannerWeekLabel">Esta semana</strong>
-                  <button class="mini-button" id="plannerWeekToday">Semana atual</button>
-                </div>
-                <button class="icon-button" id="plannerWeekNext" title="Próxima semana"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></button>
+              <div class="bp-nav">
+                <button type="button" class="bd-icon-btn" id="plannerWeekPrev" title="Semana anterior" aria-label="Semana anterior"><svg class="i"><use href="#i-chev-left"/></svg></button>
+                <div class="bp-nav-label"><strong id="plannerWeekLabel">Esta semana</strong><button type="button" class="bd-btn bp-nav-today" id="plannerWeekToday">Semana atual</button></div>
+                <button type="button" class="bd-icon-btn" id="plannerWeekNext" title="Próxima semana" aria-label="Próxima semana"><svg class="i"><use href="#i-chev-right"/></svg></button>
               </div>
               <div id="plannerWeekBody" class="planner-week-body"></div>
             </div>
 
             <!-- ===== MÊS ===== -->
             <div class="planner-subview" data-planner-subview="month">
-              <div class="planner-day-nav">
-                <button class="icon-button" id="plannerMonthPrev" title="Mês anterior"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></button>
-                <div class="planner-day-nav-label">
-                  <strong id="plannerMonthLabel">Mês</strong>
-                  <button class="mini-button" id="plannerMonthToday">Mês atual</button>
-                </div>
-                <button class="icon-button" id="plannerMonthNext" title="Próximo mês"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></button>
+              <div class="bp-nav">
+                <button type="button" class="bd-icon-btn" id="plannerMonthPrev" title="Mês anterior" aria-label="Mês anterior"><svg class="i"><use href="#i-chev-left"/></svg></button>
+                <div class="bp-nav-label"><strong id="plannerMonthLabel">Mês</strong><button type="button" class="bd-btn bp-nav-today" id="plannerMonthToday">Mês atual</button></div>
+                <button type="button" class="bd-icon-btn" id="plannerMonthNext" title="Próximo mês" aria-label="Próximo mês"><svg class="i"><use href="#i-chev-right"/></svg></button>
               </div>
-              <div class="panel">
+              <section class="bd-card bp-month-card">
                 <div class="planner-month-scroll" aria-label="Calendário mensal">
-                  <div class="planner-month-weekdays">
-                    <span>Dom</span><span>Seg</span><span>Ter</span><span>Qua</span><span>Qui</span><span>Sex</span><span>Sáb</span>
-                  </div>
+                  <div class="planner-month-weekdays"><span>Dom</span><span>Seg</span><span>Ter</span><span>Qua</span><span>Qui</span><span>Sex</span><span>Sáb</span></div>
                   <div id="plannerMonthGrid" class="planner-month-grid"></div>
                 </div>
-              </div>
+              </section>
             </div>
 
+            <button type="button" class="bp-fab" id="plannerFab" aria-label="Nova tarefa"><svg class="i"><use href="#i-plus"/></svg></button>
+          </div>
+
+          <!-- Gerenciar metas: o antigo painel de metas (progresso, etapas, marcos, exclusão) -->
+          <div id="plannerGoalsModal" class="modal-backdrop" hidden>
+            <div class="modal-card bp-goals-modal" role="dialog" aria-modal="true" aria-labelledby="plannerGoalsTitle">
+              <div class="modal-header">
+                <h2 id="plannerGoalsTitle">Metas</h2>
+                <button type="button" class="icon-button" id="plannerGoalsClose" aria-label="Fechar">✕</button>
+              </div>
+              <div class="modal-body">
+                <button type="button" class="bd-btn bd-btn--primary" id="plannerNewGoalBtn"><svg class="i"><use href="#i-plus"/></svg>Nova meta</button>
+                <div id="plannerGoalsStrip" class="planner-goals-strip"></div>
+              </div>
+            </div>
           </div>
         </section>
 
