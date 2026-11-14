@@ -765,7 +765,7 @@ body.bdo-open { overflow: hidden; }
 .bp-agenda-head h3 { font-size: 16px; font-weight: 700; }
 .bp-agenda-head p { margin-top: 2px; font-size: 12.5px; color: var(--bd-text-2); }
 .bp-agenda-nav { display: flex; gap: 2px; }
-.bp-agenda-chips { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.bp-agenda-chips { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 6px; }
 .bp-agenda-chips button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-width: 0; height: 34px; padding: 0 6px; border: 1px solid var(--bd-line); border-radius: 10px; background: var(--bd-card-2); color: var(--bd-text-2); font-size: 12px; font-weight: 600; white-space: nowrap; }
 .bp-agenda-chips button .i { width: 14px; height: 14px; flex: none; }
 .bp-agenda-chips button span { overflow: hidden; text-overflow: ellipsis; font-size: 11.5px; }
@@ -1975,3 +1975,70 @@ body:not([data-active-view="finances"]) .bf-fab { display: none; }
 #categoryPickerSearch { margin-bottom: 12px; }
 #globalPaletteInput:focus, #categoryPickerSearch:focus { border-color: var(--bd-primary) !important; box-shadow: var(--bd-focus) !important; }
 #globalPaletteInput::placeholder, #categoryPickerSearch::placeholder { color: var(--bd-text-3); }
+
+/* =========================================================
+   Planner — ajustes (botão do topo, grupos e folha "Adicionar")
+   ========================================================= */
+/* O CSS antigo pintava este botão de azul→ciano; volta ao violeta do sistema. */
+#plannerView #plannerNewTaskBtn.bp-new, #plannerView #plannerNewTaskBtn.bp-new:hover {
+  border: 0; background: linear-gradient(135deg, #5b4ff5, #4d40f9); color: #fff;
+  box-shadow: 0 10px 20px -10px rgba(77,64,249,.7); transform: none; filter: none;
+}
+#plannerView #plannerNewTaskBtn.bp-new:hover { filter: brightness(1.08); }
+@media (max-width: 760px) {
+  /* No celular já existem o "+" do Planner e o "+" central — o botão do topo
+     só repetia a mesma ação e apertava a data. */
+  #plannerView #plannerNewTaskBtn.bp-new { display: none; }
+  #plannerView .bp-bar-row { grid-template-columns: minmax(0, 1fr); }
+  /* Grupos: bolinha colorida à esquerda e uma única seta à direita (quadro). */
+  .bp-group-head > .i:first-child { display: none; }
+  .bp-group-head > span:not(.bp-group-caret)::before { content: ""; display: inline-block; width: 6px; height: 6px; margin: 0 8px 2px 2px; border-radius: 50%; background: var(--bd-primary-ink); vertical-align: middle; }
+  .bp-group.is-overdue .bp-group-head > span:not(.bp-group-caret)::before { background: var(--bd-red); }
+  .bp-group[data-group="upcoming"] .bp-group-head > span:not(.bp-group-caret)::before { background: var(--bd-green); }
+}
+
+/* Folha "Adicionar ao planner" */
+#plannerQuickAddModal .pqa-card { border: 1px solid var(--bd-line); background: var(--bd-card); color: var(--bd-text); }
+#plannerQuickAddModal .modal-header h2 { font-size: 18px; font-weight: 750; letter-spacing: -.01em; }
+#plannerQuickAddModal #plannerQuickAddType {
+  display: grid; grid-template-columns: minmax(0, .85fr) minmax(0, 1.3fr) minmax(0, .85fr); gap: 4px; width: 100%; padding: 4px;
+  border: 1px solid var(--bd-line); border-radius: 14px; background: var(--bd-card-2);
+}
+#plannerQuickAddModal #plannerQuickAddType button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 0; height: 40px; margin: 0; padding: 0 6px;
+  border: 0; border-radius: 10px; background: transparent; color: var(--bd-text-2); font: inherit; font-size: 13.5px; font-weight: 600;
+  box-shadow: none; transform: none; overflow: hidden;
+}
+#plannerQuickAddModal #plannerQuickAddType button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#plannerQuickAddModal #plannerQuickAddType button svg { flex: none; }
+#plannerQuickAddModal #plannerQuickAddType button.active { background: linear-gradient(135deg, #5b4ff5, #4d40f9); color: #fff; box-shadow: 0 8px 18px -10px rgba(77,64,249,.8); }
+#plannerQuickAddModal #plannerQuickAddType button[hidden] { display: none; }
+#plannerQuickAddModal input:not([type="checkbox"]):not(.pqa-row-control),
+#plannerQuickAddModal select, #plannerQuickAddModal textarea {
+  width: 100%; min-height: 48px; padding: 0 14px; border: 1px solid var(--bd-line-strong); border-radius: 12px;
+  background: var(--bd-input); color: var(--bd-text); font: inherit; font-size: 15px; box-shadow: none; outline: 0;
+}
+#plannerQuickAddModal textarea { min-height: 76px; padding: 12px 14px; resize: vertical; }
+#plannerQuickAddModal input:not(.pqa-row-control):focus, #plannerQuickAddModal select:focus, #plannerQuickAddModal textarea:focus { border-color: var(--bd-primary); box-shadow: var(--bd-focus); }
+#plannerQuickAddModal .form-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+#plannerQuickAddModal .pqa-icon-row { min-height: 52px; padding: 4px 8px 4px 10px; border: 1px solid var(--bd-line-strong); border-radius: 12px; background: var(--bd-input); cursor: pointer; }
+#plannerQuickAddModal .pqa-row-icon { display: grid; place-items: center; flex: none; width: 32px; height: 32px; border-radius: 9px; background: color-mix(in srgb, currentColor 14%, transparent); }
+#plannerQuickAddModal .pqa-row-label { color: var(--bd-text); font-size: 14px; font-weight: 600; }
+#plannerQuickAddModal .pqa-row-label small { font-weight: 500; color: var(--bd-text-3); }
+#plannerQuickAddModal .pqa-icon-row .pqa-row-control {
+  flex: none; width: auto; min-width: 92px; max-width: 58%; height: 38px; min-height: 0; margin: 0; padding: 0 10px;
+  border: 0; border-radius: 9px; background: color-mix(in srgb, var(--bd-text) 6%, transparent); box-shadow: none; outline: 0;
+  color: var(--bd-text); font: inherit; font-size: 14px; font-weight: 600; text-align: right; -webkit-appearance: none; appearance: none;
+}
+#plannerQuickAddModal .pqa-icon-row .pqa-row-control:focus { box-shadow: var(--bd-focus); }
+#plannerQuickAddModal #pqaGoalTarget { width: 72px; min-width: 72px; text-align: center; }
+#plannerQuickAddModal .pqa-hint { margin: 8px 2px 0; font-size: 12.5px; line-height: 1.45; color: var(--bd-text-2); }
+#plannerQuickAddModal .form-actions { margin: 4px 0 0; }
+#plannerQuickAddModal .form-actions .primary-button { width: 100%; height: 50px; justify-content: center; border: 0; border-radius: 14px; background: linear-gradient(135deg, #5b4ff5, #4d40f9) !important; color: #fff; font-size: 15.5px; font-weight: 700; box-shadow: 0 12px 24px -12px rgba(77,64,249,.8); }
+#plannerQuickAddModal .reminder-custom-field { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; color: var(--bd-text-2); }
+#plannerQuickAddModal .reminder-custom-field[hidden] { display: none; }
+#plannerQuickAddModal .reminder-custom-field input { width: 90px; min-height: 40px; }
+@media (max-width: 370px) {
+  #plannerQuickAddModal #plannerQuickAddType button { gap: 4px; font-size: 13px; }
+  #plannerQuickAddModal #plannerQuickAddType button svg { width: 13px; height: 13px; }
+}

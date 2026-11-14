@@ -609,7 +609,7 @@
              num único lugar, no lugar dos 3 formulários espalhados pelas
              telas antigas. -->
         <div id="plannerQuickAddModal" class="modal-backdrop" hidden>
-          <div class="modal-card" style="max-width:420px">
+          <div class="modal-card pqa-card" style="max-width:420px">
             <div class="modal-header">
               <h2>Adicionar ao planner</h2>
               <button class="icon-button" id="closePlannerQuickAdd">✕</button>
@@ -641,7 +641,7 @@
                     <input id="pqaTaskDue" type="date" class="pqa-row-control" />
                   </label>
                   <label class="pqa-icon-row">
-                    <span class="pqa-row-icon" style="color:var(--teal)">◷</span>
+                    <span class="pqa-row-icon" style="color:#5ac8fa"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg></span>
                     <span class="pqa-row-label">Horário</span>
                     <input id="pqaTaskTime" type="time" class="pqa-row-control" />
                   </label>
@@ -668,8 +668,8 @@
                     <input id="pqaEventTime" type="time" />
                   </div>
                   <label class="pqa-icon-row" style="margin-top:10px">
-                    <span class="pqa-row-icon" style="color:var(--teal)">◷</span>
-                    <span class="pqa-row-label">Término</span>
+                    <span class="pqa-row-icon" style="color:#5ac8fa"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg></span>
+                    <span class="pqa-row-label">Término <small>(opcional)</small></span>
                     <input id="pqaEventEndTime" type="time" class="pqa-row-control" />
                   </label>
                   <input id="pqaEventLocation" placeholder="Local ou link" style="margin-top:10px" />
@@ -692,7 +692,12 @@
                 </div>
 
                 <div id="pqaGoalFields" style="display:none">
-                  <input id="pqaGoalTarget" type="number" min="1" max="100" value="5" placeholder="Nº de etapas" />
+                  <label class="pqa-icon-row">
+                    <span class="pqa-row-icon" style="color:#25d388"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V4"/><path d="M5 4h11l-2 4 2 4H5"/></svg></span>
+                    <span class="pqa-row-label">Marcos até concluir</span>
+                    <input id="pqaGoalTarget" type="number" min="1" max="100" value="5" inputmode="numeric" class="pqa-row-control" aria-label="Número de marcos" />
+                  </label>
+                  <p class="pqa-hint">Divida a meta em etapas — você marca cada uma no “Foco da semana” e acompanha o progresso.</p>
                 </div>
 
                 <div class="form-actions">

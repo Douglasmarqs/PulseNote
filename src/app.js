@@ -5395,6 +5395,8 @@ function setPlannerQuickAddType(type) {
   document.querySelector("#pqaGoalFields").style.display = type === "goal" ? "block" : "none";
   const form = document.querySelector("#plannerQuickAddForm");
   form.dataset.type = type;
+  const title = document.querySelector("#pqaTitle");
+  if (title) title.placeholder = { task: "O que precisa ser feito?", event: "Nome do compromisso", goal: "Qual é a sua meta?" }[type] || "Título";
   const referenceDate = plannerActiveTab === "day" ? plannerDayDate : todayIso;
   if (type === "task") {
     document.querySelector("#pqaTaskDue").value ||= referenceDate;
