@@ -71,6 +71,28 @@ function suggestion(kind, parts, details) {
   };
 }
 
+function brDate(iso) {
+  const [year, month, day] = String(iso || "").split("-");
+  return day && month ? `${day}/${month}${year ? `/${year}` : ""}` : String(iso || "");
+}
+
+function normalizeText(value) {
+  return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
+
+const PRIORITY_LABEL = { Baixa: "Baixa", Media: "Média", Alta: "Alta", Urgente: "Urgente" };
+const SUBSCRIPTION_HINT = /(assinatura|streaming|netflix|spotify|disney|hbo|max\b|prime video|amazon prime|youtube|deezer|apple|icloud|google one|globoplay|paramount|crunchyroll|software|adobe|canva|chatgpt|notion|office|microsoft 365|dropbox|clube|revista|jornal|produtividade)/;
+const NOT_SUBSCRIPTION = /(aluguel|condom|internet|luz|energia|agua|gas\b|financiamento|fatura|cartao|escola|faculdade|mensalidade escolar|seguro|plano de saude|plano de celular|celular|telefone|salario)/;
+const NOTE_FOLDER_RULES = [
+  ["Trabalho", /(reuni|projeto|cliente|relatorio|apresenta|equipe|sprint|kpi|trimestre|trabalho|empresa|contrato|roadmap|entrega)/],
+  ["Estudos", /(estud|curso|aula|prova|faculdade|livro|leitura|resumo|exercic|aprender|modulo|artigo)/],
+  ["Finanças", /(gasto|financ|orcamento|pagar|fatura|invest|economi|planilha|boleto|dinheiro)/],
+];
+
+function isPersonal(item) {
+  return (item?.workspaceId || "personal") === "personal";
+}
+
 function isOpen(item) {
   return item && item.status !== "Concluida" && item.status !== "Cancelada";
 }
@@ -117,6 +139,11 @@ function buildSuggestions(state = {}, now = new Date()) {
         { action: "reschedule_task_tomorrow", label: "Reagendar para amanhã" },
         { action: "complete_task", label: "Marcar como concluída" },
       ],
+      metrics: [
+        { icon: "calendar", label: "Venceu em", value: brDate(task.dueDate), tone: "negative" },
+        { icon: "flag", label: "Prioridade", value: PRIORITY_LABEL[task.priority] || "Média" },
+      ],
+      impact: { label: "Novo prazo", value: brDate(tomorrow) },
       metadata: { dueDate: task.dueDate, proposedDueDate: tomorrow },
     }));
   }
@@ -137,6 +164,11 @@ function buildSuggestions(state = {}, now = new Date()) {
       reason: `Está marcado para ${event.date}${event.time ? ` às ${event.time}` : ""}.`,
       target: { type: "event", id: event.id },
       actionOptions: [{ action: "create_prep_task", label: "Criar tarefa de preparação" }],
+      metrics: [
+        { icon: "calendar", label: "Data", value: brDate(event.date) },
+        { icon: "clock", label: "Horário", value: event.time || "Dia todo" },
+      ],
+      impact: { label: "Resultado", value: "Tarefa de preparação para hoje" },
       metadata: { date: event.date, time: event.time || "" },
     }));
   }
@@ -163,6 +195,12 @@ function buildSuggestions(state = {}, now = new Date()) {
       reason: `${pending.length} ${pending.length === 1 ? "item pendente" : "itens pendentes"}; próximo: ${checklistText(first.item)}.`,
       target: { type: "note", id: note.id },
       actionOptions: options,
+      metrics: [
+        { icon: "list", label: "Itens pendentes", value: String(pending.length) },
+        { icon: "check", label: "Próximo", value: checklistText(first.item) },
+      ],
+      items: pending.slice(0, 8).map(({ item }) => checklistText(item)),
+      impact: { label: "Progresso", value: `${pending.length - 1} ${pending.length - 1 === 1 ? "item restante" : "itens restantes"}` },
       metadata: { pendingCount: pending.length, itemIndex: first.index },
     }));
   }
@@ -190,7 +228,102 @@ function buildSuggestions(state = {}, now = new Date()) {
       reason: `${money(spent)} de ${money(Number(goal.limit))} usados neste mês (${Math.round(ratio * 100)}%).`,
       target: { type: "category_budget", id: goal.categoryId },
       actionOptions: [{ action: "create_budget_review_task", label: "Criar tarefa para revisar gastos" }],
+      metrics: [
+        { icon: "wallet", label: "Gasto atual", value: money(spent), tone: ratio >= 1 ? "negative" : "" },
+        { icon: "target", label: "Limite do mês", value: money(Number(goal.limit)) },
+      ],
+      impact: { label: "Uso do limite", value: `${Math.round(ratio * 100)}%`, tone: ratio >= 1 ? "negative" : "" },
       metadata: { month, category, spent, limit: Number(goal.limit) },
+    }));
+  }
+
+  // Assinaturas recorrentes: soma o que sai todo mês e mostra quanto daria
+  // para economizar por ano revisando-as.
+  const subscriptionMarker = `subscriptions:${month}`;
+  const subscriptions = asArray(state.finRecurrents)
+    .filter((item) => item?.id && isPersonal(item) && item.type !== "receita" && item.active !== false && Number(item.amount) > 0)
+    .filter((item) => {
+      const text = normalizeText(`${item.description} ${item.categoryId || item.category || ""}`);
+      return !NOT_SUBSCRIPTION.test(text) && ((item.categoryId || item.category) === "assinaturas" || SUBSCRIPTION_HINT.test(text));
+    })
+    .sort((a, b) => Number(b.amount) - Number(a.amount));
+  if (subscriptions.length >= 2 && !asArray(state.tasks).some((task) => task.autopilotSource === subscriptionMarker)) {
+    const monthly = Math.round(subscriptions.reduce((sum, item) => sum + Number(item.amount), 0) * 100) / 100;
+    const yearly = Math.round(monthly * 12 * 100) / 100;
+    const names = subscriptions.map((item) => `${asText(item.description, "Assinatura")} – ${money(Number(item.amount))}/mês`);
+    candidates.push(suggestion("recurring_subscriptions", [month, subscriptions.map((item) => [item.id, Number(item.amount)])], {
+      area: "finances",
+      priority: monthly >= 100 ? "high" : "medium",
+      score: monthly >= 100 ? 85 : 70,
+      title: "Reduzir gastos recorrentes",
+      reason: `Você tem ${subscriptions.length} assinaturas ativas (${money(monthly)}/mês). Cancele ou pause as que usa pouco e economize até ${money(yearly)} por ano.`,
+      target: { type: "subscriptions", id: month },
+      actionOptions: [
+        { action: "create_subscription_review_task", label: "Criar tarefa para revisar assinaturas" },
+        { action: "pause_subscription_recurrents", label: "Já cancelei: pausar estas recorrências" },
+      ],
+      metrics: [
+        { icon: "wallet", label: "Gasto atual", value: `${money(monthly)}/mês` },
+        { icon: "trend", label: "Economia estimada", value: `${money(yearly)}/ano`, tone: "positive" },
+      ],
+      items: names,
+      impact: { label: "Economia estimada", value: `+ ${money(yearly)}/ano`, tone: "positive" },
+      metadata: { month, monthly, yearly, ids: subscriptions.map((item) => item.id), names },
+    }));
+  }
+
+  // Semana cheia: sugere um momento para planejar.
+  const weekEnd = addCalendarDays(today, 7);
+  const weekday = new Date(`${today}T12:00:00.000Z`).getUTCDay();
+  const weekMarker = `plan_week:${addCalendarDays(today, -((weekday + 6) % 7))}`;
+  const weekTasks = asArray(state.tasks).filter((task) => task?.id && isOpen(task) && /^\d{4}-\d{2}-\d{2}$/.test(task.dueDate || "") && task.dueDate >= today && task.dueDate <= weekEnd);
+  const weekEvents = asArray(state.events).filter((event) => event?.id && isOpen(event) && event.date >= today && event.date <= weekEnd);
+  if (weekTasks.length >= 3 && !asArray(state.tasks).some((task) => task.autopilotSource === weekMarker)) {
+    candidates.push(suggestion("plan_week", [weekMarker, weekTasks.length, weekEvents.length], {
+      area: "planner",
+      priority: weekTasks.length >= 8 ? "high" : "medium",
+      score: 60,
+      title: "Planejar a próxima semana",
+      reason: `Há ${weekTasks.length} tarefas pendentes e ${weekEvents.length} ${weekEvents.length === 1 ? "compromisso" : "compromissos"} nos próximos 7 dias. Organize sua semana em 10 minutos.`,
+      target: { type: "week", id: weekMarker },
+      actionOptions: [{ action: "create_week_plan_task", label: "Criar tarefa de planejamento" }],
+      metrics: [
+        { icon: "list", label: `${weekTasks.length} ${weekTasks.length === 1 ? "tarefa pendente" : "tarefas pendentes"}` },
+        { icon: "calendar", label: `${weekEvents.length} ${weekEvents.length === 1 ? "compromisso" : "compromissos"}` },
+      ],
+      items: weekTasks.sort((a, b) => a.dueDate.localeCompare(b.dueDate)).slice(0, 8).map((task) => `${asText(task.title, "Tarefa")} · ${brDate(task.dueDate)}`),
+      impact: { label: "Tempo estimado", value: "10 minutos" },
+      metadata: { marker: weekMarker, tasks: weekTasks.length, events: weekEvents.length },
+    }));
+  }
+
+  // Notas sem pasta/categoria: propõe uma organização por palavras-chave.
+  const looseNotes = asArray(state.notes).filter((note) => note?.id && !asText(note.folder) && !asText(note.category));
+  if (looseNotes.length >= 3) {
+    const existingFolders = [...new Set(asArray(state.notes).map((note) => asText(note.folder)).filter(Boolean))];
+    const plan = looseNotes.map((note) => {
+      const text = normalizeText(`${note.title} ${note.description || ""} ${asArray(note.tags).join(" ")}`);
+      const rule = NOTE_FOLDER_RULES.find(([, pattern]) => pattern.test(text));
+      const base = rule ? rule[0] : "Pessoal";
+      const folder = existingFolders.find((name) => normalizeText(name) === normalizeText(base)) || base;
+      return { id: note.id, title: asText(note.title, "Nota sem título"), folder };
+    });
+    const folders = [...new Set(plan.map((item) => item.folder))];
+    candidates.push(suggestion("organize_notes", [plan.map((item) => [item.id, item.folder])], {
+      area: "notes",
+      priority: "low",
+      score: 45,
+      title: "Organizar suas notas",
+      reason: `Você tem ${looseNotes.length} notas sem categoria. Classifique em ${folders.length} ${folders.length === 1 ? "pasta" : "pastas"} e encontre tudo com mais rapidez.`,
+      target: { type: "notes", id: "loose" },
+      actionOptions: [{ action: "organize_notes_folders", label: `Organizar em ${folders.length} ${folders.length === 1 ? "pasta" : "pastas"}` }],
+      metrics: [
+        { icon: "note", label: `${looseNotes.length} notas sem categoria` },
+        { icon: "layers", label: `Sugestão: ${folders.join(", ")}` },
+      ],
+      items: plan.slice(0, 12).map((item) => `${item.title} → ${item.folder}`),
+      impact: { label: "Pastas", value: folders.join(", ") },
+      metadata: { plan },
     }));
   }
 
@@ -284,6 +417,47 @@ function applySuggestionAction(state, suggestionItem, action, now = new Date()) 
     const task = taskFromSuggestion(`Revisar gastos de ${suggestionItem.metadata.category}`, "Alta", today, today, { autopilotSource: marker });
     patch.tasks = [task, ...asArray(state.tasks)];
     result = { type: "task", id: task.id, title: task.title, message: "Tarefa de revisão de gastos criada." };
+  } else if (action === "create_subscription_review_task") {
+    const marker = `subscriptions:${suggestionItem.metadata.month}`;
+    if (asArray(state.tasks).some((task) => task.autopilotSource === marker)) {
+      throw Object.assign(new Error("stale_suggestion"), { status: 409 });
+    }
+    const task = taskFromSuggestion("Revisar assinaturas e cancelar as que não uso", "Alta", today, today, { autopilotSource: marker });
+    task.subtasks = asArray(suggestionItem.metadata.names).map((name) => ({ id: crypto.randomUUID(), title: name, done: false }));
+    patch.tasks = [task, ...asArray(state.tasks)];
+    result = { type: "task", id: task.id, title: task.title, message: "Tarefa para revisar as assinaturas criada." };
+  } else if (action === "pause_subscription_recurrents") {
+    const ids = new Set(asArray(suggestionItem.metadata.ids));
+    const recurrents = asArray(state.finRecurrents);
+    if (!recurrents.some((item) => ids.has(item.id) && item.active !== false)) {
+      throw Object.assign(new Error("stale_suggestion"), { status: 409 });
+    }
+    patch.finRecurrents = recurrents.map((item) => ids.has(item.id) ? { ...item, active: false, pausedBy: "autopilot", pausedAt: today } : item);
+    result = { type: "finRecurrents", id: suggestionItem.target.id, title: "Assinaturas", message: `${ids.size} recorrências pausadas. Você pode retomá-las em Finanças › Automação.` };
+  } else if (action === "create_week_plan_task") {
+    const marker = suggestionItem.metadata.marker;
+    if (asArray(state.tasks).some((task) => task.autopilotSource === marker)) {
+      throw Object.assign(new Error("stale_suggestion"), { status: 409 });
+    }
+    const task = taskFromSuggestion("Planejar a próxima semana", "Media", today, today, { autopilotSource: marker });
+    task.subtasks = [
+      `Revisar as ${suggestionItem.metadata.tasks} tarefas pendentes`,
+      `Confirmar os ${suggestionItem.metadata.events} compromissos`,
+      "Escolher as 3 prioridades da semana",
+    ].map((title) => ({ id: crypto.randomUUID(), title, done: false }));
+    patch.tasks = [task, ...asArray(state.tasks)];
+    result = { type: "task", id: task.id, title: task.title, message: "Tarefa de planejamento da semana criada." };
+  } else if (action === "organize_notes_folders") {
+    const plan = new Map(asArray(suggestionItem.metadata.plan).map((item) => [item.id, item.folder]));
+    const notes = asArray(state.notes);
+    let changed = 0;
+    patch.notes = notes.map((note) => {
+      if (!plan.has(note.id) || asText(note.folder) || asText(note.category)) return note;
+      changed += 1;
+      return { ...note, folder: plan.get(note.id), category: plan.get(note.id) };
+    });
+    if (!changed) throw Object.assign(new Error("stale_suggestion"), { status: 409 });
+    result = { type: "notes", id: "loose", title: "Notas", message: `${changed} ${changed === 1 ? "nota organizada" : "notas organizadas"} em pastas.` };
   } else {
     throw Object.assign(new Error("invalid_action"), { status: 400 });
   }
