@@ -1901,6 +1901,26 @@ function createDesignPreviewState(mode = "1") {
       { id: "preview-event-2", title: "Almoço com o time", date: todayIso, time: "13:00", endTime: "14:00", location: "", notes: "", reminder: 30 },
       { id: "preview-event-3", title: "Revisão do relatório", date: todayIso, time: "15:00", endTime: "16:00", location: "", notes: "", reminder: 15 },
     ],
+    notes: [
+      { id: "preview-note-1", title: "Planejamento do trimestre", description: "Definir metas, revisar projetos e alinhar próximos passos.", descriptionHtml: 'Definir metas, revisar projetos e <span style="background-color: rgb(253, 224, 71);">alinhar próximos passos.</span>', category: "Trabalho", folder: "Trabalho", tags: [], priority: "Alta", color: "purple", favorite: true, createdAt: todayIso, updatedAt: `${todayIso}T09:20:00`, attachments: [], goal: "", observations: "",
+        checklist: [
+          { id: "pn1-1", text: "Revisar metas do trimestre", done: true },
+          { id: "pn1-2", text: "Atualizar cronograma dos projetos", done: true },
+          { id: "pn1-3", text: "Alinhar com o time", done: true },
+          { id: "pn1-4", text: "Definir indicadores (KPIs)", done: false },
+          { id: "pn1-5", text: "Agendar reunião de acompanhamento", done: false },
+        ] },
+      { id: "preview-note-2", title: "Reunião de produto", description: "Pontos discutidos, decisões e próximos itens.", descriptionHtml: 'Pontos discutidos, decisões e <span style="background-color: rgb(253, 224, 71);">próximos itens.</span>', category: "Trabalho", folder: "Trabalho", tags: [], priority: "Media", color: "pink", favorite: false, createdAt: offsetDate(-1), updatedAt: `${offsetDate(-1)}T17:42:00`, attachments: [], goal: "", observations: "",
+        checklist: [{ id: "pn2-1", text: "Enviar resumo", done: false }, { id: "pn2-2", text: "Atualizar roadmap", done: false }, { id: "pn2-3", text: "Marcar retrospectiva", done: false }] },
+      { id: "preview-note-3", title: "Ideias de melhorias", description: "Otimizar o onboarding, revisar métricas e testar novos fluxos.", category: "Trabalho", folder: "Trabalho", tags: [], priority: "Media", color: "green", favorite: false, createdAt: offsetDate(-2), attachments: [], goal: "", observations: "",
+        checklist: [{ id: "pn3-1", text: "Mapear atritos", done: true }, { id: "pn3-2", text: "Rever métricas", done: true }, { id: "pn3-3", text: "Prototipar fluxo", done: false }, { id: "pn3-4", text: "Testar com usuários", done: false }] },
+      { id: "preview-note-4", title: "Estudos – IA", description: "Anotações do curso, links úteis e conceitos principais.", descriptionHtml: 'Anotações do curso, links úteis e <span style="background-color: rgb(253, 224, 71);">conceitos principais.</span>', category: "Estudos", folder: "Estudos", tags: [], priority: "Media", color: "blue", favorite: false, createdAt: offsetDate(-3), attachments: [], goal: "", observations: "",
+        checklist: [1, 2, 3, 4, 5, 6].map((n) => ({ id: `pn4-${n}`, text: `Módulo ${n}`, done: n <= 4 })) },
+      { id: "preview-note-5", title: "Leituras da semana", description: "Resumo dos principais insights e aplicações práticas.", category: "Pessoal", folder: "Pessoal", tags: [], priority: "Baixa", color: "purple", favorite: false, createdAt: offsetDate(-4), attachments: [], goal: "", observations: "",
+        checklist: [{ id: "pn5-1", text: "Capítulo 3", done: false }, { id: "pn5-2", text: "Artigo sobre hábitos", done: false }] },
+      { id: "preview-note-6", title: "Finanças pessoais", description: "Revisar gastos do mês, ajustar metas e atualizar planilha.", descriptionHtml: 'Revisar gastos do mês, <span style="background-color: rgb(253, 224, 71);">ajustar metas</span> e atualizar planilha.', category: "Pessoal", folder: "Pessoal", tags: [], priority: "Media", color: "green", favorite: false, createdAt: offsetDate(-6), attachments: [], goal: "", observations: "",
+        checklist: [{ id: "pn6-1", text: "Exportar extrato", done: true }, { id: "pn6-2", text: "Categorizar gastos", done: true }, { id: "pn6-3", text: "Atualizar planilha", done: true }] },
+    ],
     goals: [{ id: "preview-goal-1", title: "Concluir o relatório mensal e planejar fevereiro.", current: 72, target: 100, milestones: [
       { id: "ms-1", title: "Coletar dados", done: true },
       { id: "ms-2", title: "Analisar resultados", done: true },
@@ -3106,6 +3126,7 @@ function setView(view, { fromHistory = false } = {}) {
   target.classList.add("active-view");
   applyViewHeading(view);
   if (view === "dashboard") requestAnimationFrame(renderBoardsEvolution);
+  if (view === "notes") renderNotes();
   // Trocas de area precisam começar no topo imediatamente. O scroll suave
   // deixava o cabecalho parcialmente cortado durante a transicao, sobretudo
   // no mobile e em navegadores que preservam a posicao anterior.
@@ -3177,6 +3198,7 @@ function saveNote(event) {
     textColor,
     favorite: existing?.favorite || false,
     createdAt: existing?.createdAt || todayIso,
+    updatedAt: new Date().toISOString(),
     convertedToTaskId: existing?.convertedToTaskId || "",
     // A cor escolhida já aparece enquanto a pessoa escreve a primeira
     // versão da nota. Ao salvar, guardamos também o HTML equivalente para
@@ -3188,7 +3210,9 @@ function saveNote(event) {
   state.notes = id ? state.notes.map((note) => (note.id === id ? payload : note)) : [payload, ...state.notes];
   saveState();
   resetNoteForm();
+  closeNotesFormSheet();
   renderAll();
+  if (notesPanelMode()) openNoteDetail(payload.id);
   showToast(id ? "Anotacao atualizada." : "Anotacao criada.");
 }
 
@@ -3350,7 +3374,7 @@ function resetNoteForm() {
   const moreDetails = document.querySelector(".note-more-details");
   if (moreDetails) moreDetails.open = false;
   document.querySelector("#noteEditingBanner").hidden = true;
-  document.querySelector("#noteSaveBtnLabel").textContent = "Salvar anotação";
+  document.querySelector("#noteSaveBtnLabel").textContent = "Salvar nota";
   enableAutogrowTextareas();
 }
 
@@ -3383,6 +3407,7 @@ function bindNoteQuickControls() {
     toggleBtn.addEventListener("click", () => {
       field.hidden = !field.hidden;
       toggleBtn.classList.toggle("active", !field.hidden);
+      toggleBtn.setAttribute("aria-checked", String(!field.hidden));
       if (!field.hidden) document.querySelector("#noteChecklist").focus();
     });
   }
@@ -3540,10 +3565,11 @@ function applyViewHeading(view) {
   const first = bdFirstName();
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Bom dia" : hour < 18 ? "Boa tarde" : "Boa noite";
+  const compact = window.matchMedia("(max-width: 760px)").matches; // textos curtos do quadro mobile
   const headings = {
-    dashboard: [`${greeting}, ${first}! 👋`, "Aqui está o seu panorama de hoje."],
+    dashboard: [`${greeting}, ${first}! 👋`, compact ? "Seu panorama de hoje." : "Aqui está o seu panorama de hoje."],
     planner: ["Planner", "Organize suas tarefas, compromissos e metas."],
-    notes: [`Notas, ${first}! 📝`, "Capture ideias, organize informações e transforme em ação."],
+    notes: [`Notas, ${first}! 📝`, compact ? "Capture ideias, organize e aja." : "Capture ideias, organize informações e transforme em ação."],
     finances: ["Finanças", "Organize, acompanhe e evolua suas finanças."],
     autopilot: ["", ""],
     profile: ["Perfil", ""],
@@ -3556,7 +3582,8 @@ function applyViewHeading(view) {
   }
   const subtitleEl = document.querySelector("#viewSubtitle");
   if (subtitleEl) subtitleEl.textContent = subtitle;
-  document.body.dataset.view = view;
+  // Não usar data-view aqui: bindNavigation liga um clique de navegação em todo [data-view].
+  document.body.dataset.activeView = view;
   const dateEl = document.querySelector("#bdDateText");
   if (dateEl) dateEl.textContent = bdFormatBoardDate();
 }
@@ -5412,10 +5439,54 @@ function submitPlannerQuickAdd(event) {
   renderAll();
 }
 
+// ── Notas (visual dos quadros) ──────────────────────────────
+let notesSearchQuery = "";
+let ndChecklistAdding = false;
+const notesPanelMode = () => window.matchMedia("(min-width: 1181px)").matches;
+
+// "hoje, 09:20" / "ontem, 17:42" / "22 de jan" a partir de updatedAt (ou da data de criação)
+function noteWhen(note, { capital = false } = {}) {
+  const iso = note.updatedAt || "";
+  const dateIso = iso ? toLocalIso(new Date(iso)) : (note.createdAt || "");
+  if (!dateIso) return "";
+  const time = iso ? new Date(iso).toTimeString().slice(0, 5) : "";
+  let label;
+  if (dateIso === todayIso) label = time ? `hoje, ${time}` : "hoje";
+  else if (dateIso === offsetDate(-1)) label = time ? `ontem, ${time}` : "ontem";
+  else {
+    const d = new Date(`${dateIso}T12:00:00`);
+    label = `${d.getDate()} de ${BD_MONTHS[d.getMonth()]}`;
+  }
+  return capital ? label.charAt(0).toUpperCase() + label.slice(1) : label;
+}
+
+function noteIconFor(note) {
+  const text = `${note.folder || ""} ${note.category || ""} ${note.title || ""}`.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  if (/(estud|curso|leitura|livro|aula|faculdade)/.test(text)) return "book";
+  if (/(financ|gasto|orcamento|dinheiro|conta)/.test(text)) return "bars";
+  if (/(ideia|melhoria|brainstorm)/.test(text)) return "clipboard-list";
+  if (/(reuni|trabalho|planej|projeto|trimestre|produto)/.test(text)) return "calendar";
+  return "note";
+}
+
+function closeNotesFormSheet() {
+  document.querySelector("#noteFormWrap")?.classList.remove("is-open");
+  const backdrop = document.querySelector("#noteFormBackdrop");
+  if (backdrop) backdrop.hidden = true;
+}
+
+function openNotesFormSheet() {
+  document.querySelector("#noteFormWrap")?.classList.add("is-open");
+  const backdrop = document.querySelector("#noteFormBackdrop");
+  if (backdrop && !notesPanelMode() && window.matchMedia("(max-width: 760px)").matches) backdrop.hidden = false;
+  setTimeout(() => document.querySelector("#noteTitle")?.focus(), 60);
+}
+
 function renderNotes() {
   const filter = document.querySelector("#noteFilter").value;
-  const searchQuery = elements.globalSearch.value.trim();
-  let notes = queryFilter(state.notes, ["title", "description", "category", "folder", "goal"]);
+  const searchQuery = (notesSearchQuery || elements.globalSearch.value || "").trim();
+  const q = searchQuery.toLowerCase();
+  let notes = state.notes.filter((note) => !q || ["title", "description", "category", "folder", "goal"].some((field) => String(note[field] || "").toLowerCase().includes(q)));
   if (filter === "favorite") notes = notes.filter((note) => note.favorite);
   if (["Alta", "Urgente"].includes(filter)) notes = notes.filter((note) => note.priority === filter);
   if (notesFolderFilter !== "all") notes = notes.filter((note) => ((note.folder || "").trim() || "Sem pasta") === notesFolderFilter);
@@ -5429,55 +5500,66 @@ function renderNotes() {
     (note) => renderNoteCard(note, searchQuery),
     emptyStateHtml(
       isFiltering
-        ? {
-            iconName: "inbox",
-            title: "Nada por aqui com esse filtro",
-            desc: "Tente limpar a busca, trocar a pasta ou o filtro de prioridade.",
-          }
-        : {
-            iconName: "notebook",
-            title: "Sua primeira nota está a um toque",
-            desc: "Ideias, lembretes e recados soltos — tudo cabe aqui, sem formulário complicado.",
-            ctaLabel: "Nova nota",
-            ctaOnClick: "document.querySelector('#noteTitle').focus()",
-            mascot: true,
-            mascotBadgeIcon: "notebook",
-          }
+        ? { iconName: "inbox", title: "Nada por aqui com esse filtro", desc: "Tente limpar a busca, trocar a pasta ou o filtro." }
+        : { iconName: "notebook", title: "Sua primeira nota está a um toque", desc: "Ideias, lembretes e recados soltos: tudo cabe aqui.", ctaLabel: "Nova nota", ctaOnClick: "openNotesFormSheet()", mascot: true, mascotBadgeIcon: "notebook" }
     ),
     ""
   );
+
+  // Computador: a nota aberta fica no painel da direita; abre a primeira se nenhuma estiver aberta.
+  const empty = document.querySelector("#noteDetailEmpty");
+  if (notesPanelMode()) {
+    if (ndCurrentNoteId && !state.notes.some((n) => n.id === ndCurrentNoteId)) closeNoteDetailUI();
+    if (!ndCurrentNoteId && notes.length && activeView === "notes") openNoteDetail(notes[0].id);
+  }
+  if (empty) empty.hidden = Boolean(ndCurrentNoteId);
 }
 
-// ── Pastas: derivadas dos próprios valores de "folder" das notas —
-// sem precisar de uma estrutura de dados nova. Toque numa pasta pra
-// filtrar a biblioteca por ela. ──
+// Pastas: "Todas (n)", uma por pasta (com contagem) e "+ Pasta".
 function renderNoteFolders() {
-  const wrap = document.querySelector("#noteFoldersWrap");
   const root = document.querySelector("#noteFolders");
-  if (!root || !wrap) return;
+  if (!root) return;
   const counts = {};
   state.notes.forEach((n) => {
     const key = (n.folder || "").trim() || "Sem pasta";
     counts[key] = (counts[key] || 0) + 1;
   });
-  const folders = Object.keys(counts).sort((a, b) => a.localeCompare(b, "pt-BR"));
-  if (!folders.length) {
-    wrap.hidden = true;
-    root.innerHTML = "";
-    return;
-  }
-  wrap.hidden = false;
-  const allChip = `<button class="folder-chip ${notesFolderFilter === "all" ? "active" : ""}" type="button" onclick="setNotesFolderFilter('all')">${icon("notebook", 13)}<span>Todas as pastas</span><span class="pill">${state.notes.length}</span></button>`;
-  const chips = folders.map((f) => {
-    const safe = f.replace(/'/g, "\\'");
-    return `<button class="folder-chip ${notesFolderFilter === f ? "active" : ""}" type="button" onclick="setNotesFolderFilter('${safe}')">${icon("folder", 13)}<span>${escapeHtml(f)}</span><span class="pill">${counts[f]}</span></button>`;
-  });
-  root.innerHTML = [allChip, ...chips].join("");
+  const folders = Object.keys(counts).sort((a, b) => counts[b] - counts[a] || a.localeCompare(b, "pt-BR"));
+  const chip = (value, label, count) => `<button type="button" class="bn-chip${notesFolderFilter === value ? " active" : ""}" data-note-folder="${escapeHtml(value)}" aria-pressed="${notesFolderFilter === value}">${escapeHtml(label)} <span>(${count})</span></button>`;
+  root.innerHTML = [
+    chip("all", "Todas", state.notes.length),
+    ...folders.map((f) => chip(f, f, counts[f])),
+    `<button type="button" class="bn-chip bn-chip--add" data-new-folder>${bdIcon("plus")}Pasta</button>`,
+  ].join("");
 }
 
 function setNotesFolderFilter(folder) {
   notesFolderFilter = folder;
   renderNotes();
+}
+
+function renderNoteCard(note, searchQuery) {
+  const tone = noteColorTone(note);
+  const items = note.checklist || [];
+  const done = items.filter(noteChecklistItemDone).length;
+  const titleHtml = highlightMatch(escapeHtml(note.title || "Sem título"), searchQuery);
+  const preview = note.descriptionHtml
+    ? sanitizeNoteHtml(note.descriptionHtml)
+    : highlightMatch(escapeHtml(note.description || ""), searchQuery).replace(/\n/g, "<br>");
+  const selected = note.id === ndCurrentNoteId && notesPanelMode();
+  const complete = items.length > 0 && done === items.length;
+  return `<article class="bn-card${selected ? " is-selected" : ""}" style="--nc:${tone.border}" data-note-id="${note.id}" tabindex="0" role="button" aria-label="Abrir nota ${escapeHtml(note.title || "")}" onclick="openNoteDetail('${note.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openNoteDetail('${note.id}')}">
+    <header>
+      <span class="bn-card-ico">${bdIcon(noteIconFor(note))}</span>
+      <button type="button" class="bn-star${note.favorite ? " is-on" : ""}" onclick="event.stopPropagation(); toggleFavorite('${note.id}')" aria-pressed="${!!note.favorite}" aria-label="${note.favorite ? "Remover dos favoritos" : "Favoritar"}"><svg class="i" ${note.favorite ? 'fill="currentColor"' : ""}><use href="#i-star"/></svg></button>
+    </header>
+    <h4>${titleHtml}</h4>
+    ${preview ? `<div class="bn-card-body">${preview}</div>` : ""}
+    <footer>
+      ${items.length ? `<span class="bn-card-check${complete ? " is-complete" : ""}">${bdIcon(complete ? "check-circle" : "check")}${done}/${items.length}</span>` : "<span></span>"}
+      <span class="bn-when">${escapeHtml(noteWhen(note, { capital: true }))}</span>
+    </footer>
+  </article>`;
 }
 
 // Checklists criados nas versões antigas eram arrays de texto. As funções
@@ -5489,66 +5571,6 @@ function noteChecklistItemText(item) {
 
 function noteChecklistItemDone(item) {
   return typeof item === "object" && !!item?.done;
-}
-
-function renderNoteCard(note, searchQuery) {
-  const tone = noteColorTone(note); // cor escolhida pela pessoa; notas antigas mantêm a cor determinística anterior
-  const checklistHtml =
-    note.checklist && note.checklist.length
-      ? `<div class="checklist-preview">${note.checklist
-          .map((item, i) => {
-            const done = noteChecklistItemDone(item);
-            return `<div class="cl-item${done ? " is-done" : ""}${i >= 3 ? " cl-item-extra" : ""}"><span class="cl-check">${icon("check", 11)}</span><span class="cl-text">${escapeHtml(noteChecklistItemText(item))}</span></div>`;
-          })
-          .join("")}${
-          note.checklist.length > 3
-            ? `<button type="button" class="cl-toggle-btn" onclick="event.stopPropagation(); toggleNoteChecklistPreview(this)">+${note.checklist.length - 3} mais itens</button>`
-            : ""
-        }</div>`
-      : "";
-
-  const tagsHtml =
-    note.tags && note.tags.length ? `<div class="tag-list">${note.tags.slice(0, 3).map((t) => `<span class="pill">#${escapeHtml(t)}</span>`).join("")}</div>` : "";
-
-  const words = (note.description || "").trim().split(/\s+/).filter(Boolean).length;
-  const readingMin = Math.max(1, Math.round(words / 200));
-  const wordCountHtml = words > 0 ? `<small class="task-meta note-wordcount">${words} palavras · ${readingMin} min de leitura</small>` : "";
-
-  const titleHtml = highlightMatch(escapeHtml(note.title), searchQuery);
-  const formattedDescription = note.descriptionHtml
-    ? sanitizeNoteHtml(note.descriptionHtml)
-    : highlightMatch(escapeHtml(note.description || ""), searchQuery).replace(/\n/g, "<br>");
-  const descHtml = formattedDescription ? `<div class="note-card-preview">${formattedDescription}</div>` : "";
-  const folderName = (note.folder || "").trim();
-  const folderHtml = folderName ? `<span class="note-folder-badge">${icon("folder", 11)}${escapeHtml(folderName)}</span>` : "";
-
-  return `
-    <article class="note-card" style="--note-card-bg:${tone.bg};--note-card-ink:${tone.border};border-left-color:${tone.border}" onclick="openNoteDetail('${note.id}')">
-      <header>
-        <div>
-          <h3>${titleHtml}</h3>
-          <div class="note-meta">${escapeHtml(note.category || "Geral")} · ${formatDate(note.createdAt)}${folderHtml}</div>
-        </div>
-        <button class="note-fav-btn ${note.favorite ? "is-active" : ""}" onclick="event.stopPropagation(); toggleFavorite('${note.id}')" title="Favoritar">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="${note.favorite ? "currentColor" : "none"}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></svg>
-        </button>
-      </header>
-      ${descHtml}
-      ${wordCountHtml}
-      ${checklistHtml}
-      ${tagsHtml}
-      <div class="tag-list note-priority-row">
-        <span class="priority-pill priority-${note.priority}">${escapeHtml(note.priority)}</span>
-      </div>
-      <div class="card-actions note-card-actions">
-        <button onclick="event.stopPropagation(); editNote('${note.id}')" title="Mais campos (categoria, pasta, tags...)">${icon("pencil", 14)}<span>Editar</span></button>
-        ${note.convertedToTaskId
-          ? `<button class="is-done-action" onclick="event.stopPropagation(); convertNoteToTask('${note.id}')" title="Já virou tarefa — toque pra ver no Planner">${icon("check", 14)}<span>Virou tarefa</span></button>`
-          : `<button onclick="event.stopPropagation(); convertNoteToTask('${note.id}')" title="Virar tarefa">${icon("arrowRight", 14)}<span>Tarefa</span></button>`}
-        <button class="danger-action" onclick="event.stopPropagation(); deleteNote('${note.id}')" title="Excluir" aria-label="Excluir">${icon("trash", 14)}</button>
-      </div>
-    </article>
-  `;
 }
 
 // Envolve trechos que batem com a busca em <mark>, pra destacar visualmente
@@ -5626,7 +5648,7 @@ function editNote(id) {
 
   enableAutogrowTextareas();
   setView("notes");
-  document.querySelector("#noteTitle").focus();
+  openNotesFormSheet();
 }
 
 function toggleFavorite(id) {
@@ -5686,7 +5708,7 @@ let ndCurrentNoteId = null;
 // `<b>`/`<i>` — sem isso aqui, o sanitizador jogaria essa formatação
 // fora sem querer.
 function sanitizeNoteHtml(html) {
-  const allowedTags = new Set(["B", "STRONG", "I", "EM", "BR", "DIV", "SPAN", "MARK", "P", "FONT"]);
+  const allowedTags = new Set(["B", "STRONG", "I", "EM", "U", "UL", "OL", "LI", "A", "BR", "DIV", "SPAN", "MARK", "P", "FONT"]);
   const allowedStyles = ["color", "backgroundColor", "fontWeight", "fontStyle"];
   const template = document.createElement("template");
   template.innerHTML = String(html || "");
@@ -5706,8 +5728,19 @@ function sanitizeNoteHtml(html) {
       const keptStyles = node.style
         ? allowedStyles.map((prop) => [prop, node.style[prop]]).filter(([, value]) => value)
         : [];
+      const href = node.tagName === "A" ? String(node.getAttribute("href") || "").trim() : "";
       [...node.attributes].forEach((attr) => node.removeAttribute(attr.name));
       keptStyles.forEach(([prop, value]) => { node.style[prop] = value; });
+      if (node.tagName === "A") {
+        if (/^(https?:\/\/|mailto:)/i.test(href)) {
+          node.setAttribute("href", href);
+          node.setAttribute("target", "_blank");
+          node.setAttribute("rel", "noopener noreferrer");
+        } else {
+          node.replaceWith(document.createTextNode(node.textContent));
+          return;
+        }
+      }
       clean(node);
     });
   };
@@ -5795,7 +5828,7 @@ function flushNoteDetailSave() {
 
   state.notes = state.notes.map((note) =>
     note.id === ndCurrentNoteId
-      ? { ...note, title, description: plainText, descriptionHtml: cleanHtml }
+      ? { ...note, title, description: plainText, descriptionHtml: cleanHtml, updatedAt: new Date().toISOString() }
       : note
   );
   saveState();
@@ -5805,7 +5838,13 @@ function flushNoteDetailSave() {
 function openNoteDetail(id) {
   const note = state.notes.find((item) => item.id === id);
   if (!note) return;
+  if (ndCurrentNoteId && ndCurrentNoteId !== id) flushNoteDetailSave();
+  const switching = Boolean(ndCurrentNoteId);
   ndCurrentNoteId = id;
+  ndChecklistAdding = false;
+  document.querySelector("#ndMenu")?.setAttribute("hidden", "");
+  document.querySelector("#ndMorePanel")?.setAttribute("hidden", "");
+  document.querySelector("#ndLinkForm")?.setAttribute("hidden", "");
 
   document.querySelector("#ndTitle").value = note.title || "";
   const body = document.querySelector("#ndBody");
@@ -5816,11 +5855,22 @@ function openNoteDetail(id) {
   renderNoteDetailChecklist(note);
 
   document.querySelector("#ndMeta").textContent =
-    `${note.category || "Geral"} · criada em ${formatDate(note.createdAt)}`;
+    `${(note.folder || note.category || "Geral").trim()} • Atualizado ${noteWhen(note)}`;
+  document.querySelector(".bn-detail-ico")?.style.setProperty("--nc", noteColorTone(note).border);
+  const detailIcon = document.querySelector(".bn-detail-ico use");
+  if (detailIcon) detailIcon.setAttribute("href", `#i-${noteIconFor(note)}`);
   document.querySelector("#ndFavBtn").classList.toggle("is-fav", !!note.favorite);
   document.querySelector("#ndFavBtn svg").setAttribute("fill", note.favorite ? "currentColor" : "none");
+  const favLabel = document.querySelector("#ndFavBtn span");
+  if (favLabel) favLabel.textContent = note.favorite ? "Remover dos favoritos" : "Favoritar";
 
   document.querySelector("#noteDetailModal").hidden = false;
+  const emptyPanel = document.querySelector("#noteDetailEmpty");
+  if (emptyPanel) emptyPanel.hidden = true;
+  document.querySelectorAll("#notesList .bn-card").forEach((card) => card.classList.toggle("is-selected", notesPanelMode() && card.dataset.noteId === id));
+  // No computador a nota abre no painel ao lado: sem travar a rolagem nem criar histórico.
+  if (notesPanelMode()) return;
+  if (switching) return;
   lockBackgroundScroll();
   // Empurra um estado de histórico só pra isso — assim o gesto de
   // "voltar" do celular (ou o botão físico/gesto de voltar do
@@ -5838,17 +5888,17 @@ function renderNoteDetailChecklist(note) {
   if (!section || !list || !summary || !progress || !progressBar) return;
   const items = note?.checklist || [];
   const completed = items.filter(noteChecklistItemDone).length;
-  section.hidden = items.length === 0;
+  section.hidden = items.length === 0 && !ndChecklistAdding;
   section.classList.toggle("is-complete", items.length > 0 && completed === items.length);
   summary.textContent = completed === items.length
     ? "Tudo concluído"
     : `${items.length - completed} ${items.length - completed === 1 ? "item pendente" : "itens pendentes"}`;
-  progress.textContent = `${completed}/${items.length}`;
+  progress.textContent = items.length ? `${completed} de ${items.length} (${Math.round((completed / items.length) * 100)}%)` : "0 de 0";
   progressBar.style.width = `${items.length ? Math.round((completed / items.length) * 100) : 0}%`;
   list.innerHTML = items.map((item, index) => {
     const done = noteChecklistItemDone(item);
-    return `<button type="button" class="note-detail-check-item${done ? " is-done" : ""}" onclick="toggleNoteChecklistItem('${note.id}', ${index})" aria-pressed="${done}">
-      <span class="note-detail-check-box">${done ? icon("check", 13) : ""}</span>
+    return `<button type="button" class="bn-check-item${done ? " is-done" : ""}" onclick="toggleNoteChecklistItem('${note.id}', ${index})" aria-pressed="${done}">
+      <span class="bn-check-box">${done ? bdIcon("check") : ""}</span>
       <span>${escapeHtml(noteChecklistItemText(item))}</span>
     </button>`;
   }).join("");
@@ -5863,6 +5913,7 @@ function toggleNoteChecklistItem(noteId, index) {
     text: noteChecklistItemText(current),
     done: !noteChecklistItemDone(current),
   };
+  note.updatedAt = new Date().toISOString();
   saveState();
   renderNoteDetailChecklist(note);
   renderNotes();
@@ -5881,6 +5932,8 @@ function closeNoteDetailUI() {
   document.querySelector("#noteDetailModal").hidden = true;
   unlockBackgroundScroll();
   ndCurrentNoteId = null;
+  const emptyPanel = document.querySelector("#noteDetailEmpty");
+  if (emptyPanel) emptyPanel.hidden = false;
 }
 
 // Fecha a nota — SEMPRE salva antes, não importa por onde a pessoa
@@ -5898,10 +5951,45 @@ function closeNoteDetail({ updateHistory = true } = {}) {
 
 function saveNoteDetail() {
   if (!ndCurrentNoteId) return;
+  if (notesPanelMode()) {
+    flushNoteDetailSave();
+    renderNotes();
+    showToast("Nota salva.");
+    return;
+  }
   closeNoteDetail();
 }
 
+// Tela de Notas: atalhos do celular, busca própria, pastas e "+ Pasta".
+function bindNotesBoard() {
+  document.querySelector("#notesOpenForm")?.addEventListener("click", openNotesFormSheet);
+  document.querySelector("#notesCloseForm")?.addEventListener("click", closeNotesFormSheet);
+  document.querySelector("#noteFormBackdrop")?.addEventListener("click", closeNotesFormSheet);
+  document.querySelector("#notesOpenLibrary")?.addEventListener("click", (event) => {
+    const library = document.querySelector("#notesLibrary");
+    const open = !library.classList.contains("is-expanded");
+    library.classList.toggle("is-expanded", open);
+    event.currentTarget.setAttribute("aria-expanded", String(open));
+    if (open) setTimeout(() => document.querySelector("#notesSearch")?.focus(), 50);
+  });
+  const search = document.querySelector("#notesSearch");
+  search?.addEventListener("input", debounce(() => { notesSearchQuery = search.value; renderNotes(); }, 150));
+  document.querySelector("#noteFolders")?.addEventListener("click", (event) => {
+    if (event.target.closest("[data-new-folder]")) {
+      openNotesFormSheet();
+      const details = document.querySelector(".note-more-details");
+      if (details) details.open = true;
+      setTimeout(() => document.querySelector("#noteFolder")?.focus(), 80);
+      showToast("Digite o nome da nova pasta e salve a nota nela.");
+      return;
+    }
+    const chip = event.target.closest("[data-note-folder]");
+    if (chip) setNotesFolderFilter(chip.dataset.noteFolder);
+  });
+}
+
 function bindNoteDetail() {
+  bindNotesBoard();
   const modal = document.querySelector("#noteDetailModal");
   const body = document.querySelector("#ndBody");
   if (!modal || !body) return;
@@ -5949,6 +6037,8 @@ function bindNoteDetail() {
     const note = state.notes.find((n) => n.id === ndCurrentNoteId);
     document.querySelector("#ndFavBtn").classList.toggle("is-fav", !!note?.favorite);
     document.querySelector("#ndFavBtn svg").setAttribute("fill", note?.favorite ? "currentColor" : "none");
+    const favLabel = document.querySelector("#ndFavBtn span");
+    if (favLabel) favLabel.textContent = note?.favorite ? "Remover dos favoritos" : "Favoritar";
   });
 
   document.querySelector("#ndConvertTaskBtn").addEventListener("click", () => {
@@ -6020,6 +6110,26 @@ function bindNoteDetail() {
     const toolBtn = e.target.closest("[data-nd-cmd]");
     if (!swatch && !toolBtn) return;
 
+    const panelCommand = toolBtn?.dataset.ndCmd;
+    if (panelCommand === "more" || panelCommand === "link" || panelCommand === "checklist") {
+      const morePanel = document.querySelector("#ndMorePanel");
+      const linkForm = document.querySelector("#ndLinkForm");
+      if (panelCommand === "more") {
+        morePanel.hidden = !morePanel.hidden;
+        toolBtn.setAttribute("aria-expanded", String(!morePanel.hidden));
+      } else if (panelCommand === "link") {
+        linkForm.hidden = !linkForm.hidden;
+        if (!linkForm.hidden) setTimeout(() => document.querySelector("#ndLinkInput")?.focus(), 30);
+      } else {
+        ndChecklistAdding = true;
+        morePanel.hidden = true;
+        const note = state.notes.find((n) => n.id === ndCurrentNoteId);
+        if (note) renderNoteDetailChecklist(note);
+        setTimeout(() => document.querySelector("#ndChecklistAddInput")?.focus(), 30);
+      }
+      return;
+    }
+
     const savedRange = ndSavedRange;
     body.focus();
     const sel = window.getSelection();
@@ -6043,6 +6153,14 @@ function bindNoteDetail() {
       document.execCommand("bold");
     } else if (toolBtn.dataset.ndCmd === "italic") {
       document.execCommand("italic");
+    } else if (toolBtn.dataset.ndCmd === "underline") {
+      document.execCommand("underline");
+    } else if (toolBtn.dataset.ndCmd === "ul") {
+      document.execCommand("insertUnorderedList");
+    } else if (toolBtn.dataset.ndCmd === "ol") {
+      document.execCommand("insertOrderedList");
+    } else if (toolBtn.dataset.ndCmd === "highlight") {
+      document.execCommand("backColor", false, "#fde047");
     } else if (toolBtn.dataset.ndCmd === "clear") {
       document.execCommand("backColor", false, "transparent");
       document.execCommand("foreColor", false, getComputedStyle(body).color);
@@ -6053,6 +6171,57 @@ function bindNoteDetail() {
     }
     saveNdSelection();
     flushNoteDetailSave();
+  });
+
+  // Link: aplica no trecho selecionado (ou insere o próprio endereço)
+  document.querySelector("#ndLinkForm")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    let url = document.querySelector("#ndLinkInput").value.trim();
+    if (!url) return;
+    if (!/^(https?:\/\/|mailto:)/i.test(url)) url = `https://${url}`;
+    body.focus();
+    const sel = window.getSelection();
+    if (sel && ndSavedRange && body.contains(ndSavedRange.commonAncestorContainer)) {
+      sel.removeAllRanges();
+      sel.addRange(ndSavedRange);
+    }
+    if (sel && sel.rangeCount && !sel.getRangeAt(0).collapsed) document.execCommand("createLink", false, url);
+    else document.execCommand("insertHTML", false, `<a href="${escapeHtml(url)}">${escapeHtml(url)}</a>&nbsp;`);
+    document.querySelector("#ndLinkInput").value = "";
+    event.target.hidden = true;
+    flushNoteDetailSave();
+  });
+
+  // Menu "⋮" da nota
+  const menuBtn = document.querySelector("#ndMenuBtn");
+  const menu = document.querySelector("#ndMenu");
+  menuBtn?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    menu.hidden = !menu.hidden;
+    menuBtn.setAttribute("aria-expanded", String(!menu.hidden));
+  });
+  document.addEventListener("click", (event) => {
+    if (menu && !menu.hidden && !event.target.closest(".bn-menu-wrap")) {
+      menu.hidden = true;
+      menuBtn?.setAttribute("aria-expanded", "false");
+    }
+  });
+  menu?.addEventListener("click", () => { menu.hidden = true; menuBtn?.setAttribute("aria-expanded", "false"); });
+
+  // Novo item da checklist direto na nota aberta
+  document.querySelector("#ndChecklistAddForm")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const input = document.querySelector("#ndChecklistAddInput");
+    const text = input.value.trim();
+    const note = state.notes.find((n) => n.id === ndCurrentNoteId);
+    if (!text || !note) return;
+    note.checklist = [...(note.checklist || []), { id: crypto.randomUUID(), text, done: false }];
+    note.updatedAt = new Date().toISOString();
+    saveState();
+    input.value = "";
+    renderNoteDetailChecklist(note);
+    renderNotes();
+    input.focus();
   });
 
   // Gesto/botão físico de "voltar" do celular fecha a nota em vez de

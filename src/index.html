@@ -148,6 +148,9 @@
         <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3.500l9.500 16.500h-19z"/><path d="M12 10v4.500M12 17.200v.1"/></symbol>
         <symbol id="i-repeat" viewBox="0 0 24 24"><path d="M17 3l3.500 3.500L17 10M3.500 11.500v-1A4 4 0 017.500 6.500h13M7 21l-3.500-3.500L7 14M20.500 12.500v1a4 4 0 01-4 4h-13"/></symbol>
         <symbol id="i-clipboard-list" viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="17" rx="2.500"/><path d="M9 4h6v3H9zM9 12h6M9 16h4"/></symbol>
+        <symbol id="i-list-num" viewBox="0 0 24 24"><path d="M10 6h10M10 12h10M10 18h10M4 5h1.500v4M3.800 9h3.400M3.800 14.200a1.500 1.500 0 012.800.6c0 1-2.800 2.200-2.800 3.200h3"/></symbol>
+        <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4.500 4.500 0 006.400 0l3-3a4.500 4.500 0 00-6.400-6.400l-1 1"/><path d="M14 10a4.500 4.500 0 00-6.400 0l-3 3a4.500 4.500 0 006.400 6.400l1-1"/></symbol>
+        <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 5.500A2.500 2.500 0 016.500 3H20v15H6.500A2.500 2.500 0 004 20.500z"/><path d="M4 20.500A2.500 2.500 0 006.500 23H20v-5"/></symbol>
         <symbol id="i-trophy" viewBox="0 0 24 24"><path d="M7 4h10v5a5 5 0 01-10 0zM7 6H4v1.500A3.500 3.500 0 007.500 11M17 6h3v1.500A3.500 3.500 0 0116.500 11M12 14v4M8.500 20.500h7"/></symbol>
       </defs>
     </svg>
@@ -802,62 +805,52 @@
 
         <!-- ===== NOTES VIEW ===== -->
         <section id="notesView" class="view">
-          <div class="workbench">
+          <div class="bn-shell">
 
-            <!-- Editor -->
-            <form id="noteForm" class="editor-panel note-editor">
-              <div class="form-heading">
-                <div>
-                  <p class="eyebrow">Nova anotação</p>
-                  <h2>O que você quer guardar hoje?</h2>
-                </div>
-              </div>
-              <input id="noteId" type="hidden" />
+            <!-- Celular: atalhos como no quadro -->
+            <div class="bn-entries">
+              <button type="button" class="bn-entry" id="notesOpenForm"><span class="bn-entry-ico"><svg class="i"><use href="#i-layers"/></svg></span><strong>Nova nota</strong><svg class="i"><use href="#i-chev-right"/></svg></button>
+              <button type="button" class="bn-entry" id="notesOpenLibrary" aria-expanded="false"><span class="bn-entry-ico"><svg class="i"><use href="#i-layers"/></svg></span><strong>Minha biblioteca</strong><svg class="i"><use href="#i-chev-right"/></svg></button>
+            </div>
 
-              <!-- Só aparece quando você está editando uma nota existente —
-                   antes o formulário ficava idêntico pra criar e editar,
-                   sem nenhum aviso de qual dos dois modos você estava. -->
-              <div id="noteEditingBanner" class="note-editing-banner" hidden>
+            <div class="bn-grid">
+              <!-- Nova nota (no celular abre como painel inferior) -->
+              <div class="bn-form-wrap" id="noteFormWrap">
+                <form id="noteForm" class="bd-card bn-form">
+                  <header class="bn-head">
+                    <span class="bn-head-ico"><svg class="i"><use href="#i-note"/></svg></span>
+                    <h3>Nova nota</h3>
+                    <button id="resetNoteForm" type="button" class="bn-text-btn">Limpar</button>
+                    <button type="button" class="bd-icon-btn bn-form-close" id="notesCloseForm" aria-label="Fechar"><svg class="i"><use href="#i-x"/></svg></button>
+                  </header>
+                  <input id="noteId" type="hidden" />
+                  <div id="noteEditingBanner" class="note-editing-banner" hidden>
                 <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h8"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>Editando <strong id="noteEditingTitle"></strong></span>
                 <button type="button" id="cancelEditNote">Cancelar edição</button>
               </div>
-
-              <label class="note-title-field">
-                <input id="noteTitle" required maxlength="80" placeholder="Dê um título curto..." autocomplete="off" />
-              </label>
-              <label class="note-body-field">
-                <textarea id="noteDescription" class="autogrow" rows="3" placeholder="Escreva livremente aqui — ideias, lembretes, recados para você mesmo..."></textarea>
-              </label>
-
-              <!-- Só as decisões mais frequentes ficam expostas. Aparência e
-                   organização vivem em "Mais detalhes" para manter o editor leve. -->
-              <div class="note-quick-row">
-                <div class="note-priority-picker" id="notePriorityPicker">
-                  <button type="button" class="note-priority-dot" data-priority="Baixa"><span class="dot"></span>Baixa</button>
-                  <button type="button" class="note-priority-dot active" data-priority="Media"><span class="dot"></span>Média</button>
-                  <button type="button" class="note-priority-dot" data-priority="Alta"><span class="dot"></span>Alta</button>
-                  <button type="button" class="note-priority-dot" data-priority="Urgente"><span class="dot"></span>Urgente</button>
-                </div>
-                <select id="notePriority" hidden>
-                  <option>Baixa</option>
-                  <option selected>Media</option>
-                  <option>Alta</option>
-                  <option>Urgente</option>
-                </select>
-                <button type="button" class="note-checklist-toggle" id="noteChecklistToggle"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="m8 12 2.5 2.5L16 9"/></svg><span>Checklist</span></button>
-              </div>
-
-              <!-- Checklist: escondida até o usuário pedir, pra não intimidar quem só quer anotar algo rápido -->
-              <label id="noteChecklistField" class="note-checklist-field" hidden>
-                Itens da checklist
-                <textarea id="noteChecklist" rows="3" placeholder="Uma tarefa por linha"></textarea>
-              </label>
-
-              <!-- Mais detalhes: tudo que é opcional fica recolhido, mas continua a 1 toque de distância -->
-              <details class="note-more-details">
-                <summary>Mais detalhes <span class="chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span></summary>
-                <p class="note-details-hint">Organize somente se precisar. A nota salva normalmente sem preencher estes campos.</p>
-                <input id="noteTextColor" type="hidden" value="" />
+                  <label class="bn-field"><span>Título</span><input id="noteTitle" required maxlength="80" placeholder="Dê um título curto" autocomplete="off" /></label>
+                  <label class="bn-field"><span>Conteúdo</span><textarea id="noteDescription" class="autogrow" rows="4" placeholder="Escreva livremente: ideias, lembretes, recados..."></textarea></label>
+                  <label class="bn-field"><span>Prioridade</span>
+                    <span class="bn-select"><svg class="i bn-flag"><use href="#i-flag"/></svg>
+                      <select id="notePriority">
+                        <option value="Baixa">Baixa</option>
+                        <option value="Media" selected>Média</option>
+                        <option value="Alta">Alta</option>
+                        <option value="Urgente">Urgente</option>
+                      </select>
+                      <svg class="i bn-select-chev"><use href="#i-chev-down"/></svg>
+                    </span>
+                  </label>
+                  <div id="notePriorityPicker" hidden></div>
+                  <div class="bn-switch-row">
+                    <span id="noteChecklistLabel">Checklist</span>
+                    <button type="button" class="bdo-switch bn-switch" id="noteChecklistToggle" role="switch" aria-checked="false" aria-labelledby="noteChecklistLabel"><i></i></button>
+                  </div>
+                  <label id="noteChecklistField" class="bn-field" hidden><span>Itens da checklist</span><textarea id="noteChecklist" rows="3" placeholder="Um item por linha"></textarea></label>
+                  <details class="note-more-details bn-more">
+                    <summary>Organizar <svg class="i"><use href="#i-chev-down"/></svg></summary>
+                    <p class="note-details-hint">Opcional: a nota salva normalmente sem preencher estes campos.</p>
+                    <input id="noteTextColor" type="hidden" value="" />
                 <input id="noteColor" type="hidden" value="blue" />
                 <div class="form-grid">
                   <label>
@@ -885,129 +878,107 @@
                   Observações adicionais
                   <textarea id="noteObservations" class="autogrow" rows="2"></textarea>
                 </label>
-              </details>
-
-              <div class="form-actions">
-                <button id="resetNoteForm" type="button" class="ghost-button">Limpar</button>
-                <button type="submit" class="primary-button note-save-btn">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
-                  <span id="noteSaveBtnLabel">Salvar anotação</span>
-                </button>
+                  </details>
+                  <button type="submit" class="bd-btn bd-btn--primary bn-save"><span id="noteSaveBtnLabel">Salvar nota</span></button>
+                </form>
               </div>
-            </form>
+              <div class="bn-sheet-backdrop" id="noteFormBackdrop" hidden></div>
 
-            <!-- Notes List -->
-            <section class="list-panel">
-              <div class="panel-header">
-                <div>
-                  <p class="eyebrow">Biblioteca</p>
-                  <h2>Anotações</h2>
+              <!-- Minha biblioteca -->
+              <section class="bd-card bn-library" id="notesLibrary" aria-label="Minha biblioteca">
+                <header class="bn-lib-head">
+                  <span class="bn-head-ico"><svg class="i"><use href="#i-layers"/></svg></span>
+                  <h3>Minha biblioteca</h3>
+                  <label class="bn-search"><svg class="i"><use href="#i-search"/></svg><input id="notesSearch" type="text" inputmode="search" placeholder="Buscar notas..." autocomplete="off" aria-label="Buscar notas" /></label>
+                </header>
+                <div class="bn-chips-row">
+                  <div id="noteFolders" class="bn-chips" role="group" aria-label="Pastas"></div>
+                  <select id="noteFilter" class="bn-filter" aria-label="Filtrar notas">
+                    <option value="all">Todas</option>
+                    <option value="favorite">Favoritas</option>
+                    <option value="Alta">Prioridade alta</option>
+                    <option value="Urgente">Urgentes</option>
+                  </select>
+                </div>
+                <div id="noteFoldersWrap" hidden></div>
+                <div id="notesList" class="bn-cards"></div>
+              </section>
+
+              <!-- Nota aberta: painel à direita no computador, tela cheia no celular -->
+              <div class="bd-card bn-detail-empty" id="noteDetailEmpty">
+                <span class="bn-head-ico"><svg class="i"><use href="#i-note"/></svg></span>
+                <p>Selecione uma nota para ler e editar aqui.</p>
+              </div>
+              <div id="noteDetailModal" class="bn-detail-wrap" hidden>
+                <div class="bd-card bn-detail" role="region" aria-label="Nota aberta">
+                  <div class="bn-detail-head">
+                    <button type="button" class="bd-icon-btn bn-detail-back" id="closeNoteDetail" aria-label="Voltar"><svg class="i"><use href="#i-arrow-left"/></svg></button>
+                    <span class="bn-head-ico bn-detail-ico"><svg class="i"><use href="#i-calendar"/></svg></span>
+                    <div class="bn-detail-titles">
+                      <input id="ndTitle" class="bn-detail-title" maxlength="80" placeholder="Título" aria-label="Título da nota" />
+                      <p class="bn-detail-meta"><svg class="i"><use href="#i-calendar"/></svg><span id="ndMeta"></span></p>
+                    </div>
+                    <div class="bn-menu-wrap">
+                      <button type="button" class="bd-icon-btn" id="ndMenuBtn" aria-haspopup="true" aria-expanded="false" aria-label="Mais opções da nota"><svg class="i"><use href="#i-dots-v"/></svg></button>
+                      <div class="bn-menu" id="ndMenu" hidden>
+                        <button type="button" id="ndFavBtn"><svg class="i" fill="none"><use href="#i-star"/></svg><span>Favoritar</span></button>
+                        <button type="button" id="ndMoreFieldsBtn"><svg class="i"><use href="#i-layers"/></svg><span>Categoria, pasta e tags</span></button>
+                        <button type="button" id="ndDeleteBtn" class="is-danger"><svg class="i"><use href="#i-trash"/></svg><span>Excluir nota</span></button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="bn-toolbar" id="noteDetailToolbar" role="toolbar" aria-label="Formatação">
+                    <button type="button" data-nd-cmd="bold" title="Negrito" aria-label="Negrito"><b>B</b></button>
+                    <button type="button" data-nd-cmd="italic" title="Itálico" aria-label="Itálico"><i>I</i></button>
+                    <button type="button" data-nd-cmd="underline" title="Sublinhado" aria-label="Sublinhado"><u>U</u></button>
+                    <span class="bn-tool-sep"></span>
+                    <button type="button" data-nd-cmd="ul" title="Lista" aria-label="Lista com marcadores"><svg class="i"><use href="#i-list"/></svg></button>
+                    <button type="button" data-nd-cmd="ol" title="Lista numerada" aria-label="Lista numerada"><svg class="i"><use href="#i-list-num"/></svg></button>
+                    <span class="bn-tool-sep"></span>
+                    <button type="button" data-nd-cmd="link" title="Link" aria-label="Inserir link"><svg class="i"><use href="#i-link"/></svg></button>
+                    <button type="button" data-nd-cmd="more" title="Mais" aria-label="Mais formatação" aria-expanded="false"><svg class="i"><use href="#i-dots-h"/></svg></button>
+                    <div class="bn-tool-panel" id="ndMorePanel" hidden>
+                      <span class="bn-tool-label">Destaque</span>
+                      <button type="button" class="bn-mark-btn" data-nd-cmd="highlight" aria-label="Destacar trecho"><span>Destacar</span></button>
+                      <span class="bn-tool-label">Cor do texto</span>
+                      <button type="button" class="nd-swatch" data-nd-color="#8b5cf6" style="background:#8b5cf6" aria-label="Texto lilás" aria-pressed="false"></button>
+                      <button type="button" class="nd-swatch" data-nd-color="#ff375f" style="background:#ff375f" aria-label="Texto vermelho" aria-pressed="false"></button>
+                      <button type="button" class="nd-swatch" data-nd-color="#30d158" style="background:#30d158" aria-label="Texto verde" aria-pressed="false"></button>
+                      <button type="button" class="nd-swatch" data-nd-color="#0a84ff" style="background:#0a84ff" aria-label="Texto azul" aria-pressed="false"></button>
+                      <button type="button" class="nd-swatch" data-nd-color="#bf5af2" style="background:#bf5af2" aria-label="Texto roxo" aria-pressed="false"></button>
+                      <button type="button" class="bn-text-btn" data-nd-cmd="clear">Limpar formatação</button>
+                      <button type="button" class="bn-text-btn" data-nd-cmd="checklist">Adicionar checklist</button>
+                    </div>
+                  </div>
+                  <form class="bn-link-form" id="ndLinkForm" hidden novalidate>
+                    <input id="ndLinkInput" type="text" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="exemplo.com ou https://..." aria-label="Endereço do link" />
+                    <button type="submit" class="bd-btn bd-btn--primary">Aplicar</button>
+                  </form>
+
+                  <div class="bn-detail-scroll">
+                    <div id="ndBody" class="bn-detail-body" contenteditable="true" data-placeholder="Escreva livremente aqui..."></div>
+                    <section id="ndChecklistSection" class="bn-check" hidden aria-label="Checklist da nota">
+                      <div class="bn-check-head"><span>Progresso do checklist</span><span id="ndChecklistProgress"></span></div>
+                      <p id="ndChecklistSummary" class="sr-only"></p>
+                      <div class="bn-check-track" aria-hidden="true"><span id="ndChecklistProgressBar"></span></div>
+                      <div id="ndChecklistItems" class="bn-check-items"></div>
+                      <form class="bn-check-add" id="ndChecklistAddForm">
+                        <input id="ndChecklistAddInput" type="text" maxlength="120" placeholder="Novo item..." autocomplete="off" aria-label="Novo item da checklist" />
+                        <button type="submit" class="bd-icon-btn" aria-label="Adicionar item"><svg class="i"><use href="#i-plus"/></svg></button>
+                      </form>
+                    </section>
+                  </div>
+
+                  <div class="bn-detail-foot">
+                    <button type="button" class="bd-btn" id="ndConvertTaskBtn"><svg class="i"><use href="#i-bolt"/></svg><span>Virar tarefa</span></button>
+                    <button type="button" class="bd-btn bd-btn--primary" id="ndSaveBtn"><span>Salvar</span></button>
+                  </div>
                 </div>
               </div>
-
-              <!-- Pastas: derivadas das próprias notas, aparecem só quando existem.
-                   Tem rótulo próprio ("Pasta") pra não parecer duplicado da fileira
-                   de filtro logo abaixo — antes as duas fileiras começavam com um
-                   chip igual chamado "Todas", parecendo um botão repetido. -->
-              <div id="noteFoldersWrap" hidden>
-                <p class="note-filter-group-label">Pasta</p>
-                <div id="noteFolders" class="note-folders"></div>
-              </div>
-
-              <!-- Filter chips -->
-              <p class="note-filter-group-label">Filtrar</p>
-              <div class="note-filters">
-                <button class="filter-chip active" data-note-filter="all"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg><span>Todas</span></button>
-                <button class="filter-chip" data-note-filter="favorite"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></svg><span>Favoritas</span></button>
-                <button class="filter-chip" data-note-filter="Alta"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V4"/><path d="M5 4h12.5l-2 4.5L19.5 13H5"/></svg><span>Alta</span></button>
-                <button class="filter-chip" data-note-filter="Urgente"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.5 2 4 13.5h6.5L11 22l8.5-11.5H13z"/></svg><span>Urgentes</span></button>
-              </div>
-
-              <!-- Legacy select (hidden, kept for JS compat) -->
-              <select id="noteFilter" style="display:none">
-                <option value="all">Todas</option>
-                <option value="favorite">Favoritas</option>
-                <option value="Alta">Alta prioridade</option>
-                <option value="Urgente">Urgentes</option>
-              </select>
-
-              <div id="notesList" class="note-grid"></div>
-            </section>
+            </div>
           </div>
         </section>
-
-        <!-- ===== NOTA EM TELA CHEIA (estilo iPhone Notes) =====
-             Abre ao tocar numa nota da lista — título + corpo com
-             formatação (negrito, destaque colorido), em vez do
-             textarea simples de sempre. O formulário da esquerda
-             continua existindo pra CRIAR notas novas com todos os
-             campos extras (categoria, pasta, tags...); isto aqui é o
-             editor rápido e bonito pra abrir e mexer numa nota já
-             existente, do jeito que foi pedido. -->
-        <div id="noteDetailModal" class="modal-backdrop note-detail-backdrop" hidden>
-          <div class="modal-card note-detail-card">
-            <div class="note-detail-header">
-              <button class="icon-button" id="closeNoteDetail" title="Fechar">✕</button>
-              <div class="note-detail-header-actions">
-                <button class="icon-button" id="ndFavBtn" title="Favoritar">
-                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></svg>
-                </button>
-                <button class="icon-button danger-action" id="ndDeleteBtn" title="Excluir">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="m19 6-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
-                </button>
-              </div>
-            </div>
-
-            <input id="ndTitle" class="note-detail-title-input" maxlength="80" placeholder="Título" />
-            <div class="note-detail-meta-row">
-              <p class="note-detail-meta" id="ndMeta"></p>
-              <button type="button" class="note-detail-more-link" id="ndMoreFieldsBtn">Categoria, pasta e tags</button>
-            </div>
-
-            <div class="note-detail-toolbar" id="noteDetailToolbar">
-              <button type="button" class="nd-tool-btn" data-nd-cmd="bold" title="Negrito"><b>N</b></button>
-              <button type="button" class="nd-tool-btn" data-nd-cmd="italic" title="Itálico"><i>I</i></button>
-              <span class="nd-toolbar-sep"></span>
-              <div class="nd-color-group" role="group" aria-label="Cor do texto">
-                <span class="nd-color-label">Cor do texto</span>
-                <button type="button" class="nd-swatch" data-nd-color="#8b5cf6" style="background:#8b5cf6" title="Texto lilás" aria-label="Texto lilás" aria-pressed="false"></button>
-                <button type="button" class="nd-swatch" data-nd-color="#ff375f" style="background:#ff375f" title="Texto vermelho" aria-label="Texto vermelho" aria-pressed="false"></button>
-                <button type="button" class="nd-swatch" data-nd-color="#30d158" style="background:#30d158" title="Texto verde" aria-label="Texto verde" aria-pressed="false"></button>
-                <button type="button" class="nd-swatch" data-nd-color="#0a84ff" style="background:#0a84ff" title="Texto azul" aria-label="Texto azul" aria-pressed="false"></button>
-                <button type="button" class="nd-swatch" data-nd-color="#bf5af2" style="background:#bf5af2" title="Texto roxo" aria-label="Texto roxo" aria-pressed="false"></button>
-              </div>
-              <button type="button" class="nd-tool-btn" data-nd-cmd="clear" title="Remover destaque">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m4 20 3-3"/><path d="m21 3-9.9 9.9"/><path d="M12.5 6.5 9 3 3 9l3.5 3.5"/><path d="m6 15 3 3"/><path d="M14 21h7"/></svg>
-              </button>
-            </div>
-
-            <div class="note-detail-scroll">
-              <div id="ndBody" class="note-detail-body" contenteditable="true" data-placeholder="Escreva livremente aqui..."></div>
-              <section id="ndChecklistSection" class="note-detail-checklist" hidden aria-label="Checklist da nota">
-                <div class="note-detail-checklist-heading">
-                  <div>
-                    <div class="note-detail-checklist-title">Checklist</div>
-                    <p id="ndChecklistSummary" class="note-detail-checklist-summary"></p>
-                  </div>
-                  <span id="ndChecklistProgress" class="note-detail-checklist-progress"></span>
-                </div>
-                <div class="note-detail-checklist-track" aria-hidden="true"><span id="ndChecklistProgressBar"></span></div>
-                <div id="ndChecklistItems"></div>
-              </section>
-            </div>
-
-            <div class="note-detail-footer">
-              <button type="button" class="ghost-button" id="ndConvertTaskBtn">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8.5 12.3 2.3 2.3L16 9.6"/></svg>
-                <span>Virar tarefa</span>
-              </button>
-              <button type="button" class="primary-button" id="ndSaveBtn">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
-                <span>Salvar</span>
-              </button>
-            </div>
-          </div>
-        </div>
 
         <!-- ===== FINANCES VIEW ===== -->
         <section id="financesView" class="view">
