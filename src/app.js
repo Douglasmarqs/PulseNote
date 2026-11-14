@@ -1035,6 +1035,18 @@ function fileToCompressedDataUrl(file) {
 // (calculateXpStats, calculateStreak) e na tela antiga de Metas
 // (getAchievementsList) — nenhum número novo, só uma vitrine.
 // ============================================================
+const PF_ACH_ICON = { checkCircle: "check-circle", zap: "bolt", flame: "flame", trophy: "trophy", star: "star", notebook: "note", target: "target", flag: "flag", calendarCheck: "calendar", calendarWeek: "calendar-week", sparkle: "sparkle" };
+let pfAchFilter = "all";
+
+function pfAchIcon(name) {
+  return bdIcon(PF_ACH_ICON[name] || "star");
+}
+
+function pfPlanLabel() {
+  const text = document.querySelector("#bdUserPlan")?.textContent?.trim() || "";
+  return text && text !== "—" ? text : "Seu plano";
+}
+
 function renderProfile() {
   const nameEl = document.querySelector("#profileNameLabel");
   if (!nameEl) return;
@@ -1045,34 +1057,90 @@ function renderProfile() {
   if (emailEl) emailEl.textContent = user?.email || "";
 
   const photoURL = state?.profilePhoto || currentUser?.photoURL || "";
-  const initial = (user?.name || "U").charAt(0).toUpperCase();
   const avatarEl = document.querySelector("#profileAvatarPreview");
-  if (avatarEl) avatarEl.innerHTML = photoURL ? `<img src="${escapeHtml(photoURL)}" alt="Foto de perfil"/>` : initial;
+  if (avatarEl) avatarEl.innerHTML = photoURL ? `<img src="${escapeHtml(photoURL)}" alt="Foto de perfil"/>` : escapeHtml(bdInitials(user?.name || "U"));
 
   const { level, levelProgress, xpIntoLevel, xpPerLevel, score } = calculateXpStats();
+  const streak = calculateStreak();
   document.querySelector("#profileLevelLabel").textContent = `Nível ${level}`;
   document.querySelector("#profileLevelBadge").textContent = level;
   document.querySelector("#profileLevelBar").style.width = `${levelProgress}%`;
   document.querySelector("#profileLevelXpLabel").textContent = `${xpIntoLevel}/${xpPerLevel} XP para o próximo nível · ${score} XP no total`;
+  const nextEl = document.querySelector("#profileLevelNext");
+  if (nextEl) nextEl.textContent = `Faltam ${xpPerLevel - xpIntoLevel} XP para o nível ${level + 1}`;
 
-  document.querySelector("#profileStatStreak").textContent = calculateStreak();
+  const planChip = document.querySelector("#profilePlanChip span");
+  if (planChip) planChip.textContent = pfPlanLabel();
+  const streakChip = document.querySelector("#profileStreakChip span");
+  if (streakChip) streakChip.textContent = streak === 1 ? "1 dia seguido" : `${streak} dias seguidos`;
+
+  document.querySelector("#profileStatStreak").textContent = streak;
   document.querySelector("#profileStatTasks").textContent = state.tasks.filter((t) => t.status === "Concluida").length;
   document.querySelector("#profileStatGoals").textContent = state.goals.filter((g) => g.current >= g.target).length;
   document.querySelector("#profileStatNotes").textContent = state.notes.filter((n) => n.favorite).length;
 
   const achievements = getAchievementsList();
-  document.querySelector("#profileAchievementCount").textContent = `${achievements.filter((a) => a.unlocked).length}/${achievements.length}`;
-  document.querySelector("#profileAchievements").innerHTML = achievements
-    .map(
-      (a) => `
-      <article class="profile-badge ${a.unlocked ? "is-unlocked" : "is-locked"}">
-        <div class="profile-badge-icon">${icon(a.unlocked ? a.iconName : "lock", 19)}</div>
+  const unlockedCount = achievements.filter((a) => a.unlocked).length;
+  document.querySelector("#profileAchievementCount").textContent = `${unlockedCount}/${achievements.length}`;
+  const sub = document.querySelector("#profileAchievementSub");
+  if (sub) sub.textContent = unlockedCount === achievements.length
+    ? "Você desbloqueou todas as conquistas. Incrível!"
+    : `${unlockedCount} de ${achievements.length} desbloqueadas — continue assim.`;
+  const achBar = document.querySelector("#profileAchievementBar");
+  if (achBar) achBar.style.width = `${Math.round((unlockedCount / Math.max(1, achievements.length)) * 100)}%`;
+
+  const visible = achievements.filter((a) => pfAchFilter === "all" || (pfAchFilter === "unlocked" ? a.unlocked : !a.unlocked));
+  const grid = document.querySelector("#profileAchievements");
+  grid.innerHTML = visible.length
+    ? visible.map((a) => {
+        const target = Number(a.target) || 1;
+        const current = Math.min(target, Number(a.current) || 0);
+        const pct = Math.round((current / target) * 100);
+        return `
+      <article class="pf-badge ${a.unlocked ? "is-unlocked" : "is-locked"}">
+        <div class="pf-badge-ico">${pfAchIcon(a.iconName)}${a.unlocked ? "" : `<i class="pf-badge-lock">${bdIcon("lock")}</i>`}</div>
         <strong>${escapeHtml(a.title)}</strong>
         <span>${escapeHtml(a.detail)}</span>
-      </article>
-    `
-    )
-    .join("");
+        ${a.unlocked
+          ? `<em class="pf-badge-done">${bdIcon("check")}Desbloqueada</em>`
+          : `<div class="pf-badge-prog"><div class="pf-bar pf-bar--mini"><div style="width:${pct}%"></div></div><small>${current}/${target}</small></div>`}
+      </article>`;
+      }).join("")
+    : `<p class="pf-empty">${pfAchFilter === "unlocked" ? "Nenhuma conquista desbloqueada ainda — conclua sua primeira tarefa para começar." : "Nada pendente por aqui. Você conquistou tudo!"}</p>`;
+
+  grid.closest(".pf-ach")?.querySelectorAll("[data-pf-filter]").forEach((btn) => {
+    const on = btn.dataset.pfFilter === pfAchFilter;
+    btn.classList.toggle("is-active", on);
+    btn.setAttribute("aria-selected", on ? "true" : "false");
+    if (!btn.dataset.bound) {
+      btn.dataset.bound = "1";
+      btn.addEventListener("click", () => { pfAchFilter = btn.dataset.pfFilter; renderProfile(); });
+    }
+  });
+
+  const nextCard = document.querySelector("#profileNextAchievement");
+  if (nextCard) {
+    const next = achievements
+      .filter((a) => !a.unlocked)
+      .map((a) => ({ ...a, ratio: (Number(a.current) || 0) / (Number(a.target) || 1) }))
+      .sort((x, y) => y.ratio - x.ratio)[0];
+    if (next) {
+      const target = Number(next.target) || 1;
+      const current = Math.min(target, Number(next.current) || 0);
+      nextCard.innerHTML = `
+        <header class="pf-card-head"><div><h3>${bdIcon("flag")}Próxima conquista</h3><p>A que está mais perto de sair.</p></div></header>
+        <div class="pf-next-body">
+          <span class="pf-next-ico">${pfAchIcon(next.iconName)}</span>
+          <div class="pf-next-copy"><strong>${escapeHtml(next.title)}</strong><span>${escapeHtml(next.detail)}</span></div>
+        </div>
+        <div class="pf-bar"><div style="width:${Math.round((current / target) * 100)}%"></div></div>
+        <p class="pf-level-meta">${current} de ${target} · faltam ${target - current}</p>`;
+    } else {
+      nextCard.innerHTML = `
+        <header class="pf-card-head"><div><h3>${bdIcon("crown")}Coleção completa</h3><p>Todas as conquistas foram desbloqueadas.</p></div></header>
+        <div class="pf-next-body"><span class="pf-next-ico is-done">${bdIcon("trophy")}</span><div class="pf-next-copy"><strong>Lenda do PulseNote</strong><span>Continue no ritmo para subir de nível.</span></div></div>`;
+    }
+  }
 }
 
 function renderSettings() {
@@ -1310,6 +1378,8 @@ async function loadBillingSettings(force = false) {
     const active = current.status === "active";
     const planLabel = document.querySelector("#bdUserPlan");
     if (planLabel) planLabel.textContent = active ? `Plano ${(data.plans || []).find((plan) => plan.id === current.planId)?.name || ""}`.trim() : "Sem plano";
+    const pfPlan = document.querySelector("#profilePlanChip span");
+    if (pfPlan && planLabel) pfPlan.textContent = planLabel.textContent;
     statusBadge.textContent = active ? "Assinatura ativa" : current.planId ? "Assinatura pausada" : "Sem plano contratado";
     statusBadge.className = `billing-status-badge ${active ? "is-active" : current.planId ? "is-warning" : ""}`;
     const currentPlan = (data.plans || []).find((plan) => plan.id === current.planId);
@@ -3768,18 +3838,18 @@ function getAchievementsList() {
   const streak = calculateStreak();
   const { level } = calculateXpStats();
   return [
-    { title: "Primeiro check-in", detail: "Concluir uma tarefa", iconName: "checkCircle", unlocked: done >= 1 },
-    { title: "Dia produtivo", detail: "Concluir três tarefas", iconName: "zap", unlocked: done >= 3 },
-    { title: "Maratonista", detail: "Concluir dez tarefas", iconName: "flame", unlocked: done >= 10 },
-    { title: "Centena", detail: "Concluir cem tarefas", iconName: "trophy", unlocked: done >= 100 },
-    { title: "Biblioteca viva", detail: "Favoritar uma anotação", iconName: "star", unlocked: favorites >= 1 },
-    { title: "Colecionador de ideias", detail: "Ter dez anotações", iconName: "notebook", unlocked: state.notes.length >= 10 },
-    { title: "Meta batida", detail: "Completar uma meta", iconName: "target", unlocked: completedGoals >= 1 },
-    { title: "Trilha de metas", detail: "Completar três metas", iconName: "flag", unlocked: completedGoals >= 3 },
-    { title: "Constância", detail: "Sequência de 3 dias", iconName: "calendarCheck", unlocked: streak >= 3 },
-    { title: "Semana cheia", detail: "Sequência de 7 dias", iconName: "flame", unlocked: streak >= 7 },
-    { title: "Organizador", detail: "Ter cinco compromissos", iconName: "calendarWeek", unlocked: state.events.length >= 5 },
-    { title: "Em ascensão", detail: "Alcançar o nível 5", iconName: "sparkle", unlocked: level >= 5 },
+    { title: "Primeiro check-in", detail: "Concluir uma tarefa", iconName: "checkCircle", current: done, target: 1, unlocked: done >= 1 },
+    { title: "Dia produtivo", detail: "Concluir três tarefas", iconName: "zap", current: done, target: 3, unlocked: done >= 3 },
+    { title: "Maratonista", detail: "Concluir dez tarefas", iconName: "flame", current: done, target: 10, unlocked: done >= 10 },
+    { title: "Centena", detail: "Concluir cem tarefas", iconName: "trophy", current: done, target: 100, unlocked: done >= 100 },
+    { title: "Biblioteca viva", detail: "Favoritar uma anotação", iconName: "star", current: favorites, target: 1, unlocked: favorites >= 1 },
+    { title: "Colecionador de ideias", detail: "Ter dez anotações", iconName: "notebook", current: state.notes.length, target: 10, unlocked: state.notes.length >= 10 },
+    { title: "Meta batida", detail: "Completar uma meta", iconName: "target", current: completedGoals, target: 1, unlocked: completedGoals >= 1 },
+    { title: "Trilha de metas", detail: "Completar três metas", iconName: "flag", current: completedGoals, target: 3, unlocked: completedGoals >= 3 },
+    { title: "Constância", detail: "Sequência de 3 dias", iconName: "calendarCheck", current: streak, target: 3, unlocked: streak >= 3 },
+    { title: "Semana cheia", detail: "Sequência de 7 dias", iconName: "flame", current: streak, target: 7, unlocked: streak >= 7 },
+    { title: "Organizador", detail: "Ter cinco compromissos", iconName: "calendarWeek", current: state.events.length, target: 5, unlocked: state.events.length >= 5 },
+    { title: "Em ascensão", detail: "Alcançar o nível 5", iconName: "sparkle", current: level, target: 5, unlocked: level >= 5 },
   ];
 }
 
@@ -3845,7 +3915,7 @@ function applyViewHeading(view) {
     notes: [`Notas, ${first}! 📝`, compact ? "Capture ideias, organize e aja." : "Capture ideias, organize informações e transforme em ação."],
     finances: ["Finanças", "Organize, acompanhe e evolua suas finanças."],
     autopilot: ["", ""],
-    profile: ["Perfil", ""],
+    profile: ["Perfil", "Seu progresso, conquistas e estatísticas"],
     settings: ["Configurações", "Gerencie sua conta, preferências, integrações e segurança."],
   };
   const [title, subtitle] = headings[view] || [viewTitles[view] || "", ""];

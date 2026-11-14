@@ -107,7 +107,7 @@
     <!-- Camada de experiência: uma linguagem única para todas as áreas. -->
     <link rel="stylesheet" href="/src/experience.css?v=3" />
     <!-- Sistema visual dos quadros (claro/escuro, desktop/mobile). Carrega por último. -->
-    <link rel="stylesheet" href="/src/boards.css?v=4" />
+    <link rel="stylesheet" href="/src/boards.css?v=5" />
   </head>
   <body class="bd">
     <!-- Tela de abertura já no HTML: aparece na primeira pintura, antes de
@@ -202,6 +202,7 @@
         <symbol id="i-building" viewBox="0 0 24 24"><path d="M5.500 20.500V5a1 1 0 011-1h11a1 1 0 011 1v15.500M3.500 20.500h17M9 8h1.500M13.500 8H15M9 11.500h1.500M13.500 11.500H15M9 15h1.500M13.500 15H15M10.500 20.500v-3h3v3"/></symbol>
         <symbol id="i-camera" viewBox="0 0 24 24"><path d="M4 8h3l1.500-2.500h7L17 8h3a1 1 0 011 1v9.500a1 1 0 01-1 1H4a1 1 0 01-1-1V9a1 1 0 011-1z"/><circle cx="12" cy="13.500" r="3.500"/></symbol>
         <symbol id="i-coin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.500"/><path d="M14.800 9.300c-.5-.9-1.600-1.500-2.800-1.500-1.600 0-2.800.9-2.800 2.100 0 2.900 5.800 1.400 5.800 4.200 0 1.200-1.300 2.100-3 2.100-1.300 0-2.400-.6-2.900-1.600M12 6.300v1.500M12 16.200v1.500"/></symbol>
+        <symbol id="i-flame" viewBox="0 0 24 24"><path d="M12 3c.8 3.2-.6 5-2.1 6.7C8.4 11.4 7 13 7 15.5A5 5 0 0017 15.5c0-2.3-1-4-2.3-5.4-.3 1.6-1 2.6-2.2 3.1.6-3.2.1-6.9-.5-10.2z"/></symbol>
         <symbol id="i-trophy" viewBox="0 0 24 24"><path d="M7 4h10v5a5 5 0 01-10 0zM7 6H4v1.500A3.500 3.500 0 007.500 11M17 6h3v1.500A3.500 3.500 0 0116.500 11M12 14v4M8.500 20.500h7"/></symbol>
       </defs>
     </svg>
@@ -1449,63 +1450,90 @@
              Configurações — o botão de câmera aqui só aciona o mesmo
              input de arquivo que já existe lá. -->
         <section id="profileView" class="view">
-          <div class="profile-shell">
-            <section class="panel profile-hero">
-              <div class="profile-avatar-wrap">
-                <div class="profile-avatar-lg" id="profileAvatarPreview">U</div>
-                <button class="profile-avatar-edit" type="button" onclick="document.getElementById('settingsPhotoInput').click()" title="Trocar foto">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l1.5-2h7L17 8h3a1.5 1.5 0 0 1 1.5 1.5v9A1.5 1.5 0 0 1 20 20H4a1.5 1.5 0 0 1-1.5-1.5v-9A1.5 1.5 0 0 1 4 8z"/><circle cx="12" cy="14" r="3.6"/></svg>
-                </button>
-              </div>
-              <h2 id="profileNameLabel">Usuário</h2>
-              <p class="task-meta" id="profileEmailLabel"></p>
-              <button class="ghost-button" type="button" onclick="setView('settings')">Editar perfil</button>
-            </section>
-
-            <section class="panel profile-level-card">
-              <div class="profile-level-top">
-                <div>
-                  <p class="eyebrow">Progresso</p>
-                  <h2 id="profileLevelLabel">Nível 1</h2>
+          <div class="pf">
+            <article class="bd-card pf-hero">
+              <div class="pf-id">
+                <div class="pf-avatar-wrap">
+                  <div class="pf-avatar" id="profileAvatarPreview">U</div>
+                  <button class="pf-avatar-edit" type="button" onclick="document.getElementById('settingsPhotoInput').click()" title="Trocar foto" aria-label="Trocar foto"><svg class="i"><use href="#i-camera"/></svg></button>
                 </div>
-                <span class="profile-level-badge" id="profileLevelBadge">1</span>
+                <div class="pf-id-copy">
+                  <h2 id="profileNameLabel">Usuário</h2>
+                  <p id="profileEmailLabel"></p>
+                  <div class="pf-chips">
+                    <span class="pf-chip pf-chip--plan" id="profilePlanChip"><svg class="i"><use href="#i-crown"/></svg><span>Seu plano</span></span>
+                    <span class="pf-chip" id="profileStreakChip"><svg class="i"><use href="#i-flame"/></svg><span>0 dias seguidos</span></span>
+                  </div>
+                </div>
+                <div class="pf-actions">
+                  <button class="bd-btn bd-btn--primary" type="button" onclick="setView('settings')"><svg class="i"><use href="#i-pencil"/></svg>Editar perfil</button>
+                  <button class="bd-btn pf-btn-icon" type="button" onclick="setView('settings')" aria-label="Configurações" title="Configurações"><svg class="i"><use href="#i-gear"/></svg></button>
+                </div>
               </div>
-              <div class="progress-track"><div id="profileLevelBar" style="width:0%"></div></div>
-              <p class="task-meta" id="profileLevelXpLabel">0/150 XP para o próximo nível</p>
-            </section>
 
-            <div class="profile-stats-grid">
-              <div class="profile-stat-tile">
-                <span class="profile-stat-icon tone-orange"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5c1 3 .3 4.6-1 6.2-1.3 1.6-2.5 2.9-2.5 5a3.5 3.5 0 0 0 7 0c0-1-.3-1.8-.8-2.5.8.6 1.8 1.8 1.8 3.8a5.5 5.5 0 0 1-11 0c0-4.5 3-6.2 4.5-9 .6-1 1.3-2.2 2-3.5z"/></svg></span>
-                <strong id="profileStatStreak">0</strong>
-                <span>Sequência (dias)</span>
+              <div class="pf-level">
+                <div class="pf-level-top">
+                  <span class="pf-level-badge" id="profileLevelBadge">1</span>
+                  <div class="pf-level-copy">
+                    <span class="pf-eyebrow">Progresso</span>
+                    <h3 id="profileLevelLabel">Nível 1</h3>
+                  </div>
+                  <span class="pf-level-next" id="profileLevelNext">150 XP para o nível 2</span>
+                </div>
+                <div class="pf-bar" role="progressbar" aria-label="Progresso do nível"><div id="profileLevelBar" style="width:0%"></div></div>
+                <p class="pf-level-meta" id="profileLevelXpLabel">0/150 XP para o próximo nível</p>
               </div>
-              <div class="profile-stat-tile">
-                <span class="profile-stat-icon tone-accent"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8.5 12.3 2.3 2.3L16 9.6"/></svg></span>
-                <strong id="profileStatTasks">0</strong>
-                <span>Tarefas concluídas</span>
+            </article>
+
+            <div class="pf-stats">
+              <div class="bd-card pf-stat">
+                <span class="pf-stat-ico tone-orange"><svg class="i"><use href="#i-flame"/></svg></span>
+                <div><strong id="profileStatStreak">0</strong><span>Sequência (dias)</span></div>
               </div>
-              <div class="profile-stat-tile">
-                <span class="profile-stat-icon tone-green"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.8"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/></svg></span>
-                <strong id="profileStatGoals">0</strong>
-                <span>Metas batidas</span>
+              <div class="bd-card pf-stat">
+                <span class="pf-stat-ico tone-violet"><svg class="i"><use href="#i-check-circle"/></svg></span>
+                <div><strong id="profileStatTasks">0</strong><span>Tarefas concluídas</span></div>
               </div>
-              <div class="profile-stat-tile">
-                <span class="profile-stat-icon tone-yellow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></svg></span>
-                <strong id="profileStatNotes">0</strong>
-                <span>Notas favoritas</span>
+              <div class="bd-card pf-stat">
+                <span class="pf-stat-ico tone-green"><svg class="i"><use href="#i-target"/></svg></span>
+                <div><strong id="profileStatGoals">0</strong><span>Metas batidas</span></div>
+              </div>
+              <div class="bd-card pf-stat">
+                <span class="pf-stat-ico tone-amber"><svg class="i"><use href="#i-star"/></svg></span>
+                <div><strong id="profileStatNotes">0</strong><span>Notas favoritas</span></div>
               </div>
             </div>
 
-            <section class="panel">
-              <div class="panel-header">
-                <div>
-                  <p class="eyebrow">Conquistas</p>
-                  <h2 id="profileAchievementCount">0/12</h2>
-                </div>
-              </div>
-              <div id="profileAchievements" class="profile-achievements-grid"></div>
-            </section>
+            <div class="pf-grid">
+              <article class="bd-card pf-ach">
+                <header class="pf-card-head">
+                  <div>
+                    <h3><svg class="i"><use href="#i-trophy"/></svg>Conquistas <span class="pf-count" id="profileAchievementCount">0/12</span></h3>
+                    <p id="profileAchievementSub">Complete desafios para desbloquear medalhas.</p>
+                  </div>
+                  <div class="pf-seg" role="tablist" aria-label="Filtrar conquistas">
+                    <button type="button" class="is-active" data-pf-filter="all" role="tab" aria-selected="true">Todas</button>
+                    <button type="button" data-pf-filter="unlocked" role="tab" aria-selected="false">Desbloqueadas</button>
+                    <button type="button" data-pf-filter="locked" role="tab" aria-selected="false">A conquistar</button>
+                  </div>
+                </header>
+                <div class="pf-bar pf-bar--thin"><div id="profileAchievementBar" style="width:0%"></div></div>
+                <div id="profileAchievements" class="pf-badges"></div>
+              </article>
+
+              <aside class="pf-side">
+                <article class="bd-card pf-next" id="profileNextAchievement"></article>
+                <article class="bd-card pf-xp">
+                  <header class="pf-card-head"><div><h3><svg class="i"><use href="#i-sparkle"/></svg>Como ganhar XP</h3><p>Cada nível pede 150 XP.</p></div></header>
+                  <ul class="pf-xp-list">
+                    <li><span class="pf-xp-ico tone-violet"><svg class="i"><use href="#i-task-check"/></svg></span><span>Concluir uma tarefa</span><b>+25 XP</b></li>
+                    <li><span class="pf-xp-ico tone-green"><svg class="i"><use href="#i-target"/></svg></span><span>Avançar um passo de meta</span><b>+10 XP</b></li>
+                    <li><span class="pf-xp-ico tone-orange"><svg class="i"><use href="#i-flame"/></svg></span><span>Manter a sequência diária</span><b>Conquistas</b></li>
+                  </ul>
+                  <button class="bd-btn pf-xp-cta" type="button" onclick="setView('planner')"><svg class="i"><use href="#i-calendar"/></svg>Ir para o Planner</button>
+                </article>
+              </aside>
+            </div>
           </div>
         </section>
 
@@ -1991,7 +2019,7 @@
     <script src="/src/recurring-detector.js?v=1"></script>
     <script src="/src/card-installments.js?v=1"></script>
     <script src="/src/notifications.js?v=36" defer></script>
-    <script type="module" src="/src/app.js?v=40"></script>
+    <script type="module" src="/src/app.js?v=41"></script>
     <script type="module" src="/src/push-notifications.js?v=35"></script>
     <!-- Configuração inicial (primeiro acesso) — ver src/onboarding.js -->
   <div id="onboardingRoot" class="bdo" role="dialog" aria-modal="true" aria-labelledby="bdoTitle" hidden></div>

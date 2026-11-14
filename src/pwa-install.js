@@ -100,7 +100,7 @@
     btn.className = "pwa-fixed-install-btn";
     btn.setAttribute("aria-label", "Instalar app");
     btn.setAttribute("title", "Instalar app");
-    btn.innerHTML = `<span style="font-size:1.05rem">⬇️</span><span>Instalar app</span>`;
+    btn.innerHTML = `<span class="pwa-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v10"/><path d="m7.5 9.8 4.5 4.5 4.5-4.5"/><path d="M5 15.5v2A2.5 2.5 0 0 0 7.5 20h9a2.5 2.5 0 0 0 2.5-2.5v-2"/></svg></span><span>Instalar app</span>`;
 
     btn.addEventListener("click", () => handleInstallClick(platform));
     container.appendChild(btn);
