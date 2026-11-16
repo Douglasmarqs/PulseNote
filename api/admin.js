@@ -457,11 +457,15 @@ async function savePlan(db, actor, body) {
   const priceCents = Number(body.priceCents || 0);
   const billingInterval = body.billingInterval || "month";
   const stripePriceId = text(body.stripePriceId, 128);
+  // Conversas com IA por dia: vazio = padrão do sistema; 0 = sem limite.
+  const rawAiLimit = body.aiDailyLimit;
+  const aiDailyLimit = rawAiLimit === null || rawAiLimit === undefined || rawAiLimit === "" ? null : Number(rawAiLimit);
+  if (aiDailyLimit !== null && (!Number.isInteger(aiDailyLimit) || aiDailyLimit < 0 || aiDailyLimit > 5000)) fail(400, "invalid_plan_ai_limit");
   if (!Number.isSafeInteger(priceCents) || priceCents < 0 || priceCents > 100_000_000
     || !["month", "year"].includes(billingInterval)
     || (stripePriceId && !/^price_[A-Za-z0-9]+$/.test(stripePriceId))) fail(400, "invalid_plan_billing");
   const plan = { name, description: text(body.description, 300), active: body.active, features,
-    priceCents, currency: "BRL", billingInterval, stripePriceId: stripePriceId || null,
+    priceCents, currency: "BRL", billingInterval, stripePriceId: stripePriceId || null, aiDailyLimit,
     updatedAt: new Date().toISOString(), updatedBy: actor.uid };
   const batch = db.batch();
   batch.set(db.collection("adminPlans").doc(id), plan, { merge: true });

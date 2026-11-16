@@ -58,6 +58,7 @@
 const crypto = require("node:crypto");
 const { AsyncLocalStorage } = require("node:async_hooks");
 const { getFirebaseAdmin } = require("./_lib/firebaseAdmin");
+const { createAiQuota, aiQuotaNotice } = require("./_lib/aiQuota");
 const { rememberRequestOidc } = require("./_lib/aiGatewayFetch");
 const { parseTransactionImage, parseNoteImage, transcribeAudio } = require("./_lib/parseTransactionAI");
 const { parseTextIntent, parseDeterministicIntent, findBestMatch, findBestMatches } = require("./_lib/parseCommandIntent");
@@ -324,7 +325,10 @@ async function findUidForPhone(fb, phone) {
     const user = await fb.auth().getUser(uid);
     if (user.disabled) return null;
     const store = messageContext.getStore();
-    if (store) store.userName = user.displayName || "";
+    if (store) {
+      store.userName = user.displayName || "";
+      store.userActor = { email: user.email || "", emailVerified: user.emailVerified === true };
+    }
     // O índice do telefone pode ter ficado para trás depois de uma troca
     // feita por uma versão antiga. A fonte da verdade é a conta: um número
     // antigo jamais pode continuar operando só porque ainda possui índice.
@@ -1538,12 +1542,19 @@ async function replyWithSmallTalk(fb, uid, phone, small, rawText) {
 async function handleBrainMessage({ fb, uid, phone, rawText, history, categories, lastFinanceEntry, fromAudio }) {
   const store = messageContext.getStore();
   const state = await loadUserState(fb, uid);
+  const quota = createAiQuota({ db: fb.firestore(), uid, actor: store?.userActor || {} });
   const brain = await timeStage("pulsinho_brain", store?.messageId, () => converse({
     state, message: rawText, history, name: store?.userName || "", channel: "whatsapp", categories,
     providerPreference: state.aiProviderPreference, fromAudio, lastFinanceEntry, allowSmallTalk: false,
-    paymentMethodFor: () => inferPaymentMethod(rawText),
+    paymentMethodFor: () => inferPaymentMethod(rawText), quota,
   }));
-  if (!brain.ok) return false;
+  if (!brain.ok) {
+    // Cota do dia esgotada: os caminhos sem IA continuam (comandos claros)
+    // e a conversa livre recebe a explicação, não um "erro".
+    if (brain.error === "ai_daily_limit" && store) store.aiLimit = brain.quota;
+    return false;
+  }
+  const quotaNotice = aiQuotaNotice(brain.quota);
 
   const autos = brain.actions.filter((action) => action.risk === "auto");
   const confirms = brain.actions.filter((action) => action.risk === "confirm");
@@ -1583,6 +1594,7 @@ async function handleBrainMessage({ fb, uid, phone, rawText, history, categories
   const parts = [brain.reply];
   if (applied.length) parts.push(applied.map((item) => item.summary).join("\n"));
   if (missed > 0) parts.push("⚠️ Uma das ações não pôde ser aplicada porque o item já não existe mais.");
+  if (quotaNotice) parts.push(quotaNotice);
   const text = parts.filter(Boolean).join("\n\n");
 
   if (confirms.length) {
@@ -2164,7 +2176,7 @@ module.exports = async (req, res) => {
         const stateSnapshot = await fb.firestore().collection("userData").doc(uid).get();
         const userState = stateSnapshot.exists ? stateSnapshot.data()?.data || {} : {};
         const history = await loadWhatsAppAssistantHistory(fb, uid);
-        const assistant = await askPulsinho({ state: userState, question: rawText, history, providerPreference: userState.aiProviderPreference, channel: "whatsapp", name: messageContext.getStore()?.userName || "", skipBrain: !aiEnabled });
+        const assistant = await askPulsinho({ state: userState, question: rawText, history, providerPreference: userState.aiProviderPreference, channel: "whatsapp", name: messageContext.getStore()?.userName || "", skipBrain: !aiEnabled, quota: createAiQuota({ db: fb.firestore(), uid, actor: messageContext.getStore()?.userActor || {} }) });
         if (assistant.ok) {
           await saveWhatsAppAssistantTurn(fb, uid, history, rawText, assistant.reply);
           await sendWhatsAppMessage(fromPhone, assistant.reply);
@@ -2396,7 +2408,7 @@ module.exports = async (req, res) => {
         const stateSnapshot = await fb.firestore().collection("userData").doc(uid).get();
         const userState = stateSnapshot.exists ? stateSnapshot.data()?.data || {} : {};
         const history = await loadWhatsAppAssistantHistory(fb, uid);
-        const assistant = await askPulsinho({ state: userState, question: rawText, history, providerPreference: userState.aiProviderPreference, channel: "whatsapp", name: messageContext.getStore()?.userName || "", skipBrain: brainAttempted });
+        const assistant = await askPulsinho({ state: userState, question: rawText, history, providerPreference: userState.aiProviderPreference, channel: "whatsapp", name: messageContext.getStore()?.userName || "", skipBrain: brainAttempted, aiLimit: messageContext.getStore()?.aiLimit || null });
         if (assistant.ok) {
           await saveWhatsAppAssistantTurn(fb, uid, history, rawText, assistant.reply);
           const followUps = (assistant.followUps || []).slice(0, 3).map((item) => `• ${item}`).join("\n");

@@ -568,7 +568,7 @@ async function converse({
   state = {}, message, history = [], name = "", channel = "app", categories = [],
   providerPreference = "auto", fromAudio = false, workspaceId = "personal", lastFinanceEntry = null,
   paymentMethodFor, now = brazilNow(), callModel = callBrainModel, allowSmallTalk = true,
-  facts = null, webSearch,
+  facts = null, webSearch, quota = null,
 }) {
   const text = String(message || "").trim().slice(0, 1600);
   if (!text) return { ok: false, status: 400, error: "invalid_question" };
@@ -586,8 +586,14 @@ async function converse({
   const search = webSearch || (process.env.GEMINI_API_KEY ? defaultWebSearch : null);
   const context = buildBrainContext(state, { now, workspaceId, lastFinanceEntry, message: text });
   const systemPrompt = buildSystemPrompt({ name, now, channel, context, categories, facts, webAvailable: Boolean(search) });
+  // Cota diária de conversas com IA (só conta o que realmente chama a IA).
+  const usage = quota ? await quota.consume() : null;
+  if (usage && !usage.allowed) {
+    return { ok: false, status: 429, error: "ai_daily_limit", quota: usage, greeting: small?.kind === "prefix" ? small : null };
+  }
   let result = await callModel({ systemPrompt, history: safeHistory, message: text, providerPreference });
   if (!result?.ok) {
+    if (quota) await quota.refund();
     return { ok: false, status: result?.status || 502, error: result?.error || "assistant_unavailable", greeting: small?.kind === "prefix" ? small : null };
   }
 
@@ -599,7 +605,7 @@ async function converse({
     if (found?.ok && found.text) {
       const sources = [...new Set(asArray(found.sources).map((s) => String(s?.title || "").trim()).filter(Boolean))].slice(0, 3);
       return {
-        ok: true, source: "web", provider: found.provider || "gemini-search", actions: [], asks: [], navigationTarget: null,
+        ok: true, source: "web", provider: found.provider || "gemini-search", actions: [], asks: [], navigationTarget: null, ...(quota ? { quota: quota.info } : {}),
         reply: `${String(found.text).trim().slice(0, 2400)}${sources.length ? `\n\nFontes: ${sources.join(", ")}` : ""}`,
         followUps: [], sources: asArray(found.sources).slice(0, 5),
       };
@@ -626,8 +632,11 @@ async function converse({
     const verbatim = text.replace(NOTE_PREFIX_RE, "").trim().slice(0, 3000);
     if (verbatim) notes[0].record.description = verbatim;
   }
-  if (!normalized.reply && !normalized.actions.length) return { ok: false, status: 502, error: "ai_bad_response" };
-  return { ok: true, source: "ai", provider: result.provider || "gateway", ...normalized };
+  if (!normalized.reply && !normalized.actions.length) {
+    if (quota) await quota.refund();
+    return { ok: false, status: 502, error: "ai_bad_response" };
+  }
+  return { ok: true, source: "ai", provider: result.provider || "gateway", ...normalized, ...(quota ? { quota: quota.info } : {}) };
 }
 
 module.exports = {

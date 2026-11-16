@@ -8,7 +8,7 @@
   <title>Administração · PulseNote</title>
   <link rel="icon" type="image/png" href="/icons/favicon-32.png" />
   <link rel="stylesheet" href="/src/admin.css?v=34" />
-  <link rel="stylesheet" href="/src/admin-boards.css?v=2" />
+  <link rel="stylesheet" href="/src/admin-boards.css?v=3" />
 </head>
 <body>
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
@@ -182,7 +182,7 @@
                 <div class="ad-form-row"><label>ID do plano<input name="id" required pattern="[a-z0-9_-]{2,40}" maxlength="40" placeholder="essencial" /></label><label>Nome<input name="name" required maxlength="80" placeholder="Essencial" /></label></div>
                 <label>Descrição<textarea name="description" maxlength="300" rows="2" placeholder="O que este plano inclui"></textarea></label>
                 <div class="ad-form-row"><label>Preço em reais<input name="price" inputmode="decimal" placeholder="29,90" /></label><label>Ciclo<select name="billingInterval"><option value="month">Mensal</option><option value="year">Anual</option></select></label></div>
-                <label>Stripe Price ID<input name="stripePriceId" maxlength="128" placeholder="price_..." autocomplete="off" /></label>
+                <div class="ad-form-row"><label>Stripe Price ID<input name="stripePriceId" maxlength="128" placeholder="price_..." autocomplete="off" /></label><label>Conversas com IA por dia<input name="aiDailyLimit" type="number" min="0" max="5000" step="1" inputmode="numeric" placeholder="Padrão: 10 grátis · 200 pago" /><small class="ad-field-hint">Vazio usa o padrão. 0 = sem limite. Cumprimentos e comandos simples não contam.</small></label></div>
                 <div class="ad-core-features"><strong>Base incluída em todos os planos</strong><span>Planner e tarefas</span><span>Notas e checklists</span><span>Finanças</span><span>Metas e compromissos</span></div>
                 <div id="adPlanFeatures" class="ad-capability-groups"></div><div class="ad-form-footer"><label class="ad-check"><input type="checkbox" name="active" checked />Plano ativo</label><button class="ad-primary-button" type="submit">Salvar plano</button></div>
               </form></div>
@@ -221,6 +221,6 @@
     </div>
   </div>
   <div id="adToast" class="ad-toast" role="status" aria-live="polite" hidden></div>
-  <script type="module" src="/src/admin.js?v=34"></script>
+  <script type="module" src="/src/admin.js?v=35"></script>
 </body>
 </html>

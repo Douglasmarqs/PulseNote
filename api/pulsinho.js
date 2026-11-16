@@ -1,4 +1,5 @@
 const { getFirebaseAdmin } = require("./_lib/firebaseAdmin");
+const { createAiQuota } = require("./_lib/aiQuota");
 const { rememberRequestOidc } = require("./_lib/aiGatewayFetch");
 const { buildFinanceForecast } = require("./_lib/financeForecast");
 const { askPulsinho } = require("./_lib/pulsinhoAssistant");
@@ -57,7 +58,9 @@ module.exports = async (req, res) => {
     const personal = await loadFinanceState(db, decoded.uid, "personal");
     const finance = workspaceId && !PRIVATE_WORKSPACES.has(workspaceId) ? await loadFinanceState(db, decoded.uid, workspaceId) : personal;
     const state = finance.shared ? { ...personal.state, ...finance.state } : personal.state;
+    const quota = createAiQuota({ db, uid: decoded.uid, actor: { email: decoded.email || "", emailVerified: decoded.email_verified === true } });
     const result = await askPulsinho({
+      quota,
       state,
       question: body.question,
       history: body.history,

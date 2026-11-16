@@ -1,6 +1,8 @@
+const { aiLimitReply, aiQuotaNotice } = require("./aiQuota");
 const { buildFinanceForecast } = require("./financeForecast");
 const { converse, detectSmallTalk, buildSmallTalkReply, brazilNow } = require("./pulsinhoBrain");
-const { serializeAction, toLegacyProposedAction } = require("./pulsinhoActions");
+const { serializeAction, toLegacyProposedAction, normalizeActions } = require("./pulsinhoActions");
+const { parseDeterministicIntent } = require("./parseCommandIntent");
 const { buildCategoryList } = require("./financeCategories");
 
 function asArray(value) {
@@ -215,7 +217,33 @@ function isActionRequest(question) {
   return ACTION_REQUEST_RE.test(normalized(question));
 }
 
-async function askPulsinho({ state, question, workspaceId, providerPreference, history, name = "", channel = "app", now = brazilNow(), callModel, skipBrain = false, webSearch }) {
+// Comando claro → ações tipadas, sem IA (mesma validação das ações da IA).
+const NOTE_PREFIX = /^\s*(?:anotar?|anote|nota)\s*[:\-–—]?\s*/i;
+function quickCommandActions(text, { state, now, workspaceId }) {
+  const categories = buildCategoryList(state);
+  const intent = parseDeterministicIntent(text, now.today, categories, { deferCompound: true });
+  if (!intent?.ok) return [];
+  let raw = null;
+  if (intent.intent === "expense" && intent.entry) {
+    const e = intent.entry;
+    raw = { type: "add_transaction", transactionType: e.type, amount: e.amount, description: e.description, categoryId: e.categoryId, date: e.date };
+  } else if (intent.intent === "task_action" && intent.task?.action === "create") {
+    const t = intent.task;
+    raw = { type: "add_task", title: t.title, date: t.dueDate, time: t.dueTime, reminderMinutes: t.reminder, priority: t.priority };
+  } else if (intent.intent === "note_action" && intent.note?.action === "create") {
+    raw = { type: "add_note", content: text.replace(NOTE_PREFIX, "").trim(), title: intent.note.title };
+  } else if (intent.intent === "event_create" && intent.event) {
+    const ev = intent.event;
+    raw = { type: "add_event", title: ev.title, date: ev.date, time: ev.time, reminderMinutes: ev.reminder, location: ev.location };
+  }
+  if (!raw) return [];
+  const { actions } = normalizeActions([raw], {
+    state, categories, today: now.today, nowTime: now.time, channel: "app", workspaceId: workspaceId || "personal", rawMessage: text,
+  });
+  return actions.filter((action) => action.risk === "auto");
+}
+
+async function askPulsinho({ state, question, workspaceId, providerPreference, history, name = "", channel = "app", now = brazilNow(), callModel, skipBrain = false, webSearch, quota = null, aiLimit = null }) {
   const cleanQuestion = String(question || "").trim().slice(0, 1600);
   if (cleanQuestion.length < 1) return { ok: false, status: 400, error: "invalid_question" };
   const safeState = state || {};
@@ -225,7 +253,7 @@ async function askPulsinho({ state, question, workspaceId, providerPreference, h
   const brainOptions = {
     state: safeState, history: safeHistory, name, channel, categories: buildCategoryList(safeState), providerPreference,
     workspaceId: workspaceId || "personal", now, allowSmallTalk: false,
-    ...(callModel ? { callModel } : {}), ...(webSearch ? { webSearch } : {}),
+    ...(callModel ? { callModel } : {}), ...(webSearch ? { webSearch } : {}), ...(quota ? { quota } : {}),
   };
 
   // "Posso gastar 350?": o simulador calcula (números exatos) e a IA
@@ -271,11 +299,13 @@ async function askPulsinho({ state, question, workspaceId, providerPreference, h
   if (brain.ok) {
     const actions = brain.actions.map(serializeAction);
     const firstConfirm = brain.actions.find((action) => action.risk === "confirm");
+    const notice = aiQuotaNotice(brain.quota, { channel });
     return {
       ok: true,
       kind: "answer",
       forecast,
-      reply: brain.reply,
+      reply: notice ? `${brain.reply}\n\n${notice}` : brain.reply,
+      ...(brain.quota && !brain.quota.unlimited ? { aiUsage: { used: brain.quota.used, limit: brain.quota.limit, remaining: brain.quota.remaining } } : {}),
       followUps: brain.followUps,
       navigationTarget: brain.navigationTarget,
       provider: brain.provider,
@@ -286,9 +316,35 @@ async function askPulsinho({ state, question, workspaceId, providerPreference, h
     };
   }
 
+  const limit = brain.error === "ai_daily_limit" ? brain.quota : aiLimit;
+
+  // Sem IA (cota do dia esgotada ou IA fora do ar), comandos claros do
+  // app ainda viram ação pelo modo rápido: gasto, tarefa, nota, evento.
+  if (channel === "app") {
+    const quick = quickCommandActions(cleanQuestion, { state: safeState, now, workspaceId });
+    if (quick.length) {
+      const tail = limit ? "\n\nFiz pelo modo rápido: as conversas com IA de hoje já acabaram." : "";
+      return {
+        ok: true, kind: "answer", forecast, provider: "pulse-engine", navigationTarget: null, followUps: [],
+        reply: `Pronto! ✅\n${quick.map((action) => action.summary).join("\n")}${tail}`,
+        actions: quick.map(serializeAction),
+        ...(limit ? { limitReached: true, aiUsage: { used: limit.used, limit: limit.limit, remaining: 0 } } : {}),
+      };
+    }
+  }
+
   const context = buildAssistantContext(safeState, forecast);
   const local = !isActionRequest(cleanQuestion) ? buildLocalAssistantAnswer(cleanQuestion, context, forecast) : null;
   if (local) return { ok: true, kind: "answer", forecast, actions: [], ...local };
+  // Cota de conversas com IA do dia esgotada: explica em vez de fingir erro.
+  if (limit) {
+    return {
+      ok: true, kind: "answer", forecast, actions: [], navigationTarget: null, provider: "pulse-engine", limitReached: true,
+      reply: aiLimitReply(limit, { channel }),
+      aiUsage: { used: limit.used, limit: limit.limit, remaining: 0 },
+      followUps: ["Quais tarefas estão pendentes?", "Como estão minhas finanças?", "Quais compromissos vêm agora?"],
+    };
+  }
   return { ok: true, kind: "answer", forecast, actions: [], ...buildLocalAssistantAnswer(cleanQuestion, context, forecast, { fallback: true }) };
 }
 

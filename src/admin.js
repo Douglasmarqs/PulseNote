@@ -463,7 +463,7 @@ async function loadPlans() {
   state.plans = data.plans;
   $("#adPlansList").innerHTML = state.plans.length ? state.plans.map((plan) => {
     const enabled = Object.values(plan.features || {}).filter(Boolean).length;
-    return `<button class="ad-plan" type="button" data-edit-plan="${escapeHtml(plan.id)}"><span class="ad-plan-name"><strong>${escapeHtml(plan.name)}</strong><small>${escapeHtml(plan.description || "Sem descrição")}</small></span><span class="ad-plan-price"><strong>${plan.priceCents ? money(plan.priceCents) : "Grátis"}</strong><small>${plan.billingInterval === "year" ? "por ano" : "por mês"}</small></span><span class="ad-plan-meta"><span class="ad-pill ${plan.active ? "" : "is-off"}">${plan.active ? "Ativo" : "Inativo"}</span><small>${enabled} recursos · ${plan.stripePriceId ? "Stripe conectado" : "sem checkout"}</small></span><span aria-hidden="true">→</span></button>`;
+    return `<button class="ad-plan" type="button" data-edit-plan="${escapeHtml(plan.id)}"><span class="ad-plan-name"><strong>${escapeHtml(plan.name)}</strong><small>${escapeHtml(plan.description || "Sem descrição")}</small></span><span class="ad-plan-price"><strong>${plan.priceCents ? money(plan.priceCents) : "Grátis"}</strong><small>${plan.billingInterval === "year" ? "por ano" : "por mês"}</small></span><span class="ad-plan-meta"><span class="ad-pill ${plan.active ? "" : "is-off"}">${plan.active ? "Ativo" : "Inativo"}</span><small>${enabled} recursos · ${aiLimitLabel(plan)} · ${plan.stripePriceId ? "Stripe conectado" : "sem checkout"}</small></span><span aria-hidden="true">→</span></button>`;
   }).join("") : `<div class="ad-empty">Nenhum plano criado. Contas sem plano mantêm o acesso atual.</div>`;
   $("#adSubscriptionPlanSelect").innerHTML = `<option value="">Selecione um plano</option>` + state.plans.filter((plan) => plan.active !== false).map((plan) => `<option value="${escapeHtml(plan.id)}">${escapeHtml(plan.name)}</option>`).join("");
   renderUsers();
@@ -493,6 +493,12 @@ async function loadConfig() {
   const data = await request("settings");
   state.config = data.config;
   renderConfig();
+}
+
+// Rótulo do limite diário de conversas com IA do plano.
+function aiLimitLabel(plan) {
+  if (Number.isInteger(plan.aiDailyLimit)) return plan.aiDailyLimit === 0 ? "IA sem limite" : `IA ${plan.aiDailyLimit}/dia`;
+  return plan.priceCents ? "IA 200/dia (padrão)" : "IA 10/dia (padrão)";
 }
 
 function money(cents) {
@@ -664,6 +670,7 @@ function bindActions() {
       form.elements.price.value = plan.priceCents ? String(plan.priceCents / 100).replace(".", ",") : "";
       form.elements.billingInterval.value = plan.billingInterval || "month";
       form.elements.stripePriceId.value = plan.stripePriceId || "";
+      form.elements.aiDailyLimit.value = Number.isInteger(plan.aiDailyLimit) ? String(plan.aiDailyLimit) : "";
       form.elements.active.checked = plan.active !== false;
       for (const key of Object.keys(FEATURE_LABELS)) form.elements[`feature-${key}`].checked = planFeatureEnabled(plan, key);
       form.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -720,13 +727,16 @@ function bindActions() {
     const normalizedPrice = rawPrice.includes(",") ? rawPrice.replace(/\./g, "").replace(",", ".") : rawPrice;
     const price = normalizedPrice ? Number(normalizedPrice) : 0;
     if (!Number.isFinite(price) || price < 0 || (normalizedPrice && !/^\d+(?:\.\d{1,2})?$/.test(normalizedPrice))) return toast("Informe um preço válido com até duas casas decimais.", true);
+    const rawAiLimit = form.elements.aiDailyLimit.value.trim();
+    const aiDailyLimit = rawAiLimit === "" ? null : Number(rawAiLimit);
+    if (aiDailyLimit !== null && (!Number.isInteger(aiDailyLimit) || aiDailyLimit < 0 || aiDailyLimit > 5000)) return toast("Conversas com IA por dia: use um número inteiro de 0 a 5000 (0 = sem limite).", true);
     if (existing && (existing.active !== form.elements.active.checked
       || Object.keys(FEATURE_LABELS).some((key) => planFeatureEnabled(existing, key) !== features[key]))
       && !window.confirm(`Alterar os recursos do plano ${existing.name}? Isso pode mudar o acesso de todos os assinantes imediatamente.`)) return;
     try {
       await request("plan-save", { id: form.elements.id.value, name: form.elements.name.value, description: form.elements.description.value,
         priceCents: Math.round(price * 100), billingInterval: form.elements.billingInterval.value,
-        stripePriceId: form.elements.stripePriceId.value.trim(), active: form.elements.active.checked, features });
+        stripePriceId: form.elements.stripePriceId.value.trim(), aiDailyLimit, active: form.elements.active.checked, features });
       toast("Plano salvo."); form.reset(); await loadPlans();
     } catch (error) { toast(error.message, true); }
   });
