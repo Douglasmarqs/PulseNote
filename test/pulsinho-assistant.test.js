@@ -64,7 +64,8 @@ test("fallback local é explícito e preserva uma próxima ação útil", () => 
   }, forecast);
   const answer = buildLocalAssistantAnswer("me ajuda a organizar", context, forecast, { fallback: true });
   assert.equal(answer.provider, "pulse-engine");
-  assert.match(answer.reply, /IA externa demorou/);
+  assert.match(answer.reply, /IA de conversa não respondeu/);
+  assert.doesNotMatch(answer.reply, /margem segura/);
   assert.match(answer.reply, /Pagar condomínio/);
 });
 

@@ -58,6 +58,7 @@
 const crypto = require("node:crypto");
 const { AsyncLocalStorage } = require("node:async_hooks");
 const { getFirebaseAdmin } = require("./_lib/firebaseAdmin");
+const { rememberRequestOidc } = require("./_lib/aiGatewayFetch");
 const { parseTransactionImage, parseNoteImage, transcribeAudio } = require("./_lib/parseTransactionAI");
 const { parseTextIntent, parseDeterministicIntent, findBestMatch, findBestMatches } = require("./_lib/parseCommandIntent");
 const { buildPdfReportBuffer } = require("./_lib/buildPdfReport");
@@ -1826,6 +1827,7 @@ async function handleMediaButton(fb, uid, phone, replyId, pending, categories, t
 }
 
 module.exports = async (req, res) => {
+  rememberRequestOidc(req);
   // ── Verificação do webhook — a Meta chama isso 1x só, ao salvar a
   //    configuração no painel do WhatsApp Business. Não é assinado
   //    (não tem corpo), então não passa pela verificação de HMAC abaixo.

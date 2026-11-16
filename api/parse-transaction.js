@@ -31,6 +31,7 @@
 //   FIREBASE_PRIVATE_KEY
 // ============================================================
 
+const { rememberRequestOidc } = require("./_lib/aiGatewayFetch");
 const { getFirebaseAdmin } = require("./_lib/firebaseAdmin");
 const { parseTransactionText, parseTransactionImage, transcribeAudio } = require("./_lib/parseTransactionAI");
 const { checkUserFeature } = require("./_lib/admin");
@@ -46,6 +47,7 @@ async function verifyUser(req) {
 }
 
 module.exports = async (req, res) => {
+  rememberRequestOidc(req);
   res.setHeader("Content-Type", "application/json");
 
   if (req.method !== "POST") {

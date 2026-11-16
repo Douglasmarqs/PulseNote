@@ -1,4 +1,5 @@
 const { getFirebaseAdmin } = require("./_lib/firebaseAdmin");
+const { rememberRequestOidc } = require("./_lib/aiGatewayFetch");
 const { buildFinanceForecast } = require("./_lib/financeForecast");
 const { askPulsinho } = require("./_lib/pulsinhoAssistant");
 const { loadFinanceState, PRIVATE_WORKSPACES } = require("./_lib/financeState");
@@ -19,6 +20,7 @@ function numberParam(value) {
 }
 
 module.exports = async (req, res) => {
+  rememberRequestOidc(req);
   res.setHeader("Content-Type", "application/json; charset=utf-8");
   res.setHeader("Cache-Control", "no-store");
   if (!['GET', 'POST'].includes(req.method)) {

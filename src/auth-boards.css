@@ -139,3 +139,9 @@ body.bda {
 @media (max-width: 560px) {
   .bda-shell--single .bda-card { padding: 0; }
 }
+
+/* Marca com o Pulsinho (mesmo mascote do app) */
+.bda-brand .bd-mascot { --s: 34px; }
+.bda-brand--mobile .bd-mascot { --s: 32px; }
+@keyframes pulsinhoMorph { 0%, 100% { border-radius: 58% 42% 53% 47% / 55% 48% 52% 45%; } 50% { border-radius: 46% 54% 44% 56% / 50% 56% 44% 50%; } }
+@keyframes pulsinhoBlink { 0%, 92%, 100% { transform: scaleY(1); } 96% { transform: scaleY(0.1); } }

@@ -117,7 +117,7 @@ function buildLocalAssistantAnswer(question, context, forecast, { fallback = fal
   const tasks = context.planner.pendingTasks;
   const events = context.planner.upcomingEvents;
   const goals = context.goals;
-  const prefix = fallback ? "A IA externa demorou, então usei os dados já salvos no PulseNote. " : "";
+  const prefix = fallback ? "Minha IA de conversa não respondeu agora, então usei seus dados salvos. " : "";
 
   if (/(saldo|quanto tenho|como estao.*financ|resumo.*financ)/.test(text)) {
     return {
@@ -194,14 +194,14 @@ function buildLocalAssistantAnswer(question, context, forecast, { fallback = fal
   }
 
   if (!fallback) return null;
-  const priority = tasks[0]?.title
-    ? `Sua próxima pendência é “${tasks[0].title}”.`
-    : events[0]?.title
-      ? `Seu próximo compromisso é “${events[0].title}”.`
-      : `Sua margem segura estimada é ${money(finance.safeToSpend)}.`;
+  // Sem IA e sem um assunto reconhecível: resposta honesta e simpática, em
+  // vez de despejar números que não foram pedidos.
+  const next = tasks[0]?.title
+    ? ` Aliás, sua próxima pendência é “${tasks[0].title}”.`
+    : events[0]?.title ? ` Aliás, seu próximo compromisso é “${events[0].title}”.` : "";
   return {
-    reply: `${prefix}${priority} Para uma resposta mais específica, diga se quer analisar finanças, tarefas, agenda, metas ou notas.`,
-    navigationTarget: tasks.length || events.length ? "planner" : "finances",
+    reply: `Tô aqui! 😊 Só que a minha IA de conversa não respondeu agora — me manda de novo em alguns segundos. Enquanto isso, comandos diretos funcionam normalmente: “gastei 30 no mercado”, “me lembra de pagar a luz amanhã às 9h” ou “minhas tarefas”.${next}`,
+    navigationTarget: null,
     followUps: ["Como estão minhas finanças?", "Quais tarefas estão pendentes?", "Quais compromissos vêm agora?"],
     provider: "pulse-engine",
   };

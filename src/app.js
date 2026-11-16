@@ -3989,6 +3989,42 @@ function renderAll() {
   refreshProfileAvatar();
 }
 
+// Campo de data compacto: o seletor nativo continua (toque abre o
+// calendário do sistema), mas o texto exibido é curto e nunca quebra
+// linha — no iPhone "16 de nov. de 2026" estourava o campo.
+function finPrettyDate(iso) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(iso || ""))) return "Escolher data";
+  const shift = (days) => {
+    const date = new Date(`${todayIso}T12:00:00`);
+    date.setDate(date.getDate() + days);
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  };
+  if (iso === todayIso) return "Hoje";
+  if (iso === shift(-1)) return "Ontem";
+  if (iso === shift(1)) return "Amanhã";
+  const [year, month, day] = iso.split("-").map(Number);
+  const base = `${day} ${BD_MONTHS[month - 1]}`;
+  return year === Number(todayIso.slice(0, 4)) ? base : `${base} ${year}`;
+}
+
+function enhanceCompactDateInput(input, label) {
+  if (!input || !label || input.dataset.compactDate === "1") return;
+  input.dataset.compactDate = "1";
+  const update = () => { label.textContent = finPrettyDate(input.value); };
+  const native = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
+  if (native?.get && native?.set) {
+    Object.defineProperty(input, "value", {
+      configurable: true,
+      get() { return native.get.call(this); },
+      set(next) { native.set.call(this, next); update(); },
+    });
+  }
+  input.addEventListener("input", update);
+  input.addEventListener("change", update);
+  input.addEventListener("click", () => { try { input.showPicker?.(); } catch { /* navegador sem showPicker */ } });
+  update();
+}
+
 function setDefaultDates() {
   const taskDue = document.querySelector("#taskDue");
   if (taskDue) taskDue.value ||= todayIso;
@@ -3997,6 +4033,7 @@ function setDefaultDates() {
   const eventTime = document.querySelector("#eventTime");
   if (eventTime) eventTime.value ||= "09:00";
   const expDate = document.querySelector("#expenseDate");
+  enhanceCompactDateInput(expDate, document.querySelector("#expenseDateLabel"));
   if (expDate) expDate.value ||= todayIso;
 }
 
@@ -4052,6 +4089,64 @@ let bdEvoRange = 30;
 
 function bdIcon(id) {
   return `<svg class="i" aria-hidden="true"><use href="#i-${id}"/></svg>`;
+}
+
+// Carrossel horizontal com bolinhas: só aparecem quando há o que deslizar,
+// acompanham a rolagem e, ao tocar, levam até o cartão correspondente.
+function bdSetupPager(scroller, dots, itemSelector) {
+  if (!scroller || !dots || scroller.dataset.pager === "1") return;
+  scroller.dataset.pager = "1";
+  const visibleItems = () => [...scroller.querySelectorAll(itemSelector)].filter((el) => el.getClientRects().length > 0);
+  const activeIndex = (items) => {
+    if (!items.length) return 0;
+    if (scroller.scrollLeft + scroller.clientWidth >= scroller.scrollWidth - 4) return items.length - 1;
+    const start = scroller.getBoundingClientRect().left + (parseFloat(getComputedStyle(scroller).paddingLeft) || 0);
+    let best = 0;
+    let bestDistance = Infinity;
+    items.forEach((el, index) => {
+      const distance = Math.abs(el.getBoundingClientRect().left - start);
+      if (distance < bestDistance) { best = index; bestDistance = distance; }
+    });
+    return best;
+  };
+  const paint = () => {
+    const items = visibleItems();
+    const overflow = scroller.scrollWidth > scroller.clientWidth + 4 && items.length > 1;
+    dots.style.display = overflow ? "" : "none";
+    if (!overflow) return;
+    if (dots.children.length !== items.length || dots.firstElementChild?.tagName !== "BUTTON") {
+      dots.removeAttribute("aria-hidden");
+      dots.setAttribute("role", "tablist");
+      dots.innerHTML = items.map((_, index) => `<button type="button" role="tab" aria-label="Cartão ${index + 1} de ${items.length}"></button>`).join("");
+    }
+    const active = activeIndex(items);
+    [...dots.children].forEach((dot, index) => {
+      dot.classList.toggle("active", index === active);
+      dot.setAttribute("aria-selected", String(index === active));
+    });
+  };
+  dots.addEventListener("click", (event) => {
+    const dot = event.target.closest("button");
+    if (!dot) return;
+    const items = visibleItems();
+    const target = items[[...dots.children].indexOf(dot)];
+    if (!target) return;
+    const padding = parseFloat(getComputedStyle(scroller).paddingLeft) || 0;
+    const left = target.getBoundingClientRect().left - scroller.getBoundingClientRect().left + scroller.scrollLeft - padding;
+    scroller.scrollTo({ left: Math.max(0, left), behavior: "smooth" });
+  });
+  let frame = 0;
+  scroller.addEventListener("scroll", () => {
+    cancelAnimationFrame(frame);
+    frame = requestAnimationFrame(paint);
+  }, { passive: true });
+  if (typeof ResizeObserver === "function") {
+    const observer = new ResizeObserver(() => paint());
+    observer.observe(scroller);
+    scroller.querySelectorAll(itemSelector).forEach((el) => observer.observe(el));
+  }
+  window.addEventListener("resize", paint, { passive: true });
+  paint();
 }
 
 function bdFirstName() {
@@ -4292,13 +4387,6 @@ function renderBoardsSparkline(series) {
   svg.innerHTML = `<defs><linearGradient id="bdSparkFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#25d388" stop-opacity=".45"/><stop offset="1" stop-color="#25d388" stop-opacity="0"/></linearGradient></defs><path d="${line} L200 70 L0 70 Z" fill="url(#bdSparkFill)"/><path d="${line}" fill="none" stroke="#25d388" stroke-width="1.6" stroke-linecap="round"/>`;
 }
 
-const BD_CATEGORY_ICONS = {
-  moradia: "home", contas: "home", manutencao: "home",
-  alimentacao: "fork", mercado: "fork",
-  transporte: "car", combustivel: "car",
-  saude: "heart", academia: "heart", beleza: "heart",
-  assinaturas: "layers",
-};
 const BD_CATEGORY_SHORT = { alimentacao: "Aliment.", mercado: "Mercado", transporte: "Transp.", assinaturas: "Assin.", investimentos_desp: "Invest." };
 
 function bdCategoryName(id) {
@@ -4331,11 +4419,11 @@ function renderBoardsCategories(monthEntries) {
   host.style.gridTemplateColumns = `repeat(${rows.length}, 1fr)`;
   host.innerHTML = rows.map((r) => {
     const pct = r.value / total;
-    const icon = BD_CATEGORY_ICONS[r.id] || "dots-circle";
+
     return `<div class="bd-cat" title="${escapeHtml(findCategory(r.id).label)} · ${escapeHtml(formatCurrency(r.value))}">
       <span class="bd-cat-pct">${Math.round(pct * 100)}%</span>
       <span class="bd-cat-track"><i class="bd-cat-bar" style="height:${Math.max(6, (pct / maxPct) * 100).toFixed(1)}%"></i></span>
-      <span class="bd-cat-ico">${bdIcon(icon)}</span>
+      <span class="bd-cat-ico">${finCategoryIconHtml(r.id)}</span>
       <span class="bd-cat-name">${escapeHtml(bdCategoryName(r.id))}</span>
     </div>`;
   }).join("");
@@ -4485,14 +4573,8 @@ function bindBoardsShell() {
       renderBoardsEvolution();
     }).observe(chart);
   }
-  // Carrossel de KPIs (mobile): bolinhas acompanham a rolagem
-  const kpis = document.querySelector("#bdKpis");
-  kpis?.addEventListener("scroll", () => {
-    const max = kpis.scrollWidth - kpis.clientWidth;
-    const count = kpis.querySelectorAll(".bd-kpi").length;
-    const index = max > 0 ? Math.round((kpis.scrollLeft / max) * (count - 1)) : 0;
-    document.querySelectorAll("#bdKpiDots i").forEach((dot, i) => dot.classList.toggle("active", i === Math.min(index, count - 1)));
-  }, { passive: true });
+  // Carrossel de KPIs (mobile): bolinhas acompanham a rolagem e levam ao cartão
+  bdSetupPager(document.querySelector("#bdKpis"), document.querySelector("#bdKpiDots"), ".bd-kpi");
   // Busca recolhida em ícone
   const search = document.querySelector(".bd-search");
   const searchInput = document.querySelector("#globalSearch");
@@ -8356,7 +8438,8 @@ const FIN_CATEGORY_KEYWORDS = {
   investimentos:["dividendo","rendimento","investimento","ação","ações","cdb","tesouro direto","fii","fundo imobiliário","fundo imobiliario","juros recebidos","resgate","renda fixa","lucro","rendeu"],
   vendas:       ["venda","vendi","vendeu","olx","mercado livre","enjoei","marketplace","vendinha"],
   reembolso:    ["reembolso","ressarcimento","devolução","devolucao","estorno","cashback","restituição","restituicao","devolveram","me devolveu","pagou de volta"],
-  presente:     ["presente","bônus","bonus","doação","doacao","mesada","ganhei de presente","pix de presente","mimo","vaquinha"],
+  presente:     ["presente","bônus","bonus","doação","doacao","mesada","ganhei de presente","pix de presente","mimo","vaquinha"],
+
   beleza: ["cabelo", "corte de cabelo", "cabeleireiro", "cabeleireira", "salão", "salao", "manicure", "pedicure", "barbearia", "barbeiro", "depilação", "depilacao", "estética", "estetica", "maquiagem", "sobrancelha", "unha", "skincare", "cosmético", "cosmetico", "barba", "escova", "progressiva", "depilação a laser", "perfumaria"],
   pet: ["ração", "racao", "veterinário", "veterinario", "petshop", "pet shop", "cachorro", "gato", "areia de gato", "banho e tosa", "antipulgas", "brinquedo do pet", "consulta veterinária", "consulta veterinaria", "petz", "cobasi", "pet"],
   pensao: ["pensão", "pensao", "auxílio", "auxilio", "bolsa família", "bolsa familia", "benefício", "beneficio", "inss", "aposentadoria", "seguro desemprego", "bpc"],
@@ -9010,23 +9093,122 @@ function finCatName(catId) {
   return String(findCategory(catId).label || "Outros").replace(/^[^\p{L}\p{N}]+/u, "").trim();
 }
 
-// Ícone do lançamento: primeiro pela descrição (aluguel, internet, mercado), depois pela categoria.
+// Ícones de finanças — um símbolo próprio por categoria e, antes dele, um
+// ícone pelo que a pessoa escreveu na descrição ("Uber" → carro, "Luz" →
+// raio, "Netflix" → TV), mesmo dentro de categorias amplas como Contas.
 const FIN_CATEGORY_ICONS = {
-  moradia: "home", contas: "home", manutencao: "home",
+  // Despesas
+  moradia: "home", contas: "bolt", manutencao: "wrench",
   alimentacao: "fork", mercado: "cart", supermercado: "cart",
-  transporte: "car", combustivel: "car",
-  saude: "heart", academia: "heart", beleza: "heart",
-  assinaturas: "layers", investimentos_desp: "bars",
-  salario: "wallet", freelance: "wallet", vendas: "wallet", investimentos: "bars", outros_receita: "wallet",
-  outros: "dots-circle",
+  transporte: "car", combustivel: "fuel",
+  saude: "pill", academia: "dumbbell", beleza: "scissors",
+  educacao: "graduation", lazer: "gamepad", eventos: "balloon", presentes: "gift",
+  roupas: "shirt", tecnologia: "phone", assinaturas: "repeat", familia: "family",
+  pet: "paw", viagem: "plane", investimentos_desp: "piggy", emprestimos: "bank",
+  impostos: "receipt", seguros: "umbrella", doacoes: "hand-heart", outros: "dots-circle",
+  // Receitas
+  salario: "briefcase", freelance: "laptop", investimentos: "trend-up", vendas: "tag",
+  aluguel_receb: "building", reembolso: "undo", premio: "trophy", emprestimo_receb: "bank",
+  pensao: "family", presente: "gift", outros_receita: "coin",
 };
+
+// [regex na descrição normalizada, ícone, tipo opcional]. A ordem importa:
+// do mais específico para o mais genérico.
+const FIN_DESCRIPTION_ICONS = [
+  [/\b(estorno|reembolso|devolucao|cashback)\b/, "undo"],
+  [/\b(salario|holerite|adiantamento|13o|decimo terceiro|ferias|plr)\b/, "briefcase", "receita"],
+  [/\b(freela|freelance|bico|job|projeto)\b/, "laptop", "receita"],
+  [/\b(rendimento|dividendo|juros|cdb|tesouro|acoes|cripto|bitcoin)\b/, "trend-up"],
+  [/\b(venda|vendi|vendido)\b/, "tag", "receita"],
+  [/\b(premio|sorteio|loteria|mega ?sena|bolao)\b/, "trophy"],
+  [/\b(netflix|spotify|deezer|prime video|amazon prime|disney|hbo|hbo max|globoplay|youtube|paramount|apple tv|crunchyroll|streaming)\b/, "tv"],
+  [/\b(icloud|google one|chatgpt|claude|assinatura|mensalidade app)\b/, "repeat"],
+  [/\b(luz|energia|eletrica|cemig|enel|light|copel|celesc|coelba|cpfl|equatorial|neoenergia)\b/, "bolt"],
+  [/\b(agua|sabesp|copasa|cedae|sanepar|embasa|saneamento|esgoto)\b/, "droplet"],
+  [/\b(gas|botijao|comgas|ultragaz|liquigas)\b/, "flame"],
+  [/\b(internet|wi-?fi|fibra|banda larga|provedor)\b/, "wifi"],
+  [/\b(celular|recarga|telefone|claro|vivo|tim|oi movel|chip|plano movel)\b/, "phone"],
+  [/\b(condominio)\b/, "building"],
+  [/\b(aluguel|financiamento casa|prestacao casa|iptu casa)\b/, "home"],
+  [/\b(conserto|reforma|pedreiro|eletricista|encanador|manutencao|oficina|mecanico)\b/, "wrench"],
+  [/\b(gasolina|etanol|alcool|diesel|combustivel|posto|abasteci\w*|gnv)\b/, "fuel"],
+  [/\b(onibus|metro|trem|brt|passagem urbana|bilhete unico|vlt)\b/, "bus"],
+  [/\b(uber|99|taxi|cabify|indriver|estacionamento|pedagio|ipva|lavagem carro|lava jato)\b/, "car"],
+  [/\b(passagem aerea|voo|aereo|hotel|pousada|airbnb|hospedagem|viagem|milhas)\b/, "plane"],
+  [/\b(ifood|rappi|delivery|ze delivery|aiqfome|99food)\b/, "bag"],
+  [/\b(cafe|cafeteria|padaria|padoca|starbucks)\b/, "coffee"],
+  [/\b(almoco|jantar|lanche|restaurante|pizza|hamburguer|burger|sushi|churrasco|bar|cerveja|marmita|acai|sorvete)\b/, "fork"],
+  [/\b(mercado|supermercado|feira|hortifruti|sacolao|atacadao|assai|carrefour|acougue)\b/, "cart"],
+  [/\b(farmacia|drogaria|remedio|medicamento|drogasil|pague menos|raia)\b/, "pill"],
+  [/\b(medico|consulta|dentista|exame|hospital|clinica|plano de saude|unimed|terapia|psicologo|fisioterapia)\b/, "heart"],
+  [/\b(academia|smart ?fit|crossfit|treino|personal|pilates|natacao|futebol|esporte)\b/, "dumbbell"],
+  [/\b(cabelo|corte|barbearia|barbeiro|salao|manicure|unha|sobrancelha|depilacao|estetica|maquiagem|perfume|cosmetico)\b/, "scissors"],
+  [/\b(cinema|show|ingresso|teatro|festival|evento|parque)\b/, "ticket"],
+  [/\b(jogo|game|steam|playstation|psn|xbox|nintendo)\b/, "gamepad"],
+  [/\b(festa|aniversario|casamento|formatura|confraternizacao)\b/, "balloon"],
+  [/\b(presente|lembrancinha)\b/, "gift"],
+  [/\b(roupa|camisa|camiseta|calca|bermuda|vestido|tenis|sapato|chinelo|bolsa|shein|renner|riachuelo|cea|zara)\b/, "shirt"],
+  [/\b(notebook|computador|pc|monitor|fone|teclado|mouse|eletronico|iphone|smartphone|tablet|ipad)\b/, "laptop"],
+  [/\b(curso|faculdade|escola|colegio|mensalidade escolar|material escolar|apostila|udemy|alura)\b/, "graduation"],
+  [/\b(livro|livraria|kindle|ebook)\b/, "book"],
+  [/\b(pet|racao|veterinario|vet|petshop|banho e tosa|cachorro|gato)\b/, "paw"],
+  [/\b(filho|filha|bebe|fralda|creche|baba|mesada)\b/, "family"],
+  [/\b(seguro)\b/, "umbrella"],
+  [/\b(imposto|iptu|irpf|darf|taxa|multa|tarifa|cartorio)\b/, "receipt"],
+  [/\b(doacao|dizimo|oferta|vaquinha|caridade)\b/, "hand-heart"],
+  [/\b(emprestimo|parcela do emprestimo|consignado|divida|acordo)\b/, "bank"],
+  [/\b(poupanca|investimento|aporte|reserva|guardei)\b/, "piggy"],
+  [/\b(fatura|cartao)\b/, "card"],
+  [/\b(pix recebido|transferencia recebida|recebi)\b/, "coin", "receita"],
+];
+
+function finCategoryIconName(catId) {
+  return FIN_CATEGORY_ICONS[catId] || "";
+}
+
+function finDescriptionIconName(description, type) {
+  const text = finNormalize(description);
+  if (!text) return "";
+  for (const [re, icon, onlyType] of FIN_DESCRIPTION_ICONS) {
+    if (onlyType && onlyType !== type) continue;
+    if (re.test(text)) return icon;
+  }
+  return "";
+}
+
+// Categoria personalizada: usa o emoji escolhido pela pessoa ao criá-la.
+function finCustomCategoryEmoji(catId) {
+  if (!catId || FIN_CATEGORY_ICONS[catId]) return "";
+  const custom = (state.customCategories || []).find((c) => c && c.id === catId);
+  const label = String(custom?.label || "").trim();
+  const first = label.split(/\s+/)[0] || "";
+  return /\p{Extended_Pictographic}/u.test(first) ? first : "";
+}
+
 function finTxIcon(entry) {
-  const text = `${entry.description || ""}`.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
-  if (/(aluguel|condominio|moradia)/.test(text)) return "home";
-  if (/(internet|wi-?fi|fibra)/.test(text)) return "wifi";
-  if (/(supermercado|mercado|feira)/.test(text)) return "cart";
-  if (/(salario|pagamento recebido|pix recebido)/.test(text)) return "wallet";
-  return FIN_CATEGORY_ICONS[entry.category] || (entry.type === "receita" ? "wallet" : "dots-circle");
+  return finDescriptionIconName(entry.description, entry.type)
+    || finCategoryIconName(entry.category)
+    || (entry.type === "receita" ? "wallet" : "dots-circle");
+}
+
+// HTML do ícone de um lançamento (respeita o emoji de categorias próprias
+// quando a descrição não aponta um ícone mais específico).
+function finTxIconHtml(entry) {
+  const byText = finDescriptionIconName(entry.description, entry.type);
+  if (byText) return bdIcon(byText);
+  const byCat = finCategoryIconName(entry.category);
+  if (byCat) return bdIcon(byCat);
+  const emoji = finCustomCategoryEmoji(entry.category);
+  if (emoji) return `<span class="fin-emoji-ico" aria-hidden="true">${escapeHtml(emoji)}</span>`;
+  return bdIcon(entry.type === "receita" ? "wallet" : "dots-circle");
+}
+
+function finCategoryIconHtml(catId) {
+  const byCat = finCategoryIconName(catId);
+  if (byCat) return bdIcon(byCat);
+  const emoji = finCustomCategoryEmoji(catId);
+  if (emoji) return `<span class="fin-emoji-ico" aria-hidden="true">${escapeHtml(emoji)}</span>`;
+  return bdIcon("dots-circle");
 }
 
 function finTrendHtml(current, previous, { inverse = false, prevKey } = {}) {
@@ -9136,7 +9318,7 @@ function renderFinCategoryBars(entries, despesas, monthKey) {
     const pct = despesas > 0 ? total / despesas : 0;
     const label = finCatName(catId);
     return `<div class="bf-cat-row fin-cat-row" data-fin-category="${escapeHtml(catId)}" role="button" tabindex="0" title="${escapeHtml(label)} · ${escapeHtml(formatCurrency(total))}" aria-label="${escapeHtml(label)}: ${Math.round(pct * 100)}% (${escapeHtml(formatCurrency(total))}). Abrir lançamentos">
-      <span class="bf-cat-ico">${bdIcon(FIN_CATEGORY_ICONS[catId] || "dots-circle")}</span>
+      <span class="bf-cat-ico">${finCategoryIconHtml(catId)}</span>
       <span class="bf-cat-name">${escapeHtml(label)}</span>
       <span class="bf-cat-track"><i style="width:${Math.max(4, (pct / maxPct) * 100).toFixed(1)}%"></i></span>
       <b>${Math.round(pct * 100)}%</b>
@@ -9202,8 +9384,8 @@ function renderFinTransaction(f) {
   const date = `${Number(dd)} ${BD_MONTHS[Number(mm) - 1]}`;
   const ws = workspaceLabel(f.workspaceId || "personal").replace("Compartilhado · ", "");
   return `<article class="bf-tx${f.projected ? " is-projected" : ""}" data-fin-id="${f.id}">
-    <span class="bf-tx-ico ${isReceita ? "in" : "out"}">${bdIcon(finTxIcon(f))}</span>
-    <div class="bf-tx-main"><strong title="${escapeHtml(f.description)}">${escapeHtml(f.description || finCatName(f.category))}</strong><small>${escapeHtml(finCatName(f.category))}<span class="bf-tx-ws-inline"> • ${escapeHtml(ws)}</span>${f.projected ? " • Previsto" : ""}</small></div>
+    <span class="bf-tx-ico ${isReceita ? "in" : "out"}">${finTxIconHtml(f)}</span>
+    <div class="bf-tx-main"><strong title="${escapeHtml(f.description)}">${escapeHtml(f.description || finCatName(f.category))}</strong><small>${escapeHtml(finCatName(f.category))}<span class="bf-tx-date-inline"> • ${date}</span>${(f.workspaceId || "personal") !== activeWorkspaceId ? `<span class="bf-tx-ws-inline"> • ${escapeHtml(ws)}</span>` : ""}${f.projected ? " • Previsto" : ""}</small></div>
     <span class="bf-ws-chip">${bdIcon("user")}${escapeHtml(ws)}</span>
     <span class="bf-tx-date">${date}</span>
     <span class="bf-tx-amt ${isReceita ? "in" : "out"}">${isReceita ? "+" : "-"} ${formatCurrency(f.amount)}</span>
@@ -9218,7 +9400,7 @@ function renderFinRecentMini(monthKey) {
   root.innerHTML = list.length ? list.map((f) => {
     const [, mm, dd] = f.date.split("-");
     const isIn = f.type === "receita";
-    return `<div class="bf-mini"><span class="bf-tx-ico ${isIn ? "in" : "out"}">${bdIcon(finTxIcon(f))}</span><div><strong>${escapeHtml(f.description || finCatName(f.category))}</strong><small>${escapeHtml(finCatName(f.category))} • ${Number(dd)} ${BD_MONTHS[Number(mm) - 1]}</small></div><b class="${isIn ? "in" : "out"}">${isIn ? "+" : "-"} ${formatCurrency(f.amount)}</b></div>`;
+    return `<div class="bf-mini"><span class="bf-tx-ico ${isIn ? "in" : "out"}">${finTxIconHtml(f)}</span><div><strong>${escapeHtml(f.description || finCatName(f.category))}</strong><small>${escapeHtml(finCatName(f.category))} • ${Number(dd)} ${BD_MONTHS[Number(mm) - 1]}</small></div><b class="${isIn ? "in" : "out"}">${isIn ? "+" : "-"} ${formatCurrency(f.amount)}</b></div>`;
   }).join("") : '<div class="bd-empty">Nenhum lançamento no mês.</div>';
 }
 
@@ -9234,7 +9416,7 @@ function openFinTxActions(id, event) {
   sheet.innerHTML = `<div class="modal-card planner-action-sheet" role="dialog" aria-modal="true" aria-labelledby="finTxActionsTitle">
     <div class="modal-header"><h2 id="finTxActionsTitle">${escapeHtml(entry.description || finCatName(entry.category))}</h2><button type="button" class="icon-button" data-close aria-label="Fechar">${bdIcon("x")}</button></div>
     <div class="modal-body planner-action-sheet-body">
-      <p class="planner-action-sheet-label">${escapeHtml(plannerShortDate(entry.date))} · ${entry.type === "receita" ? "+" : "-"} ${escapeHtml(formatCurrency(entry.amount))}</p>
+      <p class="planner-action-sheet-label">${escapeHtml(plannerShortDate(entry.date))} · ${entry.type === "receita" ? "Receita" : "Despesa"} de ${escapeHtml(formatCurrency(entry.amount))}</p>
       <button type="button" class="planner-action-option" data-edit><span>Editar lançamento</span>${bdIcon("pencil")}</button>
       <button type="button" class="planner-action-danger" data-delete>${bdIcon("trash")}<span>Excluir lançamento</span></button>
     </div></div>`;
@@ -9532,13 +9714,7 @@ function bindFinanceBoard() {
     requestAnimationFrame(() => document.querySelector("#finSharedSpacesList")?.closest("section")?.scrollIntoView({ behavior: "smooth", block: "start" }));
   });
 
-  const kpis = document.querySelector("#finKpis");
-  kpis?.addEventListener("scroll", () => {
-    const max = kpis.scrollWidth - kpis.clientWidth;
-    const count = 3;
-    const index = max > 0 ? Math.round((kpis.scrollLeft / max) * (count - 1)) : 0;
-    document.querySelectorAll("#finKpiDots i").forEach((dot, i) => dot.classList.toggle("active", i === index));
-  }, { passive: true });
+  bdSetupPager(document.querySelector("#finKpis"), document.querySelector("#finKpiDots"), ".bf-kpi");
 
   const receiptInput = document.querySelector("#finReceiptInput");
   document.querySelector("#finReceiptBtn")?.addEventListener("click", () => receiptInput?.click());
@@ -9630,7 +9806,7 @@ function populateFinanceAccountSelect() {
   if (!select) return;
   const selected = select.value;
   const accounts = (state.financeAccounts || []).filter((item) => !item.archived && (item.workspaceId || "personal") === activeWorkspaceId);
-  select.innerHTML = `<option value="">Sem conta específica</option>${accounts.map((account) => `<option value="${escapeHtml(account.id)}">${escapeHtml(account.name)}</option>`).join("")}`;
+  select.innerHTML = `<option value="">Sem conta</option>${accounts.map((account) => `<option value="${escapeHtml(account.id)}">${escapeHtml(account.name)}</option>`).join("")}`;
   if ([...select.options].some((option) => option.value === selected)) select.value = selected;
 }
 
@@ -10519,7 +10695,7 @@ function renderFinGoals() {
     const tone = pct > 100 ? "red" : pct >= 90 ? "amber" : (FIN_BUDGET_TONES[goal.categoryId] || "blue");
     const name = finCatName(goal.categoryId);
     return `<button type="button" class="bf-brow is-${tone}" data-budget-edit="${escapeHtml(goal.categoryId)}" aria-label="${escapeHtml(`${name}: ${formatCurrency(spent)} de ${formatCurrency(limit)} (${pct}%)`)}">
-      <span class="bf-brow-ico">${bdIcon(FIN_CATEGORY_ICONS[goal.categoryId] || "dots-circle")}</span>
+      <span class="bf-brow-ico">${finCategoryIconHtml(goal.categoryId)}</span>
       <span class="bf-brow-name">${escapeHtml(name)}</span>
       <span class="bf-bar"><i style="width:${Math.min(100, pct)}%"></i></span>
       <span class="bf-brow-val">${formatCurrency(spent)} de ${formatCurrency(limit)}</span>

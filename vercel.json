@@ -4,7 +4,7 @@
 
   "functions": {
     "api/whatsapp-webhook.js": { "maxDuration": 60 },
-    "api/pulsinho.js": { "maxDuration": 30 }
+    "api/pulsinho.js": { "maxDuration": 60 }
   },
 
   "headers": [

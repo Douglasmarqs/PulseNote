@@ -34,7 +34,7 @@
 // v27: invalida os recursos antigos após corrigir a navegação do painel
 // que alguns bloqueadores de conteúdo ocultavam como se fosse publicidade.
 // v37: entrega as telas dos quadros (Finanças, Autopilot, Configurações e Administração).
-const CACHE_NAME = "pulsenote-v43";
+const CACHE_NAME = "pulsenote-v44";
 
 // ── Firebase Cloud Messaging (push em segundo plano) ──────────────
 // Isso é o que permite uma notificação aparecer mesmo com o PulseNote

@@ -467,7 +467,7 @@ async function callBrainModel({ systemPrompt, history, message, providerPreferen
   // histórico é cortado mensagem a mensagem pelo próprio gateway.
   const messages = [...history];
   const gateway = await fetchGatewayJson({
-    systemPrompt, userPrompt: message, messages, label: "pulsinho_brain", timeoutMs: 15000, providerPreference, maxTokens: 1600, maxHistory: 20,
+    systemPrompt, userPrompt: message, messages, label: "pulsinho_brain", timeoutMs: 13000, totalBudgetMs: 20000, providerPreference, maxTokens: 1600, maxHistory: 20,
   });
   if (gateway.ok) return gateway;
   // A conversa leva dados pessoais: Gemini só como reserva no plano pago.
