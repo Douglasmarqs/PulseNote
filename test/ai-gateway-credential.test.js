@@ -48,7 +48,7 @@ test("chave fixa do AI Gateway tem prioridade sobre o OIDC", () => withEnv({ AI_
   assert.equal(gateway.gatewayCredential(), "fixed-key");
 }));
 
-test("envia o token do header ao gateway, pede raciocínio baixo no GPT e cai para o Claude se o GPT falhar", () => withEnv({
+test("envia o token do header ao gateway, pede raciocínio baixo no GPT e cai para o Claude se o GPT falhar (preferência GPT)", () => withEnv({
   AI_GATEWAY_OPENAI_MODEL: "openai/gpt-5-mini",
   AI_GATEWAY_ANTHROPIC_MODEL: "anthropic/claude-haiku-5.5",
 }, async () => {
@@ -63,7 +63,7 @@ test("envia o token do header ao gateway, pede raciocínio baixo no GPT e cai pa
     return { ok: true, status: 200, json: async () => ({ model: body.model, choices: [{ message: { content: '{"reply":"Tô de boa sim!"}' } }] }) };
   };
   try {
-    const result = await gateway.fetchGatewayJson({ systemPrompt: "s", userPrompt: "ta de boa aí?", label: "test", timeoutMs: 5000 });
+    const result = await gateway.fetchGatewayJson({ systemPrompt: "s", userPrompt: "ta de boa aí?", label: "test", timeoutMs: 5000, providerPreference: "openai" });
     assert.equal(result.ok, true);
     assert.equal(result.parsed.reply, "Tô de boa sim!");
     assert.deepEqual(calls.map((c) => c.model), ["openai/gpt-5-mini", "anthropic/claude-haiku-5.5"]);
@@ -132,4 +132,15 @@ test("403 de um modelo (fora do plano gratuito) tenta o próximo; 403 de cartão
     global.fetch = originalFetch;
     console.warn = originalWarn;
   }
+}));
+
+test("modo automático começa pelo Claude (mais econômico) e deixa o GPT de reserva", () => withEnv({
+  AI_GATEWAY_OPENAI_MODEL: "openai/gpt-5-mini",
+  AI_GATEWAY_ANTHROPIC_MODEL: "anthropic/claude-haiku-5.5",
+}, () => {
+  const gateway = freshModule();
+  assert.deepEqual(gateway.gatewayModels("auto"), ["anthropic/claude-haiku-5.5", "openai/gpt-5-mini"]);
+  assert.deepEqual(gateway.gatewayModels(), ["anthropic/claude-haiku-5.5", "openai/gpt-5-mini"]);
+  assert.deepEqual(gateway.gatewayModels("openai"), ["openai/gpt-5-mini", "anthropic/claude-haiku-5.5"]);
+  assert.deepEqual(gateway.gatewayModels("anthropic"), ["anthropic/claude-haiku-5.5", "openai/gpt-5-mini"]);
 }));

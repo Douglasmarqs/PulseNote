@@ -4234,7 +4234,7 @@ function placePulsinhoPanel(view) {
   }
 }
 
-const AP_AI_LABELS = { auto: "Automático · GPT · Claude", openai: "GPT (OpenAI)", anthropic: "Claude (Anthropic)" };
+const AP_AI_LABELS = { auto: "Automático · Claude · GPT", openai: "GPT (OpenAI)", anthropic: "Claude (Anthropic)" };
 function renderAutopilotAiPreference() {
   const pref = state?.aiProviderPreference || "auto";
   const label = document.querySelector("#apAiLabel");

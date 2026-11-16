@@ -68,8 +68,9 @@ function gatewayModels(providerPreference = "auto") {
     ...String(process.env.AI_GATEWAY_MODELS || "").split(","),
   ].map((item) => String(item || "").trim()).filter(Boolean);
   const unique = [...new Set(configured)];
-  const preferredPrefix = providerPreference === "openai" ? "openai/" : providerPreference === "anthropic" ? "anthropic/" : "";
-  if (!preferredPrefix) return unique;
+  // "auto" começa pelo Claude (Haiku): mais rápido e cerca de 4x mais barato
+  // por mensagem; o GPT fica como reserva automática.
+  const preferredPrefix = providerPreference === "openai" ? "openai/" : "anthropic/";
   return [...unique.filter((model) => model.startsWith(preferredPrefix)), ...unique.filter((model) => !model.startsWith(preferredPrefix))];
 }
 
