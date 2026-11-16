@@ -93,3 +93,43 @@ test("sem credencial nenhuma, avisa no log e não chama a rede", () => withEnv({
     console.warn = originalWarn;
   }
 }));
+
+test("403 de um modelo (fora do plano gratuito) tenta o próximo; 403 de cartão não verificado para", () => withEnv({
+  AI_GATEWAY_API_KEY: "k",
+  AI_GATEWAY_OPENAI_MODEL: "openai/gpt-5-mini",
+  AI_GATEWAY_ANTHROPIC_MODEL: "anthropic/claude-haiku-5.5",
+}, async () => {
+  const gateway = freshModule();
+  const originalFetch = global.fetch;
+  const originalWarn = console.warn;
+  const warnings = [];
+  console.warn = (...args) => warnings.push(args);
+  try {
+    let calls = [];
+    global.fetch = async (url, options) => {
+      const body = JSON.parse(options.body);
+      calls.push(body.model);
+      if (body.model.startsWith("anthropic/")) {
+        return { ok: false, status: 403, text: async () => JSON.stringify({ error: { type: "forbidden", message: "Model requires purchased credits (free tier)" } }) };
+      }
+      return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: '{"reply":"oi"}' } }] }) };
+    };
+    const ok = await gateway.fetchGatewayJson({ systemPrompt: "s", userPrompt: "oi", providerPreference: "anthropic", timeoutMs: 5000 });
+    assert.equal(ok.ok, true);
+    assert.deepEqual(calls, ["anthropic/claude-haiku-5.5", "openai/gpt-5-mini"]);
+    assert.ok(warnings.some(([, meta]) => meta?.errorMessage?.includes("free tier")));
+
+    calls = [];
+    global.fetch = async (url, options) => {
+      calls.push(JSON.parse(options.body).model);
+      return { ok: false, status: 403, text: async () => JSON.stringify({ error: { type: "customer_verification_required", message: "Add a payment method" } }) };
+    };
+    const blocked = await gateway.fetchGatewayJson({ systemPrompt: "s", userPrompt: "oi", timeoutMs: 5000 });
+    assert.equal(blocked.ok, false);
+    assert.equal(blocked.errorType, "customer_verification_required");
+    assert.equal(calls.length, 1);
+  } finally {
+    global.fetch = originalFetch;
+    console.warn = originalWarn;
+  }
+}));

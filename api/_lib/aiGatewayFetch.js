@@ -89,6 +89,27 @@ function normalizeMessages(messages, userPrompt, maxHistory = 12) {
   return normalized;
 }
 
+async function gatewayErrorDetail(response) {
+  try {
+    const raw = await response.text();
+    let body = null;
+    try { body = JSON.parse(raw); } catch { body = null; }
+    const error = body?.error && typeof body.error === "object" ? body.error : body || {};
+    return {
+      type: String(error.type || error.code || body?.type || "").slice(0, 80),
+      message: String(error.message || body?.message || raw || "").replace(/\s+/g, " ").slice(0, 240),
+    };
+  } catch {
+    return { type: "", message: "" };
+  }
+}
+
+// Erros que valem para a conta inteira (trocar de modelo não adianta).
+function accountWideFailure(result) {
+  if (result.status === 401 || result.status === 402) return true;
+  return result.status === 403 && /customer_verification_required|payment method|credit card/i.test(`${result.errorType} ${result.errorMessage}`);
+}
+
 // GPT-5 mini "pensa" antes de responder e esse raciocínio consome o mesmo
 // limite de tokens da resposta. Esforço baixo deixa a conversa rápida e
 // evita respostas cortadas (JSON incompleto). Claude Haiku não precisa.
@@ -123,9 +144,15 @@ async function requestModel({ model, token, systemPrompt, userPrompt, messages, 
       return requestModel({ model, token, systemPrompt, userPrompt, messages, label, timeoutMs: Math.max(2500, timeoutMs - (Date.now() - startedAt)), maxTokens, maxHistory, withReasoning: false });
     }
     if (!response.ok) {
-      console.warn("ai_gateway_request", { label, status: response.status, durationMs: Date.now() - startedAt, model });
-      const status = [401, 403, 429].includes(response.status) ? response.status : 502;
-      return { ok: false, status, error: response.status === 429 ? "ai_rate_limited" : status === 502 ? "ai_gateway_failed" : "ai_gateway_unauthorized" };
+      // O corpo do erro diz o motivo exato (cartão não verificado, modelo
+      // fora do plano gratuito, sem créditos...). Só metadados vão ao log.
+      const detail = await gatewayErrorDetail(response);
+      console.warn("ai_gateway_request", { label, status: response.status, durationMs: Date.now() - startedAt, model, errorType: detail.type, errorMessage: detail.message });
+      const status = [401, 402, 403, 429].includes(response.status) ? response.status : 502;
+      return {
+        ok: false, status, errorType: detail.type, errorMessage: detail.message,
+        error: response.status === 429 ? "ai_rate_limited" : status === 502 ? "ai_gateway_failed" : status === 402 ? "ai_gateway_no_credits" : "ai_gateway_unauthorized",
+      };
     }
     const body = await response.json();
     const content = body.choices?.[0]?.message?.content;
@@ -155,7 +182,8 @@ async function fetchGatewayJson({ systemPrompt, userPrompt, messages, label = "a
     if (remaining < 2500) break;
     last = await requestModel({ model, token, systemPrompt, userPrompt, messages, label, timeoutMs: Math.min(timeoutMs, remaining), maxTokens, maxHistory });
     if (last.ok) return last;
-    if (last.status === 401 || last.status === 403) break;
+    // 403 por modelo (ex.: fora do plano gratuito) → tenta o próximo modelo.
+    if (accountWideFailure(last)) break;
   }
   return last;
 }
