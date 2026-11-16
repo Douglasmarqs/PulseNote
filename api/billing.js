@@ -1,7 +1,7 @@
 "use strict";
 
 const { getAdmin } = require("./_lib/admin");
-const { requireUser, publicBillingState, createCheckout, createPortal } = require("./_lib/billing");
+const { requireUser, publicBillingState, createCheckout, createChargeCheckout, createPortal } = require("./_lib/billing");
 
 module.exports = async function billingApi(req, res) {
   res.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -15,6 +15,7 @@ module.exports = async function billingApi(req, res) {
     if (req.method === "GET" && action === "status") result = await publicBillingState(firebase, user);
     else if (req.method === "POST" && action === "checkout") result = await createCheckout(firebase, user, req.body?.planId);
     else if (req.method === "POST" && action === "portal") result = await createPortal(firebase, user);
+    else if (req.method === "POST" && action === "charge-pay") result = await createChargeCheckout(firebase, user, req.body?.chargeId);
     else return res.status(404).json({ error: "unknown_action" });
     return res.status(200).json({ ok: true, ...result });
   } catch (error) {

@@ -1,7 +1,8 @@
 "use strict";
 
 const crypto = require("node:crypto");
-const { getAdmin } = require("./admin");
+const { getAdmin, configuredAdminEmails, saoPauloToday } = require("./admin");
+const { getRuntimeConfig } = require("./adminConfig");
 
 const OFFICIAL_APP_URL = "https://pulse-note-5erj.vercel.app";
 
@@ -42,7 +43,51 @@ async function requireUser(req, firebase = getAdmin()) {
   if (user.disabled) throw billingError(403, "account_disabled");
   const status = await firebase.firestore().collection("adminUserStatus").doc(user.uid).get();
   if (status.data()?.disabled === true) throw billingError(403, "account_disabled");
-  return { uid: user.uid, email: user.email || "", displayName: user.displayName || "" };
+  return { uid: user.uid, email: user.email || "", displayName: user.displayName || "", createdAt: user.metadata?.creationTime || null };
+}
+
+function addDaysIso(isoDate, days) {
+  const date = new Date(`${isoDate}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+// Mesma regra do painel: cobrança paga vinculada a plano libera/estende o acesso.
+function grantFromCharge(currentEntitlement, charge, today = saoPauloToday()) {
+  if (!charge?.planId || !Number.isInteger(Number(charge.grantDays))) return null;
+  const samePlan = currentEntitlement?.planId === charge.planId && (currentEntitlement.status || "active") === "active";
+  const base = samePlan && currentEntitlement.validUntil && currentEntitlement.validUntil >= today
+    ? currentEntitlement.validUntil : addDaysIso(today, -1);
+  return { planId: charge.planId, status: "active", source: "charge", validUntil: addDaysIso(base, Number(charge.grantDays)), updatedAt: new Date().toISOString() };
+}
+
+async function isAdminUser(db, user) {
+  if (configuredAdminEmails().has(String(user.email || "").toLowerCase())) return true;
+  const role = await db.collection("adminRoles").doc(user.uid).get();
+  return role.data()?.enabled === true;
+}
+
+// Teste grátis automático: só para contas criadas depois que o teste foi
+// ligado no painel e que ainda não têm nenhum registro de acesso.
+async function maybeStartAutoTrial(db, user, config, entitlementSnapshot) {
+  const trial = config?.trial;
+  if (!trial?.enabled || !trial.planId || entitlementSnapshot.exists) return null;
+  const createdAt = user.createdAt ? new Date(user.createdAt).toISOString() : "";
+  if (!createdAt || (trial.enabledAt && createdAt < trial.enabledAt)) return null;
+  const plan = await db.collection("adminPlans").doc(trial.planId).get();
+  if (!plan.exists || plan.data()?.active === false) return null;
+  const today = saoPauloToday();
+  const entitlement = { planId: trial.planId, status: "active", source: "trial", trialStartedAt: today,
+    validUntil: addDaysIso(today, trial.days - 1), updatedAt: new Date().toISOString(), updatedBy: "auto_trial" };
+  try {
+    await db.collection("adminEntitlements").doc(user.uid).create(entitlement);
+  } catch (error) {
+    if (error.code === 6 || error.code === "already-exists") return null;
+    throw error;
+  }
+  await db.collection("adminAudit").add({ at: entitlement.updatedAt, actorUid: "system", actorEmail: "teste automático",
+    action: "access_trial_auto", target: user.uid, details: { email: user.email || "", planId: trial.planId, validUntil: entitlement.validUntil } }).catch(() => {});
+  return entitlement;
 }
 
 async function stripeRequest(path, params) {
@@ -84,11 +129,20 @@ async function ensureCustomer(firebase, user) {
 
 async function publicBillingState(firebase, user) {
   const db = firebase.firestore();
-  const [plansSnapshot, entitlement] = await Promise.all([
+  const [plansSnapshot, entitlementSnapshot, config, chargesSnapshot] = await Promise.all([
     db.collection("adminPlans").where("active", "==", true).limit(50).get(),
     db.collection("adminEntitlements").doc(user.uid).get(),
+    getRuntimeConfig(db),
+    db.collection("adminCharges").where("uid", "==", user.uid).limit(30).get(),
   ]);
-  const plans = plansSnapshot.docs.map((entry) => {
+  const autoTrial = await maybeStartAutoTrial(db, user, config, entitlementSnapshot).catch((error) => {
+    console.error("auto_trial_failed", { code: error.code || error.message });
+    return null;
+  });
+  const entitlementData = autoTrial || (entitlementSnapshot.exists ? entitlementSnapshot.data() : null);
+  const entitlement = { exists: Boolean(entitlementData), data: () => entitlementData };
+  const currentPlanId = entitlementData?.planId || null;
+  const plans = plansSnapshot.docs.filter((entry) => entry.data()?.visibility !== "private" || entry.id === currentPlanId).map((entry) => {
     const plan = entry.data();
     return {
       id: entry.id,
@@ -106,8 +160,74 @@ async function publicBillingState(firebase, user) {
     status: entitlement.data().status || "unassigned",
     provider: entitlement.data().provider || entitlement.data().source || null,
     validUntil: entitlement.data().validUntil || null,
-  } : { planId: null, status: "unassigned", provider: null, validUntil: null };
-  return { configured: stripeConfigured(), plans, subscription };
+    trial: entitlement.data().source === "trial",
+    expired: Boolean(entitlement.data().validUntil && saoPauloToday() > entitlement.data().validUntil),
+  } : { planId: null, status: "unassigned", provider: null, validUntil: null, trial: false, expired: false };
+  const charges = chargesSnapshot.docs
+    .map((entry) => ({ id: entry.id, ...entry.data() }))
+    .filter((charge) => charge.status === "manual_pending")
+    .sort((a, b) => String(a.dueDate || "9999").localeCompare(String(b.dueDate || "9999")))
+    .map((charge) => ({ id: charge.id, amountCents: Number(charge.amountCents) || 0, note: charge.note || "Cobrança PulseNote",
+      dueDate: charge.dueDate || null, planId: charge.planId || null, grantDays: charge.grantDays || null }));
+  const maintenance = config.maintenance.enabled
+    ? { enabled: true, message: config.maintenance.message, eta: config.maintenance.eta,
+      bypass: config.maintenance.allowAdmins !== false && await isAdminUser(db, user) }
+    : { enabled: false };
+  const manualPayment = config.payment.pixKey ? { pixKey: config.payment.pixKey, pixHolder: config.payment.pixHolder, instructions: config.payment.instructions } : null;
+  return { configured: stripeConfigured(), plans, subscription, charges, maintenance,
+    payment: { online: stripeConfigured(), manual: charges.length ? manualPayment : null } };
+}
+
+// Pagamento de uma cobrança avulsa pelo Stripe Checkout (cartão ou Pix,
+// conforme os métodos ativos na conta Stripe).
+async function createChargeCheckout(firebase, user, chargeId) {
+  const id = String(chargeId || "").trim();
+  if (!/^[A-Za-z0-9_-]{6,128}$/.test(id)) throw billingError(400, "invalid_charge");
+  const snapshot = await firebase.firestore().collection("adminCharges").doc(id).get();
+  const charge = snapshot.data();
+  if (!snapshot.exists || charge.uid !== user.uid) throw billingError(404, "charge_not_found");
+  if (charge.status !== "manual_pending") throw billingError(409, "charge_not_pending");
+  const amount = Number(charge.amountCents);
+  if (!Number.isSafeInteger(amount) || amount < 100) throw billingError(400, "invalid_charge_amount");
+  const customerId = await ensureCustomer(firebase, user);
+  const base = appBaseUrl();
+  const session = await stripeRequest("checkout/sessions", {
+    mode: "payment",
+    customer: customerId,
+    client_reference_id: user.uid,
+    "line_items[0][price_data][currency]": "brl",
+    "line_items[0][price_data][unit_amount]": String(amount),
+    "line_items[0][price_data][product_data][name]": String(charge.note || "Cobrança PulseNote").slice(0, 120),
+    "line_items[0][quantity]": "1",
+    locale: "pt-BR",
+    success_url: `${base}/app?billing=charge_success`,
+    cancel_url: `${base}/app?billing=cancelled`,
+    "metadata[firebase_uid]": user.uid,
+    "metadata[charge_id]": id,
+    "payment_intent_data[metadata][charge_id]": id,
+  });
+  return { url: session.url };
+}
+
+async function markChargePaid(db, chargeId, uid, providerRef) {
+  const ref = db.collection("adminCharges").doc(chargeId);
+  return db.runTransaction(async (tx) => {
+    const snapshot = await tx.get(ref);
+    const charge = snapshot.data();
+    if (!snapshot.exists || charge.uid !== uid) return { ignored: true, reason: "charge_not_found" };
+    if (charge.status === "paid") return { duplicate: true };
+    if (charge.status !== "manual_pending") return { ignored: true, reason: "charge_not_pending" };
+    let granted = null;
+    if (charge.planId) {
+      const entitlementRef = db.collection("adminEntitlements").doc(uid);
+      const entitlement = await tx.get(entitlementRef);
+      granted = grantFromCharge(entitlement.exists ? entitlement.data() : null, charge);
+      if (granted) tx.set(entitlementRef, { ...granted, updatedBy: "stripe" });
+    }
+    const now = new Date().toISOString();
+    tx.update(ref, { status: "paid", paidAt: now, updatedAt: now, provider: "stripe", providerRef: providerRef || null });
+    return { chargeId, paid: true, granted };
+  });
 }
 
 async function createCheckout(firebase, user, planId) {
@@ -181,6 +301,14 @@ async function applyStripeEvent(firebase, event) {
   const object = event?.data?.object || {};
   const uid = await resolveUid(db, object);
   const now = new Date().toISOString();
+  // Cobrança avulsa (mode=payment). Pix confirma depois: só marca paga
+  // quando o Stripe informa payment_status "paid".
+  if (["checkout.session.completed", "checkout.session.async_payment_succeeded"].includes(event.type) && object.mode === "payment") {
+    const chargeId = String(object.metadata?.charge_id || "");
+    if (!uid || !chargeId) return { ignored: true };
+    if (object.payment_status !== "paid") return { pending: true, chargeId };
+    return markChargePaid(db, chargeId, uid, object.payment_intent || object.id);
+  }
   if (["checkout.session.completed", "customer.subscription.created", "customer.subscription.updated", "customer.subscription.deleted"].includes(event.type)) {
     const planId = String(object.metadata?.plan_id || "").toLowerCase();
     if (!uid || !/^[a-z0-9_-]{2,40}$/.test(planId)) return { ignored: true };
@@ -236,7 +364,11 @@ module.exports = {
   requireUser,
   publicBillingState,
   createCheckout,
+  createChargeCheckout,
   createPortal,
+  grantFromCharge,
+  maybeStartAutoTrial,
+  markChargePaid,
   verifyStripeSignature,
   applyStripeEvent,
   readRawBody,

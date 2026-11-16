@@ -44,16 +44,58 @@ async function requireAdmin(req, firebase = getAdmin()) {
 
   const email = user.email.toLowerCase();
   const listed = configuredAdminEmails().has(email);
-  const role = await firebase.firestore().collection("adminRoles").doc(user.uid).get();
-  if (!listed && role.data()?.enabled !== true) {
+  const roleDoc = await firebase.firestore().collection("adminRoles").doc(user.uid).get();
+  if (!listed && roleDoc.data()?.enabled !== true) {
     const error = new Error("forbidden");
     error.status = 403;
     throw error;
   }
-  return { uid: user.uid, email, firebase, isOwner: email === configuredPrimaryAdminEmail() };
+  const isOwner = email === configuredPrimaryAdminEmail();
+  // Hierarquia: dono (variável do servidor) > admins da allowlist > papel salvo.
+  const role = isOwner ? "owner" : listed ? "admin" : normalizeRole(roleDoc.data()?.role);
+  return { uid: user.uid, email, firebase, isOwner, role, permissions: ROLE_PERMISSIONS[role], authTime: Number(decoded.auth_time) || 0 };
 }
 
-async function getUserEntitlements(db, uid) {
+// ── Hierarquia administrativa ─────────────────────────────────────
+// Cada papel é um conjunto fechado de permissões verificado no servidor
+// em toda chamada. A interface apenas esconde o que o papel não pode.
+const ROLE_PERMISSIONS = Object.freeze({
+  owner: Object.freeze(["view", "users.access", "users.status", "plans.manage", "charges.manage", "config.manage", "admins.manage"]),
+  admin: Object.freeze(["view", "users.access", "users.status", "plans.manage", "charges.manage", "config.manage"]),
+  finance: Object.freeze(["view", "users.access", "plans.manage", "charges.manage"]),
+  support: Object.freeze(["view", "users.access"]),
+  viewer: Object.freeze(["view"]),
+});
+const ROLE_LABELS = Object.freeze({ owner: "Proprietário", admin: "Administrador", finance: "Financeiro", support: "Suporte", viewer: "Leitura" });
+const ASSIGNABLE_ROLES = Object.freeze(["admin", "finance", "support", "viewer"]);
+
+function normalizeRole(role) {
+  return ASSIGNABLE_ROLES.includes(role) ? role : "admin";
+}
+
+function hasPermission(actor, permission) {
+  return Boolean(actor && (ROLE_PERMISSIONS[actor.role] || ROLE_PERMISSIONS.admin).includes(permission));
+}
+
+function saoPauloToday(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
+  const part = (type) => parts.find((item) => item.type === type).value;
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
+// Sem plano (ou teste encerrado): segue a política definida no painel.
+async function noPlanEntitlement(db, config, extra = {}) {
+  const policy = config?.access;
+  if (policy?.noPlan === "plan" && policy.noPlanPlanId) {
+    const plan = await db.collection("adminPlans").doc(policy.noPlanPlanId).get();
+    if (plan.exists && plan.data()?.active !== false) {
+      return { planId: policy.noPlanPlanId, features: planFeatures(plan.data()), status: "default_plan", ...extra };
+    }
+  }
+  return { planId: null, features: {}, status: "unassigned", ...extra };
+}
+
+async function getUserEntitlements(db, uid, { config } = {}) {
   const [entitlement, userStatus] = await Promise.all([
     db.collection("adminEntitlements").doc(uid).get(),
     db.collection("adminUserStatus").doc(uid).get(),
@@ -62,21 +104,25 @@ async function getUserEntitlements(db, uid) {
     return { planId: null, features: {}, status: "disabled" };
   }
   const data = entitlement.data() || {};
-  if (!data.planId) return { planId: null, features: {}, status: "unassigned" };
+  if (!data.planId) return noPlanEntitlement(db, config);
   if (data.status && data.status !== "active") {
     return { planId: data.planId, features: {}, status: data.status };
   }
-  const parts = new Intl.DateTimeFormat("en-US", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
-  const part = (type) => parts.find((item) => item.type === type).value;
-  const today = `${part("year")}-${part("month")}-${part("day")}`;
+  const today = saoPauloToday();
   if (data.validUntil && today > data.validUntil) {
+    // Teste grátis vencido volta para a regra de quem não tem plano.
+    if (data.source === "trial") return noPlanEntitlement(db, config, { trialExpired: true, expiredPlanId: data.planId });
     return { planId: data.planId, features: {}, status: "expired" };
   }
   const plan = await db.collection("adminPlans").doc(data.planId).get();
   if (!plan.exists || plan.data()?.active === false) {
     return { planId: data.planId, features: {}, status: "inactive_plan" };
   }
-  const storedFeatures = plan.data()?.features || {};
+  return { planId: data.planId, features: planFeatures(plan.data()), status: "active", trial: data.source === "trial", validUntil: data.validUntil || null };
+}
+
+function planFeatures(planData) {
+  const storedFeatures = planData?.features || {};
   // Planos criados antes da expansão do catálogo não podem perder recursos
   // que já estavam implícitos. Novos planos persistem todas as chaves.
   const features = {
@@ -90,7 +136,7 @@ async function getUserEntitlements(db, uid) {
     pdfReports: typeof storedFeatures.pdfReports === "boolean"
       ? storedFeatures.pdfReports : storedFeatures.whatsapp === true,
   };
-  return { planId: data.planId, features, status: "active" };
+  return features;
 }
 
 async function checkUserFeature(db, uid, feature) {
@@ -98,9 +144,10 @@ async function checkUserFeature(db, uid, feature) {
   const config = await getRuntimeConfig(db);
   if (config.maintenance.enabled) return { allowed: false, reason: "maintenance" };
   if (!config.features[feature]) return { allowed: false, reason: "feature_disabled" };
-  const entitlement = await getUserEntitlements(db, uid);
+  const entitlement = await getUserEntitlements(db, uid, { config });
   // Sem plano atribuído, preserva o acesso atual durante a migração.
   if (entitlement.status === "unassigned") return { allowed: true, reason: "legacy_access" };
+  if (entitlement.status === "default_plan") return { allowed: entitlement.features[feature] === true, reason: "default_plan" };
   return { allowed: entitlement.status === "active" && entitlement.features[feature] === true,
     reason: entitlement.status === "active" ? "plan" : entitlement.status };
 }
@@ -115,5 +162,12 @@ module.exports = {
   getRuntimeConfig,
   getUserEntitlements,
   checkUserFeature,
+  planFeatures,
+  saoPauloToday,
+  ROLE_PERMISSIONS,
+  ROLE_LABELS,
+  ASSIGNABLE_ROLES,
+  normalizeRole,
+  hasPermission,
 };
 

@@ -1,7 +1,7 @@
 "use strict";
 
 const crypto = require("node:crypto");
-const { getAdmin, requireAdmin, configuredAdminEmails, configuredPrimaryAdminEmail } = require("./_lib/admin");
+const { getAdmin, requireAdmin, configuredAdminEmails, configuredPrimaryAdminEmail, hasPermission, ROLE_LABELS, ROLE_PERMISSIONS, ASSIGNABLE_ROLES, normalizeRole, saoPauloToday } = require("./_lib/admin");
 const { DEFAULT_FEATURES, getRuntimeConfig, normalizeRuntimeConfig } = require("./_lib/adminConfig");
 
 function fail(status, code) {
@@ -147,7 +147,8 @@ async function authUserActivity(firebase, days = 30, historyDays = 90) {
     running += created.get(date) || 0;
     return { date, total: running };
   });
-  return { total: users.length, active30d, lastAccessByDay: buckets, accountsByDay, newUsers30d, newUsersPrev30d };
+  return { total: users.length, active30d, lastAccessByDay: buckets, accountsByDay, newUsers30d, newUsersPrev30d,
+    disabled: users.filter((user) => user.disabled).length };
 }
 
 function monthlyCents(plan) {
@@ -207,8 +208,10 @@ async function dashboard(firebase, db) {
     finances: sum.finances + item.activity.finances,
     events: sum.events + item.activity.events,
   }), { tasks: 0, notes: 0, finances: 0, events: 0 });
+  const segments = await accessSegments(db, authActivity);
   return {
     periodDays: 30,
+    segments,
     metrics: { users: authActivity.total, activeUsers30d: authActivity.active30d, activeSubscriptions, revenueCents30d,
       integrationsHealthy, integrationsTotal: integrations.integrations.length,
       usersWithSavedChanges30d, whatsappReceived30d: whatsapp, reminderDeliveriesAccepted30d: reminders,
@@ -266,13 +269,26 @@ async function listUsers(firebase, db, query) {
 }
 
 async function listPlans(db) {
-  const snapshot = await db.collection("adminPlans").orderBy("name").limit(100).get();
-  return { plans: snapshot.docs.map((entry) => ({ id: entry.id, ...entry.data() })) };
+  const [snapshot, entitlements] = await Promise.all([
+    db.collection("adminPlans").orderBy("name").limit(100).get(),
+    db.collection("adminEntitlements").limit(5000).get(),
+  ]);
+  const today = saoPauloToday();
+  const counts = new Map();
+  for (const entry of entitlements.docs) {
+    const data = entry.data() || {};
+    const { segment } = classifyEntitlement(data, today);
+    if (!data.planId || !["plan", "trial"].includes(segment)) continue;
+    const current = counts.get(data.planId) || { active: 0, trial: 0 };
+    current[segment === "trial" ? "trial" : "active"]++;
+    counts.set(data.planId, current);
+  }
+  return { plans: snapshot.docs.map((entry) => ({ id: entry.id, ...entry.data(), subscribers: counts.get(entry.id) || { active: 0, trial: 0 } })) };
 }
 
 async function listCharges(db) {
-  const snapshot = await db.collection("adminCharges").orderBy("createdAt", "desc").limit(100).get();
-  return { charges: snapshot.docs.map((entry) => ({ id: entry.id, ...entry.data() })), mode: "manual_only" };
+  const snapshot = await db.collection("adminCharges").orderBy("createdAt", "desc").limit(300).get();
+  return { charges: snapshot.docs.map((entry) => ({ id: entry.id, ...entry.data() })), stripeConfigured: Boolean(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_WEBHOOK_SECRET) };
 }
 
 async function listSubscriptions(db) {
@@ -293,7 +309,8 @@ async function listAdmins(firebase, db, actor) {
   for (const email of configured) {
     try {
       const user = await firebase.auth().getUserByEmail(email);
-      byUid.set(user.uid, { uid: user.uid, email: user.email || email, displayName: user.displayName || "", owner: email === primaryEmail, source: "environment" });
+      const owner = email === primaryEmail;
+      byUid.set(user.uid, { uid: user.uid, email: user.email || email, displayName: user.displayName || "", owner, role: owner ? "owner" : "admin", roleLabel: ROLE_LABELS[owner ? "owner" : "admin"], source: "environment" });
     } catch (error) {
       if (error.code !== "auth/user-not-found") throw error;
     }
@@ -302,19 +319,22 @@ async function listAdmins(firebase, db, actor) {
     if (byUid.has(entry.id)) return;
     try {
       const user = await firebase.auth().getUser(entry.id);
-      byUid.set(user.uid, { uid: user.uid, email: user.email || "", displayName: user.displayName || "", owner: (user.email || "").toLowerCase() === primaryEmail, source: "firestore" });
+      const owner = (user.email || "").toLowerCase() === primaryEmail;
+      const role = owner ? "owner" : normalizeRole(entry.data()?.role);
+      byUid.set(user.uid, { uid: user.uid, email: user.email || "", displayName: user.displayName || "", owner, role, roleLabel: ROLE_LABELS[role], source: "firestore", lastSignInAt: timestampValue(user.metadata?.lastSignInTime) });
     } catch (error) {
       if (error.code !== "auth/user-not-found") throw error;
     }
   }));
-  return { admins: [...byUid.values()].sort((a, b) => Number(b.owner) - Number(a.owner) || a.email.localeCompare(b.email)), isOwner: actor.isOwner === true };
+  return { admins: [...byUid.values()].sort((a, b) => Number(b.owner) - Number(a.owner) || a.email.localeCompare(b.email)), isOwner: actor.isOwner === true,
+    roles: Object.fromEntries(Object.entries(ROLE_LABELS).map(([key, label]) => [key, { label, permissions: ROLE_PERMISSIONS[key] }])) };
 }
 
 async function setAdminRole(firebase, db, actor, body) {
   if (!actor.isOwner) fail(403, "owner_required");
   if (typeof body.enabled !== "boolean") fail(400, "invalid_admin_role");
   let user;
-  if (body.enabled) {
+  if (body.enabled && !body.uid) {
     const email = text(body.email, 200).toLowerCase();
     if (!email) fail(400, "email_required");
     user = await firebase.auth().getUserByEmail(email);
@@ -326,14 +346,313 @@ async function setAdminRole(firebase, db, actor, body) {
   }
   const email = (user.email || "").toLowerCase();
   if (email === configuredPrimaryAdminEmail() || user.uid === actor.uid) fail(403, "cannot_change_owner");
+  if (body.enabled && configuredAdminEmails().has(email)) fail(409, "role_managed_by_server");
+  const role = body.role === undefined ? "admin" : body.role;
+  if (body.enabled && !ASSIGNABLE_ROLES.includes(role)) fail(400, "invalid_admin_role");
   const now = new Date().toISOString();
   const batch = db.batch();
-  batch.set(db.collection("adminRoles").doc(user.uid), { enabled: body.enabled, email, updatedAt: now, updatedBy: actor.uid }, { merge: true });
+  batch.set(db.collection("adminRoles").doc(user.uid), { enabled: body.enabled, email, ...(body.enabled ? { role } : {}), updatedAt: now, updatedBy: actor.uid }, { merge: true });
   batch.set(db.collection("adminAudit").doc(), { at: now, actorUid: actor.uid, actorEmail: actor.email,
-    action: body.enabled ? "admin_access_granted" : "admin_access_revoked", target: user.uid, details: { email } });
+    action: body.enabled ? "admin_access_granted" : "admin_access_revoked", target: user.uid, details: { email, ...(body.enabled ? { role } : {}) } });
   await batch.commit();
-  if (!body.enabled) await firebase.auth().revokeRefreshTokens(user.uid);
-  return { uid: user.uid, email, enabled: body.enabled };
+  // Ao remover ou rebaixar, encerra as sessões ativas para o novo papel valer já.
+  await firebase.auth().revokeRefreshTokens(user.uid);
+  return { uid: user.uid, email, enabled: body.enabled, role: body.enabled ? role : null };
+}
+
+
+// ── Segmentos de acesso (visão geral) ──────────────────────────────
+function addDaysIso(isoDate, days) {
+  const date = new Date(`${isoDate}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function daysBetween(fromIso, toIso) {
+  return Math.round((new Date(`${toIso}T12:00:00Z`) - new Date(`${fromIso}T12:00:00Z`)) / 86400000);
+}
+
+// Classifica um acesso: com plano, em teste, pausado, vencido, sem plano.
+function classifyEntitlement(data, today = saoPauloToday()) {
+  if (!data?.planId) return { segment: "none", daysLeft: null };
+  const expired = Boolean(data.validUntil && today > data.validUntil);
+  const daysLeft = data.validUntil ? daysBetween(today, data.validUntil) : null;
+  if (data.status && data.status !== "active") return { segment: data.status === "cancelled" ? "cancelled" : "paused", daysLeft };
+  if (expired) return { segment: data.source === "trial" ? "trial_ended" : "expired", daysLeft };
+  return { segment: data.source === "trial" ? "trial" : "plan", daysLeft };
+}
+
+async function accessSegments(db, authActivity) {
+  const [entitlements, pending] = await Promise.all([
+    db.collection("adminEntitlements").limit(5000).get(),
+    db.collection("adminCharges").where("status", "==", "manual_pending").limit(2000).get(),
+  ]);
+  const today = saoPauloToday();
+  const counts = { plan: 0, trial: 0, paused: 0, expired: 0, none: 0, disabled: Number(authActivity?.disabled) || 0, expiringSoon: 0, trialEndingSoon: 0 };
+  let withEntitlement = 0;
+  for (const entry of entitlements.docs) {
+    const data = entry.data() || {};
+    if (!data.planId) continue;
+    withEntitlement++;
+    const { segment, daysLeft } = classifyEntitlement(data, today);
+    if (segment === "plan") counts.plan++;
+    else if (segment === "trial") counts.trial++;
+    else if (segment === "paused" || segment === "cancelled") counts.paused++;
+    else counts.expired++;
+    if (segment === "plan" && daysLeft !== null && daysLeft <= 7) counts.expiringSoon++;
+    if (segment === "trial" && daysLeft !== null && daysLeft <= 3) counts.trialEndingSoon++;
+  }
+  counts.none = Math.max(0, (Number(authActivity?.total) || 0) - withEntitlement);
+  let pendingCents = 0;
+  let overdue = 0;
+  let pendingCount = 0;
+  for (const entry of pending.docs) {
+    const charge = entry.data() || {};
+    if (charge.status !== "manual_pending") continue;
+    pendingCount++;
+    pendingCents += Number(charge.amountCents) || 0;
+    if (charge.dueDate && charge.dueDate < today) overdue++;
+  }
+  return { ...counts, pendingCharges: pendingCount, pendingCents, overdueCharges: overdue };
+}
+
+// ── Diretório completo de usuários ─────────────────────────────────
+async function allAuthUsers(firebase, max = 5000) {
+  const users = [];
+  let cursor;
+  do {
+    const page = await firebase.auth().listUsers(1000, cursor);
+    users.push(...page.users);
+    cursor = page.pageToken;
+  } while (cursor && users.length < max);
+  return users.slice(0, max);
+}
+
+async function directory(firebase, db) {
+  const [users, entitlements, usage, plans, pending, roles] = await Promise.all([
+    allAuthUsers(firebase),
+    db.collection("adminEntitlements").limit(5000).get(),
+    db.collection("adminUsage").limit(5000).get(),
+    db.collection("adminPlans").limit(100).get(),
+    db.collection("adminCharges").where("status", "==", "manual_pending").limit(2000).get(),
+    db.collection("adminRoles").where("enabled", "==", true).limit(100).get(),
+  ]);
+  const entitlementByUid = new Map(entitlements.docs.map((entry) => [entry.id, entry.data() || {}]));
+  const usageByUid = new Map(usage.docs.map((entry) => [entry.id, entry.data() || {}]));
+  const planName = new Map(plans.docs.map((entry) => [entry.id, entry.data()?.name || entry.id]));
+  const pendingByUid = new Map();
+  for (const entry of pending.docs) {
+    const charge = entry.data() || {};
+    if (charge.status !== "manual_pending" || !charge.uid) continue;
+    const current = pendingByUid.get(charge.uid) || { count: 0, cents: 0 };
+    pendingByUid.set(charge.uid, { count: current.count + 1, cents: current.cents + (Number(charge.amountCents) || 0) });
+  }
+  const adminEmails = configuredAdminEmails();
+  const adminUids = new Set(roles.docs.map((entry) => entry.id));
+  const today = saoPauloToday();
+  const rows = users.map((user) => {
+    const entitlement = entitlementByUid.get(user.uid) || {};
+    const { segment, daysLeft } = classifyEntitlement(entitlement, today);
+    const lastSeen = timestampValue(usageByUid.get(user.uid)?.lastSeenAt);
+    return {
+      uid: user.uid,
+      email: user.email || "",
+      displayName: user.displayName || "",
+      photoURL: /^https:\/\//.test(user.photoURL || "") ? user.photoURL : "",
+      provider: (user.providerData || []).some((item) => item.providerId === "google.com") ? "google" : "email",
+      emailVerified: user.emailVerified === true,
+      disabled: user.disabled === true,
+      createdAt: timestampValue(user.metadata?.creationTime),
+      lastSignInAt: timestampValue(user.metadata?.lastSignInTime),
+      lastActiveAt: lastSeen,
+      planId: entitlement.planId || null,
+      planName: entitlement.planId ? planName.get(entitlement.planId) || entitlement.planId : null,
+      status: entitlement.planId ? entitlement.status || "active" : "none",
+      source: entitlement.source || null,
+      validUntil: entitlement.validUntil || null,
+      segment: user.disabled ? "disabled" : segment,
+      daysLeft,
+      pending: pendingByUid.get(user.uid) || { count: 0, cents: 0 },
+      admin: adminEmails.has(String(user.email || "").toLowerCase()) || adminUids.has(user.uid),
+    };
+  });
+  rows.sort((a, b) => String(b.lastActiveAt || b.lastSignInAt || "").localeCompare(String(a.lastActiveAt || a.lastSignInAt || "")));
+  return { users: rows, today, truncated: users.length >= 5000 };
+}
+
+async function userDetail(firebase, db, query) {
+  const uid = text(query.uid, 128);
+  if (!uid) fail(400, "uid_required");
+  const user = await firebase.auth().getUser(uid);
+  const [entitlement, userData, usage, charges, aiUsage] = await Promise.all([
+    db.collection("adminEntitlements").doc(uid).get(),
+    db.collection("userData").doc(uid).get(),
+    db.collection("adminUsage").doc(uid).get(),
+    db.collection("adminCharges").where("uid", "==", uid).limit(30).get(),
+    db.collection("aiUsage").doc(uid).get(),
+  ]);
+  const ai = aiUsage.data() || {};
+  return {
+    user: { uid, email: user.email || "", displayName: user.displayName || "", disabled: user.disabled === true,
+      emailVerified: user.emailVerified === true, createdAt: timestampValue(user.metadata?.creationTime),
+      lastSignInAt: timestampValue(user.metadata?.lastSignInTime) },
+    entitlement: entitlement.exists ? { ...pick(entitlement.data(), ["planId", "status", "source", "validUntil", "trialStartedAt", "updatedAt", "provider"]) } : null,
+    ...summarizeUserState(userData),
+    ...summarizeUsage(usage),
+    aiToday: ai.day === saoPauloToday() ? Number(ai.count) || 0 : 0,
+    charges: charges.docs.map((entry) => ({ id: entry.id, ...pick(entry.data(), ["amountCents", "status", "dueDate", "note", "createdAt", "planId", "grantDays", "paidAt", "source"]) }))
+      .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || ""))),
+  };
+}
+
+function pick(object = {}, keys) {
+  return Object.fromEntries(keys.filter((key) => object[key] !== undefined).map((key) => [key, object[key]]));
+}
+
+// ── Acesso: atribuir, teste, estender, pausar, remover (1 ou vários) ─
+const ACCESS_OPS = ["assign", "trial", "extend", "pause", "resume", "remove"];
+
+function validUids(input) {
+  const list = Array.isArray(input) ? input : [input];
+  const uids = [...new Set(list.map((uid) => text(uid, 128)).filter(Boolean))];
+  if (!uids.length) fail(400, "uids_required");
+  if (uids.length > 200) fail(400, "too_many_users");
+  return uids;
+}
+
+async function existingUsers(firebase, uids) {
+  const auth = firebase.auth();
+  if (typeof auth.getUsers === "function") {
+    const found = new Map();
+    for (let index = 0; index < uids.length; index += 100) {
+      const result = await auth.getUsers(uids.slice(index, index + 100).map((uid) => ({ uid })));
+      for (const user of result.users) found.set(user.uid, user);
+    }
+    return found;
+  }
+  const found = new Map();
+  for (const uid of uids) {
+    try { found.set(uid, await auth.getUser(uid)); } catch (error) { if (error.code !== "auth/user-not-found") throw error; }
+  }
+  return found;
+}
+
+async function accessApply(firebase, db, actor, body) {
+  const op = body.op;
+  if (!ACCESS_OPS.includes(op)) fail(400, "invalid_access_op");
+  const uids = validUids(body.uids ?? body.uid);
+  const today = saoPauloToday();
+  const days = Number(body.days);
+  let planId = "";
+  let plan = null;
+  if (op === "assign" || op === "trial") {
+    planId = text(body.planId, 40).toLowerCase();
+    if (!/^[a-z0-9_-]{2,40}$/.test(planId)) fail(400, "plan_required");
+    const snapshot = await db.collection("adminPlans").doc(planId).get();
+    if (!snapshot.exists || snapshot.data()?.active === false) fail(400, "plan_unavailable");
+    plan = snapshot.data();
+  }
+  if ((op === "trial" && (!Number.isInteger(days) || days < 1 || days > 90))
+    || (op === "extend" && (!Number.isInteger(days) || days < 1 || days > 730))) fail(400, "invalid_days");
+  const validUntil = op === "assign" && body.validUntil ? text(body.validUntil, 10) : null;
+  if (validUntil && (!/^\d{4}-\d{2}-\d{2}$/.test(validUntil) || validUntil < today)) fail(400, "invalid_valid_until");
+
+  const users = await existingUsers(firebase, uids);
+  const current = new Map(await Promise.all(uids.map(async (uid) => [uid, (await db.collection("adminEntitlements").doc(uid).get()).data() || null])));
+  const now = new Date().toISOString();
+  const applied = [];
+  const skipped = [];
+  const writes = [];
+  for (const uid of uids) {
+    if (!users.has(uid)) { skipped.push({ uid, reason: "user_not_found" }); continue; }
+    const before = current.get(uid);
+    const ref = db.collection("adminEntitlements").doc(uid);
+    let next = null;
+    if (op === "assign") next = { planId, status: "active", validUntil, source: "manual", updatedAt: now, updatedBy: actor.uid };
+    else if (op === "trial") next = { planId, status: "active", validUntil: addDaysIso(today, days - 1), source: "trial", trialStartedAt: today, updatedAt: now, updatedBy: actor.uid };
+    else if (op === "extend") {
+      if (!before?.planId) { skipped.push({ uid, reason: "no_plan" }); continue; }
+      const base = before.validUntil && before.validUntil >= today ? before.validUntil : addDaysIso(today, -1);
+      next = { ...before, status: "active", validUntil: addDaysIso(base, days), updatedAt: now, updatedBy: actor.uid };
+    } else if (op === "pause" || op === "resume") {
+      if (!before?.planId) { skipped.push({ uid, reason: "no_plan" }); continue; }
+      next = { ...before, status: op === "pause" ? "paused" : "active", updatedAt: now, updatedBy: actor.uid };
+    } else if (op === "remove") {
+      if (!before?.planId) { skipped.push({ uid, reason: "no_plan" }); continue; }
+    }
+    writes.push({ ref, next, uid, before });
+    applied.push(uid);
+  }
+  // Grava em lotes (máx. 500 operações por lote no Firestore).
+  for (let index = 0; index < writes.length; index += 200) {
+    const batch = db.batch();
+    for (const item of writes.slice(index, index + 200)) {
+      if (item.next) batch.set(item.ref, item.next);
+      else batch.delete(item.ref);
+      batch.set(db.collection("adminAudit").doc(), { at: now, actorUid: actor.uid, actorEmail: actor.email,
+        action: `access_${op}`, target: item.uid,
+        details: { email: users.get(item.uid)?.email || "", planId: item.next?.planId || item.before?.planId || null,
+          validUntil: item.next?.validUntil || null, days: Number.isInteger(days) ? days : null } });
+    }
+    await batch.commit();
+  }
+  const stripeWarnings = writes.filter((item) => item.before?.source === "stripe" && ["remove", "pause"].includes(op)).length;
+  return { op, applied, skipped, stripeWarnings, planName: plan?.name || null };
+}
+
+// ── Cobranças em lote ───────────────────────────────────────────────
+async function chargeBulk(firebase, db, actor, body) {
+  const uids = validUids(body.uids);
+  const requestId = text(body.requestId, 64);
+  if (!/^[a-f0-9-]{36}$/i.test(requestId)) fail(400, "invalid_charge");
+  let planId = text(body.planId, 40).toLowerCase();
+  let plan = null;
+  if (planId) {
+    if (!/^[a-z0-9_-]{2,40}$/.test(planId)) fail(400, "invalid_charge");
+    const snapshot = await db.collection("adminPlans").doc(planId).get();
+    if (!snapshot.exists) fail(400, "plan_unavailable");
+    plan = snapshot.data();
+  } else planId = null;
+  const amountCents = body.amountCents === undefined || body.amountCents === null || body.amountCents === ""
+    ? Number(plan?.priceCents) : Number(body.amountCents);
+  const dueDate = text(body.dueDate, 10) || null;
+  const grantDays = body.grantDays === undefined || body.grantDays === null || body.grantDays === ""
+    ? (plan ? (plan.billingInterval === "year" ? 365 : 30) : null) : Number(body.grantDays);
+  if (!Number.isSafeInteger(amountCents) || amountCents <= 0 || amountCents > 100_000_000
+    || (dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(dueDate))
+    || (grantDays !== null && (!Number.isInteger(grantDays) || grantDays < 1 || grantDays > 730))
+    || (grantDays !== null && !planId)) fail(400, "invalid_charge");
+  const note = text(body.note, 300) || (plan ? `Plano ${plan.name || planId}` : "Cobrança PulseNote");
+  const users = await existingUsers(firebase, uids);
+  const now = new Date().toISOString();
+  const created = [];
+  const skipped = [];
+  for (let index = 0; index < uids.length; index += 150) {
+    const chunk = uids.slice(index, index + 150);
+    const refs = chunk.map((uid) => ({ uid, ref: db.collection("adminCharges").doc(crypto.createHash("sha256").update(`${actor.uid}:${requestId}:${uid}`).digest("hex")) }));
+    const existing = await Promise.all(refs.map(({ ref }) => ref.get()));
+    const batch = db.batch();
+    refs.forEach(({ uid, ref }, position) => {
+      if (!users.has(uid)) { skipped.push({ uid, reason: "user_not_found" }); return; }
+      if (existing[position].exists) { skipped.push({ uid, reason: "already_created" }); return; }
+      batch.set(ref, { uid, email: users.get(uid).email || "", amountCents, currency: "BRL", dueDate, note,
+        planId, grantDays, status: "manual_pending", source: "manual", requestId, createdAt: now, createdBy: actor.uid });
+      batch.set(db.collection("adminAudit").doc(), { at: now, actorUid: actor.uid, actorEmail: actor.email,
+        action: "manual_charge_created", target: ref.id, details: { uid, email: users.get(uid).email || "", amountCents, planId } });
+      created.push({ id: ref.id, uid });
+    });
+    await batch.commit();
+  }
+  return { created, skipped, amountCents, planId };
+}
+
+// Libera/estende o plano quando uma cobrança vinculada é paga.
+function grantFromCharge(currentEntitlement, charge, today = saoPauloToday()) {
+  if (!charge?.planId || !Number.isInteger(Number(charge.grantDays))) return null;
+  const samePlan = currentEntitlement?.planId === charge.planId && (currentEntitlement.status || "active") === "active";
+  const base = samePlan && currentEntitlement.validUntil && currentEntitlement.validUntil >= today
+    ? currentEntitlement.validUntil : addDaysIso(today, -1);
+  return { planId: charge.planId, status: "active", source: "charge", validUntil: addDaysIso(base, Number(charge.grantDays)), updatedAt: new Date().toISOString() };
 }
 
 async function integrationStatus(db) {
@@ -404,16 +723,51 @@ function validateFeatureMap(input) {
 }
 
 async function updateConfig(db, actor, body) {
-  const features = validateFeatureMap(body.features);
-  if (typeof body.maintenance?.enabled !== "boolean") fail(400, "invalid_maintenance");
-  const message = text(body.maintenance.message, 240);
-  // Não expor uma configuração de suporte sem consumidor real no produto.
-  const config = normalizeRuntimeConfig({ features, maintenance: { enabled: body.maintenance.enabled, message } });
+  const current = await getRuntimeConfig(db);
+  const now = new Date().toISOString();
+  const next = { ...current };
+  if (body.features !== undefined) next.features = validateFeatureMap(body.features);
+  if (body.maintenance !== undefined) {
+    if (typeof body.maintenance?.enabled !== "boolean") fail(400, "invalid_maintenance");
+    next.maintenance = {
+      enabled: body.maintenance.enabled,
+      message: text(body.maintenance.message, 240) || current.maintenance.message,
+      eta: text(body.maintenance.eta, 60),
+      allowAdmins: body.maintenance.allowAdmins !== false,
+      startedAt: body.maintenance.enabled ? (current.maintenance.enabled ? current.maintenance.startedAt || now : now) : "",
+    };
+  }
+  const planExists = async (id) => {
+    const snapshot = await db.collection("adminPlans").doc(id).get();
+    return snapshot.exists && snapshot.data()?.active !== false;
+  };
+  if (body.access !== undefined) {
+    const noPlan = body.access?.noPlan === "plan" ? "plan" : body.access?.noPlan === "full" ? "full" : null;
+    const planId = text(body.access?.noPlanPlanId, 40).toLowerCase();
+    if (!noPlan || (noPlan === "plan" && (!/^[a-z0-9_-]{2,40}$/.test(planId) || !(await planExists(planId))))) fail(400, "invalid_access_policy");
+    next.access = { noPlan, noPlanPlanId: noPlan === "plan" ? planId : "" };
+  }
+  if (body.trial !== undefined) {
+    const enabled = body.trial?.enabled === true;
+    const planId = text(body.trial?.planId, 40).toLowerCase();
+    const days = Number(body.trial?.days);
+    if (typeof body.trial?.enabled !== "boolean" || !Number.isInteger(days) || days < 1 || days > 90
+      || (enabled && (!/^[a-z0-9_-]{2,40}$/.test(planId) || !(await planExists(planId))))) fail(400, "invalid_trial");
+    next.trial = { enabled, planId: planId || current.trial.planId, days, enabledAt: enabled ? (current.trial.enabled ? current.trial.enabledAt || now : now) : "" };
+  }
+  if (body.payment !== undefined) {
+    next.payment = { pixKey: text(body.payment?.pixKey, 140), pixHolder: text(body.payment?.pixHolder, 100), instructions: text(body.payment?.instructions, 400) };
+  }
+  const config = normalizeRuntimeConfig(next);
+  const changed = ["features", "maintenance", "access", "trial", "payment"].filter((key) => body[key] !== undefined);
+  if (!changed.length) fail(400, "nothing_to_update");
   const batch = db.batch();
-  batch.set(db.collection("systemConfig").doc("global"), { ...config, updatedAt: new Date().toISOString(), updatedBy: actor.uid });
+  batch.set(db.collection("systemConfig").doc("global"), { ...config, updatedAt: now, updatedBy: actor.uid });
   batch.set(db.collection("adminAudit").doc(), {
-    at: new Date().toISOString(), actorUid: actor.uid, actorEmail: actor.email,
-    action: "config_updated", target: "global", details: { features, maintenanceEnabled: config.maintenance.enabled },
+    at: now, actorUid: actor.uid, actorEmail: actor.email,
+    action: body.maintenance !== undefined && config.maintenance.enabled !== current.maintenance.enabled
+      ? (config.maintenance.enabled ? "maintenance_enabled" : "maintenance_disabled") : "config_updated",
+    target: "global", details: { sections: changed, maintenanceEnabled: config.maintenance.enabled },
   });
   await batch.commit();
   return { config };
@@ -464,8 +818,11 @@ async function savePlan(db, actor, body) {
   if (!Number.isSafeInteger(priceCents) || priceCents < 0 || priceCents > 100_000_000
     || !["month", "year"].includes(billingInterval)
     || (stripePriceId && !/^price_[A-Za-z0-9]+$/.test(stripePriceId))) fail(400, "invalid_plan_billing");
+  // Visibilidade: "public" aparece para os usuários assinarem; "private"
+  // só pode ser atribuído pelo painel (ex.: planos de parceria ou teste).
+  const visibility = body.visibility === "private" ? "private" : "public";
   const plan = { name, description: text(body.description, 300), active: body.active, features,
-    priceCents, currency: "BRL", billingInterval, stripePriceId: stripePriceId || null, aiDailyLimit,
+    priceCents, currency: "BRL", billingInterval, stripePriceId: stripePriceId || null, aiDailyLimit, visibility,
     updatedAt: new Date().toISOString(), updatedBy: actor.uid };
   const batch = db.batch();
   batch.set(db.collection("adminPlans").doc(id), plan, { merge: true });
@@ -542,10 +899,18 @@ async function updateCharge(db, actor, body) {
     const previous = await tx.get(ref);
     if (!previous.exists || previous.data().source !== "manual") fail(404, "charge_not_found");
     if (previous.data().status !== "manual_pending") fail(409, "charge_already_finalized");
-    tx.update(ref, { status, updatedAt: new Date().toISOString(), updatedBy: actor.uid });
+    const charge = previous.data();
+    let granted = null;
+    if (status === "manual_received" && charge.planId && charge.uid) {
+      const entitlementRef = db.collection("adminEntitlements").doc(charge.uid);
+      const entitlement = await tx.get(entitlementRef);
+      granted = grantFromCharge(entitlement.exists ? entitlement.data() : null, charge);
+      if (granted) tx.set(entitlementRef, { ...granted, updatedBy: actor.uid });
+    }
+    tx.update(ref, { status, updatedAt: new Date().toISOString(), updatedBy: actor.uid, ...(status === "manual_received" ? { paidAt: new Date().toISOString() } : {}) });
     tx.create(db.collection("adminAudit").doc(), { at: new Date().toISOString(), actorUid: actor.uid,
-      actorEmail: actor.email, action: "manual_charge_updated", target: id, details: { status } });
-    return { id, status };
+      actorEmail: actor.email, action: "manual_charge_updated", target: id, details: { status, ...(granted ? { planId: granted.planId, validUntil: granted.validUntil } : {}) } });
+    return { id, status, granted };
   });
 }
 
@@ -558,11 +923,16 @@ module.exports = async function adminApi(req, res) {
     const actor = await requireAdmin(req, firebase);
     const db = firebase.firestore();
     const action = String(req.query?.action || "dashboard");
+    const allow = (permission) => { if (!hasPermission(actor, permission)) fail(403, "permission_denied"); };
     let result;
     if (req.method === "GET") {
-      if (action === "me") result = { isAdmin: true, isOwner: actor.isOwner === true, uid: actor.uid, email: actor.email };
+      allow("view");
+      if (action === "me") result = { isAdmin: true, isOwner: actor.isOwner === true, uid: actor.uid, email: actor.email,
+        role: actor.role, roleLabel: ROLE_LABELS[actor.role], permissions: ROLE_PERMISSIONS[actor.role] };
       else if (action === "dashboard") result = await dashboard(firebase, db);
       else if (action === "users") result = await listUsers(firebase, db, req.query || {});
+      else if (action === "directory") result = await directory(firebase, db);
+      else if (action === "user-detail") result = await userDetail(firebase, db, req.query || {});
       else if (action === "plans") result = await listPlans(db);
       else if (action === "subscriptions") result = await listSubscriptions(db);
       else if (action === "charges") result = await listCharges(db);
@@ -572,15 +942,24 @@ module.exports = async function adminApi(req, res) {
       else if (action === "admins") result = await listAdmins(firebase, db, actor);
       else fail(404, "unknown_action");
     } else {
-      const body = req.body || {};
+      const body = req.body && typeof req.body === "object" ? req.body : {};
+      const permissionFor = {
+        "config-update": "config.manage", "user-update": "users.status", "plan-save": "plans.manage",
+        "entitlement-set": "users.access", "access-apply": "users.access",
+        "charge-create": "charges.manage", "charge-bulk": "charges.manage", "charge-update": "charges.manage",
+        "admin-role-set": "admins.manage",
+      };
+      if (!permissionFor[action]) fail(404, "unknown_action");
+      allow(permissionFor[action]);
       if (action === "config-update") result = await updateConfig(db, actor, body);
       else if (action === "user-update") result = await updateUser(firebase, db, actor, body);
       else if (action === "plan-save") result = await savePlan(db, actor, body);
       else if (action === "entitlement-set") result = await setEntitlement(firebase, db, actor, body);
+      else if (action === "access-apply") result = await accessApply(firebase, db, actor, body);
       else if (action === "charge-create") result = await createCharge(firebase, db, actor, body);
+      else if (action === "charge-bulk") result = await chargeBulk(firebase, db, actor, body);
       else if (action === "charge-update") result = await updateCharge(db, actor, body);
       else if (action === "admin-role-set") result = await setAdminRole(firebase, db, actor, body);
-      else fail(404, "unknown_action");
     }
     return res.status(200).json({ ok: true, ...result });
   } catch (error) {
@@ -591,4 +970,5 @@ module.exports = async function adminApi(req, res) {
 };
 
 module.exports._test = { validateFeatureMap, integrationStatus, countAuthUsers, authUserActivity, summarizeUserState, summarizeUsage, aggregateUsage,
-  dashboard, listUsers, listAdmins, updateConfig, updateUser, setEntitlement, createCharge, updateCharge, setAdminRole };
+  dashboard, listUsers, listAdmins, updateConfig, updateUser, setEntitlement, createCharge, updateCharge, setAdminRole,
+  directory, userDetail, accessApply, chargeBulk, grantFromCharge, classifyEntitlement, accessSegments, addDaysIso };

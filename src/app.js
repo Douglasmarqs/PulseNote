@@ -1171,6 +1171,7 @@ function renderSettings() {
   const aiPreference = document.getElementById("pulsinhoAiPreference");
   if (aiPreference && document.activeElement !== aiPreference) aiPreference.value = state.aiProviderPreference || "auto";
   loadBillingSettings();
+  if (!handleBillingReturnParams.done) { handleBillingReturnParams.done = true; handleBillingReturnParams(); }
   renderSettingsBoard();
 }
 
@@ -1352,6 +1353,107 @@ function bindSettingsBoard() {
 }
 
 let billingRequest = null;
+
+function billingShortDate(iso) {
+  const [year, month, day] = String(iso || "").split("-").map(Number);
+  if (!year || !month || !day) return "";
+  return `${String(day).padStart(2, "0")}/${String(month).padStart(2, "0")}`;
+}
+
+// ── Manutenção: tela cheia com a mensagem definida no painel ──────────
+let maintenancePoll = null;
+function applyMaintenanceState(maintenance) {
+  const active = Boolean(maintenance?.enabled) && !maintenance.bypass;
+  let screen = document.getElementById("pnMaintenance");
+  if (!active) {
+    if (screen) screen.remove();
+    document.documentElement.classList.remove("is-maintenance");
+    if (maintenancePoll) { clearInterval(maintenancePoll); maintenancePoll = null; }
+    if (maintenance?.enabled && maintenance.bypass && !applyMaintenanceState.warned) {
+      applyMaintenanceState.warned = true;
+      showToast("Manutenção ativa: só administradores estão usando o app agora.");
+    }
+    return;
+  }
+  if (!screen) {
+    screen = document.createElement("div");
+    screen.id = "pnMaintenance";
+    screen.className = "pn-maintenance";
+    screen.setAttribute("role", "alertdialog");
+    screen.setAttribute("aria-modal", "true");
+    screen.setAttribute("aria-labelledby", "pnMaintenanceTitle");
+    document.body.appendChild(screen);
+  }
+  screen.innerHTML = `<div class="pn-maintenance__card">
+    <span class="bd-mascot pn-maintenance__mascot" aria-hidden="true"><span class="bd-mascot__eyes"><i></i><i></i></span><svg class="bd-mascot__pulse" viewBox="0 0 120 26"><path d="M0,13 L28,13 L36,3 L44,23 L52,13 L64,13 L70,6 L76,20 L82,13 L120,13"/></svg></span>
+    <h1 id="pnMaintenanceTitle">Estamos em manutenção</h1>
+    <p>${escapeHtml(maintenance.message || "O PulseNote está em manutenção. Volte em instantes.")}</p>
+    ${maintenance.eta ? `<p class="pn-maintenance__eta">Previsão de retorno: <strong>${escapeHtml(maintenance.eta)}</strong></p>` : ""}
+    <p class="pn-maintenance__safe">Seus dados estão guardados com segurança.</p>
+    <button type="button" class="primary-button" id="pnMaintenanceRetry">Tentar de novo</button>
+  </div>`;
+  document.documentElement.classList.add("is-maintenance");
+  screen.querySelector("#pnMaintenanceRetry")?.addEventListener("click", () => loadBillingSettings(true));
+  if (!maintenancePoll) maintenancePoll = setInterval(() => loadBillingSettings(true), 60000);
+}
+
+// ── Cobranças pendentes do usuário ────────────────────────────────────
+let billingChargesNotified = false;
+function renderBillingCharges(data) {
+  const host = document.getElementById("billingChargesList");
+  const charges = Array.isArray(data?.charges) ? data.charges : [];
+  if (host) {
+    host.hidden = !charges.length;
+    const manual = data?.payment?.manual;
+    host.innerHTML = charges.length ? `<h3 class="billing-charges__title">Cobranças pendentes</h3>${charges.map((charge) => `
+      <article class="billing-charge" data-charge-id="${escapeHtml(charge.id)}">
+        <div><strong>${escapeHtml(charge.note)}</strong><small>${billingMoney(charge.amountCents)}${charge.dueDate ? ` · vence ${billingShortDate(charge.dueDate)}` : ""}${charge.planId && charge.grantDays ? ` · libera ${charge.grantDays} dias de plano` : ""}</small></div>
+        ${data?.payment?.online ? `<button type="button" class="primary-button" data-pay-charge="${escapeHtml(charge.id)}">Pagar agora</button>` : ""}
+      </article>`).join("")}
+      ${manual ? `<div class="billing-pix"><span>Pague por Pix${manual.pixHolder ? ` para <strong>${escapeHtml(manual.pixHolder)}</strong>` : ""}</span><code>${escapeHtml(manual.pixKey)}</code><button type="button" class="ghost-button" data-copy-pix="${escapeHtml(manual.pixKey)}">Copiar chave Pix</button>${manual.instructions ? `<small>${escapeHtml(manual.instructions)}</small>` : ""}</div>` : ""}
+      ${!data?.payment?.online && !manual ? `<small class="billing-charges__hint">O administrador vai te enviar as instruções de pagamento.</small>` : ""}` : "";
+    host.querySelectorAll("[data-pay-charge]").forEach((button) => button.addEventListener("click", async () => {
+      const original = button.textContent;
+      button.disabled = true;
+      button.textContent = "Abrindo pagamento…";
+      try {
+        const result = await billingApi("charge-pay", "POST", { chargeId: button.dataset.payCharge });
+        window.location.assign(result.url);
+      } catch (error) {
+        console.error("Falha ao iniciar pagamento:", error.code || error.message);
+        button.disabled = false;
+        button.textContent = original;
+        showToast("Não foi possível abrir o pagamento agora.");
+      }
+    }));
+    host.querySelector("[data-copy-pix]")?.addEventListener("click", async (event) => {
+      try { await navigator.clipboard.writeText(event.currentTarget.dataset.copyPix); showToast("Chave Pix copiada."); }
+      catch { showToast("Não foi possível copiar. Selecione a chave e copie manualmente."); }
+    });
+  }
+  if (charges.length && !billingChargesNotified) {
+    billingChargesNotified = true;
+    const total = charges.reduce((sum, charge) => sum + charge.amountCents, 0);
+    showToast(`Você tem ${charges.length === 1 ? "1 cobrança pendente" : `${charges.length} cobranças pendentes`} (${billingMoney(total)}). Veja em Configurações → Plano.`);
+  }
+}
+
+// Retorno do pagamento e link direto para a cobrança (?pay=...).
+function handleBillingReturnParams() {
+  let params;
+  try { params = new URLSearchParams(window.location.search); } catch { return; }
+  const billing = params.get("billing");
+  const pay = params.get("pay");
+  if (!billing && !pay) return;
+  if (billing === "charge_success" || billing === "success") showToast("Pagamento enviado! A confirmação pode levar alguns instantes.");
+  else if (billing === "cancelled") showToast("Pagamento cancelado. Nada foi cobrado.");
+  setTimeout(() => { try { openSettingsSection("plano"); } catch { /* tela ainda carregando */ } }, 600);
+  params.delete("billing");
+  params.delete("pay");
+  params.delete("session_id");
+  const query = params.toString();
+  try { window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`); } catch { /* sem history */ }
+}
 function billingMoney(cents) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format((Number(cents) || 0) / 100);
 }
@@ -1388,18 +1490,21 @@ async function loadBillingSettings(force = false) {
   }
   if (billingRequest && !force) return billingRequest;
   billingRequest = billingApi("status").then((data) => {
+    applyMaintenanceState(data.maintenance);
+    renderBillingCharges(data);
     const current = data.subscription || {};
-    const active = current.status === "active";
+    const active = current.status === "active" && !current.expired;
+    const trialUntil = current.trial && active && current.validUntil ? billingShortDate(current.validUntil) : "";
     const planLabel = document.querySelector("#bdUserPlan");
     if (planLabel) planLabel.textContent = active ? `Plano ${(data.plans || []).find((plan) => plan.id === current.planId)?.name || ""}`.trim() : "Sem plano";
     const pfPlan = document.querySelector("#profilePlanChip span");
     if (pfPlan && planLabel) pfPlan.textContent = planLabel.textContent;
-    statusBadge.textContent = active ? "Assinatura ativa" : current.planId ? "Assinatura pausada" : "Sem plano contratado";
+    statusBadge.textContent = trialUntil ? `Teste grátis até ${trialUntil}` : active ? "Assinatura ativa" : current.expired ? (current.trial ? "Teste encerrado" : "Plano vencido") : current.planId ? "Assinatura pausada" : "Sem plano contratado";
     statusBadge.className = `billing-status-badge ${active ? "is-active" : current.planId ? "is-warning" : ""}`;
     const currentPlan = (data.plans || []).find((plan) => plan.id === current.planId);
     stBillingSummary = {
       name: currentPlan ? `Plano ${currentPlan.name}` : "Sem plano",
-      status: active ? "Ativo" : current.planId ? "Pausado" : "Inativo",
+      status: trialUntil ? `Teste até ${trialUntil}` : active ? "Ativo" : current.expired ? "Vencido" : current.planId ? "Pausado" : "Inativo",
       tone: active ? "on" : current.planId ? "warn" : "",
       desc: currentPlan?.description || (active ? "Recursos do seu plano liberados." : "Escolha um plano para liberar mais recursos."),
     };

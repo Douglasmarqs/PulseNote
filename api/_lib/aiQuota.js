@@ -42,8 +42,10 @@ async function resolveAiDailyLimit(db, uid, actor = {}) {
   if (await isAdministrativeOperator(db, uid, actor)) return { limit: 0, tier: "admin" };
 
   const { getUserEntitlements } = require("./admin");
-  const entitlement = await getUserEntitlements(db, uid);
-  if (entitlement.status !== "active" || !entitlement.planId) return { limit: free, tier: "free" };
+  const { getRuntimeConfig } = require("./adminConfig");
+  const config = await getRuntimeConfig(db).catch(() => null);
+  const entitlement = await getUserEntitlements(db, uid, { config });
+  if (!["active", "default_plan"].includes(entitlement.status) || !entitlement.planId) return { limit: free, tier: "free" };
 
   const plan = (await db.collection("adminPlans").doc(entitlement.planId).get()).data() || {};
   const custom = normalizePlanLimit(plan.aiDailyLimit);

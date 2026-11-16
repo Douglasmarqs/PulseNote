@@ -4,11 +4,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="robots" content="noindex,nofollow" />
+  <meta name="referrer" content="no-referrer" />
   <meta name="theme-color" content="#060a18" />
   <title>Administração · PulseNote</title>
   <link rel="icon" type="image/png" href="/icons/favicon-32.png" />
-  <link rel="stylesheet" href="/src/admin.css?v=34" />
-  <link rel="stylesheet" href="/src/admin-boards.css?v=3" />
+  <link rel="stylesheet" href="/src/admin.css?v=35" />
+  <link rel="stylesheet" href="/src/admin-boards.css?v=4" />
+  <link rel="stylesheet" href="/src/admin-console.css?v=1" />
 </head>
 <body>
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
@@ -50,20 +52,41 @@
 <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
 <symbol id="i-trend" viewBox="0 0 24 24"><path d="M3.5 17l6-6 4 4 7-7.5M15 7.5h5.5V13"/></symbol>
 <symbol id="i-database" viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="7.5" ry="3"/><path d="M4.5 6v12c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3V6M4.5 12c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3"/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.500"/><path d="M16 16l4.500 4.500"/></symbol>
+<symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11M7 10.500l5 5 5-5M4.500 19.500h15"/></symbol>
+<symbol id="i-gift" viewBox="0 0 24 24"><rect x="3.500" y="8" width="17" height="4" rx="1"/><path d="M5 12v8.500h14V12M12 8v12.500M12 8C10.500 4.200 7 4.300 7 6.300 7 8 12 8 12 8zM12 8c1.500-3.800 5-3.700 5-1.700C17 8 12 8 12 8z"/></symbol>
+<symbol id="i-pause" viewBox="0 0 24 24"><rect x="6.500" y="5" width="3.500" height="14" rx="1"/><rect x="14" y="5" width="3.500" height="14" rx="1"/></symbol>
+<symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.500v13l10.500-6.500z"/></symbol>
+<symbol id="i-trash" viewBox="0 0 24 24"><path d="M4.500 7h15M9.500 7V4.500h5V7M6.500 7l1 13h9l1-13M10 11v5.500M14 11v5.500"/></symbol>
+<symbol id="i-copy" viewBox="0 0 24 24"><rect x="8.500" y="8.500" width="11" height="11" rx="2.500"/><path d="M15.500 8.500V6a1.500 1.500 0 00-1.500-1.500H6A1.500 1.500 0 004.500 6v8A1.500 1.500 0 006 15.500h2.500"/></symbol>
+<symbol id="i-user-plus" viewBox="0 0 24 24"><circle cx="10" cy="8.500" r="3.500"/><path d="M3.500 20a6.500 6.500 0 0113 0M18.500 8v6M15.500 11h6"/></symbol>
+<symbol id="i-crown" viewBox="0 0 24 24"><path d="M4 17.500L3 7.500l5 4 4-6 4 6 5-4-1 10z"/><path d="M5 20.500h14"/></symbol>
+<symbol id="i-wrench" viewBox="0 0 24 24"><path d="M14.700 6.300a4 4 0 00-5.300 5.300l-6 6a1.800 1.800 0 002.500 2.500l6-6a4 4 0 005.300-5.300l-2.600 2.600-2.400-.5-.5-2.400z"/></symbol>
+<symbol id="i-receipt" viewBox="0 0 24 24"><path d="M6 3h12v18l-2-1.400-2 1.400-2-1.400-2 1.400-2-1.400L6 21z"/><path d="M9 8h6M9 11.500h6M9 15h3.500"/></symbol>
+<symbol id="i-bank" viewBox="0 0 24 24"><path d="M3.500 9.500L12 4l8.500 5.500z"/><path d="M5.500 10v7.500M10 10v7.500M14 10v7.500M18.500 10v7.500M3.500 20.500h17"/></symbol>
+<symbol id="i-qr" viewBox="0 0 24 24"><rect x="3.500" y="3.500" width="7" height="7" rx="1.500"/><rect x="13.500" y="3.500" width="7" height="7" rx="1.500"/><rect x="3.500" y="13.500" width="7" height="7" rx="1.500"/><path d="M14 14h2.500v2.500H14zM18 18h2.500v2.500H18zM18 14h2.500M14 18v2.500"/></symbol>
+<symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.500 12S6 5.500 12 5.500 21.500 12 21.500 12 18 18.500 12 18.500 2.500 12 2.500 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+<symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M16 7l2.500 2.500M18.500 4.500L21 7"/></symbol>
+<symbol id="i-chev-down" viewBox="0 0 24 24"><path d="M6 9.500l6 6 6-6"/></symbol>
+<symbol id="i-hourglass" viewBox="0 0 24 24"><path d="M6.500 3.500h11M6.500 20.500h11M7.500 3.500c0 5 4.500 5.500 4.500 8.500s-4.500 3.500-4.500 8.500M16.500 3.500c0 5-4.500 5.500-4.500 8.500s4.500 3.500 4.500 8.500"/></symbol>
 </svg>
   <div class="ad-shell is-locked">
     <aside class="pn-rail" id="pnRail" aria-label="Seções administrativas">
       <a class="ad-brand" href="/app" aria-label="PulseNote, voltar ao aplicativo"><span class="ad-brand-mark" aria-hidden="true"><span class="bd-mascot" aria-hidden="true"><span class="bd-mascot__eyes"><i></i><i></i></span><svg class="bd-mascot__pulse" viewBox="0 0 120 26"><path d="M0,13 L28,13 L36,3 L44,23 L52,13 L64,13 L70,6 L76,20 L82,13 L120,13"/></svg></span></span><span><strong>PulseNote</strong><small>Administração</small></span></a>
       <nav class="ad-nav" id="adNav" aria-label="Navegação do painel">
         <button type="button" class="is-active" data-section="overview"><svg class="i" aria-hidden="true"><use href="#i-home"/></svg>Visão geral</button>
-        <button type="button" data-section="users"><svg class="i" aria-hidden="true"><use href="#i-user"/></svg>Usuários</button>
-        <button type="button" data-section="plans"><svg class="i" aria-hidden="true"><use href="#i-layers"/></svg>Planos e preços</button>
-        <button type="button" data-section="subscriptions"><svg class="i" aria-hidden="true"><use href="#i-repeat"/></svg>Assinaturas</button>
-        <button type="button" data-section="charges"><svg class="i" aria-hidden="true"><use href="#i-wallet"/></svg>Cobranças</button>
+        <span class="ac-nav-group">Pessoas</span>
+        <button type="button" data-section="users"><svg class="i" aria-hidden="true"><use href="#i-users"/></svg>Usuários<span class="ac-nav-badge" id="adNavUsersBadge" hidden></span></button>
+        <button type="button" data-section="subscriptions"><svg class="i" aria-hidden="true"><use href="#i-gift"/></svg>Acessos e testes<span class="ac-nav-badge is-warn" id="adNavTrialBadge" hidden></span></button>
+        <span class="ac-nav-group">Receita</span>
+        <button type="button" data-section="plans"><svg class="i" aria-hidden="true"><use href="#i-layers"/></svg>Planos</button>
+        <button type="button" data-section="charges"><svg class="i" aria-hidden="true"><use href="#i-wallet"/></svg>Cobranças<span class="ac-nav-badge is-warn" id="adNavChargesBadge" hidden></span></button>
+        <span class="ac-nav-group">Produto</span>
         <button type="button" data-section="features"><svg class="i" aria-hidden="true"><use href="#i-sliders"/></svg>Recursos</button>
         <button type="button" data-section="integrations"><svg class="i" aria-hidden="true"><use href="#i-link"/></svg>Integrações</button>
-        <button type="button" data-section="security"><svg class="i" aria-hidden="true"><use href="#i-shield"/></svg>Segurança</button>
-        <button type="button" data-section="settings"><svg class="i" aria-hidden="true"><use href="#i-gear"/></svg>Configurações</button>
+        <span class="ac-nav-group">Administração</span>
+        <button type="button" data-section="security"><svg class="i" aria-hidden="true"><use href="#i-shield"/></svg>Equipe e segurança</button>
+        <button type="button" data-section="settings"><svg class="i" aria-hidden="true"><use href="#i-wrench"/></svg>Operação<span class="ac-nav-badge is-danger" id="adNavMaintenanceBadge" hidden>Ativa</span></button>
       </nav>
       <div class="ad-rail-footer">
         <a class="ad-back" href="/app" aria-label="Abrir meu PulseNote"><svg class="i" aria-hidden="true"><use href="#i-arrow-left"/></svg><span>Voltar ao meu PulseNote</span></a>
@@ -76,10 +99,11 @@
       <header class="ad-topbar">
         <button class="ad-menu-button" id="adMenuButton" type="button" aria-expanded="false" aria-controls="pnRail" aria-label="Abrir menu"><svg class="i" aria-hidden="true"><use href="#i-menu"/></svg></button>
         <span class="ad-topbar-title"><span class="bd-mascot" aria-hidden="true"><span class="bd-mascot__eyes"><i></i><i></i></span><svg class="bd-mascot__pulse" viewBox="0 0 120 26"><path d="M0,13 L28,13 L36,3 L44,23 L52,13 L64,13 L70,6 L76,20 L82,13 L120,13"/></svg></span><span><strong>PulseNote</strong><small>Administração</small></span></span>
-        <div class="ad-heading"><div><h1 id="adPageTitle">Administração do PulseNote</h1><p id="adPageSubtitle">Controle usuários, planos, assinaturas, integrações e a operação do PulseNote.</p></div></div>
+        <div class="ad-heading"><div><h1 id="adPageTitle">Administração do PulseNote</h1><p id="adPageSubtitle">Usuários, planos, cobranças e a operação do PulseNote em um só lugar.</p></div></div>
         <div class="ad-topbar-actions">
           <span class="ad-date-pill"><svg class="i" aria-hidden="true"><use href="#i-calendar"/></svg><span id="adCurrentDate">Hoje</span></span>
           <span class="ad-environment" id="adEnvironment">Ambiente de prévia</span>
+          <button class="ad-icon-button" id="adRefreshButton" type="button" aria-label="Atualizar dados" title="Atualizar dados"><svg class="i" aria-hidden="true"><use href="#i-repeat"/></svg></button>
           <a class="ad-app-switch" href="/app" title="Meu aplicativo" aria-label="Meu aplicativo"><svg class="i" aria-hidden="true"><use href="#i-external"/></svg></a>
           <button class="ad-icon-button" id="adThemeButton" type="button" aria-label="Alternar tema"><svg class="i" aria-hidden="true"><use href="#i-sun"/></svg></button>
           <span class="ad-top-avatar" id="adTopAvatar" aria-hidden="true">PN</span>
@@ -91,136 +115,237 @@
         <div id="adGate" class="ad-gate" role="status">Verificando sua permissão de administrador…</div>
         <div id="adContent" hidden>
           <span class="ad-session" id="adSession" hidden></span>
+          <div id="adMaintenanceBanner" class="ac-banner is-danger" role="status" hidden><svg class="i" aria-hidden="true"><use href="#i-wrench"/></svg><span><strong>Manutenção ativa.</strong> Os usuários estão vendo a tela de manutenção.</span><button type="button" class="ad-subtle-button" data-go="settings">Gerenciar</button></div>
           <div id="adLoadError" class="ad-load-error" role="alert" hidden><span id="adLoadErrorText"></span><button class="ad-subtle-button" id="adSectionRetry" type="button">Tentar novamente</button></div>
           <div class="ad-mobile-tabs" id="adMobileTabs" aria-label="Seções administrativas"></div>
 
+          <!-- VISÃO GERAL -->
           <section class="pn-console-view is-active" id="pn-console-overview" aria-labelledby="ad-overview-title">
-            <h2 class="ad-sr" id="ad-overview-title"><span id="adGreeting">Visão geral</span></h2>
+            <h2 class="ac-greeting" id="ad-overview-title"><span id="adGreeting">Visão geral</span></h2>
+            <div class="ac-alerts" id="adAlerts" aria-label="Avisos importantes"></div>
             <div class="ad-kpis" id="adKpis" aria-label="Indicadores principais">
-              <article class="ad-kpi"><span class="ad-kpi-ico is-green"><svg class="i"><use href="#i-users"/></svg></span><div class="ad-kpi-copy"><span>Usuários ativos</span><strong id="adKpi1Value">—</strong><small id="adKpi1Sub"></small></div><svg class="ad-kpi-spark" id="adKpi1Spark" viewBox="0 0 120 44" preserveAspectRatio="none" aria-hidden="true"></svg></article>
-              <article class="ad-kpi"><span class="ad-kpi-ico is-violet"><svg class="i"><use href="#i-layers"/></svg></span><div class="ad-kpi-copy"><span>Assinaturas</span><strong id="adKpi2Value">—</strong><small id="adKpi2Sub"></small></div><svg class="ad-kpi-spark" id="adKpi2Spark" viewBox="0 0 120 44" preserveAspectRatio="none" aria-hidden="true"></svg></article>
-              <article class="ad-kpi"><span class="ad-kpi-ico is-violet"><svg class="i"><use href="#i-database"/></svg></span><div class="ad-kpi-copy"><span>Receita (MRR)</span><strong id="adKpi3Value">—</strong><small id="adKpi3Sub"></small></div><svg class="ad-kpi-spark" id="adKpi3Spark" viewBox="0 0 120 44" preserveAspectRatio="none" aria-hidden="true"></svg></article>
-              <article class="ad-kpi"><span class="ad-kpi-ico is-violet"><svg class="i"><use href="#i-trend"/></svg></span><div class="ad-kpi-copy"><span>Uso da plataforma</span><strong id="adKpi4Value">—</strong><small id="adKpi4Sub"></small></div><svg class="ad-kpi-spark" id="adKpi4Spark" viewBox="0 0 120 44" preserveAspectRatio="none" aria-hidden="true"></svg></article>
+              <article class="ad-kpi"><span class="ad-kpi-ico is-green"><svg class="i" aria-hidden="true"><use href="#i-users"/></svg></span><div class="ad-kpi-copy"><span>Usuários</span><strong id="adKpi1Value">—</strong><small id="adKpi1Sub"></small></div><svg class="ad-kpi-spark" id="adKpi1Spark" viewBox="0 0 120 44" preserveAspectRatio="none" aria-hidden="true"></svg></article>
+              <article class="ad-kpi"><span class="ad-kpi-ico is-violet"><svg class="i" aria-hidden="true"><use href="#i-layers"/></svg></span><div class="ad-kpi-copy"><span>Com plano</span><strong id="adKpi2Value">—</strong><small id="adKpi2Sub"></small></div><svg class="ad-kpi-spark" id="adKpi2Spark" viewBox="0 0 120 44" preserveAspectRatio="none" aria-hidden="true"></svg></article>
+              <article class="ad-kpi"><span class="ad-kpi-ico is-amber"><svg class="i" aria-hidden="true"><use href="#i-gift"/></svg></span><div class="ad-kpi-copy"><span>Em teste</span><strong id="adKpi3Value">—</strong><small id="adKpi3Sub"></small></div><svg class="ad-kpi-spark" id="adKpi3Spark" viewBox="0 0 120 44" preserveAspectRatio="none" aria-hidden="true"></svg></article>
+              <article class="ad-kpi"><span class="ad-kpi-ico is-violet"><svg class="i" aria-hidden="true"><use href="#i-database"/></svg></span><div class="ad-kpi-copy"><span>Receita mensal (MRR)</span><strong id="adKpi4Value">—</strong><small id="adKpi4Sub"></small></div><svg class="ad-kpi-spark" id="adKpi4Spark" viewBox="0 0 120 44" preserveAspectRatio="none" aria-hidden="true"></svg></article>
             </div>
             <div class="ad-kpi-dots" id="adKpiDots" aria-hidden="true"><i class="is-on"></i><i></i><i></i></div>
-            <div class="ad-stats" id="adStats" aria-label="Métricas dos últimos 30 dias" hidden></div>
+
+            <article class="ad-card ac-base-card">
+              <div class="ad-card-head"><div><h2>Base de usuários</h2><p>Toque em um grupo para ver as pessoas.</p></div><button class="ad-link" type="button" data-go="users">Ver todos <svg class="i" aria-hidden="true"><use href="#i-arrow-right"/></svg></button></div>
+              <div class="ac-segbar" id="adSegBar" role="img" aria-label="Distribuição dos usuários por situação"></div>
+              <div class="ac-seglegend" id="adSegLegend"></div>
+            </article>
 
             <div class="ad-ov-tabs" id="adOvTabs" role="tablist" aria-label="Painéis da visão geral">
               <button type="button" class="is-active" data-ov="users">Usuários</button>
-              <button type="button" data-ov="subs">Assinaturas</button>
+              <button type="button" data-ov="subs">Receita</button>
               <button type="button" data-ov="integrations">Integrações</button>
               <button type="button" data-ov="audit">Auditoria</button>
             </div>
 
             <div class="ad-ov-grid" id="adOvGrid" data-ov-active="users">
               <article class="ad-card ad-flow-card" data-ov-card="flow">
-                <div class="ad-card-head"><div><h2>Crescimento da plataforma <span class="ad-info" title="Total acumulado de contas, pela data de criação no Firebase Auth."><svg class="i"><use href="#i-info"/></svg></span></h2></div>
+                <div class="ad-card-head"><div><h2>Crescimento <span class="ad-info" title="Total acumulado de contas, pela data de criação."><svg class="i" aria-hidden="true"><use href="#i-info"/></svg></span></h2></div>
                   <div class="ad-range" id="adGrowthRange" role="group" aria-label="Período"><button type="button" data-range="7">7 dias</button><button type="button" class="is-active" data-range="30">30 dias</button><button type="button" data-range="90">3 meses</button></div></div>
                 <div class="ad-growth" id="adGrowthChart" role="img" aria-label="Gráfico de contas acumuladas"></div>
               </article>
               <article class="ad-card ad-health-card" data-ov-card="integrations">
-                <div class="ad-card-head"><div><h2>Saúde das integrações <span class="ad-info" title="Serviços com credenciais completas no servidor."><svg class="i"><use href="#i-info"/></svg></span></h2></div></div>
+                <div class="ad-card-head"><div><h2>Saúde das integrações</h2></div></div>
                 <p class="ad-health-summary" id="adHealthSummary"></p>
                 <div id="adIntegrationsPreview" class="ad-health-list"></div>
-                <button class="ad-link ad-link--center" type="button" data-go="integrations">Ver integrações <svg class="i"><use href="#i-arrow-right"/></svg></button>
+                <button class="ad-link ad-link--center" type="button" data-go="integrations">Ver integrações <svg class="i" aria-hidden="true"><use href="#i-arrow-right"/></svg></button>
               </article>
               <article class="ad-card ad-subs-card" data-ov-card="subs">
-                <div class="ad-card-head"><div><h2>Resumo de assinaturas <span class="ad-info" title="Assinaturas ativas por plano e receita mensal recorrente estimada pelos preços cadastrados."><svg class="i"><use href="#i-info"/></svg></span></h2></div></div>
+                <div class="ad-card-head"><div><h2>Receita por plano <span class="ad-info" title="Assinaturas ativas por plano e receita mensal estimada pelos preços cadastrados."><svg class="i" aria-hidden="true"><use href="#i-info"/></svg></span></h2></div></div>
                 <div id="adPlanBreakdown" class="ad-plan-bars"></div>
                 <dl class="ad-subs-totals" id="adSubsTotals"></dl>
-                <button class="ad-outline-button" type="button" data-go="plans">Gerenciar planos e preços</button>
+                <button class="ad-outline-button" type="button" data-go="charges">Ver cobranças</button>
               </article>
               <article class="ad-card ad-users-card" data-ov-card="users">
-                <div class="ad-card-head"><div><h2 id="adUsersCardTitle">Usuários</h2></div><button class="ad-link" type="button" data-go="users">Gerenciar usuários <svg class="i"><use href="#i-arrow-right"/></svg></button></div>
-                <div id="adUsersPreview" class="ad-users-table"></div>
+                <div class="ad-card-head"><div><h2 id="adUsersCardTitle">Atividade recente</h2></div><button class="ad-link" type="button" data-go="users">Gerenciar usuários <svg class="i" aria-hidden="true"><use href="#i-arrow-right"/></svg></button></div>
+                <div id="adUsersPreview" class="ac-table-wrap"></div>
               </article>
               <article class="ad-card ad-audit-card" data-ov-card="audit">
-                <div class="ad-card-head"><div><h2>Log de auditoria (recentes)</h2></div><button class="ad-link" type="button" id="adAuditAll">Ver tudo <svg class="i"><use href="#i-arrow-right"/></svg></button><button class="ad-icon-mini" type="button" id="adAuditRefresh" aria-label="Atualizar auditoria" title="Atualizar"><svg class="i"><use href="#i-repeat"/></svg></button></div>
+                <div class="ad-card-head"><div><h2>Últimas ações da equipe</h2></div><button class="ad-link" type="button" id="adAuditAll">Ver tudo <svg class="i" aria-hidden="true"><use href="#i-arrow-right"/></svg></button><button class="ad-icon-mini" type="button" id="adAuditRefresh" aria-label="Atualizar auditoria" title="Atualizar"><svg class="i" aria-hidden="true"><use href="#i-repeat"/></svg></button></div>
                 <div id="adAuditPreview" class="ad-empty">Nenhuma ação registrada ainda.</div>
               </article>
             </div>
 
-            <div class="ad-mobile-actions">
-              <button type="button" class="ad-outline-button" data-go="users"><svg class="i"><use href="#i-users"/></svg>Ver usuários</button>
-              <button type="button" class="ad-primary-button" data-go="plans"><svg class="i"><use href="#i-layers"/></svg>Gerenciar planos</button>
-            </div>
-
             <details class="ad-card ad-engagement">
-              <summary><span><strong>Engajamento e operação</strong><small>Retorno de usuários, adoção do produto, uso por área e manutenção</small></span><svg class="i"><use href="#i-chev-right"/></svg></summary>
-              <div class="ad-operations-strip" id="adOperationsSummary" aria-label="Atividade operacional dos últimos 30 dias"></div>
+              <summary><span><strong>Engajamento e operação</strong><small>Retorno de usuários, adoção do produto e uso por área</small></span><svg class="i" aria-hidden="true"><use href="#i-chev-right"/></svg></summary>
+              <div class="ad-operations-strip" id="adOperationsSummary" aria-label="Atividade dos últimos 30 dias"></div>
               <div class="ad-insight-grid">
                 <article class="ad-subcard ad-access-panel">
-                  <div class="ad-card-head"><div><h3>Usuários que voltaram</h3><p>Distribuição do último acesso registrado pelo Firebase Auth.</p></div><span class="ad-live-label"><i></i><span id="adLastRefresh">Atualizando…</span></span></div>
+                  <div class="ad-card-head"><div><h3>Usuários que voltaram</h3><p>Distribuição do último acesso.</p></div><span class="ad-live-label"><i></i><span id="adLastRefresh">Atualizando…</span></span></div>
                   <div id="adAccessChart" class="ad-access-chart" role="img" aria-label="Gráfico de último acesso dos usuários"></div>
                 </article>
                 <article class="ad-subcard ad-journey-panel">
                   <div class="ad-card-head"><div><h3>Adoção do produto</h3><p>Marcos reais encontrados nas contas.</p></div></div>
                   <div id="adJourney" class="ad-journey"></div>
-                  <div class="ad-flow-divider"><strong>Fluxo real por área</strong><small>Sem registrar conteúdo pessoal.</small></div>
+                  <div class="ad-flow-divider"><strong>Fluxo por área</strong><small>Sem registrar conteúdo pessoal.</small></div>
                   <div id="adUsageFlow" class="ad-usage-flow"></div>
                 </article>
               </div>
-              <div class="ad-maintenance-card"><div><strong>Modo de manutenção</strong><small>Bloqueia alterações durante uma intervenção.</small></div><span class="ad-pill" id="adMaintenanceStatus">Carregando…</span><button type="button" class="ad-subtle-button" data-go="settings">Configurar operação</button></div>
+              <div class="ad-maintenance-card"><div><strong>Modo de manutenção</strong><small>Tira o app do ar com uma mensagem até você liberar.</small></div><span class="ad-pill" id="adMaintenanceStatus">Carregando…</span><button type="button" class="ad-subtle-button" data-go="settings">Configurar operação</button></div>
             </details>
 
-            <aside class="ad-user-drawer ad-audit-drawer" id="adAuditDrawer" aria-labelledby="adAuditDrawerTitle" aria-hidden="true"><button class="ad-drawer-close" id="adAuditDrawerClose" type="button" aria-label="Fechar auditoria">×</button><span class="ad-card-kicker">AUDITORIA</span><h2 id="adAuditDrawerTitle">Todas as ações administrativas</h2><div id="adAuditFull" class="ad-audit-list"></div></aside>
+            <aside class="ad-user-drawer ad-audit-drawer" id="adAuditDrawer" aria-labelledby="adAuditDrawerTitle" aria-hidden="true"><button class="ad-drawer-close" id="adAuditDrawerClose" type="button" aria-label="Fechar auditoria"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button><span class="ad-card-kicker">AUDITORIA</span><h2 id="adAuditDrawerTitle">Todas as ações administrativas</h2><label class="ac-search ac-search--drawer"><svg class="i" aria-hidden="true"><use href="#i-search"/></svg><input id="adAuditSearch" type="search" placeholder="Filtrar por ação, e-mail ou administrador" autocomplete="off" /></label><div id="adAuditFull" class="ad-audit-list"></div></aside>
           </section>
 
+          <!-- USUÁRIOS -->
           <section class="pn-console-view" id="pn-console-users" aria-labelledby="ad-users-title">
-            <div class="ad-card ad-table-card"><div class="ad-card-head"><div><span class="ad-card-kicker">DIRETÓRIO</span><h2 id="ad-users-title">Usuários</h2><p>Dados de conta e totais de uso. O conteúdo privado de notas e finanças não é exibido.</p></div></div>
-              <form id="adUserSearch" class="ad-user-toolbar"><label class="ad-search-box"><span aria-hidden="true">⌕</span><input id="adUserEmail" type="search" autocomplete="off" placeholder="Buscar e-mail exato" aria-label="E-mail do usuário" /></label><button class="ad-primary-button" type="submit">Buscar</button><button class="ad-subtle-button" id="adUserClear" type="button">Limpar</button></form>
-              <div class="ad-filter-row" id="adUserFilters"><button type="button" class="is-active" data-user-filter="all">Todos</button><button type="button" data-user-filter="active">Ativos</button><button type="button" data-user-filter="whatsapp">WhatsApp</button><button type="button" data-user-filter="reminders">Lembretes</button></div>
-              <div class="ad-user-table-wrap"><div id="adUsersList" class="ad-user-table"></div></div><div class="ad-list-footer"><span id="adUsersPageLabel"></span><button class="ad-subtle-button" id="adUsersNext" type="button">Próxima página →</button></div>
+            <div class="ad-card ac-dir-card">
+              <div class="ad-card-head"><div><h2 id="ad-users-title">Usuários</h2><p>Selecione pessoas para dar teste, trocar de plano, estender o prazo ou cobrar. O conteúdo pessoal (notas, finanças) nunca aparece aqui.</p></div>
+                <button class="ad-subtle-button" type="button" id="adUsersExport"><svg class="i" aria-hidden="true"><use href="#i-download"/></svg>Exportar CSV</button></div>
+              <div class="ac-toolbar">
+                <label class="ac-search"><svg class="i" aria-hidden="true"><use href="#i-search"/></svg><input id="adUserEmail" type="search" autocomplete="off" placeholder="Buscar por nome ou e-mail" aria-label="Buscar usuário" /></label>
+                <select id="adUserPlanFilter" class="ac-select" aria-label="Filtrar por plano"><option value="">Todos os planos</option></select>
+                <select id="adUserSort" class="ac-select" aria-label="Ordenar"><option value="recent">Último acesso</option><option value="new">Mais novos</option><option value="name">Nome (A–Z)</option><option value="expiry">Vence primeiro</option></select>
+              </div>
+              <div class="ac-chips" id="adUserFilters" role="tablist" aria-label="Filtrar por situação"></div>
+              <form id="adUserSearch" hidden></form>
+              <div class="ac-table-wrap"><div id="adUsersList" class="ac-table" role="table" aria-label="Lista de usuários"></div></div>
+              <div class="ad-list-footer"><span id="adUsersPageLabel"></span><button class="ad-subtle-button" id="adUsersNext" type="button">Mostrar mais</button><button class="ad-subtle-button" id="adUserClear" type="button" hidden>Limpar</button></div>
             </div>
-            <aside class="ad-user-drawer" id="adUserDrawer" aria-labelledby="adUserDrawerTitle" aria-hidden="true"><button class="ad-drawer-close" id="adUserDrawerClose" type="button" aria-label="Fechar detalhes">×</button><div id="adUserDrawerContent"></div></aside>
+            <div class="ac-bulkbar" id="adBulkBar" hidden role="region" aria-label="Ações para os selecionados">
+              <span class="ac-bulk-count"><strong id="adBulkCount">0</strong> selecionado(s)</span>
+              <div class="ac-bulk-actions">
+                <button type="button" class="ac-bulk-btn" data-bulk="assign" data-perm="users.access"><svg class="i" aria-hidden="true"><use href="#i-layers"/></svg>Atribuir plano</button>
+                <button type="button" class="ac-bulk-btn" data-bulk="trial" data-perm="users.access"><svg class="i" aria-hidden="true"><use href="#i-gift"/></svg>Dar teste</button>
+                <button type="button" class="ac-bulk-btn" data-bulk="extend" data-perm="users.access"><svg class="i" aria-hidden="true"><use href="#i-hourglass"/></svg>Estender</button>
+                <button type="button" class="ac-bulk-btn" data-bulk="charge" data-perm="charges.manage"><svg class="i" aria-hidden="true"><use href="#i-receipt"/></svg>Cobrar</button>
+                <button type="button" class="ac-bulk-btn" data-bulk="pause" data-perm="users.access"><svg class="i" aria-hidden="true"><use href="#i-pause"/></svg>Pausar</button>
+                <button type="button" class="ac-bulk-btn is-danger" data-bulk="remove" data-perm="users.access"><svg class="i" aria-hidden="true"><use href="#i-trash"/></svg>Remover plano</button>
+              </div>
+              <button type="button" class="ac-bulk-clear" id="adBulkClear" aria-label="Limpar seleção"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button>
+            </div>
           </section>
 
-          <section class="pn-console-view" id="pn-console-plans" aria-labelledby="ad-plans-title">
-            <div class="ad-plan-workspace">
-              <div class="ad-card ad-plan-catalog"><div class="ad-card-head"><div><span class="ad-card-kicker">CATÁLOGO</span><h2 id="ad-plans-title">Planos</h2><p>Ofertas disponíveis e vínculo com a cobrança.</p></div></div><div id="adPlansList" class="ad-list"></div></div>
-              <div class="ad-card ad-plan-editor"><div class="ad-card-head"><div><span class="ad-card-kicker">CONFIGURAÇÃO</span><h2>Criar ou editar plano</h2><p>Os recursos selecionados são aplicados pelo backend. O Stripe Price ID ativa o checkout quando a integração estiver conectada.</p></div></div><form id="adPlanForm" class="ad-form">
-                <div class="ad-form-row"><label>ID do plano<input name="id" required pattern="[a-z0-9_-]{2,40}" maxlength="40" placeholder="essencial" /></label><label>Nome<input name="name" required maxlength="80" placeholder="Essencial" /></label></div>
-                <label>Descrição<textarea name="description" maxlength="300" rows="2" placeholder="O que este plano inclui"></textarea></label>
-                <div class="ad-form-row"><label>Preço em reais<input name="price" inputmode="decimal" placeholder="29,90" /></label><label>Ciclo<select name="billingInterval"><option value="month">Mensal</option><option value="year">Anual</option></select></label></div>
-                <div class="ad-form-row"><label>Stripe Price ID<input name="stripePriceId" maxlength="128" placeholder="price_..." autocomplete="off" /></label><label>Conversas com IA por dia<input name="aiDailyLimit" type="number" min="0" max="5000" step="1" inputmode="numeric" placeholder="Padrão: 10 grátis · 200 pago" /><small class="ad-field-hint">Vazio usa o padrão. 0 = sem limite. Cumprimentos e comandos simples não contam.</small></label></div>
-                <div class="ad-core-features"><strong>Base incluída em todos os planos</strong><span>Planner e tarefas</span><span>Notas e checklists</span><span>Finanças</span><span>Metas e compromissos</span></div>
-                <div id="adPlanFeatures" class="ad-capability-groups"></div><div class="ad-form-footer"><label class="ad-check"><input type="checkbox" name="active" checked />Plano ativo</label><button class="ad-primary-button" type="submit">Salvar plano</button></div>
-              </form></div>
-            </div>
-          </section>
-
+          <!-- ACESSOS E TESTES -->
           <section class="pn-console-view" id="pn-console-subscriptions" aria-labelledby="ad-subscriptions-title">
-            <div class="ad-two-col"><div class="ad-card"><div class="ad-card-head"><div><h2 id="ad-subscriptions-title">Assinaturas</h2><p>Acesso manual e assinaturas sincronizadas pelo provedor.</p></div></div><div id="adSubscriptionsList" class="ad-list"></div></div>
-              <div class="ad-card"><h2>Gerenciar acesso manual</h2><p>Use para suporte ou concessões administrativas; pagamentos automáticos são atualizados por webhook.</p><form id="adSubscriptionForm" class="ad-form"><label>UID do usuário<input name="uid" required maxlength="128" placeholder="UID do Firebase Auth" /></label><label>Plano<select name="planId" required id="adSubscriptionPlanSelect"></select></label><div class="ad-form-row"><label>Situação<select name="status"><option value="active">Ativa</option><option value="paused">Pausada</option><option value="cancelled">Cancelada</option></select></label><label>Válida até<input name="validUntil" type="date" /></label></div><button class="ad-primary-button" type="submit">Salvar acesso</button></form></div>
+            <h2 class="ad-sr" id="ad-subscriptions-title">Acessos e testes</h2>
+            <div class="ac-grid-2">
+              <article class="ad-card">
+                <div class="ad-card-head"><div><span class="ad-card-kicker">NOVOS USUÁRIOS</span><h2>Teste grátis automático</h2><p>Toda conta criada depois de ligar ganha o plano escolhido por alguns dias. Quem já tinha conta não é afetado.</p></div></div>
+                <form id="adTrialForm" class="ad-form" data-perm="config.manage">
+                  <label class="ac-switch"><input type="checkbox" name="enabled" /><span class="ac-switch-ui" aria-hidden="true"></span><span><strong>Dar teste para novas contas</strong><small id="adTrialSince">Desligado</small></span></label>
+                  <div class="ad-form-row"><label>Plano do teste<select name="planId" class="ac-plan-select" required></select></label><label>Duração (dias)<input name="days" type="number" min="1" max="90" step="1" value="7" required /></label></div>
+                  <button class="ad-primary-button" type="submit">Salvar teste automático</button>
+                </form>
+              </article>
+              <article class="ad-card">
+                <div class="ad-card-head"><div><span class="ad-card-kicker">REGRA PADRÃO</span><h2>Quem está sem plano</h2><p>Vale para quem nunca teve plano, teve o plano removido ou terminou o teste.</p></div></div>
+                <form id="adAccessPolicyForm" class="ad-form" data-perm="config.manage">
+                  <label class="ac-radio"><input type="radio" name="noPlan" value="full" /><span><strong>Acesso completo</strong><small>Ideal na fase de lançamento: tudo liberado para todos.</small></span></label>
+                  <label class="ac-radio"><input type="radio" name="noPlan" value="plan" /><span><strong>Usar um plano gratuito</strong><small>Só os recursos do plano escolhido ficam liberados.</small></span></label>
+                  <label>Plano gratuito<select name="noPlanPlanId" class="ac-plan-select"></select></label>
+                  <button class="ad-primary-button" type="submit">Salvar regra</button>
+                </form>
+              </article>
+            </div>
+            <article class="ad-card">
+              <div class="ad-card-head"><div><h2>Acompanhamento</h2><p>Testes acabando, planos vencendo e acessos pausados — com ações rápidas.</p></div></div>
+              <div class="ac-chips" id="adAccessTabs" role="tablist"></div>
+              <div class="ac-table-wrap"><div id="adSubscriptionsList" class="ac-table"></div></div>
+            </article>
+          </section>
+
+          <!-- PLANOS -->
+          <section class="pn-console-view" id="pn-console-plans" aria-labelledby="ad-plans-title">
+            <div class="ad-card">
+              <div class="ad-card-head"><div><h2 id="ad-plans-title">Planos</h2><p>Públicos aparecem para os usuários assinarem. Privados só podem ser atribuídos por aqui (parcerias, cortesias, testes).</p></div><button class="ad-primary-button" type="button" id="adNewPlan" data-perm="plans.manage"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg>Novo plano</button></div>
+              <div id="adPlansList" class="ac-plan-grid"></div>
             </div>
           </section>
 
+          <!-- COBRANÇAS -->
           <section class="pn-console-view" id="pn-console-charges" aria-labelledby="ad-charges-title">
-            <div class="ad-card ad-narrow-card"><div class="ad-card-head"><div><h2 id="ad-charges-title">Provedor de pagamentos</h2><p>Conexão para Checkout, assinaturas e portal do cliente.</p></div></div><div id="adBillingStatus" class="ad-provider"><span class="ad-provider-logo">S</span><div><strong>Stripe Billing</strong><small>Verificando credenciais e webhook…</small></div><span class="ad-pill is-warn">Verificando</span></div></div>
-            <div class="ad-two-col ad-audit-card"><div class="ad-card"><div class="ad-card-head"><div><h2>Cobranças registradas</h2><p>Inclui apenas registros existentes no PulseNote.</p></div></div><div id="adChargesList" class="ad-list"></div></div>
-              <div class="ad-card"><h2>Novo registro manual</h2><p>Não movimenta dinheiro e não substitui a confirmação do provedor.</p><form id="adChargeForm" class="ad-form"><label>UID do usuário<input name="uid" required maxlength="128" placeholder="UID do Firebase Auth" /></label><div class="ad-form-row"><label>Valor em reais<input name="amount" required inputmode="decimal" placeholder="0,00" /></label><label>Vencimento<input name="dueDate" type="date" /></label></div><label>Observação<textarea name="note" maxlength="300" rows="2"></textarea></label><button class="ad-primary-button" type="submit">Registrar manualmente</button></form></div>
+            <div class="ac-stat-row" id="adChargeStats"></div>
+            <div class="ad-card">
+              <div class="ad-card-head"><div><h2 id="ad-charges-title">Cobranças</h2><p>O usuário vê a cobrança no app (Configurações → Plano) e paga por cartão/Pix no Stripe ou pela sua chave Pix.</p></div><button class="ad-primary-button" type="button" id="adNewCharge" data-perm="charges.manage"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg>Nova cobrança</button></div>
+              <div class="ac-toolbar"><label class="ac-search"><svg class="i" aria-hidden="true"><use href="#i-search"/></svg><input id="adChargeSearch" type="search" placeholder="Buscar por e-mail ou descrição" autocomplete="off" /></label></div>
+              <div class="ac-chips" id="adChargeFilters" role="tablist"></div>
+              <div class="ac-table-wrap"><div id="adChargesList" class="ac-table"></div></div>
             </div>
+            <div class="ac-grid-2">
+              <article class="ad-card">
+                <div class="ad-card-head"><div><span class="ad-card-kicker">COMO O DINHEIRO CHEGA</span><h2>Recebimentos</h2></div></div>
+                <div id="adBillingStatus" class="ad-provider"><span class="ad-provider-logo">S</span><div><strong>Stripe</strong><small>Verificando…</small></div><span class="ad-pill is-warn">Verificando</span></div>
+                <ol class="ac-steps">
+                  <li><strong>O usuário paga</strong><span>No app, em Configurações → Plano: assinatura do plano ou "Pagar agora" na cobrança (cartão ou Pix).</span></li>
+                  <li><strong>O Stripe confirma</strong><span>O webhook marca a cobrança como paga e libera ou estende o plano sozinho.</span></li>
+                  <li><strong>O saldo vai para o seu banco</strong><span>O Stripe transfere automaticamente para a conta bancária cadastrada no painel dele (repasse). Prazo típico: cerca de 2 dias úteis no Pix; no cartão, conforme o cronograma da sua conta.</span></li>
+                </ol>
+                <a class="ad-outline-button ac-ext" href="https://dashboard.stripe.com/payouts" target="_blank" rel="noopener noreferrer"><svg class="i" aria-hidden="true"><use href="#i-external"/></svg>Abrir repasses no Stripe</a>
+              </article>
+              <article class="ad-card">
+                <div class="ad-card-head"><div><span class="ad-card-kicker">ALTERNATIVA SEM STRIPE</span><h2>Pix direto</h2><p>Mostrada ao usuário junto da cobrança. Quando o Pix cair na sua conta, marque a cobrança como recebida — o plano é liberado na hora.</p></div></div>
+                <form id="adPaymentForm" class="ad-form" data-perm="config.manage">
+                  <div class="ad-form-row"><label>Chave Pix<input name="pixKey" maxlength="140" autocomplete="off" placeholder="e-mail, telefone, CPF/CNPJ ou chave aleatória" /></label><label>Nome do recebedor<input name="pixHolder" maxlength="100" autocomplete="off" placeholder="Como aparece no banco" /></label></div>
+                  <label>Instruções<textarea name="instructions" maxlength="400" rows="2" placeholder="Ex.: envie o comprovante no WhatsApp do suporte."></textarea></label>
+                  <button class="ad-primary-button" type="submit">Salvar Pix</button>
+                </form>
+              </article>
+            </div>
+            <form id="adChargeForm" hidden></form>
           </section>
 
-          <section class="pn-console-view" id="pn-console-features" aria-labelledby="ad-features-title"><div class="ad-card ad-narrow-card"><h2 id="ad-features-title">Recursos do produto</h2><p>Alterações globais são aplicadas no backend; o plano do usuário ainda pode limitar cada recurso.</p><form id="adFeaturesForm" class="ad-form"><div id="adFeatureSwitches"></div><button class="ad-primary-button" type="submit">Salvar recursos</button></form></div></section>
+          <!-- RECURSOS -->
+          <section class="pn-console-view" id="pn-console-features" aria-labelledby="ad-features-title"><div class="ad-card ad-narrow-card"><div class="ad-card-head"><div><h2 id="ad-features-title">Recursos do produto</h2><p>Liga ou desliga para todo mundo. Desligado aqui, nenhum plano consegue liberar.</p></div></div><form id="adFeaturesForm" class="ad-form" data-perm="config.manage"><div id="adFeatureSwitches" class="ac-feature-list"></div><button class="ad-primary-button" type="submit">Salvar recursos</button></form></div></section>
 
+          <!-- INTEGRAÇÕES -->
           <section class="pn-console-view" id="pn-console-integrations" aria-labelledby="ad-integrations-title">
             <div class="ad-card ad-narrow-card"><h2 id="ad-integrations-title">Integrações</h2><p>Credenciais, eventos recentes e execução dos serviços.</p><div id="adIntegrationsList"></div><p class="ad-fineprint" id="adIntegrationNote"></p></div>
             <div class="ad-card ad-narrow-card ad-audit-card"><div class="ad-card-head"><div><span class="ad-card-kicker">LEMBRETES</span><h2>Últimas tentativas</h2><p>Recibos reais do servidor, sem telefone, token ou conteúdo pessoal.</p></div><span class="ad-live-label"><i></i>QStash</span></div><div id="adReminderDeliveries" class="ad-delivery-list"></div></div>
           </section>
 
+          <!-- EQUIPE E SEGURANÇA -->
           <section class="pn-console-view" id="pn-console-security" aria-labelledby="ad-security-title">
-            <div class="ad-two-col"><div class="ad-card"><div class="ad-card-head"><div><h2 id="ad-security-title">Acessos administrativos</h2><p>A mesma conta do PulseNote pode ter papel de usuário e administrador.</p></div></div><div id="adAdminsList" class="ad-list"></div></div>
-              <div class="ad-card"><h2>Conceder acesso</h2><p>Somente o proprietário principal pode adicionar ou remover administradores.</p><form id="adAdminForm" class="ad-form"><label>E-mail verificado do usuário<input name="email" type="email" required autocomplete="off" placeholder="usuario@exemplo.com" /></label><button class="ad-primary-button" type="submit">Conceder acesso administrativo</button></form><p class="ad-security-note">O acesso usa a sessão Google/Firebase já existente e é revalidado pelo servidor em cada operação administrativa.</p></div>
+            <div class="ac-grid-2">
+              <div class="ad-card"><div class="ad-card-head"><div><h2 id="ad-security-title">Equipe</h2><p>Quem pode acessar este painel e o que cada um pode fazer.</p></div></div><div id="adAdminsList" class="ac-team"></div></div>
+              <div class="ad-card"><div class="ad-card-head"><div><h2>Adicionar pessoa</h2><p>Somente o proprietário adiciona, troca o papel ou remove alguém. A pessoa precisa ter conta no PulseNote com e-mail confirmado.</p></div></div>
+                <form id="adAdminForm" class="ad-form"><label>E-mail da conta<input name="email" type="email" required autocomplete="off" placeholder="pessoa@exemplo.com" /></label><label>Papel<select name="role" id="adAdminRoleSelect"><option value="support">Suporte</option><option value="finance">Financeiro</option><option value="admin">Administrador</option><option value="viewer">Leitura</option></select></label><button class="ad-primary-button" type="submit"><svg class="i" aria-hidden="true"><use href="#i-user-plus"/></svg>Dar acesso</button></form>
+                <p class="ad-security-note" id="adAdminFormLocked" hidden><svg class="i" aria-hidden="true"><use href="#i-lock"/></svg>Apenas o proprietário principal gerencia a equipe.</p>
+              </div>
+            </div>
+            <div class="ad-card"><div class="ad-card-head"><div><h2>O que cada papel pode fazer</h2><p>As permissões são conferidas pelo servidor em toda ação — esconder um botão não é a única proteção.</p></div></div><div class="ac-table-wrap"><div id="adRolesMatrix" class="ac-matrix"></div></div></div>
+            <div class="ad-card"><div class="ad-card-head"><div><h2>Proteções ativas</h2></div></div>
+              <ul class="ac-checklist">
+                <li><svg class="i" aria-hidden="true"><use href="#i-check-circle"/></svg><span><strong>Sessão verificada a cada ação</strong>O servidor confere o login (token revogável) e o papel antes de qualquer leitura ou alteração.</span></li>
+                <li><svg class="i" aria-hidden="true"><use href="#i-check-circle"/></svg><span><strong>Hierarquia no servidor</strong>Proprietário, administrador, financeiro, suporte e leitura têm permissões fechadas.</span></li>
+                <li><svg class="i" aria-hidden="true"><use href="#i-check-circle"/></svg><span><strong>Auditoria completa</strong>Toda alteração fica registrada com quem fez, quando e em quem.</span></li>
+                <li><svg class="i" aria-hidden="true"><use href="#i-check-circle"/></svg><span><strong>Privacidade</strong>Notas, finanças e conversas nunca são exibidas no painel — só totais.</span></li>
+                <li><svg class="i" aria-hidden="true"><use href="#i-check-circle"/></svg><span><strong>Saída imediata</strong>Ao remover ou trocar o papel de alguém, as sessões dessa pessoa são encerradas.</span></li>
+              </ul>
             </div>
           </section>
 
-          <section class="pn-console-view" id="pn-console-settings" aria-labelledby="ad-settings-title"><div class="ad-card ad-narrow-card"><h2 id="ad-settings-title">Configurações gerais</h2><p>Estes valores são consumidos pelo servidor e alteram o funcionamento real do produto.</p><form id="adSettingsForm" class="ad-form"><label class="ad-switch-row"><span><strong>Modo manutenção</strong><small>Suspende gravações dos usuários durante uma intervenção.</small></span><input id="adMaintenanceInput" type="checkbox" name="maintenance" /></label><label>Mensagem de manutenção<textarea name="maintenanceMessage" maxlength="240" rows="2"></textarea></label><button class="ad-primary-button" type="submit">Salvar configurações</button></form></div></section>
+          <!-- OPERAÇÃO -->
+          <section class="pn-console-view" id="pn-console-settings" aria-labelledby="ad-settings-title">
+            <div class="ac-grid-2">
+              <div class="ad-card ac-maint-card" id="adMaintCard"><div class="ad-card-head"><div><span class="ad-card-kicker">OPERAÇÃO</span><h2 id="ad-settings-title">Modo manutenção</h2><p>Tira o app do ar para os usuários (app e WhatsApp) com a sua mensagem, até você encerrar.</p></div><span class="ad-pill" id="adMaintPill">—</span></div>
+                <form id="adSettingsForm" class="ad-form" data-perm="config.manage">
+                  <input id="adMaintenanceInput" type="checkbox" name="maintenance" hidden />
+                  <label>Mensagem para os usuários<textarea name="maintenanceMessage" maxlength="240" rows="3" placeholder="Estamos melhorando o PulseNote. Voltamos já!"></textarea></label>
+                  <label>Previsão de retorno (opcional)<input name="maintenanceEta" maxlength="60" placeholder="Ex.: hoje às 18h" autocomplete="off" /></label>
+                  <label class="ad-check"><input type="checkbox" name="allowAdmins" checked />Administradores continuam usando o app (para testar)</label>
+                  <div class="ac-maint-actions"><button class="ad-primary-button is-danger" type="button" id="adMaintOn"><svg class="i" aria-hidden="true"><use href="#i-wrench"/></svg>Ativar manutenção</button><button class="ad-primary-button" type="button" id="adMaintOff" hidden><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>Encerrar manutenção</button><button class="ad-subtle-button" type="submit">Salvar texto</button></div>
+                </form>
+              </div>
+              <div class="ad-card"><div class="ad-card-head"><div><span class="ad-card-kicker">PRÉVIA</span><h2>O que o usuário vê</h2></div></div>
+                <div class="ac-maint-preview"><span class="ac-preview-mascot"><span class="bd-mascot" aria-hidden="true"><span class="bd-mascot__eyes"><i></i><i></i></span><svg class="bd-mascot__pulse" viewBox="0 0 120 26"><path d="M0,13 L28,13 L36,3 L44,23 L52,13 L64,13 L70,6 L76,20 L82,13 L120,13"/></svg></span></span><strong>Estamos em manutenção</strong><p id="adMaintPreviewMsg">—</p><small id="adMaintPreviewEta" hidden></small><span class="ac-preview-btn">Tentar de novo</span></div>
+              </div>
+            </div>
+          </section>
         </div>
       </main>
     </div>
   </div>
+
+  <aside class="ad-user-drawer" id="adUserDrawer" aria-labelledby="adUserDrawerTitle" aria-hidden="true"><button class="ad-drawer-close" id="adUserDrawerClose" type="button" aria-label="Fechar detalhes"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button><div id="adUserDrawerContent"></div></aside>
+  <div class="ac-modal" id="adModal" hidden><div class="ac-modal-backdrop" data-modal-close></div><div class="ac-modal-card" role="dialog" aria-modal="true" aria-labelledby="adModalTitle"><header class="ac-modal-head"><div><span class="ad-card-kicker" id="adModalKicker"></span><h2 id="adModalTitle">—</h2></div><button type="button" class="ac-modal-x" data-modal-close aria-label="Fechar"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button></header><div class="ac-modal-body" id="adModalBody"></div><footer class="ac-modal-foot" id="adModalFoot"></footer></div></div>
   <div id="adToast" class="ad-toast" role="status" aria-live="polite" hidden></div>
-  <script type="module" src="/src/admin.js?v=35"></script>
+  <script type="module" src="/src/admin.js?v=36"></script>
 </body>
 </html>

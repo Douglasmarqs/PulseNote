@@ -107,7 +107,7 @@
     <!-- Camada de experiência: uma linguagem única para todas as áreas. -->
     <link rel="stylesheet" href="/src/experience.css?v=3" />
     <!-- Sistema visual dos quadros (claro/escuro, desktop/mobile). Carrega por último. -->
-    <link rel="stylesheet" href="/src/boards.css?v=9" />
+    <link rel="stylesheet" href="/src/boards.css?v=10" />
   </head>
   <body class="bd">
     <!-- Tela de abertura já no HTML: aparece na primeira pintura, antes de
@@ -1726,6 +1726,7 @@
                 <span class="billing-status-badge" id="billingStatusBadge">Carregando…</span>
               </div>
               <p class="task-meta" id="billingStatusText">Consultando os planos disponíveis e o estado da sua assinatura.</p>
+              <div class="billing-charges" id="billingChargesList" hidden aria-live="polite"></div>
               <div class="billing-plan-grid" id="billingPlanGrid" aria-live="polite"></div>
               <div class="form-actions billing-actions" id="billingActions" hidden>
                 <button id="billingPortalButton" type="button" class="ghost-button">Gerenciar pagamento e assinatura</button>
@@ -2047,7 +2048,7 @@
     <script src="/src/recurring-detector.js?v=1"></script>
     <script src="/src/card-installments.js?v=1"></script>
     <script src="/src/notifications.js?v=36" defer></script>
-    <script type="module" src="/src/app.js?v=46"></script>
+    <script type="module" src="/src/app.js?v=47"></script>
     <script type="module" src="/src/push-notifications.js?v=35"></script>
     <!-- Configuração inicial (primeiro acesso) — ver src/onboarding.js -->
   <div id="onboardingRoot" class="bdo" role="dialog" aria-modal="true" aria-labelledby="bdoTitle" hidden></div>

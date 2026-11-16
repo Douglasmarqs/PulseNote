@@ -2705,3 +2705,34 @@ html, body { overflow-x: clip; }
 /* iPhone: datas e horários nativos alinhados à esquerda e sem quebra. */
 input[type="date"]::-webkit-date-and-time-value,
 input[type="time"]::-webkit-date-and-time-value { text-align: left; white-space: nowrap; }
+
+/* ── Manutenção (tela cheia) ─────────────────────────────────────── */
+.pn-maintenance {
+  position: fixed; inset: 0; z-index: 2147483000; display: grid; place-items: center; padding: 24px;
+  background: radial-gradient(120% 80% at 50% 0%, rgba(124, 92, 255, .22), transparent 60%), var(--bd-bg, #070b18);
+  color: var(--bd-text, #eef1ff);
+}
+.pn-maintenance__card { width: min(440px, 100%); text-align: center; display: grid; justify-items: center; gap: 10px; }
+.pn-maintenance__mascot { --s: 72px; margin-bottom: 6px; }
+.pn-maintenance h1 { margin: 0; font-size: 24px; letter-spacing: -.01em; }
+.pn-maintenance p { margin: 0; color: var(--bd-text-2, #b7bfdc); font-size: 15px; line-height: 1.55; }
+.pn-maintenance__eta { padding: 8px 14px; border: 1px solid var(--bd-line, rgba(255,255,255,.1)); border-radius: 999px; font-size: 13.5px !important; }
+.pn-maintenance__eta strong { color: var(--bd-text, #fff); }
+.pn-maintenance__safe { font-size: 13px !important; opacity: .8; }
+.pn-maintenance .primary-button { margin-top: 8px; min-width: 180px; }
+html.is-maintenance body { overflow: hidden; }
+
+/* ── Cobranças pendentes no plano ───────────────────────────────── */
+.billing-charges { display: grid; gap: 10px; margin: 6px 0 16px; padding: 14px; border: 1px solid rgba(245, 166, 35, .35); border-radius: 16px; background: rgba(245, 166, 35, .07); }
+.billing-charges__title { margin: 0; font-size: 14px; color: var(--bd-text); }
+.billing-charge { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border-radius: 12px; background: var(--bd-surface, rgba(255,255,255,.04)); border: 1px solid var(--bd-line); }
+.billing-charge div { display: grid; gap: 2px; min-width: 0; }
+.billing-charge strong { font-size: 14px; color: var(--bd-text); }
+.billing-charge small { font-size: 12.5px; color: var(--bd-text-2); }
+.billing-charge .primary-button { flex: none; min-height: 36px; padding: 0 14px; }
+.billing-pix { display: grid; gap: 6px; padding: 10px 12px; border-radius: 12px; border: 1px dashed var(--bd-line-strong); font-size: 13px; color: var(--bd-text-2); }
+.billing-pix code { font-size: 14px; color: var(--bd-text); word-break: break-all; user-select: all; }
+.billing-pix .ghost-button { justify-self: start; }
+.billing-charges__hint { color: var(--bd-text-2); font-size: 12.5px; }
+@media (max-width: 520px) { .billing-charge { flex-direction: column; align-items: stretch; } }
+.pn-maintenance .primary-button { display: inline-flex; align-items: center; justify-content: center; text-align: center; }
