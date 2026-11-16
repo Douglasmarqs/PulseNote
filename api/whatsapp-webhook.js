@@ -431,7 +431,7 @@ async function confirmWhatsAppLink(fb, uid, phone, code) {
 // Configurações > Integrações > WhatsApp em src/index.html, que gera
 // esse código de 6 dígitos e grava em userData/{uid}.data.whatsappLinkCode
 // (válido por 10 min). Após confirmar, manda a mensagem de boas-vindas
-// completa (WELCOME_MESSAGE) — não só um "ok, vinculado".
+// completa (buildWelcomeMessages) — não só um "ok, vinculado".
 async function handleLinkCommand(fb, phone, text) {
   const match = text.trim().match(/^vincular\s+(\d{4,8})$/i);
   const code = match?.[1];
@@ -479,7 +479,9 @@ async function handleLinkCommand(fb, phone, text) {
     await sendWhatsAppMessage(phone, "Esse código expirou ou já foi usado. Gere um novo em Configurações > Integrações no PulseNote.");
     return;
   }
-  await sendWhatsAppMessage(phone, WELCOME_MESSAGE);
+  let name = "";
+  try { name = (await fb.auth().getUser(matchUid))?.displayName || ""; } catch { name = ""; }
+  for (const part of buildWelcomeMessages(name)) await sendWhatsAppMessage(phone, part);
 }
 
 // Categorias fixas + as que o usuário criou (state.customCategories),
@@ -1310,12 +1312,15 @@ function offerDeleteChoices(state, kind, matches) {
     date: item.dueDate || item.createdAt || "",
   }));
   state.whatsappPendingDelete = { kind, choices, createdAt: new Date().toISOString() };
-  return { status: "ambiguous", kind, choices };
+  return { status: choices.length === 1 ? "confirm" : "ambiguous", kind, choices };
 }
 
 function formatDeleteChoices(result) {
   const noun = result.kind === "task" ? "tarefa" : "nota";
   if (result.status === "too_many") return `Encontrei muitas ${noun}s parecidas. Não apaguei nada. Envie um nome mais específico.`;
+  if (result.status === "confirm") {
+    return `Excluir a ${noun} “${String(result.choices[0].title).slice(0, 80)}”? Responda *1* para confirmar ou *cancelar*. (Nada foi apagado ainda.)`;
+  }
   const lines = result.choices.map((choice, index) => {
     const date = String(choice.date || "").slice(0, 10);
     const reference = String(choice.id || "").slice(0, 6);
@@ -1355,11 +1360,8 @@ async function deleteTaskByQuery(fb, uid, query) {
     const tasks = Array.isArray(state.tasks) ? state.tasks : [];
     const matches = findBestMatches(query, tasks, "title");
     if (!matches.length) return undefined;
-    if (matches.length > 1) return offerDeleteChoices(state, "task", matches);
-    const match = matches[0];
-    state.tasks = tasks.filter((t) => t.id !== match.id);
-    state.whatsappPendingDelete = null;
-    return { status: "deleted", kind: "task", item: match };
+    // Mesmo com um único resultado, a exclusão só acontece com o "1".
+    return offerDeleteChoices(state, "task", matches);
   }, "delete_task");
 }
 
@@ -1420,11 +1422,8 @@ async function deleteNoteByQuery(fb, uid, query) {
     const titleMatches = findBestMatches(query, notes, "title");
     const matches = titleMatches.length ? titleMatches : findBestMatches(query, notes, "description");
     if (!matches.length) return undefined;
-    if (matches.length > 1) return offerDeleteChoices(state, "note", matches);
-    const match = matches[0];
-    state.notes = notes.filter((n) => n.id !== match.id);
-    state.whatsappPendingDelete = null;
-    return { status: "deleted", kind: "note", item: match };
+    // Mesmo com um único resultado, a exclusão só acontece com o "1".
+    return offerDeleteChoices(state, "note", matches);
   }, "delete_note");
 }
 
@@ -1626,50 +1625,61 @@ async function handlePulsinhoConfirmation(fb, uid, phone, decision, pending, { f
   }
 }
 
-const HELP_MESSAGE = `🤖 O que eu entendo por aqui (tudo em linguagem natural, não precisa decorar comando):
+const { OFFICIAL_APP_URL } = require("./_lib/billing");
+const PRIVACY_URL = `${String(process.env.APP_BASE_URL || process.env.PUBLIC_APP_URL || OFFICIAL_APP_URL).trim().replace(/\/$/, "")}/privacy`;
+
+const HELP_MESSAGE = `🤖 *O que eu faço por aqui*
+Pode falar comigo do seu jeito, como numa conversa normal — não precisa decorar comando. Dá até pra pedir várias coisas numa frase só.
 
 💬 *Conversa*
-Pode falar comigo do seu jeito — "bom dia pulsinho", tirar dúvidas, pedir ideias ou mandar várias coisas numa frase só: "gastei 30 no uber e me lembra de pagar a luz amanhã às 9h"
+"bom dia pulsinho", tirar dúvidas, pedir ideias, ajuda pra escrever uma mensagem…
 
 💸 *Finanças*
-"gastei 45 no mercado" / "recebi 200 de freela"
-📷 foto de cupom ou comprovante — leio o total; boleto não pago pede confirmação
-"errei, era 60 não 45" — corrige o último lançamento
-"quanto gastei com uber esse mês" — busca lançamentos
-"saldo" / "resumo" — resumo do mês atual
-"relatório do mês passado" / "quanto gastei em julho"
-"manda o PDF do mês passado" — envia o relatório em PDF
-"comparado ao mês passado, gastei mais?" — estatísticas
-"apagar último" — desfaz o último lançamento feito por aqui
+"gastei 45 no mercado" · "recebi 200 de freela"
+"gastei 30 no uber e 25 na padaria" — registro os dois
+"errei, foi 60" — corrijo o lançamento
+"quanto gastei com uber esse mês?" · "como estão minhas finanças?"
+"posso comprar um tênis de 300?" — simulo com suas contas previstas
+"manda o PDF do mês passado" — relatório em arquivo
+📷 foto de cupom, comprovante ou boleto — leio o valor
 
-📋 *Tarefas*
-"me lembra de pagar o boleto sexta"
-"concluí a tarefa do dentista"
-"apaga a tarefa de comprar ração"
-"minhas tarefas" / "tarefas de hoje" / "atrasadas" / "da semana"
-
-📝 *Notas*
-"anota: ideia pro projeto X é fazer Y" — salvo exatamente como você escreveu
-"busca minhas notas sobre viagem"
-"apaga a nota do mercado"
-📷 foto com legenda "nota" — transcrevo e salvo somente com sua confirmação
-
-🎯 *Metas*
-"criar meta economizar 5000 esse ano"
-"avancei 200 na minha meta de economia"
+📋 *Tarefas e lembretes*
+"me lembra de pagar a luz segunda às 9h"
+"minhas tarefas de hoje" · "já mandei a proposta" (concluo pra você)
 
 📅 *Agenda*
-"marca reunião com o cliente sexta às 15h"
-"compromissos de hoje" / "da semana"
+"marca dentista quinta às 14h" · "o que tenho essa semana?"
 
-✨ *Pulse Autopilot*
-"autopilot" ou "sugestões" — prioridades reais, sempre com confirmação
+📝 *Notas*
+"anota: ideia do app de receitas" — salvo exatamente como você escreveu
+"qual a senha do wifi que anotei?" — respondo com base nas suas notas
+📷 foto com legenda "nota" — transcrevo e salvo com sua confirmação
 
-Tudo sincronizado direto com o seu painel do PulseNote, e cada ação eu confirmo por aqui mesmo.`;
+🎯 *Metas*
+"criar meta de juntar 5000 pra viagem" · "guardei mais 200 pra viagem"
 
-const WELCOME_MESSAGE = `✅ WhatsApp vinculado ao PulseNote! Eu sou o Pulsinho. Tudo que você criar ou atualizar por aqui aparece no app, e o que estiver no app entra nas minhas consultas. 🎉
+🌐 *Internet*
+"quais as notícias de hoje?" · "quanto tá o dólar?" — pesquiso e cito as fontes
 
-${HELP_MESSAGE}`;
+🎙️ Também entendo *áudio*: é só falar.
+
+🔐 Exclusões sempre pedem sua confirmação (e nunca por áudio). Tudo fica sincronizado com o app.
+✨ "sugestões" — o Pulse Autopilot mostra prioridades da sua semana.`;
+
+function buildWelcomeMessages(name) {
+  const first = String(name || "").trim().split(/\s+/)[0];
+  const hello = first && !/^(usu[aá]rio|user)$/i.test(first) ? `Oi, ${first}! 💜` : "Oi! 💜";
+  return [
+    `${hello} Que bom te ver por aqui — seu WhatsApp agora está conectado ao PulseNote ✅
+
+Eu sou o *Pulsinho*, seu assistente. Pode conversar comigo como com qualquer pessoa: me conta um gasto, pede um lembrete, pergunta da sua agenda ou de qualquer assunto. Tudo o que fizermos por aqui aparece na hora no app — e o que estiver no app eu também enxergo pra te ajudar.`,
+    HELP_MESSAGE,
+    `Pra começar, que tal me mandar um "bom dia" ou contar um gasto de hoje? 😉
+Quando quiser rever esta lista, é só mandar *ajuda*.
+
+Como cuido dos seus dados: ${PRIVACY_URL}`,
+  ];
+}
 
 async function handleAutopilotText(fb, uid, phone, rawText) {
   const command = normalizeCommand(rawText).replace(/[.!?]+$/g, "").trim();
@@ -1982,12 +1992,14 @@ module.exports = async (req, res) => {
       }
 
       if (pendingDelete) {
-        if (/^cancelar(?: exclusao)?$/.test(norm)) {
+        const singleChoice = Array.isArray(pendingDelete.choices) && pendingDelete.choices.length === 1;
+        const decision = singleChoice ? confirmationReply(norm) : null;
+        if (decision === "no" || /^cancelar(?: exclusao)?$/.test(norm)) {
           await clearPendingDelete(fb, uid);
           await sendWhatsAppMessage(fromPhone, "Exclusão cancelada. Não apaguei nada.");
           return respondOk();
         }
-        const choice = norm.match(/^(?:opcao\s*)?(\d{1,2})$/);
+        const choice = decision === "yes" ? [norm, "1"] : norm.match(/^(?:opcao\s*)?(\d{1,2})$/);
         if (choice) {
           if (message.wasAudio) {
             await sendWhatsAppMessage(fromPhone, "Por segurança, digite o número da opção para excluir. Não apaguei nada a partir do áudio.");
@@ -2476,4 +2488,5 @@ module.exports._test = {
   deleteTaskByQuery, deleteNoteByQuery, selectPendingDelete, clearPendingDelete, formatDeleteChoices,
   financeDeletionTarget, deleteLastWhatsAppEntry,
   normalizeMetaDeliveryStatus, shouldApplyProviderStatus, recordMetaDeliveryStatuses,
+  buildWelcomeMessages, HELP_MESSAGE,
 };

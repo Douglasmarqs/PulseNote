@@ -521,13 +521,14 @@ function runLocalLookup(lookup, state, { workspaceId = "personal" } = {}) {
   return null;
 }
 
-async function defaultWebSearch({ query, question, name, channel, now }) {
+// A pesquisa na internet recebe só a pergunta — nenhum dado pessoal
+// (nem o nome) vai junto, como descrito na política de privacidade.
+async function defaultWebSearch({ query, question, channel, now }) {
   if (!process.env.GEMINI_API_KEY) return { ok: false, error: "web_unavailable" };
-  const n = firstName(name);
   return fetchGeminiGrounded({
     apiKey: process.env.GEMINI_API_KEY,
     label: "pulsinho_web",
-    systemPrompt: `Você é o Pulsinho, assistente simpático do PulseNote. Responda em português do Brasil, de forma natural e direta${channel === "whatsapp" ? " (mensagem de WhatsApp: curta, sem markdown de títulos)" : ""}. Use a pesquisa do Google para trazer informação atual e correta; diga a data/hora de referência quando o dado muda rápido (cotação, placar, clima). Se as fontes divergirem ou não houver resultado confiável, diga isso. Hoje é ${now.weekday}, ${now.today}, ${now.time} (Brasília).${n ? ` A pessoa se chama ${n}.` : ""}`,
+    systemPrompt: `Você é o Pulsinho, assistente simpático do PulseNote. Responda em português do Brasil, de forma natural e direta${channel === "whatsapp" ? " (mensagem de WhatsApp: curta, sem markdown de títulos)" : ""}. Use a pesquisa do Google para trazer informação atual e correta; diga a data/hora de referência quando o dado muda rápido (cotação, placar, clima). Se as fontes divergirem ou não houver resultado confiável, diga isso. Hoje é ${now.weekday}, ${now.today}, ${now.time} (Brasília).`,
     prompt: `Pergunta da pessoa: ${question}\nBusca sugerida: ${query}`,
   });
 }

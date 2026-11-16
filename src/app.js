@@ -1981,6 +1981,7 @@ function bindSettingsView() {
       try {
         localStorage.removeItem(`${BASE_STORAGE_KEY}:${account.uid}`);
         localStorage.removeItem(`${BASE_STORAGE_KEY}:pending:${account.uid}`);
+        localStorage.removeItem(`pulsenote-pulsinho-thread:${account.uid}`);
       } catch { /* a conta já foi removida; a navegação prossegue */ }
       window.location.replace("/login");
     } catch (err) {

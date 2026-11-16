@@ -2,145 +2,224 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
   <title>PulseNote — Privacidade e Termos</title>
+  <meta name="description" content="Como o PulseNote e o Pulsinho tratam seus dados: armazenamento, inteligência artificial, WhatsApp, pagamentos e seus direitos."/>
   <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png"/>
   <style>
     * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #f5f7fa;
-      color: #1a1f2e;
-      line-height: 1.6;
+    :root {
+      --bg: #f6f7fc; --card: #ffffff; --text: #141834; --text-2: #4a5170; --text-3: #7d84a3;
+      --line: #e3e6f2; --accent: #6d5dfc; --accent-soft: #efedff;
     }
-    .wrap { max-width: 680px; margin: 0 auto; padding: 32px 20px 80px; }
-    .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 32px; }
-    .brand-mark {
-      width: 44px; height: 44px; border-radius: 14px;
-      background: linear-gradient(145deg, #4f8ef7, #af52de);
-      display: grid; place-items: center; flex-shrink: 0;
-    }
-    h1 { font-size: 1.5rem; font-weight: 800; margin: 0 0 4px; }
-    h2 { font-size: 1.05rem; font-weight: 800; margin: 32px 0 10px; }
-    p, li { font-size: 0.92rem; color: #4a5568; }
-    ul { padding-left: 20px; }
-    .updated { font-size: 0.8rem; color: #8a9bb0; margin-bottom: 24px; }
-    a { color: #4f8ef7; text-decoration: none; font-weight: 600; }
-    .back { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 24px; font-size: 0.88rem; }
-
-    /* Modo escuro automático, ligado ao sistema — antes esta página não
-       tinha nenhum suporte a tema e ficava sempre com fundo claro fixo. */
     @media (prefers-color-scheme: dark) {
-      body { background: #0b0d12; color: #f4f6fb; }
-      p, li { color: #b6c0d6; }
-      .updated { color: #828ea3; }
-      a { color: #5b9ef8; }
+      :root { --bg: #0a1020; --card: #121a2e; --text: #eef1ff; --text-2: #b7bfd9; --text-3: #8a93b3; --line: #222c45; --accent: #9b8cff; --accent-soft: #1e2142; }
     }
+    body { margin: 0; font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); line-height: 1.65; }
+    .wrap { max-width: 720px; margin: 0 auto; padding: 32px 20px 80px; }
+    .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 28px; }
+    .mascot { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; width: 44px; height: 44px; border-radius: 58% 42% 53% 47% / 55% 48% 52% 45%; background: linear-gradient(155deg, #7c6cff, #c07dff); box-shadow: 0 10px 22px -10px rgba(124,108,255,.7); flex: none; }
+    .mascot .eyes { display: flex; gap: 7px; }
+    .mascot .eyes i { width: 6px; height: 6px; border-radius: 50%; background: #0c0d1c; }
+    .mascot svg { width: 26px; height: 6px; overflow: visible; }
+    .mascot path { fill: none; stroke: #fff; stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; }
+    .brand strong { font-size: 1.1rem; }
+    h1 { font-size: 1.6rem; font-weight: 800; letter-spacing: -.02em; margin: 0 0 4px; }
+    h2 { font-size: 1.08rem; font-weight: 750; margin: 34px 0 10px; }
+    h3 { font-size: .95rem; font-weight: 700; margin: 18px 0 6px; }
+    p, li { font-size: .93rem; color: var(--text-2); }
+    li { margin-bottom: 6px; }
+    ul { padding-left: 20px; }
+    strong { color: var(--text); }
+    .updated { font-size: .82rem; color: var(--text-3); margin: 0 0 22px; }
+    .summary { padding: 16px 18px; border: 1px solid var(--line); border-radius: 16px; background: var(--card); }
+    .summary ul { margin: 8px 0 0; }
+    a { color: var(--accent); text-decoration: none; font-weight: 600; }
+    a:hover { text-decoration: underline; }
+    .back { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 22px; font-size: .88rem; }
+    .toc { display: flex; flex-wrap: wrap; gap: 6px; margin: 18px 0 4px; padding: 0; list-style: none; }
+    .toc li { margin: 0; }
+    .toc a { display: inline-block; padding: 5px 11px; border: 1px solid var(--line); border-radius: 999px; background: var(--card); font-size: .8rem; font-weight: 600; color: var(--text-2); }
+    .toc a:hover { border-color: var(--accent); color: var(--accent); text-decoration: none; }
+    table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: .86rem; }
+    th, td { padding: 9px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; color: var(--text-2); }
+    th { color: var(--text); font-weight: 700; }
+    .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; background: var(--card); }
+    .table-wrap table { margin: 0; }
+    .table-wrap tr:last-child td { border-bottom: 0; }
   </style>
 </head>
 <body>
   <div class="wrap">
     <div class="brand">
-      <div class="brand-mark"><span style="color:#fff;font-size:1.2rem">⚡</span></div>
-      <div>
-        <strong style="font-size:1.1rem">PulseNote</strong>
-      </div>
+      <span class="mascot" aria-hidden="true"><span class="eyes"><i></i><i></i></span><svg viewBox="0 0 120 26"><path d="M0,13 L28,13 L36,3 L44,23 L52,13 L64,13 L70,6 L76,20 L82,13 L120,13"/></svg></span>
+      <strong>PulseNote</strong>
     </div>
 
-    <a href="/login" class="back">← Voltar para o login</a>
+    <a href="/login" class="back">← Voltar</a>
 
     <h1>Privacidade e Termos de Uso</h1>
-    <p class="updated">Última atualização: outubro de 2026</p>
+    <p class="updated">Última atualização: novembro de 2026</p>
 
-    <h2>O que é o PulseNote</h2>
-    <p>
-      O PulseNote é um aplicativo pessoal de produtividade que ajuda você a organizar
-      notas, tarefas, agenda, metas e finanças pessoais. É um projeto independente,
-      sem fins comerciais, focado em uso pessoal.
-    </p>
+    <div class="summary">
+      <strong>Resumo em poucas linhas</strong>
+      <ul>
+        <li>Seus dados são seus: não vendemos, não alugamos e não usamos para publicidade.</li>
+        <li>O Pulsinho (nosso assistente) usa inteligência artificial de terceiros para entender e responder você. Para isso, envia a sua mensagem e o trecho necessário dos seus dados ao provedor de IA.</li>
+        <li>Você controla o que a IA pode ler das suas notas e qual modelo prefere, em Configurações → Inteligência.</li>
+        <li>Nada é excluído pelo Pulsinho sem a sua confirmação.</li>
+        <li>Você pode baixar uma cópia dos seus dados ou excluir sua conta quando quiser.</li>
+      </ul>
+    </div>
 
-    <h2>Quais dados coletamos</h2>
-    <ul>
-      <li><strong>Cadastro:</strong> nome e e-mail, usados apenas para autenticação da sua conta.</li>
-      <li><strong>Conteúdo que você cria:</strong> notas, tarefas, compromissos, metas e registros financeiros que você mesmo insere no app.</li>
-      <li><strong>Foto de perfil:</strong> opcional, enviada apenas se você escolher adicionar uma.</li>
-      <li><strong>Número de telefone:</strong> opcional, coletado só se você optar por vincular o WhatsApp ao PulseNote — usado apenas para identificar sua conta quando você manda uma mensagem pelo assistente.</li>
-      <li><strong>Uso operacional:</strong> registramos somente a última área acessada e contagens agregadas de navegação entre áreas (por exemplo, Planner → Notas). Não registramos pesquisas, valores financeiros, textos de notas, títulos ou o conteúdo criado por você.</li>
+    <ul class="toc" aria-label="Seções">
+      <li><a href="#o-que-e">O que é</a></li>
+      <li><a href="#dados">Dados coletados</a></li>
+      <li><a href="#armazenamento">Armazenamento</a></li>
+      <li><a href="#acesso">Quem acessa</a></li>
+      <li><a href="#ia">Pulsinho e IA</a></li>
+      <li><a href="#whatsapp">WhatsApp</a></li>
+      <li><a href="#pagamentos">Pagamentos</a></li>
+      <li><a href="#notificacoes">Notificações</a></li>
+      <li><a href="#direitos">Seus direitos</a></li>
+      <li><a href="#termos">Termos de uso</a></li>
     </ul>
 
-    <h2>Onde seus dados ficam armazenados</h2>
+    <h2 id="o-que-e">O que é o PulseNote</h2>
     <p>
-      Todos os dados são armazenados na infraestrutura do
-      <strong>Google Firebase</strong> (Authentication, Firestore e Storage),
-      com criptografia em trânsito (HTTPS) e em repouso, seguindo os padrões
-      de segurança do Google Cloud Platform.
+      O PulseNote é um aplicativo de produtividade e finanças pessoais para organizar notas, tarefas,
+      agenda, metas e dinheiro, com o <strong>Pulsinho</strong>, um assistente que conversa com você
+      pelo app e pelo WhatsApp. O app pode oferecer planos pagos com recursos adicionais.
     </p>
 
-    <h2>Quem tem acesso aos seus dados</h2>
+    <h2 id="dados">Quais dados coletamos</h2>
+    <ul>
+      <li><strong>Cadastro:</strong> nome e e-mail, usados para autenticar sua conta e personalizar o atendimento (por exemplo, o Pulsinho te chamar pelo nome).</li>
+      <li><strong>Conteúdo que você cria:</strong> notas, tarefas, compromissos, metas, lançamentos financeiros, contas, cartões, orçamentos, regras de categorização e configurações.</li>
+      <li><strong>Foto de perfil:</strong> opcional, apenas se você escolher adicionar.</li>
+      <li><strong>Número de telefone:</strong> opcional, só se você vincular o WhatsApp, para identificar sua conta quando você fala com o Pulsinho por lá.</li>
+      <li><strong>Conversas com o Pulsinho:</strong>
+        <ul>
+          <li><em>No WhatsApp:</em> guardamos as 20 mensagens mais recentes da conversa (suas e do Pulsinho), para ele entender o contexto (“sim”, “na verdade foi 40”). Depois de 7 dias sem conversa, esse histórico deixa de ser usado. Ele é apagado se você excluir a conta.</li>
+          <li><em>No app:</em> a conversa fica salva <strong>apenas no seu aparelho</strong> (armazenamento local do navegador), para continuar de onde parou. O botão de limpar conversa apaga esse histórico.</li>
+        </ul>
+      </li>
+      <li><strong>Áudios, fotos e PDFs enviados ao Pulsinho:</strong> são usados apenas para transcrever ou ler o conteúdo (por exemplo, o valor de um cupom). O PulseNote não guarda o arquivo; fica salvo só o que você confirmar (o lançamento ou a nota).</li>
+      <li><strong>Registros técnicos:</strong> identificadores de mensagens e operações do WhatsApp, usados para não registrar o mesmo gasto duas vezes quando uma mensagem chega repetida.</li>
+      <li><strong>Uso operacional:</strong> a última área acessada e contagens agregadas de navegação entre áreas (por exemplo, Planner → Notas). Não registramos nesses indicadores pesquisas, valores, textos de notas ou títulos.</li>
+    </ul>
+
+    <h2 id="armazenamento">Onde seus dados ficam armazenados</h2>
     <p>
-      Apenas você. As regras de segurança do banco de dados garantem que cada
-      conta só pode ler e escrever os próprios dados — nenhum outro usuário,
-      e nenhum administrador do app, tem acesso ao conteúdo das suas notas,
-      tarefas ou registros financeiros.
-    </p>
-    <p>
-      A administração do serviço visualiza apenas dados operacionais necessários para
-      suporte e segurança, como status da conta, data do último acesso e totais agregados
-      de uso. O conteúdo pessoal não é exibido no painel administrativo.
+      Os dados da conta ficam no <strong>Google Firebase</strong> (Authentication, Firestore e Storage), com
+      criptografia em trânsito (HTTPS) e em repouso. O servidor do app roda na <strong>Vercel</strong>, que
+      processa as requisições (por exemplo, as mensagens do WhatsApp e as conversas com o Pulsinho) sem
+      armazenar o seu conteúdo além do necessário para responder.
     </p>
 
-    <h2>Integração com WhatsApp e Inteligência Artificial</h2>
+    <h2 id="acesso">Quem tem acesso aos seus dados</h2>
     <p>
-      Se você optar por vincular seu número de WhatsApp ao PulseNote, as mensagens que
-      você manda pelo assistente passam por dois serviços de terceiros, necessários
-      para esse recurso funcionar:
+      Por padrão, apenas você. As regras de segurança do banco de dados garantem que cada conta só leia e
+      escreva os próprios dados.
     </p>
     <ul>
-      <li><strong>Meta (WhatsApp Business Platform):</strong> processa o envio e
-      recebimento das mensagens entre você e o número oficial do PulseNote no WhatsApp.</li>
-      <li><strong>Google (Gemini AI):</strong> o texto da sua mensagem é enviado à API do
-      Gemini para ser interpretado — por exemplo, pra identificar que você quer registrar
-      um gasto ou criar uma tarefa, e escolher a categoria mais adequada entre as que
-      você já tem. O Google processa esse texto só pra gerar a resposta; não usamos isso
-      pra treinar modelo nenhum nem compartilhamos com fins de publicidade.</li>
+      <li><strong>Espaços financeiros compartilhados:</strong> se você criar ou entrar em um espaço compartilhado (casal, família etc.), os membros convidados veem as finanças <em>daquele espaço</em>. Suas notas, tarefas e finanças pessoais continuam privadas.</li>
+      <li><strong>Administração do serviço:</strong> vê apenas dados operacionais necessários para suporte e segurança, como status da conta, plano, data do último acesso e totais agregados. O conteúdo pessoal não aparece no painel administrativo.</li>
+      <li><strong>Provedores que operam o serviço:</strong> os listados nesta página (Google, Vercel, provedores de IA, Meta e Stripe), cada um apenas para a função descrita.</li>
     </ul>
+
+    <h2 id="ia">Pulsinho e Inteligência Artificial</h2>
     <p>
-      Você pode desvincular seu número quando quiser, nas Configurações do app — a
-      partir daí nenhuma mensagem nova sua passa mais por esses serviços.
+      Para conversar com naturalidade, registrar o que você pede e responder perguntas sobre sua rotina e
+      suas finanças, o Pulsinho usa modelos de inteligência artificial de terceiros.
     </p>
+
+    <h3>O que é enviado à IA</h3>
+    <ul>
+      <li>A sua mensagem (texto, ou a transcrição do áudio) e as mensagens recentes da conversa.</li>
+      <li>Um resumo dos seus dados para ele poder responder:
+        <ul>
+          <li>finanças: saldo e projeção, lançamentos do mês, totais dos últimos meses e compromissos previstos;</li>
+          <li>tarefas pendentes, compromissos e metas;</li>
+          <li>suas notas, e, quando necessário, o resultado de uma busca nos seus lançamentos ou notas.</li>
+        </ul>
+      </li>
+      <li><strong>Conteúdo das notas:</strong> enviado só se a opção “Ler conteúdo das notas” estiver ligada (ligada por padrão). Desligando em Configurações → Inteligência, a IA passa a receber apenas os títulos.</li>
+      <li>Não enviamos à IA a senha da sua conta, números de cartão (o PulseNote não os guarda) nem dados de outros usuários. Atenção: se você anotar algo sensível numa nota (como uma senha), esse conteúdo pode ir para a IA quando a leitura de notas está ligada.</li>
+    </ul>
+
+    <h3>Quais provedores</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Provedor</th><th>Para quê</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Vercel AI Gateway</strong></td><td>Encaminha as conversas ao modelo escolhido.</td></tr>
+          <tr><td><strong>OpenAI (GPT)</strong> e <strong>Anthropic (Claude)</strong></td><td>Entender a mensagem, conversar e propor as ações. Você pode preferir um deles em Configurações → Inteligência; o outro é usado como reserva.</td></tr>
+          <tr><td><strong>Google (Gemini)</strong></td><td>Reserva da conversa, transcrição de áudio, leitura de fotos e PDFs e interpretação de comandos no WhatsApp.</td></tr>
+          <tr><td><strong>Google Search (via Gemini)</strong></td><td>Só quando você pergunta algo atual (notícias, cotações, clima): a pergunta é pesquisada na internet e a resposta cita as fontes. Seus dados pessoais não são enviados nessa pesquisa.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Como a IA é usada</h3>
+    <ul>
+      <li>O PulseNote <strong>não usa seus dados para treinar modelos</strong>. Os provedores processam as requisições conforme os próprios termos de uso de API e políticas de privacidade.</li>
+      <li>A IA <strong>propõe</strong> ações; o PulseNote as valida antes de gravar. O que você pede claramente (um gasto, um lembrete, uma nota) é registrado na hora, com resumo e opção de desfazer ou corrigir.</li>
+      <li><strong>Exclusões sempre pedem confirmação</strong>, e por áudio nunca são feitas.</li>
+      <li>A IA pode errar. Confira o resumo do que foi registrado. As respostas sobre dinheiro são informativas e não substituem orientação financeira profissional.</li>
+    </ul>
+
+    <h2 id="whatsapp">Integração com o WhatsApp</h2>
+    <p>
+      Se você vincular seu número, as mensagens trocadas com o Pulsinho passam pela
+      <strong>Meta (WhatsApp Business Platform)</strong>, responsável pela entrega das mensagens, e pelos
+      provedores de IA descritos acima. Você pode desvincular o número a qualquer momento em
+      Configurações → Integrações; a partir daí nenhuma mensagem nova passa por esses serviços.
+    </p>
+
+    <h2 id="pagamentos">Pagamentos</h2>
+    <p>
+      Se você contratar um plano pago, o pagamento é processado pela <strong>Stripe</strong>. O PulseNote
+      não recebe nem armazena o número do seu cartão; guardamos apenas o status da assinatura, o plano e os
+      identificadores necessários na Stripe para liberar os recursos contratados.
+    </p>
+
+    <h2 id="notificacoes">Notificações</h2>
+    <p>
+      Se você ativar as notificações, o app pode avisar sobre tarefas, compromissos, metas e orçamento.
+      Com o app aberto, o aviso é gerado no próprio aparelho. Com o app fechado, usamos o
+      <strong>Firebase Cloud Messaging</strong> (Google). Se o WhatsApp estiver vinculado, o lembrete também
+      pode chegar por mensagem. Cada canal pode ser desativado quando quiser.
+    </p>
+
+    <h2 id="direitos">Seus direitos (LGPD)</h2>
+    <p>De acordo com a Lei Geral de Proteção de Dados (Lei nº 13.709/2018), você pode:</p>
+    <ul>
+      <li><strong>Acessar e levar seus dados:</strong> baixe uma cópia em Configurações → Segurança e dados → Baixar backup.</li>
+      <li><strong>Corrigir:</strong> edite qualquer informação direto no app ou pedindo ao Pulsinho.</li>
+      <li><strong>Limitar o uso pela IA:</strong> desligue a leitura das notas, desvincule o WhatsApp ou limpe a conversa do app.</li>
+      <li><strong>Excluir:</strong> exclua sua conta em Configurações. Isso remove o conteúdo principal, o vínculo e o histórico de conversa do WhatsApp, a conversa salva no aparelho e os indicadores operacionais ligados à conta.</li>
+      <li><strong>Tirar dúvidas ou fazer pedidos:</strong> pelo contato de suporte indicado no app.</li>
+    </ul>
+
+    <h2 id="termos">Termos de uso</h2>
+    <ul>
+      <li>O PulseNote é oferecido para uso pessoal. Você é responsável pelo conteúdo que registra e por manter seu acesso seguro.</li>
+      <li>Não use o app ou o Pulsinho para atividades ilegais, para tentar acessar dados de outras pessoas ou para sobrecarregar o serviço.</li>
+      <li>Os cálculos, projeções e respostas do Pulsinho são ferramentas de apoio baseadas nos dados que você registrou e podem conter erros; decisões financeiras são suas.</li>
+      <li>Recursos podem variar conforme o plano e podem ser atualizados com a evolução do app.</li>
+    </ul>
 
     <h2>Não compartilhamos seus dados</h2>
     <p>
-      O PulseNote não vende, aluga, nem compartilha seus dados pessoais com
-      terceiros para fins de publicidade ou marketing. Não exibimos anúncios.
-    </p>
-
-    <h2>Notificações</h2>
-    <p>
-      Se você ativar as notificações, o app pode avisar sobre tarefas vencendo,
-      compromissos próximos, progresso de metas e situação do orçamento mensal, de duas
-      formas: enquanto o app está aberto no navegador, o aviso é gerado ali mesmo, local;
-      pra chegar mesmo com o app fechado, usamos o <strong>Firebase Cloud Messaging</strong>
-      (serviço de notificação push do Google) e, se você tiver vinculado o WhatsApp, esse
-      lembrete também pode chegar por mensagem de WhatsApp. Você pode desativar cada um
-      desses canais quando quiser — o push nas configurações de notificação do navegador
-      ou do celular, e o lembrete por WhatsApp desvinculando o número nas Configurações do
-      app.
-    </p>
-
-    <h2>Exclusão de conta e dados</h2>
-    <p>
-      Você pode excluir sua conta e os dados associados pelas Configurações do aplicativo.
-      A exclusão remove o conteúdo principal, o vínculo do WhatsApp e os indicadores
-      operacionais agregados relacionados à conta. Se não conseguir concluir o fluxo,
-      use o e-mail de suporte indicado no app.
+      O PulseNote não vende, aluga nem compartilha seus dados pessoais para publicidade ou marketing, e não
+      exibe anúncios. O compartilhamento acontece apenas com os provedores listados, para o serviço funcionar.
     </p>
 
     <h2>Alterações nesta política</h2>
     <p>
-      Esta política pode ser atualizada conforme o app evolui. Mudanças
-      relevantes serão comunicadas dentro do próprio aplicativo.
+      Esta política pode ser atualizada conforme o app evolui. Mudanças relevantes serão comunicadas no
+      próprio aplicativo, com a data de atualização indicada no topo desta página.
     </p>
   </div>
 </body>

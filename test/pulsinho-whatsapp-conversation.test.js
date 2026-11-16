@@ -241,3 +241,31 @@ test("memória do WhatsApp guarda as últimas 20 mensagens", async () => {
     assert.match(thread.messages.at(-2).content, /número 11/);
   } finally { restore(); }
 });
+
+test("sem IA, 'apaga a tarefa' também pede confirmação e aceita 'sim'", async () => {
+  const restore = quiet();
+  const originalError = console.error;
+  console.error = () => {};
+  try {
+    const sim = createSimulator({ state: baseState(), gatewayFails: true });
+    const ask = await sim.say("apaga a tarefa comprar ração");
+    assert.match(ask.replies[0].text, /Excluir a tarefa “Comprar ração”\? Responda \*1\*/);
+    assert.equal(sim.state().tasks.length, 2);
+    const yes = await sim.say("sim");
+    assert.match(yes.replies[0].text, /Apaguei a tarefa "Comprar ração"/);
+    assert.equal(sim.state().tasks.length, 1);
+  } finally {
+    console.error = originalError;
+    restore();
+  }
+});
+
+test("boas-vindas da vinculação: saudação com nome, guia completo e link de privacidade", () => {
+  const { buildWelcomeMessages } = require("../api/whatsapp-webhook")._test;
+  const [hello, guide, closing] = buildWelcomeMessages("Douglas Marques");
+  assert.match(hello, /^Oi, Douglas! 💜/);
+  for (const topic of ["Finanças", "Tarefas e lembretes", "Agenda", "Notas", "Metas", "Internet", "áudio", "confirmação"]) assert.match(guide, new RegExp(topic));
+  assert.ok(guide.length < 4000, "cabe numa mensagem do WhatsApp");
+  assert.match(closing, /\/privacy$/);
+  assert.match(buildWelcomeMessages("")[0], /^Oi! 💜/);
+});
