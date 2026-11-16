@@ -1,7 +1,7 @@
 const { getFirebaseAdmin } = require("./_lib/firebaseAdmin");
 const { buildFinanceForecast } = require("./_lib/financeForecast");
 const { askPulsinho } = require("./_lib/pulsinhoAssistant");
-const { loadFinanceState } = require("./_lib/financeState");
+const { loadFinanceState, PRIVATE_WORKSPACES } = require("./_lib/financeState");
 
 function bodyOf(req) {
   if (typeof req.body === "string") {
@@ -48,12 +48,20 @@ module.exports = async (req, res) => {
     const body = bodyOf(req);
     if (!body) return res.status(400).json({ error: "invalid_json" });
     const workspaceId = typeof body.workspaceId === "string" ? body.workspaceId : undefined;
-    const { state } = await loadFinanceState(firebase.firestore(), decoded.uid, workspaceId);
+    // A conversa precisa do estado pessoal (tarefas, agenda, notas, metas)
+    // mesmo quando o espaço financeiro ativo é compartilhado; nesse caso
+    // as finanças do espaço substituem as pessoais na análise.
+    const db = firebase.firestore();
+    const personal = await loadFinanceState(db, decoded.uid, "personal");
+    const finance = workspaceId && !PRIVATE_WORKSPACES.has(workspaceId) ? await loadFinanceState(db, decoded.uid, workspaceId) : personal;
+    const state = finance.shared ? { ...personal.state, ...finance.state } : personal.state;
     const result = await askPulsinho({
       state,
       question: body.question,
       history: body.history,
       workspaceId,
+      name: typeof decoded.name === "string" ? decoded.name : "",
+      channel: "app",
       providerPreference: ["openai", "anthropic"].includes(body.providerPreference) ? body.providerPreference : state.aiProviderPreference,
     });
     if (!result.ok) return res.status(Number(result.status) || 502).json({ error: result.error || "assistant_unavailable" });

@@ -41,6 +41,11 @@ import {
 let lastShownRuntimeError = "";
 const pulsinhoConversation = [];
 let pendingPulsinhoAction = null;
+// Ações que o Pulsinho devolveu e que precisam de um "sim" (exclusões,
+// gasto com categoria incerta). As demais são aplicadas na hora, com
+// botão de desfazer no próprio balão da conversa.
+let pendingPulsinhoActions = [];
+const pulsinhoUndo = new Map();
 function showRuntimeErrorBanner(message) {
   if (!message || message === lastShownRuntimeError) return; // evita repetir o mesmo aviso em loop
   lastShownRuntimeError = message;
@@ -2399,8 +2404,8 @@ function bindPremiumDashboard() {
   commandForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const command = commandInput?.value.trim() || "";
-    if (command.length < 3) {
-      showToast("Escreva um pedido curto para o Pulsinho entender.");
+    if (!command) {
+      commandInput?.focus();
       return;
     }
     await askPulsinhoFromDashboard(command);
@@ -2457,12 +2462,21 @@ function bindPremiumDashboard() {
       commandForm?.requestSubmit();
       return;
     }
+    const undo = event.target.closest("[data-pulsinho-undo]");
+    if (undo) {
+      undoPulsinhoAction(undo.dataset.pulsinhoUndo);
+      return;
+    }
     if (event.target.closest("[data-pulsinho-action-confirm]")) {
-      confirmPulsinhoAction();
+      if (pendingPulsinhoActions.length) confirmPulsinhoActions();
+      else confirmPulsinhoAction();
       return;
     }
     if (event.target.closest("[data-pulsinho-action-cancel]")) {
+      const hadActions = pendingPulsinhoActions.length || pendingPulsinhoAction;
       pendingPulsinhoAction = null;
+      pendingPulsinhoActions = [];
+      if (hadActions) pulsinhoConversation.push({ role: "assistant", content: "Tudo bem, cancelei. Nada foi alterado 👍", provider: "pulse-engine" });
       renderPulsinhoConversation();
     }
   });
@@ -2542,16 +2556,35 @@ function renderPulsinhoConversation({ loading = false, error = "" } = {}) {
   const root = document.querySelector("#pulseCommandResponse");
   if (!root) return;
   root.classList.toggle("is-loading", loading);
-  const intro = `<div class="bd-msg bd-msg--ai">Olá, ${escapeHtml(bdFirstName())}! Como posso te ajudar hoje? Você pode pedir para criar tarefas, organizar sua rotina, registrar gastos ou analisar suas finanças.</div>`;
+  const hour = new Date().getHours();
+  const hello = hour < 5 ? "Boa noite" : hour < 12 ? "Bom dia" : hour < 18 ? "Boa tarde" : "Boa noite";
+  const intro = `<div class="bd-msg bd-msg--ai">${hello}, ${escapeHtml(bdFirstName())}! Sou o Pulsinho 💜 Pode falar comigo do seu jeito: registro gastos, crio tarefas e lembretes, marco compromissos, anoto ideias — ou a gente só conversa.</div>`;
   const messages = pulsinhoConversation.map((message) => {
     const followUps = message === pulsinhoConversation.at(-1) && Array.isArray(message.followUps) ? message.followUps : [];
     const followUpHtml = followUps.length
       ? `<div class="bd-followups">${followUps.map((item) => `<button type="button" data-pulsinho-followup="${escapeHtml(item)}">${escapeHtml(item)}</button>`).join("")}</div>`
       : "";
     const side = message.role === "user" ? "user" : "ai";
-    return `<div class="bd-msg bd-msg--${side}">${escapeHtml(message.content)}${followUpHtml}</div>`;
+    const actionsHtml = Array.isArray(message.actions) && message.actions.length
+      ? `<div class="bd-msg-actions">${message.actions.map((item) => `<div class="bd-msg-action${item.undone ? " is-undone" : ""}"><span>${escapeHtml(item.summary)}</span>${item.undone ? "<em>Desfeito</em>" : item.undoKey ? `<button type="button" data-pulsinho-undo="${escapeHtml(item.undoKey)}">Desfazer</button>` : ""}</div>`).join("")}</div>`
+      : "";
+    return `<div class="bd-msg bd-msg--${side}">${escapeHtml(message.content)}${actionsHtml}${followUpHtml}</div>`;
   }).join("");
-  const action = pendingPulsinhoAction
+  const multi = pendingPulsinhoActions.length
+    ? `<section class="bd-confirm is-sheet" aria-label="Confirmação necessária">
+        <div class="bd-confirm-head">
+          <span class="ico${pendingPulsinhoActions.some((item) => String(item.type).startsWith("delete_")) ? " is-danger" : ""}">${bdIcon(pendingPulsinhoActions.some((item) => String(item.type).startsWith("delete_")) ? "trash" : "task-check")}</span>
+          <div><strong>Confirmar?</strong><small>Nada muda sem a sua confirmação.</small></div>
+          <button type="button" class="bd-icon-btn close" data-pulsinho-action-cancel aria-label="Fechar">${bdIcon("x")}</button>
+        </div>
+        <ul class="bd-confirm-list">${pendingPulsinhoActions.map((item) => `<li>${escapeHtml(item.summary || "")}</li>`).join("")}</ul>
+        <div class="bd-confirm-actions">
+          <button type="button" class="bd-btn" data-pulsinho-action-cancel>Cancelar</button>
+          <button type="button" class="bd-btn bd-btn--primary" data-pulsinho-action-confirm>${bdIcon("check")}Confirmar</button>
+        </div>
+      </section>`
+    : "";
+  const action = multi || (pendingPulsinhoAction
     ? `<section class="bd-confirm is-sheet" aria-label="Confirmação necessária">
         <div class="bd-confirm-head">
           <span class="ico">${bdIcon("task-check")}</span>
@@ -2564,7 +2597,7 @@ function renderPulsinhoConversation({ loading = false, error = "" } = {}) {
           <button type="button" class="bd-btn bd-btn--primary" data-pulsinho-action-confirm>${bdIcon("check")}${escapeHtml(pendingPulsinhoAction.label || "Confirmar")}</button>
         </div>
       </section>`
-    : "";
+    : "");
   const loadingMessage = loading ? '<div class="bd-typing" aria-label="Pulsinho está pensando"><i></i><i></i><i></i></div>' : "";
   const errorMessage = error ? `<div class="bd-chat-error">${escapeHtml(error)}</div>` : "";
   root.innerHTML = `${intro}${messages}${loadingMessage}${errorMessage}${action}`;
@@ -2573,9 +2606,15 @@ function renderPulsinhoConversation({ loading = false, error = "" } = {}) {
 
 async function askPulsinhoFromDashboard(question) {
   const input = document.querySelector("#pulseCommandInput");
-  const history = pulsinhoConversation.map(({ role, content }) => ({ role, content })).slice(-10);
+  // O histórico leva também o resumo do que foi feito em cada resposta,
+  // para "na verdade foi 40" ou "desfaz a tarefa" terem contexto.
+  const history = pulsinhoConversation.map(({ role, content, actions }) => ({
+    role,
+    content: [content, ...(actions || []).map((item) => `${item.summary}${item.undone ? " (desfeito)" : ""}`)].filter(Boolean).join("\n"),
+  })).slice(-10);
   pulsinhoConversation.push({ role: "user", content: question });
   pendingPulsinhoAction = null;
+  pendingPulsinhoActions = [];
   if (input) input.value = "";
   renderPulsinhoConversation({ loading: true });
   try {
@@ -2583,14 +2622,7 @@ async function askPulsinhoFromDashboard(question) {
       method: "POST",
       body: JSON.stringify({ question, history, workspaceId: activeWorkspaceId, providerPreference: state.aiProviderPreference || "auto" }),
     });
-    pulsinhoConversation.push({
-      role: "assistant",
-      content: payload.reply || "Não encontrei uma resposta segura com os dados disponíveis.",
-      followUps: Array.isArray(payload.followUps) ? payload.followUps : [],
-      provider: payload.provider || "",
-    });
-    pendingPulsinhoAction = payload.proposedAction?.requiresConfirmation ? payload.proposedAction : null;
-    renderPulsinhoConversation();
+    handlePulsinhoPayload(payload);
   } catch (error) {
     renderPulsinhoConversation({
       error: error?.code === "ai_not_configured" || error?.code === "assistant_unavailable"
@@ -2598,6 +2630,108 @@ async function askPulsinhoFromDashboard(question) {
         : "A conexão falhou. Seus dados não foram alterados; tente novamente em instantes.",
     });
   }
+}
+
+const PULSINHO_COLLECTIONS = {
+  add_transaction: "finances", add_task: "tasks", add_event: "events", add_note: "notes", add_goal: "goals",
+  update_goal: "goals", complete_task: "tasks", edit_transaction: "finances",
+  delete_transaction: "finances", delete_task: "tasks", delete_note: "notes", delete_event: "events",
+};
+
+// Aplica uma ação já validada pelo servidor. Criações chegam com o
+// registro pronto (mesmo formato do app); alterações e exclusões
+// chegam pelo id. Devolve o resumo e como desfazer.
+function applyPulsinhoAction(action) {
+  const key = PULSINHO_COLLECTIONS[action?.type];
+  if (!key) return null;
+  if (!Array.isArray(state[key])) state[key] = [];
+  const list = state[key];
+  if (action.type.startsWith("add_")) {
+    if (!action.record?.id || list.some((item) => item.id === action.record.id)) return null;
+    const record = { ...action.record };
+    if (action.type === "add_transaction") record.workspaceId = activeWorkspaceId;
+    if (action.type === "add_event") list.push(record);
+    else list.unshift(record);
+    return { summary: action.summary, undo: () => { state[key] = state[key].filter((item) => item.id !== record.id); } };
+  }
+  const index = list.findIndex((item) => item.id === action.targetId);
+  if (index < 0) return null;
+  if (action.type.startsWith("delete_")) {
+    const [removed] = list.splice(index, 1);
+    return {
+      summary: `🗑️ Excluído: “${action.targetTitle || removed?.title || removed?.description || "item"}”`,
+      undo: () => { state[key].splice(Math.min(index, state[key].length), 0, removed); },
+    };
+  }
+  const before = { ...list[index] };
+  list[index] = { ...list[index], ...(action.patch || {}) };
+  return {
+    summary: action.summary,
+    undo: () => {
+      const position = state[key].findIndex((item) => item.id === before.id);
+      if (position >= 0) state[key][position] = before;
+    },
+  };
+}
+
+function applyPulsinhoActions(actions) {
+  const applied = [];
+  for (const action of actions) {
+    const result = applyPulsinhoAction(action);
+    if (!result) continue;
+    const undoKey = crypto.randomUUID();
+    pulsinhoUndo.set(undoKey, result.undo);
+    applied.push({ summary: result.summary, undoKey });
+  }
+  if (applied.length) {
+    saveState();
+    renderAll();
+  }
+  return applied;
+}
+
+function handlePulsinhoPayload(payload) {
+  const actions = Array.isArray(payload?.actions) ? payload.actions : [];
+  const needsConfirm = (action) => action.risk !== "auto" || action.lowConfidence;
+  const applied = applyPulsinhoActions(actions.filter((action) => !needsConfirm(action)));
+  pendingPulsinhoActions = actions.filter(needsConfirm);
+  pulsinhoConversation.push({
+    role: "assistant",
+    content: payload?.reply || (applied.length ? "Pronto!" : "Não encontrei uma resposta segura com os dados disponíveis."),
+    followUps: Array.isArray(payload?.followUps) ? payload.followUps : [],
+    provider: payload?.provider || "",
+    actions: applied,
+  });
+  // Versões antigas do servidor devolvem só uma proposta única.
+  pendingPulsinhoAction = !actions.length && payload?.proposedAction?.requiresConfirmation ? payload.proposedAction : null;
+  renderPulsinhoConversation();
+}
+
+function confirmPulsinhoActions() {
+  const actions = pendingPulsinhoActions;
+  pendingPulsinhoActions = [];
+  const applied = applyPulsinhoActions(actions);
+  pulsinhoConversation.push({
+    role: "assistant",
+    content: applied.length ? "Pronto! ✅" : "Esses itens já não existem mais — talvez tenham sido alterados. Nada foi alterado.",
+    provider: "pulse-engine",
+    actions: applied,
+  });
+  renderPulsinhoConversation();
+}
+
+function undoPulsinhoAction(undoKey) {
+  const undo = pulsinhoUndo.get(undoKey);
+  if (!undo) return;
+  undo();
+  pulsinhoUndo.delete(undoKey);
+  for (const message of pulsinhoConversation) {
+    for (const item of message.actions || []) if (item.undoKey === undoKey) item.undone = true;
+  }
+  saveState();
+  renderAll();
+  renderPulsinhoConversation();
+  showToast("Desfeito.");
 }
 
 function validPulsinhoDate(value, fallback = todayIso) {
@@ -4328,6 +4462,8 @@ function bindBoardsShell() {
   document.querySelector("#bdChatMore")?.addEventListener("click", () => {
     pulsinhoConversation.length = 0;
     pendingPulsinhoAction = null;
+    pendingPulsinhoActions = [];
+    pulsinhoUndo.clear();
     renderPulsinhoConversation();
   });
 }
@@ -11512,4 +11648,13 @@ window.updateGoalProgress = updateGoalProgress;
 // silenciosamente não faziam nada.
 window.setView = setView;
 window.setNotesFolderFilter = setNotesFolderFilter;
+
+// Só no modo de demonstração (QA visual): injeta uma resposta do
+// servidor no chat do Pulsinho sem login nem rede.
+if (isLocalDesignPreview) {
+  window.__pulsinhoPreview = (question, payload) => {
+    pulsinhoConversation.push({ role: "user", content: question });
+    handlePulsinhoPayload(payload);
+  };
+}
 

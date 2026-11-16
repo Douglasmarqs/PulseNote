@@ -2634,3 +2634,16 @@ body.st-drawer-open { overflow: hidden; }
 html, body { overflow-x: clip; }
 @supports not (overflow: clip) { body { overflow-x: visible; } }
 @media (max-width: 400px) { .pf-seg button { font-size: 11.5px; padding: 0 4px; } }
+
+/* Pulsinho conversacional: resumo do que foi feito (com Desfazer) e
+   lista de confirmação para exclusões/itens incertos. */
+.bd-msg-actions { display: grid; gap: 6px; margin-top: 9px; white-space: normal; }
+.bd-msg-action { display: flex; align-items: center; gap: 8px; padding: 7px 9px; border: 1px solid var(--bd-line); border-radius: 10px; background: var(--bd-card); font-size: 12.5px; line-height: 1.35; color: var(--bd-text); }
+.bd-msg-action > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.bd-msg-action button { flex: none; padding: 3px 9px; border: 1px solid var(--bd-line-strong); border-radius: 999px; background: transparent; color: var(--bd-primary-ink); font: inherit; font-size: 11.5px; font-weight: 600; cursor: pointer; }
+.bd-msg-action button:hover { border-color: var(--bd-primary); background: var(--bd-primary-soft); }
+.bd-msg-action em { flex: none; font-size: 11.5px; font-style: normal; font-weight: 600; color: var(--bd-text-3); }
+.bd-msg-action.is-undone > span { color: var(--bd-text-3); text-decoration: line-through; }
+.bd-confirm-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.bd-confirm-list li { padding: 8px 10px; border: 1px solid var(--bd-line-strong); border-radius: 9px; background: var(--bd-input); font-size: 12.5px; line-height: 1.35; color: var(--bd-text); }
+.bd-confirm-head .ico.is-danger { background: var(--bd-red-soft); color: var(--bd-red); }

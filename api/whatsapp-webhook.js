@@ -59,7 +59,7 @@ const crypto = require("node:crypto");
 const { AsyncLocalStorage } = require("node:async_hooks");
 const { getFirebaseAdmin } = require("./_lib/firebaseAdmin");
 const { parseTransactionImage, parseNoteImage, transcribeAudio } = require("./_lib/parseTransactionAI");
-const { parseTextIntent, findBestMatch, findBestMatches } = require("./_lib/parseCommandIntent");
+const { parseTextIntent, parseDeterministicIntent, findBestMatch, findBestMatches } = require("./_lib/parseCommandIntent");
 const { buildPdfReportBuffer } = require("./_lib/buildPdfReport");
 const { getRuntimeConfig, assertFeatureEnabled } = require("./_lib/adminConfig");
 const { getUserEntitlements } = require("./_lib/admin");
@@ -68,6 +68,9 @@ const { findSuggestion, formatSuggestionsForWhatsApp } = require("./_lib/autopil
 const { checkAutopilotAccess } = require("./_lib/autopilotAccess");
 const { askPulsinho, purchaseAmountFromQuestion } = require("./_lib/pulsinhoAssistant");
 const { META_GRAPH_VERSION } = require("./_lib/metaGraph");
+const { DEFAULT_EXPENSE_CATEGORIES, DEFAULT_INCOME_CATEGORIES } = require("./_lib/financeCategories");
+const { converse, detectSmallTalk, buildSmallTalkReply, greetingLine, firstName, brazilNow } = require("./_lib/pulsinhoBrain");
+const { applyActionToState, serializeAction } = require("./_lib/pulsinhoActions");
 const messageContext = new AsyncLocalStorage();
 
 function logStage(stage, startedAt, messageId) {
@@ -135,51 +138,8 @@ async function recordMetaDeliveryStatuses(fb, statuses) {
   }
 }
 
-// Espelha as categorias padrão de src/app.js (expenseCategories /
-// incomeCategories) — precisam bater com as do app para os ids que a IA
-// escolhe fazerem sentido no Firestore. Se você editar as categorias
-// padrão no app, edite aqui também.
-const DEFAULT_EXPENSE_CATEGORIES = [
-  { id: "moradia", label: "🏠 Moradia" },
-  { id: "contas", label: "💡 Contas e Utilidades" },
-  { id: "manutencao", label: "🔧 Manutenção e Reparos" },
-  { id: "alimentacao", label: "🍔 Restaurante/Delivery" },
-  { id: "mercado", label: "🛒 Mercado" },
-  { id: "transporte", label: "🚗 Transporte" },
-  { id: "combustivel", label: "⛽ Combustível" },
-  { id: "saude", label: "💊 Saúde" },
-  { id: "academia", label: "🏋️ Academia e Esportes" },
-  { id: "beleza", label: "💅 Beleza e Cuidados pessoais" },
-  { id: "educacao", label: "📚 Educação" },
-  { id: "lazer", label: "🎬 Lazer" },
-  { id: "eventos", label: "🎉 Festas e Eventos" },
-  { id: "presentes", label: "🎁 Presentes" },
-  { id: "roupas", label: "👗 Roupas e Acessórios" },
-  { id: "tecnologia", label: "📱 Tecnologia e Eletrônicos" },
-  { id: "assinaturas", label: "🔁 Assinaturas" },
-  { id: "familia", label: "👶 Filhos e Família" },
-  { id: "pet", label: "🐾 Pet" },
-  { id: "viagem", label: "✈️ Viagem" },
-  { id: "investimentos_desp", label: "💰 Investimentos e Poupança" },
-  { id: "emprestimos", label: "🏦 Empréstimos e Dívidas" },
-  { id: "impostos", label: "🧾 Impostos e Taxas" },
-  { id: "seguros", label: "🛡️ Seguros" },
-  { id: "doacoes", label: "🎗️ Doações" },
-  { id: "outros", label: "📦 Outros" },
-];
-const DEFAULT_INCOME_CATEGORIES = [
-  { id: "salario", label: "💼 Salário" },
-  { id: "freelance", label: "💻 Freelance/Bico" },
-  { id: "investimentos", label: "📈 Investimentos" },
-  { id: "vendas", label: "🏷️ Vendas" },
-  { id: "aluguel_receb", label: "🏠 Aluguel recebido" },
-  { id: "reembolso", label: "↩️ Reembolso" },
-  { id: "premio", label: "🏆 Prêmio/Sorte" },
-  { id: "emprestimo_receb", label: "🤝 Empréstimo recebido" },
-  { id: "pensao", label: "👨‍👩‍👧 Pensão/Auxílio" },
-  { id: "presente", label: "🎁 Presente/Bônus" },
-  { id: "outros_receita", label: "📦 Outros" },
-];
+// As categorias padrão (espelho das do app) vivem em
+// _lib/financeCategories.js — compartilhadas com a conversa do Pulsinho.
 
 // ── Segurança: verificação de assinatura da Meta ───────────────────
 // A Cloud API assina todo POST com HMAC-SHA256 do corpo bruto (raw
@@ -262,7 +222,24 @@ async function sendWhatsAppPayload(to, payload) {
   }
 }
 
-async function sendWhatsAppMessage(to, body) {
+// Toda resposta passa por aqui: se a mensagem começou com uma saudação
+// ("bom dia pulsinho, gastei 30 no almoço"), a primeira resposta enviada
+// devolve o cumprimento antes da confirmação. O texto enviado também é
+// guardado para o histórico da conversa do Pulsinho.
+function decorateOutgoing(body) {
+  const store = messageContext.getStore();
+  let text = String(body || "");
+  if (!store) return text;
+  if (store.greetingPrefix && !store.greeted) {
+    text = `${store.greetingPrefix}\n${text}`;
+    store.greeted = true;
+  }
+  store.sentTexts = [...(store.sentTexts || []), text].slice(-3);
+  return text;
+}
+
+async function sendWhatsAppMessage(to, rawBody) {
+  const body = decorateOutgoing(rawBody);
   const sent = await sendWhatsAppPayload(to, { type: "text", text: { body } });
   if (!sent) throw new Error("meta_message_rejected");
   return true;
@@ -283,7 +260,8 @@ function buttonFallbackText(body, buttons) {
 
 // Formato de Reply Buttons documentado pelo SDK oficial da Meta:
 // https://whatsapp.github.io/WhatsApp-Nodejs-SDK/api-reference/messages/interactive/
-async function sendWhatsAppButtons(to, body, buttons, footer = "") {
+async function sendWhatsAppButtons(to, rawBody, buttons, footer = "") {
+  const body = decorateOutgoing(rawBody);
   const interactive = {
     type: "button",
     body: { text: body.slice(0, 1024) },
@@ -343,6 +321,8 @@ async function findUidForPhone(fb, phone) {
   try {
     const user = await fb.auth().getUser(uid);
     if (user.disabled) return null;
+    const store = messageContext.getStore();
+    if (store) store.userName = user.displayName || "";
     // O índice do telefone pode ter ficado para trás depois de uma troca
     // feita por uma versão antiga. A fonte da verdade é a conta: um número
     // antigo jamais pode continuar operando só porque ainda possui índice.
@@ -555,6 +535,8 @@ async function loadWhatsAppAssistantHistory(fb, uid) {
 }
 
 async function saveWhatsAppAssistantTurn(fb, uid, history, question, reply) {
+  const store = messageContext.getStore();
+  if (store) store.turnSaved = true;
   const messages = [
     ...(Array.isArray(history) ? history : []),
     { role: "user", content: String(question || "").slice(0, 1200) },
@@ -572,9 +554,30 @@ async function savePendingAssistantAction(fb, uid, action) {
 
 async function clearPendingAssistantAction(fb, uid) {
   return withUserData(fb, uid, (state) => {
-    delete state.whatsappPendingAssistantAction;
+    state.whatsappPendingAssistantAction = null;
     return true;
   }, "clear_assistant_action");
+}
+
+// Ações confirmadas pela pessoa ("sim"/botão). Versão 2: lista de ações
+// já validadas por pulsinhoActions (inclusive exclusões). Cada alvo é
+// revalidado aqui — se o item sumiu pelo app, nada acontece com ele.
+async function applyPendingAssistantActions(fb, uid, pending) {
+  if (!pendingIsFresh(pending)) return null;
+  return withUserData(fb, uid, (state) => {
+    const done = [];
+    for (const action of Array.isArray(pending.actions) ? pending.actions.slice(0, 6) : []) {
+      const result = applyActionToState(state, action);
+      if (result.ok) done.push({ type: action.type, title: action.targetTitle || action.record?.title || action.record?.description || "", summary: action.summary });
+    }
+    state.whatsappPendingAssistantAction = null;
+    return { done };
+  }, "apply_assistant_actions");
+}
+
+function confirmedActionLine(item) {
+  if (item.type.startsWith("delete_")) return `🗑️ Excluído: “${item.title}”`;
+  return item.summary;
 }
 
 async function applyPendingAssistantAction(fb, uid, pending) {
@@ -606,7 +609,7 @@ async function applyPendingAssistantAction(fb, uid, pending) {
     } else {
       return undefined;
     }
-    delete state.whatsappPendingAssistantAction;
+    state.whatsappPendingAssistantAction = null;
     return { type: pending.type, title };
   }, "apply_assistant_action");
 }
@@ -620,7 +623,7 @@ async function saveWhatsAppPendingClarification(fb, uid, clarification) {
 
 async function clearWhatsAppPendingClarification(fb, uid) {
   return withUserData(fb, uid, (state) => {
-    if (state.whatsappPendingClarification) delete state.whatsappPendingClarification;
+    state.whatsappPendingClarification = null;
     return true;
   }, "clear_clarification");
 }
@@ -1463,7 +1466,165 @@ async function createEventFromWhatsApp(fb, uid, { title, date, time, reminder, l
   }, "create_event");
 }
 
+// ── Conversa do Pulsinho (cérebro compartilhado com o app) ────────
+// Pedidos de confirmação usam botões "Sim"/"Não"; sem botões (falha de
+// envio interativo), a pessoa responde "sim" ou "não" em texto.
+const CONFIRM_YES_RE = /^(?:confirmar|confirmo|confirma|sim|s|ss|isso|isso mesmo|pode|pode sim|pode fazer|pode apagar|pode excluir|manda ver|bora|ok|claro|fechado|faz|faz isso|exclui|apaga|sim pode|sim confirmo|sim por favor)$/;
+const CONFIRM_NO_RE = /^(?:cancelar|cancela|nao|n|agora nao|deixa|deixa pra la|esquece|nao precisa|melhor nao|nao quero|nem|negativo)$/;
+
+function confirmationReply(norm) {
+  const clean = norm.replace(/[!.?,]+/g, " ").replace(/\s+/g, " ").trim();
+  if (CONFIRM_YES_RE.test(clean)) return "yes";
+  if (CONFIRM_NO_RE.test(clean)) return "no";
+  return null;
+}
+
+async function loadUserState(fb, uid) {
+  const snapshot = await fb.firestore().collection("userData").doc(uid).get();
+  return snapshot.exists ? snapshot.data()?.data || {} : {};
+}
+
+// Salva no histórico a pergunta e o que foi efetivamente respondido —
+// assim "cria uma tarefa pra isso" ou "sim" na mensagem seguinte têm
+// contexto, mesmo quando a resposta veio de um fluxo determinístico.
+async function saveConversationTurnFromContext() {
+  const store = messageContext.getStore();
+  const turn = store?.turn;
+  if (!turn || store.turnSaved || !store.sentTexts?.length) return;
+  store.turnSaved = true;
+  try {
+    await saveWhatsAppAssistantTurn(turn.fb, turn.uid, turn.history, turn.question, store.sentTexts.join("\n\n"));
+  } catch (error) {
+    console.warn("whatsapp_turn_save_failed", { error: error?.name || "error" });
+  }
+}
+
+async function replyWithSmallTalk(fb, uid, phone, small, rawText) {
+  const store = messageContext.getStore();
+  if (small.kind === "help") {
+    await sendWhatsAppMessage(phone, HELP_MESSAGE);
+    return;
+  }
+  const state = await loadUserState(fb, uid);
+  const now = brazilNow();
+  await sendWhatsAppMessage(phone, buildSmallTalkReply(small, {
+    name: store?.userName || "", state, now, channel: "whatsapp", seed: `${now.today}|${rawText}`,
+  }));
+}
+
+// Conversa livre + ações: usado quando a mensagem não é um comando
+// determinístico. Retorna false quando a IA está indisponível, para o
+// webhook cair no classificador antigo (nada se perde).
+async function handleBrainMessage({ fb, uid, phone, rawText, history, categories, lastFinanceEntry, fromAudio }) {
+  const store = messageContext.getStore();
+  const state = await loadUserState(fb, uid);
+  const brain = await timeStage("pulsinho_brain", store?.messageId, () => converse({
+    state, message: rawText, history, name: store?.userName || "", channel: "whatsapp", categories,
+    providerPreference: state.aiProviderPreference, fromAudio, lastFinanceEntry, allowSmallTalk: false,
+    paymentMethodFor: () => inferPaymentMethod(rawText),
+  }));
+  if (!brain.ok) return false;
+
+  const autos = brain.actions.filter((action) => action.risk === "auto");
+  const confirms = brain.actions.filter((action) => action.risk === "confirm");
+
+  // Um único gasto com categoria incerta: pergunta a categoria (fluxo já
+  // conhecido) em vez de gravar num palpite.
+  const single = brain.actions.length === 1 ? autos[0] : null;
+  if (single?.type === "add_transaction" && single.lowConfidence && single.categoryAlternatives?.length) {
+    const r = single.record;
+    const options = [r.category, ...single.categoryAlternatives].slice(0, 4);
+    await saveWhatsAppPendingClarification(fb, uid, {
+      entry: { type: r.type, amount: r.amount, categoryId: r.category, description: r.description, date: r.date },
+      options,
+    });
+    const list = options.map((id, i) => `${i + 1}) ${categories.find((c) => c.id === id)?.label || id}`).join("\n");
+    await sendWhatsAppMessage(phone, `${brain.reply ? `${brain.reply}\n` : ""}Só me confirma a categoria de R$ ${formatWhatsAppAmount(r.amount)} — ${r.description}. Me diz o número:\n${list}`);
+    return true;
+  }
+
+  let applied = [];
+  if (autos.length) {
+    const result = await withUserData(fb, uid, (s) => {
+      const out = [];
+      for (const action of autos) {
+        const outcome = applyActionToState(s, action);
+        if (outcome.ok) out.push({ type: action.type, summary: action.summary, record: outcome.record || null });
+      }
+      return out.length ? out : undefined;
+    }, "pulsinho_actions");
+    applied = Array.isArray(result) ? result : [];
+  }
+  if (confirms.length) {
+    await savePendingAssistantAction(fb, uid, { version: 2, actions: confirms.map(serializeAction), summary: confirms.map((a) => a.summary).join("\n") });
+  }
+
+  const missed = autos.length - applied.length;
+  const parts = [brain.reply];
+  if (applied.length) parts.push(applied.map((item) => item.summary).join("\n"));
+  if (missed > 0) parts.push("⚠️ Uma das ações não pôde ser aplicada porque o item já não existe mais.");
+  const text = parts.filter(Boolean).join("\n\n");
+
+  if (confirms.length) {
+    const body = `${text ? `${text}\n\n` : ""}🔐 *Confirma?*\n${confirms.map((a) => a.summary).join("\n")}`;
+    await sendWhatsAppButtons(phone, body, [
+      { id: "pa:yes", title: "Sim, confirmar" },
+      { id: "pa:no", title: "Cancelar" },
+    ], "Nada muda sem a sua confirmação.");
+  } else if (applied.length === 1 && applied[0].type === "add_transaction" && /^wa_/.test(applied[0].record?.id || "")) {
+    await sendWhatsAppButtons(phone, text, [
+      { id: `fin:edit:${applied[0].record.id}`, title: "Editar" },
+      { id: `fin:delete:${applied[0].record.id}`, title: "Excluir" },
+    ], "Use os botões para corrigir ou excluir.");
+  } else {
+    await sendWhatsAppMessage(phone, text || "Pode deixar!");
+  }
+  return true;
+}
+
+async function handlePulsinhoConfirmation(fb, uid, phone, decision, pending, { fromAudio = false } = {}) {
+  if (decision === "no") {
+    await clearPendingAssistantAction(fb, uid);
+    await sendWhatsAppMessage(phone, "Tudo bem, cancelei. Nada foi alterado 👍");
+    return;
+  }
+  const hasDeletion = Array.isArray(pending?.actions) && pending.actions.some((a) => String(a.type).startsWith("delete_"));
+  if (fromAudio && hasDeletion) {
+    await sendWhatsAppMessage(phone, "Por segurança, confirme exclusões tocando no botão ou digitando *sim*. Não apaguei nada a partir do áudio.");
+    return;
+  }
+  if (pending?.version === 2) {
+    const applied = await applyPendingAssistantActions(fb, uid, pending);
+    if (!applied) {
+      await clearPendingAssistantAction(fb, uid);
+      await sendWhatsAppMessage(phone, "Essa confirmação expirou. Me peça de novo; nada foi alterado.");
+    } else if (!applied.done.length) {
+      await sendWhatsAppMessage(phone, "Não encontrei mais esses itens — talvez já tenham sido alterados no app. Nada foi alterado.");
+    } else {
+      await sendWhatsAppMessage(phone, `✅ Pronto!\n${applied.done.map(confirmedActionLine).join("\n")}`);
+    }
+    return;
+  }
+  const applied = await applyPendingAssistantAction(fb, uid, pending);
+  if (applied) await sendWhatsAppMessage(phone, `✅ Pronto. Confirmei e salvei: ${applied.title}.`);
+  else {
+    await clearPendingAssistantAction(fb, uid);
+    await sendWhatsAppMessage(phone, "Essa confirmação expirou ou estava incompleta. Peça a ação novamente; nada foi alterado.");
+  }
+}
+
+// "me ajuda a priorizar minhas tarefas", "o que você acha da minha
+// semana?" — pedidos de conversa, não consultas secas da agenda.
+function isConversationalRequest(text) {
+  const norm = normalizeCommand(text);
+  return norm.split(/\s+/).length >= 5
+    && /\b(me ajuda|ajuda a|me ajude|como (eu )?(posso|devo|faco)|por ?que|o que (voce|vc) acha|voce acha|vc acha|sugest|sugere|dica|prioriz|organiz|planej|devo|melhor forma|conselho|explica)/.test(norm);
+}
+
 const HELP_MESSAGE = `🤖 O que eu entendo por aqui (tudo em linguagem natural, não precisa decorar comando):
+
+💬 *Conversa*
+Pode falar comigo do seu jeito — "bom dia pulsinho", tirar dúvidas, pedir ideias ou mandar várias coisas numa frase só: "gastei 30 no uber e me lembra de pagar a luz amanhã às 9h"
 
 💸 *Finanças*
 "gastei 45 no mercado" / "recebi 200 de freela"
@@ -1678,6 +1839,7 @@ module.exports = async (req, res) => {
   let fbForMessage = null;
   const inboundStartedAt = Date.now();
   const respondOk = async () => {
+    await saveConversationTurnFromContext();
     if (claimedMessageId) await markMessageProcessed(fbForMessage, claimedMessageId);
     logStage("total", inboundStartedAt, claimedMessageId);
     return res.status(200).end();
@@ -1786,6 +1948,14 @@ module.exports = async (req, res) => {
 
     if (message.type === "interactive" || message.type === "button") {
       const replyId = message.interactive?.button_reply?.id || message.interactive?.list_reply?.id || message.button?.payload || "";
+      if (replyId === "pa:yes" || replyId === "pa:no") {
+        if (pendingAssistantAction && pendingIsFresh(pendingAssistantAction)) {
+          await handlePulsinhoConfirmation(fb, uid, fromPhone, replyId === "pa:yes" ? "yes" : "no", pendingAssistantAction);
+        } else {
+          await sendWhatsAppMessage(fromPhone, "Essa confirmação já expirou ou foi usada. Me peça de novo se ainda precisar; nada foi alterado.");
+        }
+        return respondOk();
+      }
       if (await handleAutopilotButton(fb, uid, fromPhone, replyId)) return respondOk();
       if (await handleFinanceButton(fb, uid, fromPhone, replyId, categories)) return respondOk();
       if (await handleMediaButton(fb, uid, fromPhone, replyId, pendingMediaEntry, categories, today)) return respondOk();
@@ -1794,23 +1964,14 @@ module.exports = async (req, res) => {
     }
 
     if (message.type === "text") {
-      const rawText = message.text.body;
-      const norm = normalizeCommand(rawText);
+      let rawText = message.text.body;
+      let norm = normalizeCommand(rawText);
       const referenceCommand = parseFinanceReferenceCommand(norm);
 
-      if (pendingAssistantAction) {
-        if (/^(?:cancelar|cancela|agora nao|não)$/.test(norm)) {
-          await clearPendingAssistantAction(fb, uid);
-          await sendWhatsAppMessage(fromPhone, "Tudo bem. A ação sugerida foi cancelada e nenhum dado foi alterado.");
-          return respondOk();
-        }
-        if (/^(?:confirmar|confirmo|sim|pode fazer)$/.test(norm)) {
-          const applied = await applyPendingAssistantAction(fb, uid, pendingAssistantAction);
-          if (applied) await sendWhatsAppMessage(fromPhone, `✅ Pronto. Confirmei e salvei: ${applied.title}.`);
-          else {
-            await clearPendingAssistantAction(fb, uid);
-            await sendWhatsAppMessage(fromPhone, "Essa confirmação expirou ou estava incompleta. Peça a ação novamente; nada foi alterado.");
-          }
+      if (pendingAssistantAction && pendingIsFresh(pendingAssistantAction)) {
+        const decision = confirmationReply(norm);
+        if (decision) {
+          await handlePulsinhoConfirmation(fb, uid, fromPhone, decision, pendingAssistantAction, { fromAudio: message.wasAudio });
           return respondOk();
         }
       }
@@ -1908,6 +2069,22 @@ module.exports = async (req, res) => {
         await clearWhatsAppPendingClarification(fb, uid);
       }
 
+      // Conversa: histórico recente, bate-papo instantâneo e saudação
+      // junto com um pedido ("bom dia pulsinho, gastei 30 no almoço").
+      const history = await timeStage("assistant_history", message.id, () => loadWhatsAppAssistantHistory(fb, uid));
+      const turnStore = messageContext.getStore();
+      if (turnStore) turnStore.turn = { fb, uid, history, question: rawText };
+      const small = detectSmallTalk(rawText, { history });
+      if (small && small.kind !== "prefix") {
+        await replyWithSmallTalk(fb, uid, fromPhone, small, rawText);
+        return respondOk();
+      }
+      if (small?.kind === "prefix") {
+        if (turnStore) turnStore.greetingPrefix = greetingLine(small.greeting, firstName(turnStore.userName), `${today}|${rawText}`);
+        rawText = small.rest;
+        norm = normalizeCommand(rawText);
+      }
+
       const financeDelete = financeDeletionTarget(norm);
       if (financeDelete) {
         if (financeDelete.underspecified) {
@@ -1955,7 +2132,20 @@ module.exports = async (req, res) => {
         return respondOk();
       }
 
-      const result = await timeStage("parse_text", message.id, () => parseTextIntent({ text: rawText, categories, today, lastFinanceEntry, aiEnabled }));
+      // Comandos claros seguem pelo caminho rápido (sem IA). O resto vai
+      // para o cérebro do Pulsinho, que conversa e entende várias ações na
+      // mesma frase. Se a IA estiver indisponível, o classificador antigo
+      // continua como reserva.
+      let result = parseDeterministicIntent(rawText, today, categories, { deferCompound: aiEnabled });
+      if (result?.intent === "agenda" && isConversationalRequest(rawText)) result = null;
+      const brainAttempted = !result && aiEnabled;
+      if (!result && aiEnabled) {
+        const handled = await handleBrainMessage({
+          fb, uid, phone: fromPhone, rawText, history, categories, lastFinanceEntry, fromAudio: Boolean(message.wasAudio),
+        });
+        if (handled) return respondOk();
+      }
+      if (!result) result = await timeStage("parse_text", message.id, () => parseTextIntent({ text: rawText, categories, today, lastFinanceEntry, aiEnabled }));
 
       if (message.wasAudio && isDestructiveAudioIntent(result)) {
         await sendWhatsAppMessage(fromPhone, "Por segurança, digite esse comando de exclusão. Não apaguei nada a partir do áudio.");
@@ -2171,7 +2361,7 @@ module.exports = async (req, res) => {
         const stateSnapshot = await fb.firestore().collection("userData").doc(uid).get();
         const userState = stateSnapshot.exists ? stateSnapshot.data()?.data || {} : {};
         const history = await loadWhatsAppAssistantHistory(fb, uid);
-        const assistant = await askPulsinho({ state: userState, question: rawText, history, providerPreference: userState.aiProviderPreference });
+        const assistant = await askPulsinho({ state: userState, question: rawText, history, providerPreference: userState.aiProviderPreference, channel: "whatsapp", name: messageContext.getStore()?.userName || "", skipBrain: brainAttempted });
         if (assistant.ok) {
           await saveWhatsAppAssistantTurn(fb, uid, history, rawText, assistant.reply);
           const followUps = (assistant.followUps || []).slice(0, 3).map((item) => `• ${item}`).join("\n");

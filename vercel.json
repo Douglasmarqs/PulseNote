@@ -2,6 +2,11 @@
   "version": 2,
   "outputDirectory": ".",
 
+  "functions": {
+    "api/whatsapp-webhook.js": { "maxDuration": 60 },
+    "api/pulsinho.js": { "maxDuration": 30 }
+  },
+
   "headers": [
     {
       "source": "/(.*)",

@@ -271,7 +271,30 @@ function goalTitleFromCommand(text) {
 // Comandos que precisam funcionar mesmo quando a IA estiver sem chave,
 // temporariamente indisponível ou responder fora do schema. São consultas
 // sem ambiguidade e não devem cair no "não consegui entender".
-function parseDeterministicIntent(text, todayIso, categories = []) {
+// Frases com MAIS DE UMA ação ("gastei 30 no uber e 25 na padaria",
+// "me lembra de pagar a luz e anota que..."). Quando o cérebro do
+// Pulsinho está disponível, essas frases vão inteiras para ele — o
+// atalho determinístico aqui só sabe extrair UMA ação e embaralharia o
+// resto na descrição.
+function looksCompound(text) {
+  const norm = normalizeQuickCommand(text);
+  const amounts = (norm
+    .replace(/\b\d{1,2}[:h]\d{2}\b|\b\d{1,2}\s*h\b/g, " ")
+    .replace(/\bdia\s+\d{1,2}\b|\b\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b/g, " ")
+    .replace(/\b\d+\s*(?:minutos?|mins?|min|horas?|dias?)\b/g, " ")
+    .match(/\d+(?:[.,]\d+)*/g) || []).length;
+  const cues = [
+    /\b(gastei|paguei|comprei|recebi|ganhei|vendi)\b/.test(norm),
+    /\b(me lembr\w*|lembrete|cria\w* (uma )?tarefa|nova tarefa)\b/.test(norm),
+    /\b(anota\w*|salva\w* (isso|que|uma nota))\b/.test(norm),
+    /\b(marca\w*|agenda\w*) (um|uma|reuniao|consulta|compromisso|evento)\b/.test(norm),
+  ].filter(Boolean).length;
+  const joined = /\s(e|tambem|depois|alem disso)\s/.test(norm) || /[,;]/.test(norm);
+  return cues >= 2 || (amounts >= 2 && joined && /\b(gastei|paguei|comprei|recebi|ganhei|e\s+\d)/.test(norm));
+}
+
+function parseDeterministicIntent(text, todayIso, categories = [], { deferCompound = false } = {}) {
+  if (deferCompound && looksCompound(text)) return null;
   const command = normalizeQuickCommand(text);
   const clean = command.replace(/[!?.,;:]+$/g, "").trim();
   if (/^(ajuda|help|comandos?|o que (voce|vc) (faz|entende))$/.test(clean)) {
@@ -825,4 +848,4 @@ function findBestMatch(query, items, titleKey = "title") {
   return findBestMatches(query, items, titleKey)[0] || null;
 }
 
-module.exports = { parseTextIntent, findBestMatch, findBestMatches };
+module.exports = { parseTextIntent, parseDeterministicIntent, looksCompound, findBestMatch, findBestMatches };

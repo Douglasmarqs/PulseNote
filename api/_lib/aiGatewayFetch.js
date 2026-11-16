@@ -37,7 +37,7 @@ function normalizeMessages(messages, userPrompt) {
   return normalized;
 }
 
-async function requestModel({ model, token, systemPrompt, userPrompt, messages, label, timeoutMs }) {
+async function requestModel({ model, token, systemPrompt, userPrompt, messages, label, timeoutMs, maxTokens = 900 }) {
   const startedAt = Date.now();
   try {
     const response = await fetch("https://ai-gateway.vercel.sh/v1/chat/completions", {
@@ -53,7 +53,7 @@ async function requestModel({ model, token, systemPrompt, userPrompt, messages, 
           { role: "system", content: systemPrompt },
           ...normalizeMessages(messages, userPrompt),
         ],
-        max_tokens: 900,
+        max_tokens: maxTokens,
       }),
     });
     if (!response.ok) {
@@ -72,13 +72,13 @@ async function requestModel({ model, token, systemPrompt, userPrompt, messages, 
   }
 }
 
-async function fetchGatewayJson({ systemPrompt, userPrompt, messages, label = "assistant", timeoutMs = 15000, providerPreference = "auto" }) {
+async function fetchGatewayJson({ systemPrompt, userPrompt, messages, label = "assistant", timeoutMs = 15000, providerPreference = "auto", maxTokens = 900 }) {
   const token = gatewayCredential();
   const models = gatewayModels(providerPreference);
   if (!token || !models.length) return { ok: false, status: 503, error: "ai_gateway_not_configured" };
   let last = { ok: false, status: 502, error: "ai_gateway_failed" };
   for (const model of models) {
-    last = await requestModel({ model, token, systemPrompt, userPrompt, messages, label, timeoutMs });
+    last = await requestModel({ model, token, systemPrompt, userPrompt, messages, label, timeoutMs, maxTokens });
     if (last.ok) return last;
   }
   return last;
