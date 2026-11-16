@@ -108,4 +108,40 @@ async function fetchGeminiJson({ model, apiKey, systemPrompt, contents, generati
   return lastFailure;
 }
 
-module.exports = { fetchGeminiJson, GEMINI_MODEL };
+// Resposta em texto com pesquisa do Google (grounding) — usada pelo
+// Pulsinho para notícias e informações atuais. Devolve o texto e as
+// fontes citadas pelo próprio Gemini (groundingMetadata).
+async function fetchGeminiGrounded({ apiKey, systemPrompt, prompt, label = "grounded", model = GEMINI_MODEL, timeoutMs = 15000 }) {
+  const startedAt = Date.now();
+  try {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+      signal: AbortSignal.timeout(timeoutMs),
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: systemPrompt }] },
+        contents: [{ parts: [{ text: prompt }] }],
+        tools: [{ google_search: {} }],
+        generationConfig: { maxOutputTokens: 1000 },
+      }),
+    });
+    if (!response.ok) {
+      console.warn("gemini_grounded_request", { label, status: response.status, durationMs: Date.now() - startedAt });
+      return { ok: false, error: response.status === 429 ? "ai_rate_limited" : "ai_request_failed" };
+    }
+    const data = await response.json();
+    const candidate = data.candidates?.[0] || {};
+    const text = (candidate.content?.parts || []).map((part) => part.text || "").join("").trim();
+    const sources = (candidate.groundingMetadata?.groundingChunks || [])
+      .map((chunk) => chunk?.web)
+      .filter((web) => web && (web.title || web.uri))
+      .map((web) => ({ title: String(web.title || "").slice(0, 80), uri: String(web.uri || "") }));
+    console.info("gemini_grounded_request", { label, status: response.status, durationMs: Date.now() - startedAt, sources: sources.length });
+    return text ? { ok: true, text, sources, provider: "gemini-search" } : { ok: false, error: "ai_bad_response" };
+  } catch (error) {
+    console.warn("gemini_grounded_request", { label, error: error?.name || "network_error", durationMs: Date.now() - startedAt });
+    return { ok: false, error: "ai_request_failed" };
+  }
+}
+
+module.exports = { fetchGeminiJson, fetchGeminiGrounded, GEMINI_MODEL };

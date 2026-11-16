@@ -40,6 +40,7 @@ import {
 // tirar print e mandar, em vez de "não funciona".
 let lastShownRuntimeError = "";
 const pulsinhoConversation = [];
+let pulsinhoConversationRestored = "";
 let pendingPulsinhoAction = null;
 // Ações que o Pulsinho devolveu e que precisam de um "sim" (exclusões,
 // gasto com categoria incerta). As demais são aplicadas na hora, com
@@ -1244,6 +1245,8 @@ function renderSettingsBoard() {
   document.getElementById("stPushStatus")?.classList.toggle("is-on", pushOn);
   const pushSwitch = document.getElementById("stPushSwitch");
   if (pushSwitch) pushSwitch.setAttribute("aria-checked", String(pushOn));
+  const notesSwitch = document.getElementById("stAiNotesSwitch");
+  if (notesSwitch) notesSwitch.setAttribute("aria-checked", String(state?.aiReadNotes !== false));
 
   if (typeof renderAutopilotAiPreference === "function") renderAutopilotAiPreference();
 }
@@ -1329,6 +1332,12 @@ function bindSettingsBoard() {
     if (state.whatsappLinkedPhone) document.getElementById("settingsWhatsappUnlinkBtn")?.click();
     else startWhatsappLink();
     setTimeout(renderSettingsBoard, 400);
+  });
+  document.getElementById("stAiNotesSwitch")?.addEventListener("click", () => {
+    state.aiReadNotes = state.aiReadNotes === false;
+    saveState();
+    renderSettingsBoard();
+    showToast(state.aiReadNotes ? "O Pulsinho pode ler suas notas para responder." : "O Pulsinho não lê mais o conteúdo das notas (só os títulos).");
   });
   document.getElementById("stPushSwitch")?.addEventListener("click", () => {
     const box = document.getElementById("appReminderOptIn");
@@ -2081,6 +2090,7 @@ function normalizeState(parsed) {
     parsed.appReminderOptIn = parsed.fcmTokens.length > 0;
   }
   if (!["auto", "openai", "anthropic"].includes(parsed.aiProviderPreference)) parsed.aiProviderPreference = "auto";
+  if (typeof parsed.aiReadNotes !== "boolean") parsed.aiReadNotes = true;
   // Preferências de aviso (4 categorias) e configuração inicial. Contas antigas
   // não têm esses campos: avisos ficam todos ligados (como sempre foi) e quem
   // já tem dados nunca vê a configuração inicial.
@@ -2552,9 +2562,54 @@ function bdConfirmRows(action) {
   return rows.join("");
 }
 
+// Memória da conversa do app: guardada neste aparelho (por conta), para
+// continuar de onde parou depois de recarregar ou fechar o app. Guarda as
+// últimas mensagens e envia ao Pulsinho as 20 mais recentes como contexto.
+const PULSINHO_THREAD_LIMIT = 60;
+function pulsinhoThreadKey() {
+  return currentUser?.uid ? `pulsenote-pulsinho-thread:${currentUser.uid}` : "";
+}
+
+function restorePulsinhoConversation() {
+  const key = pulsinhoThreadKey();
+  if (!key || pulsinhoConversationRestored === key) return;
+  pulsinhoConversationRestored = key;
+  try {
+    const saved = JSON.parse(localStorage.getItem(key) || "[]");
+    if (!Array.isArray(saved) || !saved.length || pulsinhoConversation.length) return;
+    for (const message of saved.slice(-PULSINHO_THREAD_LIMIT)) {
+      if (!["user", "assistant"].includes(message?.role) || typeof message.content !== "string") continue;
+      pulsinhoConversation.push({
+        role: message.role,
+        content: message.content.slice(0, 4000),
+        // Desfazer só vale na sessão em que a ação aconteceu.
+        actions: Array.isArray(message.actions) ? message.actions.map((item) => ({ summary: String(item.summary || ""), undone: Boolean(item.undone) })) : [],
+      });
+    }
+  } catch {
+    // Armazenamento indisponível (modo privado): segue sem memória local.
+  }
+}
+
+function persistPulsinhoConversation() {
+  const key = pulsinhoThreadKey();
+  if (!key) return;
+  try {
+    const slim = pulsinhoConversation.slice(-PULSINHO_THREAD_LIMIT).map(({ role, content, actions }) => ({
+      role, content, actions: (actions || []).map(({ summary, undone }) => ({ summary, undone: Boolean(undone) })),
+    }));
+    if (slim.length) localStorage.setItem(key, JSON.stringify(slim));
+    else localStorage.removeItem(key);
+  } catch {
+    // Sem espaço ou sem permissão: a conversa continua só na memória.
+  }
+}
+
 function renderPulsinhoConversation({ loading = false, error = "" } = {}) {
   const root = document.querySelector("#pulseCommandResponse");
   if (!root) return;
+  restorePulsinhoConversation();
+  if (!loading) persistPulsinhoConversation();
   root.classList.toggle("is-loading", loading);
   const hour = new Date().getHours();
   const hello = hour < 5 ? "Boa noite" : hour < 12 ? "Bom dia" : hour < 18 ? "Boa tarde" : "Boa noite";
@@ -2611,7 +2666,7 @@ async function askPulsinhoFromDashboard(question) {
   const history = pulsinhoConversation.map(({ role, content, actions }) => ({
     role,
     content: [content, ...(actions || []).map((item) => `${item.summary}${item.undone ? " (desfeito)" : ""}`)].filter(Boolean).join("\n"),
-  })).slice(-10);
+  })).slice(-20);
   pulsinhoConversation.push({ role: "user", content: question });
   pendingPulsinhoAction = null;
   pendingPulsinhoActions = [];
@@ -4464,6 +4519,7 @@ function bindBoardsShell() {
     pendingPulsinhoAction = null;
     pendingPulsinhoActions = [];
     pulsinhoUndo.clear();
+    persistPulsinhoConversation();
     renderPulsinhoConversation();
   });
 }

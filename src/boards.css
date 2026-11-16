@@ -2647,3 +2647,4 @@ html, body { overflow-x: clip; }
 .bd-confirm-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .bd-confirm-list li { padding: 8px 10px; border: 1px solid var(--bd-line-strong); border-radius: 9px; background: var(--bd-input); font-size: 12.5px; line-height: 1.35; color: var(--bd-text); }
 .bd-confirm-head .ico.is-danger { background: var(--bd-red-soft); color: var(--bd-red); }
+.st-ai-notes { margin-top: 10px; }

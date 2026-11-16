@@ -107,7 +107,7 @@
     <!-- Camada de experiência: uma linguagem única para todas as áreas. -->
     <link rel="stylesheet" href="/src/experience.css?v=3" />
     <!-- Sistema visual dos quadros (claro/escuro, desktop/mobile). Carrega por último. -->
-    <link rel="stylesheet" href="/src/boards.css?v=6" />
+    <link rel="stylesheet" href="/src/boards.css?v=7" />
   </head>
   <body class="bd">
     <!-- Tela de abertura já no HTML: aparece na primeira pintura, antes de
@@ -1613,7 +1613,12 @@
                     <option value="openai">GPT / OpenAI</option>
                     <option value="anthropic">Claude / Anthropic</option>
                   </select>
-                  <p class="st-note">A IA recebe só um resumo necessário dos seus dados. Mudanças continuam exigindo sua confirmação.</p>
+                  <div class="st-row st-ai-notes">
+                    <span class="st-row-ico"><svg class="i"><use href="#i-note"/></svg></span>
+                    <span class="st-row-copy"><strong>Ler conteúdo das notas</strong><small>Para o Pulsinho responder com base no que você anotou.</small></span>
+                    <button type="button" class="st-switch" id="stAiNotesSwitch" role="switch" aria-checked="true" aria-label="Permitir que o Pulsinho leia o conteúdo das suas notas"><i></i></button>
+                  </div>
+                  <p class="st-note">A IA recebe só o necessário dos seus dados para responder. Exclusões sempre pedem sua confirmação.</p>
                 </section>
 
                 <article class="bd-card st-card st-int">
@@ -2019,7 +2024,7 @@
     <script src="/src/recurring-detector.js?v=1"></script>
     <script src="/src/card-installments.js?v=1"></script>
     <script src="/src/notifications.js?v=36" defer></script>
-    <script type="module" src="/src/app.js?v=42"></script>
+    <script type="module" src="/src/app.js?v=43"></script>
     <script type="module" src="/src/push-notifications.js?v=35"></script>
     <!-- Configuração inicial (primeiro acesso) — ver src/onboarding.js -->
   <div id="onboardingRoot" class="bdo" role="dialog" aria-modal="true" aria-labelledby="bdoTitle" hidden></div>

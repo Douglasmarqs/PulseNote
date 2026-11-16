@@ -105,19 +105,86 @@ test("pergunta pura nunca grava sozinha, mesmo que a IA proponha", async () => {
   assert.equal(result.actions[0].risk, "confirm");
 });
 
-test("o prompt traz contexto real e não envia conteúdo privado das notas", async () => {
-  let captured = "";
-  const state = { notes: [{ id: "n1", title: "Diário", description: "texto íntimo" }], tasks: [{ id: "t", title: "Enviar proposta", status: "Pendente" }] };
-  await converse({
-    state, message: "o que eu tenho pendente?", name: "Douglas", categories, now,
-    callModel: async ({ systemPrompt }) => { captured = systemPrompt; return { ok: true, parsed: { reply: "Você tem a proposta." } }; },
+test("o prompt traz contexto real e o conteúdo das notas só quando a pessoa permite", async () => {
+  const prompts = [];
+  const state = { notes: [{ id: "n1", title: "Diário", description: "texto íntimo" }, { id: "n2", title: "Wi-fi de casa", description: "senha: girassol123" }], tasks: [{ id: "t", title: "Enviar proposta", status: "Pendente" }] };
+  const model = async ({ systemPrompt }) => { prompts.push(systemPrompt); return { ok: true, parsed: { reply: "ok" } }; };
+  await converse({ state, message: "qual é a senha do wifi?", name: "Douglas", categories, now, callModel: model });
+  assert.match(prompts[0], /Douglas/);
+  assert.match(prompts[0], /sexta-feira, 2025-01-24, 09:05/);
+  assert.match(prompts[0], /Enviar proposta/);
+  assert.match(prompts[0], /girassol123/);
+  const ranked = buildBrainContext(state, { now, message: "qual é a senha do wifi?" }).notas;
+  assert.equal(ranked[0].id, "n2", "a nota relacionada à pergunta vem primeiro");
+
+  await converse({ state: { ...state, aiReadNotes: false }, message: "qual é a senha do wifi?", categories, now, callModel: model });
+  assert.doesNotMatch(prompts[1], /girassol123|texto íntimo/);
+  assert.match(prompts[1], /"Wi-fi de casa"/);
+  assert.match(prompts[1], /desativada pela pessoa/);
+});
+
+test("a IA pode pedir uma consulta e responde com os resultados reais", async () => {
+  const state = { finances: [
+    { id: "f1", date: "2024-03-05", description: "Uber centro", amount: 23.5, type: "despesa", category: "transporte" },
+    { id: "f2", date: "2024-03-20", description: "Uber aeroporto", amount: 61, type: "despesa", category: "transporte" },
+    { id: "f3", date: "2024-03-21", description: "Mercado", amount: 200, type: "despesa", category: "mercado" },
+  ] };
+  const messages = [];
+  const result = await converse({
+    state, message: "quanto gastei com uber em março do ano passado?", categories, now,
+    callModel: async ({ message }) => {
+      messages.push(message);
+      if (messages.length === 1) return { ok: true, parsed: { reply: "", lookups: [{ type: "transactions", query: "uber", from: "2024-03-01", to: "2024-03-31" }] } };
+      return { ok: true, parsed: { reply: "Em março de 2024 foram 2 corridas de Uber, R$ 84,50 no total." } };
+    },
   });
-  assert.match(captured, /Douglas/);
-  assert.match(captured, /sexta-feira, 2025-01-24, 09:05/);
-  assert.match(captured, /Enviar proposta/);
-  assert.match(captured, /"Diário"/);
-  assert.doesNotMatch(captured, /texto íntimo/);
-  assert.deepEqual(buildBrainContext(state, { now }).notas, [{ id: "n1", title: "Diário" }]);
+  assert.equal(messages.length, 2);
+  assert.match(messages[1], /RESULTADOS DA CONSULTA/);
+  assert.match(messages[1], /"quantidade":2/);
+  assert.match(messages[1], /"totalGastos":84.5/);
+  assert.doesNotMatch(messages[1], /Mercado/);
+  assert.match(result.reply, /R\$ 84,50/);
+});
+
+test("notícias e informações atuais vão para a pesquisa na internet, com fontes", async () => {
+  let searched = null;
+  const result = await converse({
+    message: "quais as principais notícias de hoje?", categories, now,
+    callModel: async () => ({ ok: true, parsed: { reply: "", lookups: [{ type: "web", query: "principais notícias hoje Brasil" }] } }),
+    webSearch: async (input) => { searched = input; return { ok: true, text: "Hoje os destaques são…", sources: [{ title: "g1.globo.com" }, { title: "folha.uol.com.br" }, { title: "g1.globo.com" }] }; },
+  });
+  assert.equal(searched.query, "principais notícias hoje Brasil");
+  assert.equal(result.source, "web");
+  assert.match(result.reply, /Hoje os destaques são…\n\nFontes: g1\.globo\.com, folha\.uol\.com\.br$/);
+  const failed = await converse({
+    message: "cotação do dólar agora", categories, now,
+    callModel: async () => ({ ok: true, parsed: { reply: "", lookups: [{ type: "web", query: "cotação dólar" }] } }),
+    webSearch: async () => ({ ok: false }),
+  });
+  assert.match(failed.reply, /não respondeu/);
+});
+
+test("'anota:' guarda o texto exatamente como foi escrito", async () => {
+  const result = await converse({
+    message: "anota: ideia — app de receitas com IA, testar com a Ana em dezembro!!", categories, now,
+    callModel: async () => ({ ok: true, parsed: { reply: "Anotado ✍️", actions: [{ type: "add_note", title: "App de receitas", content: "Ideia de app de receitas com IA" }] } }),
+  });
+  assert.equal(result.actions[0].record.description, "ideia — app de receitas com IA, testar com a Ana em dezembro!!");
+  assert.equal(result.actions[0].record.title, "App de receitas");
+});
+
+test("simulação de compra: números do simulador, explicação da IA", async () => {
+  let prompt = "";
+  const result = await askPulsinho({
+    question: "posso comprar um tênis de 300?",
+    state: { financeAccounts: [{ id: "a", workspaceId: "personal", currentBalance: 2000 }], financialSettings: { safetyReserve: 500 } },
+    now,
+    callModel: async ({ systemPrompt }) => { prompt = systemPrompt; return { ok: true, provider: "test", parsed: { reply: "Cabe sim! Ainda sobra uma boa margem 😉" } }; },
+  });
+  assert.equal(result.kind, "simulation");
+  assert.match(prompt, /FATOS CALCULADOS/);
+  assert.match(prompt, /"valor":300/);
+  assert.equal(result.reply, "Cabe sim! Ainda sobra uma boa margem 😉");
 });
 
 test("app: 'agenda uma reunião' vai para a IA em vez da resposta pronta de agenda", async () => {
@@ -167,6 +234,10 @@ test("chat do app aplica ações com desfazer e pede confirmação para exclusõ
   assert.match(app, /data-pulsinho-undo/);
   assert.match(app, /function confirmPulsinhoActions\(\)/);
   assert.doesNotMatch(app, /command\.length < 3/, "mensagens curtas como 'oi' são aceitas");
+  assert.match(app, /pulsenote-pulsinho-thread:/, "conversa do app fica salva entre recarregamentos");
+  assert.match(app, /\.slice\(-20\)/, "contexto de 20 mensagens");
+  assert.match(app, /stAiNotesSwitch/);
+  assert.match(app, /parsed\.aiReadNotes = true/);
   const css = fs.readFileSync(path.join(__dirname, "..", "src", "boards.css"), "utf8");
   assert.match(css, /\.bd-msg-action \{/);
 });

@@ -23,7 +23,13 @@ const quiet = () => {
 test("saudação é respondida na hora, com nome e resumo do dia, sem chamar a IA", async () => {
   const restore = quiet();
   try {
-    const sim = createSimulator({ state: baseState(), model: async () => { throw new Error("não deveria chamar a IA"); } });
+    const state = baseState();
+    // Depois das 19h o resumo é de amanhã — uma tarefa em cada dia deixa o
+    // teste independente do horário em que roda.
+    const tomorrow = new Date(`${today}T12:00:00Z`);
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+    state.tasks.push({ id: "t3", title: "Dentista", status: "Pendente", dueDate: tomorrow.toISOString().slice(0, 10) });
+    const sim = createSimulator({ state, model: async () => { throw new Error("não deveria chamar a IA"); } });
     const { replies } = await sim.say("bom dia pulsinho");
     assert.equal(replies.length, 1);
     assert.match(replies[0].text, /^Bom dia, Douglas! ☀️/);
@@ -46,7 +52,7 @@ test("uma mensagem com várias intenções vira vários registros, com resumo de
       model: async ({ message, system }) => {
         assert.match(system, /Pulsinho/);
         assert.match(system, /Douglas/);
-        assert.doesNotMatch(system, /abc123/, "conteúdo de nota não vai para o modelo");
+        assert.match(system, /abc123/, "com a leitura de notas permitida, o conteúdo ajuda a responder");
         assert.match(message, /gastei 30 no uber e 25 na padaria/);
         return {
           reply: "Feito!",
@@ -75,7 +81,7 @@ test("uma mensagem com várias intenções vira vários registros, com resumo de
   } finally { restore(); }
 });
 
-test("saudação junto com pedido: cumprimenta e registra pelo caminho rápido", async () => {
+test("saudação junto com pedido: cumprimenta e, sem IA, registra pelo caminho de reserva", async () => {
   const restore = quiet();
   try {
     const sim = createSimulator({ state: baseState(), model: async () => { throw new Error("comando claro não usa IA"); } });
@@ -191,4 +197,47 @@ test("sem IA disponível, o caminho antigo continua respondendo", async () => {
     console.error = originalError;
     restore();
   }
+});
+
+test("comandos claros também passam pela IA quando ela está disponível", async () => {
+  const restore = quiet();
+  try {
+    const sim = createSimulator({
+      state: baseState(),
+      model: async ({ message }) => {
+        assert.equal(message, "minhas tarefas");
+        return { reply: "Você tem 2 pendências:\n• Enviar proposta — hoje\n• Comprar ração", actions: [] };
+      },
+    });
+    const { replies } = await sim.say("minhas tarefas");
+    assert.equal(replies[0].text, "Você tem 2 pendências:\n• Enviar proposta — hoje\n• Comprar ração");
+    assert.equal(sim.modelCalls.length, 1);
+  } finally { restore(); }
+});
+
+test("'apagar último gasto' pede confirmação antes de excluir", async () => {
+  const restore = quiet();
+  try {
+    const state = baseState();
+    state.finances = [{ id: "wa_11111111-2222-3333-4444-555555555555", source: "whatsapp", type: "despesa", amount: 45, description: "Mercado", category: "mercado", date: today }];
+    const sim = createSimulator({ state, model: async () => { throw new Error("não usa IA"); } });
+    const ask = await sim.say("apagar último gasto");
+    assert.equal(ask.replies[0].kind, "buttons");
+    assert.match(ask.replies[0].text, /Excluir o gasto de R\$ 45,00 — Mercado/);
+    assert.equal(sim.state().finances.length, 1, "nada é apagado sem o botão");
+    const done = await sim.press("fin:confirm_delete:wa_11111111-2222-3333-4444-555555555555");
+    assert.match(done.replies[0].text, /Excluí “Mercado”/);
+    assert.equal(sim.state().finances.length, 0);
+  } finally { restore(); }
+});
+
+test("memória do WhatsApp guarda as últimas 20 mensagens", async () => {
+  const restore = quiet();
+  try {
+    const sim = createSimulator({ state: baseState(), model: async () => ({ reply: "Certo!", actions: [] }) });
+    for (let i = 0; i < 12; i += 1) await sim.say(`me conta uma curiosidade número ${i}`);
+    const thread = sim.thread();
+    assert.equal(thread.messages.length, 20);
+    assert.match(thread.messages.at(-2).content, /número 11/);
+  } finally { restore(); }
 });

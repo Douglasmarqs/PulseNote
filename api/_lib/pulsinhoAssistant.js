@@ -215,28 +215,47 @@ function isActionRequest(question) {
   return ACTION_REQUEST_RE.test(normalized(question));
 }
 
-async function askPulsinho({ state, question, workspaceId, providerPreference, history, name = "", channel = "app", now = brazilNow(), callModel, skipBrain = false }) {
+async function askPulsinho({ state, question, workspaceId, providerPreference, history, name = "", channel = "app", now = brazilNow(), callModel, skipBrain = false, webSearch }) {
   const cleanQuestion = String(question || "").trim().slice(0, 1600);
   if (cleanQuestion.length < 1) return { ok: false, status: 400, error: "invalid_question" };
   const safeState = state || {};
+  const safeHistory = sanitizeHistory(history);
   const purchaseAmount = purchaseAmountFromQuestion(cleanQuestion);
   const forecast = buildFinanceForecast(safeState, { workspaceId, purchaseAmount });
+  const brainOptions = {
+    state: safeState, history: safeHistory, name, channel, categories: buildCategoryList(safeState), providerPreference,
+    workspaceId: workspaceId || "personal", now, allowSmallTalk: false,
+    ...(callModel ? { callModel } : {}), ...(webSearch ? { webSearch } : {}),
+  };
 
+  // "Posso gastar 350?": o simulador calcula (números exatos) e a IA
+  // explica em conversa. Sem IA, a resposta pronta do simulador vale.
   if (purchaseAmount > 0) {
+    const fallbackReply = `${forecast.summary} Depois dos compromissos previstos, o saldo de fechamento ficaria em ${money(forecast.projectedBalanceAfterPurchase)}. ${forecast.reasons[0] || "A projeção usa os dados registrados no PulseNote."}`;
+    const brain = skipBrain ? { ok: false } : await converse({
+      ...brainOptions,
+      message: cleanQuestion,
+      facts: {
+        simulacaoDeCompra: {
+          valor: purchaseAmount, cabeNoOrcamento: forecast.canAfford, resumo: forecast.summary,
+          saldoProjetadoDepois: forecast.projectedBalanceAfterPurchase, menorSaldoAteFimDoMes: forecast.lowestBalance,
+          reservaPreservada: forecast.reserve, motivos: asArray(forecast.reasons).slice(0, 3),
+        },
+      },
+    });
     return {
       ok: true,
       kind: "simulation",
       forecast,
-      reply: `${forecast.summary} Depois dos compromissos previstos, o saldo de fechamento ficaria em ${money(forecast.projectedBalanceAfterPurchase)}. ${forecast.reasons[0] || "A projeção usa os dados registrados no PulseNote."}`,
+      reply: brain.ok && brain.reply ? brain.reply : fallbackReply,
       navigationTarget: "finances",
-      followUps: ["Quais contas ainda vão cair?", "Quanto posso gastar por dia?", "Compare com o mês passado"],
-      provider: "forecast-engine",
+      followUps: brain.ok && brain.followUps?.length ? brain.followUps : ["Quais contas ainda vão cair?", "Quanto posso gastar por dia?", "Compare com o mês passado"],
+      provider: brain.ok ? brain.provider : "forecast-engine",
       actions: [],
     };
   }
 
   // Bate-papo (oi, bom dia, obrigado...) responde na hora, sem IA.
-  const safeHistory = sanitizeHistory(history);
   const small = detectSmallTalk(cleanQuestion, { history: safeHistory });
   if (small && small.kind !== "prefix") {
     return {
@@ -246,17 +265,9 @@ async function askPulsinho({ state, question, workspaceId, providerPreference, h
     };
   }
 
-  const context = buildAssistantContext(safeState, forecast);
-  if (!isActionRequest(cleanQuestion)) {
-    const localAnswer = buildLocalAssistantAnswer(cleanQuestion, context, forecast);
-    if (localAnswer) return { ok: true, kind: "answer", forecast, actions: [], ...localAnswer };
-  }
-
-  const brain = skipBrain ? { ok: false } : await converse({
-    state: safeState, message: cleanQuestion, history: safeHistory, name, channel,
-    categories: buildCategoryList(safeState), providerPreference, workspaceId: workspaceId || "personal", now, allowSmallTalk: false,
-    ...(callModel ? { callModel } : {}),
-  });
+  // IA primeiro para todo o resto — inclusive consultas como "saldo" ou
+  // "minhas tarefas". As respostas prontas só entram se a IA falhar.
+  const brain = skipBrain ? { ok: false } : await converse({ ...brainOptions, message: cleanQuestion });
   if (brain.ok) {
     const actions = brain.actions.map(serializeAction);
     const firstConfirm = brain.actions.find((action) => action.risk === "confirm");
@@ -269,11 +280,15 @@ async function askPulsinho({ state, question, workspaceId, providerPreference, h
       navigationTarget: brain.navigationTarget,
       provider: brain.provider,
       actions,
+      ...(brain.sources ? { sources: brain.sources } : {}),
       // Compatibilidade com versões antigas do app (um único pedido).
       proposedAction: firstConfirm ? toLegacyProposedAction(firstConfirm) : null,
     };
   }
 
+  const context = buildAssistantContext(safeState, forecast);
+  const local = !isActionRequest(cleanQuestion) ? buildLocalAssistantAnswer(cleanQuestion, context, forecast) : null;
+  if (local) return { ok: true, kind: "answer", forecast, actions: [], ...local };
   return { ok: true, kind: "answer", forecast, actions: [], ...buildLocalAssistantAnswer(cleanQuestion, context, forecast, { fallback: true }) };
 }
 

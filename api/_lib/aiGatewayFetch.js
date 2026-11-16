@@ -21,7 +21,7 @@ function gatewayModels(providerPreference = "auto") {
   return [...unique.filter((model) => model.startsWith(preferredPrefix)), ...unique.filter((model) => !model.startsWith(preferredPrefix))];
 }
 
-function normalizeMessages(messages, userPrompt) {
+function normalizeMessages(messages, userPrompt, maxHistory = 12) {
   const normalized = Array.isArray(messages)
     ? messages
         .filter((message) => ["user", "assistant"].includes(message?.role))
@@ -30,14 +30,14 @@ function normalizeMessages(messages, userPrompt) {
           content: String(message.content || "").trim().slice(0, 2000),
         }))
         .filter((message) => message.content)
-        .slice(-12)
+        .slice(-maxHistory)
     : [];
   const current = String(userPrompt || "").trim();
   if (current && normalized.at(-1)?.content !== current) normalized.push({ role: "user", content: current });
   return normalized;
 }
 
-async function requestModel({ model, token, systemPrompt, userPrompt, messages, label, timeoutMs, maxTokens = 900 }) {
+async function requestModel({ model, token, systemPrompt, userPrompt, messages, label, timeoutMs, maxTokens = 900, maxHistory = 12 }) {
   const startedAt = Date.now();
   try {
     const response = await fetch("https://ai-gateway.vercel.sh/v1/chat/completions", {
@@ -51,7 +51,7 @@ async function requestModel({ model, token, systemPrompt, userPrompt, messages, 
         model,
         messages: [
           { role: "system", content: systemPrompt },
-          ...normalizeMessages(messages, userPrompt),
+          ...normalizeMessages(messages, userPrompt, maxHistory),
         ],
         max_tokens: maxTokens,
       }),
@@ -72,13 +72,13 @@ async function requestModel({ model, token, systemPrompt, userPrompt, messages, 
   }
 }
 
-async function fetchGatewayJson({ systemPrompt, userPrompt, messages, label = "assistant", timeoutMs = 15000, providerPreference = "auto", maxTokens = 900 }) {
+async function fetchGatewayJson({ systemPrompt, userPrompt, messages, label = "assistant", timeoutMs = 15000, providerPreference = "auto", maxTokens = 900, maxHistory = 12 }) {
   const token = gatewayCredential();
   const models = gatewayModels(providerPreference);
   if (!token || !models.length) return { ok: false, status: 503, error: "ai_gateway_not_configured" };
   let last = { ok: false, status: 502, error: "ai_gateway_failed" };
   for (const model of models) {
-    last = await requestModel({ model, token, systemPrompt, userPrompt, messages, label, timeoutMs, maxTokens });
+    last = await requestModel({ model, token, systemPrompt, userPrompt, messages, label, timeoutMs, maxTokens, maxHistory });
     if (last.ok) return last;
   }
   return last;

@@ -523,7 +523,9 @@ async function getUserCategoriesAndContext(fb, uid) {
 // — mesma lógica/janela do contexto de "lançamento recente" usado pra
 // correção de data (RECENT_CONTEXT_WINDOW_MS em parseCommandIntent.js).
 const CLARIFICATION_WINDOW_MS = 10 * 60 * 1000;
-const ASSISTANT_CONTEXT_WINDOW_MS = 24 * 60 * 60 * 1000;
+// Memória da conversa no WhatsApp: últimas 20 mensagens, por até 7 dias.
+const ASSISTANT_CONTEXT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+const ASSISTANT_THREAD_LIMIT = 20;
 
 async function loadWhatsAppAssistantHistory(fb, uid) {
   const snapshot = await fb.firestore().collection("whatsappAssistantThreads").doc(uid).get();
@@ -531,7 +533,7 @@ async function loadWhatsAppAssistantHistory(fb, uid) {
   const data = snapshot.data() || {};
   const age = Date.now() - new Date(data.updatedAt || 0).getTime();
   if (!Number.isFinite(age) || age < 0 || age > ASSISTANT_CONTEXT_WINDOW_MS) return [];
-  return Array.isArray(data.messages) ? data.messages.slice(-8) : [];
+  return Array.isArray(data.messages) ? data.messages.slice(-ASSISTANT_THREAD_LIMIT) : [];
 }
 
 async function saveWhatsAppAssistantTurn(fb, uid, history, question, reply) {
@@ -541,7 +543,7 @@ async function saveWhatsAppAssistantTurn(fb, uid, history, question, reply) {
     ...(Array.isArray(history) ? history : []),
     { role: "user", content: String(question || "").slice(0, 1200) },
     { role: "assistant", content: String(reply || "").slice(0, 1600) },
-  ].filter((item) => ["user", "assistant"].includes(item.role) && item.content).slice(-8);
+  ].filter((item) => ["user", "assistant"].includes(item.role) && item.content).slice(-ASSISTANT_THREAD_LIMIT);
   await fb.firestore().collection("whatsappAssistantThreads").doc(uid).set({ uid, messages, updatedAt: new Date().toISOString() });
 }
 
@@ -946,6 +948,17 @@ function isBalanceCommand(norm) {
 // Apaga só lançamentos feitos pelo WhatsApp (nunca pelo app). O alvo
 // explícito é exigido aqui também, para que nenhum novo chamador da IA
 // possa contornar a validação do handler.
+// Só localiza (sem apagar) o lançamento de "apagar último gasto": a
+// exclusão acontece depois, pelo botão de confirmação.
+async function findLastWhatsAppEntry(fb, uid, target) {
+  if (!target || target.underspecified || ![0, 1].includes(target.offset)
+    || ![null, "receita", "despesa"].includes(target.type)) return null;
+  const state = await loadUserState(fb, uid);
+  const finances = Array.isArray(state.finances) ? state.finances : [];
+  const matching = finances.filter((entry) => entry?.source === "whatsapp" && /^wa_/.test(String(entry.id || "")) && (!target.type || entry.type === target.type));
+  return matching[target.offset] || null;
+}
+
 async function deleteLastWhatsAppEntry(fb, uid, target) {
   if (!target || target.underspecified || ![0, 1].includes(target.offset)
     || ![null, "receita", "despesa"].includes(target.type)) return undefined;
@@ -1613,14 +1626,6 @@ async function handlePulsinhoConfirmation(fb, uid, phone, decision, pending, { f
   }
 }
 
-// "me ajuda a priorizar minhas tarefas", "o que você acha da minha
-// semana?" — pedidos de conversa, não consultas secas da agenda.
-function isConversationalRequest(text) {
-  const norm = normalizeCommand(text);
-  return norm.split(/\s+/).length >= 5
-    && /\b(me ajuda|ajuda a|me ajude|como (eu )?(posso|devo|faco)|por ?que|o que (voce|vc) acha|voce acha|vc acha|sugest|sugere|dica|prioriz|organiz|planej|devo|melhor forma|conselho|explica)/.test(norm);
-}
-
 const HELP_MESSAGE = `🤖 O que eu entendo por aqui (tudo em linguagem natural, não precisa decorar comando):
 
 💬 *Conversa*
@@ -2091,17 +2096,34 @@ module.exports = async (req, res) => {
           await sendWhatsAppMessage(fromPhone, "O que deseja excluir? Diga *apagar último gasto*, *apagar última receita* ou use o ID mostrado na confirmação. Não apaguei nada.");
           return respondOk();
         }
-        const deleted = await deleteLastWhatsAppEntry(fb, uid, financeDelete);
-        if (!deleted) {
+        const entry = await findLastWhatsAppEntry(fb, uid, financeDelete);
+        if (!entry) {
           await sendWhatsAppMessage(fromPhone, "Não achei um lançamento correspondente feito por aqui. Não apaguei nada.");
         } else {
-          const verb = deleted.type === "receita" ? "Receita" : "Gasto";
-          await sendWhatsAppMessage(
-            fromPhone,
-            `🗑️ Apaguei: ${verb} de R$ ${formatWhatsAppAmount(deleted.amount)} — ${deleted.description || "sem descrição"}.`
-          );
+          const verb = entry.type === "receita" ? "a receita" : "o gasto";
+          await sendWhatsAppButtons(fromPhone, `Excluir ${verb} de R$ ${formatWhatsAppAmount(entry.amount)} — ${entry.description || "sem descrição"} (${formatDateBr(entry.date)})?`, [
+            { id: `fin:confirm_delete:${entry.id}`, title: "Sim, excluir" },
+            { id: `fin:cancel_delete:${entry.id}`, title: "Cancelar" },
+          ], "Nada muda sem a sua confirmação.");
         }
         return respondOk();
+      }
+
+      // IA primeiro: com a IA disponível, todo pedido (inclusive comandos
+      // claros como "minhas tarefas" ou "saldo") é respondido pelo Pulsinho
+      // em conversa. Ficam no formato fixo só o PDF (arquivo) e a ajuda.
+      // Se a IA falhar, os caminhos fixos abaixo respondem como antes.
+      const quickIntent = parseDeterministicIntent(rawText, today, categories);
+      const keepFixed = quickIntent?.intent === "help"
+        || (quickIntent?.intent === "report" && quickIntent.report?.format === "arquivo");
+      const isPurchaseQuestion = purchaseAmountFromQuestion(rawText) > 0;
+      let brainAttempted = false;
+      if (aiEnabled && !keepFixed && !isPurchaseQuestion) {
+        brainAttempted = true;
+        const handled = await handleBrainMessage({
+          fb, uid, phone: fromPhone, rawText, history, categories, lastFinanceEntry, fromAudio: Boolean(message.wasAudio),
+        });
+        if (handled) return respondOk();
       }
 
       if (isBalanceCommand(norm)) {
@@ -2121,30 +2143,19 @@ module.exports = async (req, res) => {
         const stateSnapshot = await fb.firestore().collection("userData").doc(uid).get();
         const userState = stateSnapshot.exists ? stateSnapshot.data()?.data || {} : {};
         const history = await loadWhatsAppAssistantHistory(fb, uid);
-        const assistant = await askPulsinho({ state: userState, question: rawText, history, providerPreference: userState.aiProviderPreference });
+        const assistant = await askPulsinho({ state: userState, question: rawText, history, providerPreference: userState.aiProviderPreference, channel: "whatsapp", name: messageContext.getStore()?.userName || "", skipBrain: !aiEnabled });
         if (assistant.ok) {
           await saveWhatsAppAssistantTurn(fb, uid, history, rawText, assistant.reply);
-          const followUps = (assistant.followUps || []).slice(0, 3).map((item) => `• ${item}`).join("\n");
-          await sendWhatsAppMessage(fromPhone, `🧠 *Pulsinho*\n${assistant.reply}${followUps ? `\n\nVocê também pode perguntar:\n${followUps}` : ""}`);
+          await sendWhatsAppMessage(fromPhone, assistant.reply);
         } else {
           await sendWhatsAppMessage(fromPhone, "Não consegui calcular essa projeção agora. Nenhum gasto foi registrado; tente novamente em instantes.");
         }
         return respondOk();
       }
 
-      // Comandos claros seguem pelo caminho rápido (sem IA). O resto vai
-      // para o cérebro do Pulsinho, que conversa e entende várias ações na
-      // mesma frase. Se a IA estiver indisponível, o classificador antigo
-      // continua como reserva.
-      let result = parseDeterministicIntent(rawText, today, categories, { deferCompound: aiEnabled });
-      if (result?.intent === "agenda" && isConversationalRequest(rawText)) result = null;
-      const brainAttempted = !result && aiEnabled;
-      if (!result && aiEnabled) {
-        const handled = await handleBrainMessage({
-          fb, uid, phone: fromPhone, rawText, history, categories, lastFinanceEntry, fromAudio: Boolean(message.wasAudio),
-        });
-        if (handled) return respondOk();
-      }
+      // Caminho de reserva (IA desligada no plano ou indisponível agora):
+      // comandos claros pelo atalho determinístico e o classificador antigo.
+      let result = quickIntent;
       if (!result) result = await timeStage("parse_text", message.id, () => parseTextIntent({ text: rawText, categories, today, lastFinanceEntry, aiEnabled }));
 
       if (message.wasAudio && isDestructiveAudioIntent(result)) {
