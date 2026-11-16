@@ -15,7 +15,8 @@
 // bem antes disso — foi o que apareceu nos logs do webhook). Trocado
 // para o sucessor indicado pela própria Google, mesmo nível
 // rápido/barato/gratuito. O mesmo modelo lê imagem também (multimodal).
-const { fetchGeminiJson, GEMINI_MODEL } = require("./geminiFetch");
+const { fetchGeminiJson, geminiAllowedForPersonalText, GEMINI_MODEL } = require("./geminiFetch");
+const { fetchGatewayJson, gatewayCredential, gatewayModels } = require("./aiGatewayFetch");
 const { guessSpecificCategoryId } = require("./localTextFallback");
 
 function buildSystemPrompt({ todayIso, categoryList, mediaMode = false }) {
@@ -29,7 +30,8 @@ Regras OBRIGATÓRIAS:
 - "amount": número positivo em reais (ex.: 32.5). Se for uma foto de cupom, use o VALOR TOTAL da compra (procure por "TOTAL", "VALOR A PAGAR" — não some cada item à mão se já houver um total impresso). Obrigatório.
 - "date": se houver referência de data relativa no texto ("ontem", "anteontem"/"antes de ontem", "semana passada", "segunda-feira", "dia 12", "27/06" etc.), calcule a data real YYYY-MM-DD a partir de hoje. Se for cupom fiscal com data impressa, use essa data. Para boleto NÃO pago, nunca use o vencimento como data de pagamento. Sem nenhuma referência, use hoje.
 - "type": "despesa" por padrão. Use "receita" APENAS se for entrada de dinheiro (salário, recebimento, venda, reembolso, freelance, rendimento etc.) — cupom fiscal é sempre "despesa".
-- "categoryId": escolha o id que melhor descreve o que foi dito/comprado. Priorize o mais específico (ex.: se a frase cita "mercado" ou o cupom é de supermercado, escolha "mercado" — não "outros"). Deve ser do mesmo tipo de "type". NUNCA escolha uma categoria genérica tipo "outros"/"outros_receita" se qualquer categoria mais específica da lista puder se aplicar pelo SENTIDO do que foi dito, mesmo sem a palavra exata (ex.: "gastei com o veterinário" → categoria de pet; "comprei fralda" → categoria de filhos/família; "paguei o seguro do carro" → categoria de seguros). Só use "outros"/"outros_receita" quando genuinely nenhuma categoria da lista tiver relação com o que foi dito.
+- "categoryId": escolha o id que melhor descreve o que foi dito/comprado. Priorize o mais específico (ex.: se a frase cita "mercado" ou o cupom é de supermercado, escolha "mercado" — não "outros"). Deve ser do mesmo tipo de "type". NUNCA escolha uma categoria genérica tipo "outros"/"outros_receita" se qualquer categoria mais específica da lista puder se aplicar pelo SENTIDO do que foi dito, mesmo sem a palavra exata (ex.: "gastei com o veterinário" → categoria de pet; "comprei fralda" → categoria de filhos/família; "paguei o seguro do carro" → categoria de seguros). Só use "outros"/"outros_receita" quando genuinamente nenhuma categoria da lista tiver relação com o que foi dito.
+- Receitas — mapa pelo sentido: salário/holerite/13º/férias/PLR → salário; freela/cliente pagou/serviço/comissão → freelance; vendi/venda/OLX/Mercado Livre → vendas; dividendos/rendimento/juros recebidos → investimentos; reembolso/estorno/cashback/restituição → reembolso; aluguel recebido de inquilino → aluguel recebido; presente/mesada/bônus → presente; pensão/auxílio/benefício → pensão; prêmio/sorteio → prêmio.
 - "description": 2 a 5 palavras que descrevam O QUE foi gasto/recebido — NÃO use o nome da categoria como descrição. Se for cupom, use o nome do estabelecimento (ex.: "Supermercado Extra", "Farmácia Drogasil"). Se for texto, extraia do que foi dito, removendo só conectores ("gastei", "paguei", "recebi", "reais", "de", "com", "no", "na" etc.).
 ${mediaMode ? '- Para imagem/PDF, informe também "documentKind" (cupom, nota_fiscal, comprovante, boleto ou outro), "paymentStatus" (pago, pendente ou desconhecido) e "dueDate" somente quando o vencimento estiver legível. Informe "paymentMethod" (pix, boleto, cartao_debito, cartao_credito, dinheiro, transferencia ou desconhecido) apenas se o meio de pagamento estiver explícito no documento; um boleto ou uma nota fiscal por si só NÃO comprovam o meio usado nem a quitação. Boleto com código de barras e vencimento, sem comprovante de quitação, é pendente. Se o valor total não estiver legível, não invente.' : ''}
 
@@ -37,7 +39,7 @@ Exemplo 1 — entrada: "gastei 32 reais no ifood ontem"
 Saída: {"type":"despesa","amount":32,"categoryId":"alimentacao","description":"iFood","date":"${todayIso}"}
 
 Exemplo 2 — entrada: "paguei 80 reais de gasolina antes de ontem"
-Saída: {"type":"despesa","amount":80,"categoryId":"transporte","description":"Gasolina","date":"${todayIso}"}
+Saída: {"type":"despesa","amount":80,"categoryId":"combustivel","description":"Gasolina","date":"${todayIso}"}
 
 Exemplo 3 — entrada: "recebi salário 2500"
 Saída: {"type":"receita","amount":2500,"categoryId":"salario","description":"Salário mensal","date":"${todayIso}"}
@@ -94,15 +96,17 @@ async function callGeminiForEntry({ contents, categories, today, mediaMode = fal
   });
 
   if (!aiResult.ok) return aiResult;
-  const parsed = aiResult.parsed;
+  return finishEntry(aiResult.parsed, { categories, todayIso, sourceText: contents.map((part) => part.text || "").join(" "), mediaMode });
+}
 
+// Validação/normalização comum à resposta do Gemini e do gateway.
+function finishEntry(parsed, { categories, todayIso, sourceText, mediaMode = false }) {
   const type = parsed.type === "receita" ? "receita" : "despesa";
   const amount = Math.round(Number(parsed.amount) * 100) / 100;
   const validIds = new Set(categories.filter((c) => c.type === type).map((c) => c.id));
   let categoryId = validIds.has(parsed.categoryId)
     ? parsed.categoryId
     : type === "receita" ? "outros_receita" : "outros";
-  const sourceText = contents.map((part) => part.text || "").join(" ");
   const explicitCategoryId = guessSpecificCategoryId(sourceText, type, categories);
   if (explicitCategoryId) categoryId = explicitCategoryId;
   const description = String(parsed.description || "").slice(0, 60).trim();
@@ -135,6 +139,28 @@ async function callGeminiForEntry({ contents, categories, today, mediaMode = fal
 async function parseTransactionText({ text, categories, today }) {
   if (!text || typeof text !== "string" || !text.trim() || text.length > 200) {
     return { ok: false, status: 400, error: "invalid_text" };
+  }
+  if (!Array.isArray(categories) || categories.length === 0) {
+    return { ok: false, status: 400, error: "invalid_categories" };
+  }
+  // Texto com dados financeiros: GPT/Claude pelo gateway primeiro. O
+  // Gemini fica como reserva só no plano pago (ou sem gateway configurado).
+  const gatewayReady = Boolean(gatewayCredential() && gatewayModels().length);
+  if (gatewayReady) {
+    const todayIso = /^\d{4}-\d{2}-\d{2}$/.test(today) ? today : new Date().toISOString().slice(0, 10);
+    const categoryList = categories.map((c) => `- ${c.id} (${c.type}): ${c.label}`).join("\n");
+    const gateway = await fetchGatewayJson({
+      label: "transaction_text",
+      timeoutMs: 9000,
+      maxTokens: 250,
+      systemPrompt: `${buildSystemPrompt({ todayIso, categoryList })}\n\nResponda APENAS com o JSON {"type","amount","categoryId","description","date"}.`,
+      userPrompt: text.trim().slice(0, 200),
+    });
+    if (gateway.ok && gateway.parsed) {
+      const entry = finishEntry(gateway.parsed, { categories, todayIso, sourceText: text });
+      if (entry.ok) return entry;
+    }
+    if (!geminiAllowedForPersonalText()) return { ok: false, status: 502, error: "ai_request_failed" };
   }
   return callGeminiForEntry({
     contents: [{ text: text.trim().slice(0, 200) }],

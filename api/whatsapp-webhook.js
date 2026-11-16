@@ -68,7 +68,8 @@ const { findSuggestion, formatSuggestionsForWhatsApp } = require("./_lib/autopil
 const { checkAutopilotAccess } = require("./_lib/autopilotAccess");
 const { askPulsinho, purchaseAmountFromQuestion } = require("./_lib/pulsinhoAssistant");
 const { META_GRAPH_VERSION } = require("./_lib/metaGraph");
-const { DEFAULT_EXPENSE_CATEGORIES, DEFAULT_INCOME_CATEGORIES } = require("./_lib/financeCategories");
+const { geminiAllowedForPersonalText } = require("./_lib/geminiFetch");
+const { DEFAULT_EXPENSE_CATEGORIES, DEFAULT_INCOME_CATEGORIES, learnedCategoryId } = require("./_lib/financeCategories");
 const { converse, detectSmallTalk, buildSmallTalkReply, greetingLine, firstName, brazilNow } = require("./_lib/pulsinhoBrain");
 const { applyActionToState, serializeAction } = require("./_lib/pulsinhoActions");
 const messageContext = new AsyncLocalStorage();
@@ -693,6 +694,12 @@ function matchClarificationReply(text, options, categories) {
 async function appendFinanceEntry(fb, uid, entry, rawMessage) {
   return withUserData(fb, uid, (state) => {
     const finances = Array.isArray(state.finances) ? state.finances : (state.finances = []);
+    // Como a pessoa já categorizou essa descrição antes vale mais que o
+    // palpite — exceto quando ela acabou de escolher a categoria (1, 2, 3…).
+    if (!entry.categoryLocked) {
+      const learned = learnedCategoryId(state, entry.description, entry.type);
+      if (learned) entry = { ...entry, categoryId: learned };
+    }
     const record = {
       id: `wa_${crypto.randomUUID()}`,
       source: "whatsapp",
@@ -2076,7 +2083,7 @@ module.exports = async (req, res) => {
             await clearWhatsAppPendingClarification(fb, uid);
             await finishParsedResult({
               fb, uid, fromPhone, categories,
-              result: { ok: true, intent: "expense", entry: { ...pendingClarification.entry, categoryId: matchedId } },
+              result: { ok: true, intent: "expense", entry: { ...pendingClarification.entry, categoryId: matchedId, categoryLocked: true } },
               failureMsg: "",
               rawMessage: rawText,
             });
@@ -2168,7 +2175,10 @@ module.exports = async (req, res) => {
       // Caminho de reserva (IA desligada no plano ou indisponível agora):
       // comandos claros pelo atalho determinístico e o classificador antigo.
       let result = quickIntent;
-      if (!result) result = await timeStage("parse_text", message.id, () => parseTextIntent({ text: rawText, categories, today, lastFinanceEntry, aiEnabled }));
+      // O classificador antigo usa o Gemini: depois de o GPT/Claude falharem,
+      // só entra se o plano do Gemini for pago (dados pessoais).
+      const classifierAi = aiEnabled && (!brainAttempted || geminiAllowedForPersonalText());
+      if (!result) result = await timeStage("parse_text", message.id, () => parseTextIntent({ text: rawText, categories, today, lastFinanceEntry, aiEnabled: classifierAi }));
 
       if (message.wasAudio && isDestructiveAudioIntent(result)) {
         await sendWhatsAppMessage(fromPhone, "Por segurança, digite esse comando de exclusão. Não apaguei nada a partir do áudio.");

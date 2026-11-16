@@ -864,8 +864,8 @@ body.bdo-open { overflow: hidden; }
 .modal-backdrop { position: fixed; inset: 0; z-index: 400; display: grid; place-items: center; padding: 20px; background: rgba(4, 8, 20, .62); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
 .modal-backdrop[hidden] { display: none; }
 .modal-backdrop .modal-card { width: min(440px, 100%); max-height: calc(100dvh - 40px); overflow: auto; border: 1px solid var(--bd-line-strong); border-radius: 20px; background: var(--bd-card); color: var(--bd-text); box-shadow: var(--bd-shadow-pop); font-family: var(--bd-font); }
-.modal-backdrop .modal-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 20px 4px; }
-.modal-backdrop .modal-header h2 { margin: 0; font-size: 17px; font-weight: 700; }
+.modal-backdrop .modal-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 20px 4px; border-bottom-color: var(--bd-line); }
+.modal-backdrop .modal-header h2 { margin: 0; font-size: 17px; font-weight: 700; color: var(--bd-text); }
 .modal-backdrop .modal-body { padding: 14px 20px 20px; }
 .modal-backdrop .icon-button { display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 1px solid var(--bd-line); border-radius: 10px; background: var(--bd-card-2); color: var(--bd-text); }
 .modal-backdrop input:not([type="range"]):not([type="checkbox"]), .modal-backdrop select, .modal-backdrop textarea { width: 100%; min-height: 42px; padding: 0 12px; border: 1px solid var(--bd-line-strong); border-radius: 11px; background: var(--bd-input); color: var(--bd-text); font: inherit; font-size: 14px; }
@@ -1274,7 +1274,7 @@ body[data-active-view="finances"] .bd-date-pill { display: none; }
 .bf-cat-trigger { flex: 1; text-align: left; cursor: pointer; }
 .bf-cat-trigger .fin-cat-trigger-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bf-cat-add { flex: none; width: 40px; height: 40px; border: 1px solid var(--bd-line-strong); }
-.bf-form-foot { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 4px; }
+.bf-form-foot { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 4px; }
 .bf-form-foot .bd-btn { height: 40px; padding: 0 10px; font-size: 12.5px; min-width: 0; }
 .bf-form-foot .bd-btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bf-form-foot .bd-btn .i { width: 15px; height: 15px; flex: none; }
@@ -1458,13 +1458,11 @@ body[data-active-view="finances"] .bd-date-pill { display: none; }
   .bf-ai-label, .bf-or { display: none; }
   .bf-fields { gap: 8px; }
   .bf-field > span:first-child { display: none; }
-  .bf-form-foot { grid-template-columns: 1fr 1fr; }
+  .bf-form-foot { grid-template-columns: 1fr; }
   .bf-form-foot .bf-submit { grid-column: 1 / -1; height: 44px; }
   .bf-media span { font-size: 0; }
   .bf-media span::after { font-size: 12.5px; }
   #finReceiptBtn span::after { content: "Comprovante"; }
-  #finAudioBtn span::after { content: "Áudio"; }
-  #finAudioBtn.is-recording span::after { content: "Parar gravação"; }
   .bf-media.is-busy span::after { content: "Lendo…"; }
   .bf-recent { order: 2; padding: 12px 12px 6px; }
   .bf-cal { order: 3; }
@@ -1532,7 +1530,7 @@ body[data-active-view="finances"] .bd-date-pill { display: none; }
 #financesView .bf-sim .fin-simulator-metric strong { margin: 0; order: 2; }
 #financesView .bf-launch { grid-template-columns: minmax(0, 1.42fr) minmax(250px, .62fr) minmax(0, 1.2fr); }
 #financesView .bf-cal-head h3 { font-size: 14.5px; white-space: nowrap; }
-#financesView .bf-form-foot { grid-template-columns: auto auto minmax(96px, 1fr); }
+#financesView .bf-form-foot { grid-template-columns: auto minmax(96px, 1fr); }
 @media (max-width: 1380px) {
   #financesView .bf-launch { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   #financesView .bf-launch .bf-form { grid-column: 1 / -1; }
@@ -1576,7 +1574,7 @@ body[data-active-view="finances"] .bd-date-pill { display: none; }
 #financesView .bf-fields > * { min-width: 0; }
 #financesView .bf-cmp .bd-card-head { flex-wrap: wrap; row-gap: 4px; }
 @media (max-width: 760px) {
-  #financesView .bf-form-foot { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  #financesView .bf-form-foot { grid-template-columns: minmax(0, 1fr); }
   #financesView .bf-form-head { gap: 8px; }
   #financesView .bf-input input[type="date"] { font-size: 12.5px; }
 }

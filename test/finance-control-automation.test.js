@@ -63,7 +63,8 @@ test("regras preenchem tipo e categoria e contam execuções ao registrar", () =
   assert.match(app, /finApplyRuleToForm\(result\.description\)/);
   assert.match(app, /rule\.hits = \(Number\(rule\.hits\) \|\| 0\) \+ 1;/);
   assert.match(app, /fillExpenseFormFrom\(data, "foto"\)/);
-  assert.match(app, /fillExpenseFormFrom\(data, "áudio"\)/);
+  // Áudio agora é só pelo WhatsApp: o app não grava nem envia áudio.
+  assert.doesNotMatch(app, /getUserMedia|finAudioBtn|mode: "audio"/);
 });
 
 test("fechamento automático fecha o mês anterior sem pedir confirmação", () => {

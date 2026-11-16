@@ -8337,26 +8337,29 @@ function updateGoalProgress(id, value, event) {
 // navegador — nenhum texto sai do dispositivo do usuário.
 const FIN_CATEGORY_KEYWORDS = {
   alimentacao:  ["almoço","almoco","jantar","lanche","restaurante","comida","ifood","padaria","café","cafe","pizza","hambúrguer","hamburguer","churrasco","marmita","delivery","açaí","acai","sorvete","doces","rappi","padoca","brunch","sushi","mcdonalds","mcdonald's","mc donalds","mac donalds","burger king","bk","coxinha","pastel","esfiha","sanduíche","sanduiche","bolo","pão","pao"],
-  mercado:      ["mercado","supermercado","mercadinho","hipermercado","atacadão","atacadao","assaí","assai","carrefour","pão de açúcar","pao de acucar","hortifruti","sacolão","sacolao","feira","açougue","acougue"],
-  transporte:   ["uber","99","ônibus","onibus","metro","metrô","táxi","taxi","passagem","estacionamento","pedágio","pedagio"],
+  mercado:      ["mercado","supermercado","mercadinho","hipermercado","atacadão","atacadao","assaí","assai","carrefour","pão de açúcar","pao de acucar","hortifruti","sacolão","sacolao","feira","açougue","acougue","quitanda","peixaria","empório","emporio"],
+  transporte:   ["uber","99","ônibus","onibus","metro","metrô","táxi","taxi","passagem","estacionamento","pedágio","pedagio","sem parar","veloe","conectcar","patinete","bike compartilhada"],
   combustivel:  ["gasolina","combustível","combustivel","etanol","diesel","gnv","posto","abastecimento"],
-  saude:        ["farmácia","farmacia","remédio","remedio","médico","medico","consulta","dentista","plano de saúde","plano de saude","exame","hospital","psicólogo","psicologo","terapia","fisioterapia","óculos","oculos","vacina","laboratório","laboratorio"],
+  saude:        ["farmácia","farmacia","remédio","remedio","médico","medico","consulta","dentista","plano de saúde","plano de saude","exame","hospital","psicólogo","psicologo","terapia","fisioterapia","óculos","oculos","vacina","laboratório","laboratorio","ótica","otica","lente de contato"],
   academia:     ["academia","smart fit","bluefit","personal trainer","crossfit","pilates","yoga","musculação","musculacao","natação","natacao"],
   lazer:        ["cinema","show","viagem","bar","balada","streaming","jogo","passeio","ingresso","netflix","festa","parque","hospedagem","hotel","pousada","passeio turístico"],
-  educacao:     ["curso","faculdade","livro","mensalidade escolar","escola","material escolar","apostila","aula","udemy","mensalidade da faculdade","pós-graduação","pos-graduacao"],
+  educacao:     ["curso","faculdade","livro","mensalidade escolar","escola","material escolar","apostila","aula","udemy","mensalidade da faculdade","pós-graduação","pos-graduacao","matrícula","matricula","material didático","material didatico"],
   moradia:      ["aluguel","condomínio","condominio","iptu","reforma","móveis","moveis","sofá","sofa"],
-  contas:       ["conta de luz","conta de água","conta de agua","luz","água","agua","internet","gás","gas","conta de","celular","telefone","tv a cabo","wifi","energia","recarga"],
+  contas:       ["conta de luz","conta de água","conta de agua","luz","água","agua","internet","gás","gas","conta de","celular","telefone","tv a cabo","wifi","energia","recarga","recarga do celular","recarga de celular","conta de celular","plano do celular","conta de internet"],
   manutencao:  ["oficina","mecânico","mecanico","manutenção do carro","manutencao do carro","manutenção","manutencao"],
   seguros:     ["seguro do carro","seguro"],
   impostos:    ["ipva","licenciamento"],
   roupas:       ["roupa","calça","calca","camisa","tênis","tenis","sapato","blusa","jaqueta","acessório","acessorio","bolsa","perfume"],
   assinaturas:  ["assinatura","spotify","amazon prime","youtube premium","mensalidade do","disney+","disney plus","hbo max","globoplay","apple music","icloud","google one"],
-  salario:      ["salário","salario","contracheque","pagamento do trabalho","pagamento da empresa","holerite"],
-  freelance:    ["freela","freelance","bico","job extra","trampo extra","projeto extra"],
-  investimentos:["dividendo","rendimento","investimento","ação","ações","cdb","tesouro direto","fii","fundo imobiliário","fundo imobiliario"],
-  vendas:       ["venda","vendi","vendeu"],
-  reembolso:    ["reembolso","ressarcimento","devolução","devolucao"],
-  presente:     ["presente","bônus","bonus","doação","doacao","mesada"],
+  salario:      ["salário","salario","contracheque","pagamento do trabalho","pagamento da empresa","holerite","13º","13o salario","decimo terceiro","décimo terceiro","férias","ferias","plr","participação nos lucros","participacao nos lucros","vale alimentação","vale alimentacao","vale refeição","vale refeicao","adiantamento salarial","pagamento do mês","pagamento do mes","folha de pagamento"],
+  freelance:    ["freela","freelance","bico","job extra","trampo extra","projeto extra","cliente pagou","pagamento do cliente","serviço prestado","servico prestado","comissão","comissao","consultoria","diária","diaria","cachê","cache","honorários","honorarios","nota fiscal","trabalho extra"],
+  investimentos:["dividendo","rendimento","investimento","ação","ações","cdb","tesouro direto","fii","fundo imobiliário","fundo imobiliario","juros recebidos","resgate","renda fixa","lucro","rendeu"],
+  vendas:       ["venda","vendi","vendeu","olx","mercado livre","enjoei","marketplace","vendinha"],
+  reembolso:    ["reembolso","ressarcimento","devolução","devolucao","estorno","cashback","restituição","restituicao","devolveram","me devolveu","pagou de volta"],
+  presente:     ["presente","bônus","bonus","doação","doacao","mesada","ganhei de presente","pix de presente","mimo","vaquinha"],
+  beleza: ["cabelo", "corte de cabelo", "cabeleireiro", "cabeleireira", "salão", "salao", "manicure", "pedicure", "barbearia", "barbeiro", "depilação", "depilacao", "estética", "estetica", "maquiagem", "sobrancelha", "unha", "skincare", "cosmético", "cosmetico", "barba", "escova", "progressiva", "depilação a laser", "perfumaria"],
+  pet: ["ração", "racao", "veterinário", "veterinario", "petshop", "pet shop", "cachorro", "gato", "areia de gato", "banho e tosa", "antipulgas", "brinquedo do pet", "consulta veterinária", "consulta veterinaria", "petz", "cobasi", "pet"],
+  pensao: ["pensão", "pensao", "auxílio", "auxilio", "bolsa família", "bolsa familia", "benefício", "beneficio", "inss", "aposentadoria", "seguro desemprego", "bpc"],
 };
 const FIN_INCOME_HINTS = ["recebi","receb","ganhei","caiu","depositaram","pix recebido","entrou","salário","salario","venda","vendi","freela","freelance","bico","reembolso","presente","bônus","bonus","dividendo","rendimento"];
 
@@ -8565,6 +8568,9 @@ function fillExpenseFormFrom(result, source = "") {
   document.querySelector("#expenseDescription").value = result.description || "";
   document.querySelector("#expenseDate").value        = result.date;
   finPendingEntrySource = source;
+  // Como a pessoa já categorizou essa descrição vale mais que o palpite.
+  const learned = finLearnedCategory(result.description, result.type);
+  if (learned && learned !== result.categoryId) populateCategorySelect(learned, result.type);
   finApplyRuleToForm(result.description);
 
   document.querySelector("#expenseAmount")?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -8782,7 +8788,62 @@ function saveExpense(event) {
   if (type === "despesa") checkFinGoalAlert(categoryId, targetMonth);
 }
 
+// ── Categoria inteligente no formulário ──────────────────────
+// Ordem: regra da pessoa → como ela já categorizou essa descrição antes
+// → palavras-chave. Uma escolha manual nunca é sobrescrita.
+const FIN_KEY_STOPWORDS = new Set(["de", "do", "da", "dos", "das", "no", "na", "nos", "nas", "em", "com", "o", "a", "os", "as", "e", "um", "uma", "pra", "para"]);
+function finDescriptionKey(text) {
+  return String(text || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+    .replace(/[^a-z\s]/g, " ").split(/\s+/).filter((w) => w.length > 1 && !FIN_KEY_STOPWORDS.has(w)).join(" ").trim();
+}
+
+function finLearnedCategory(description, type) {
+  const key = finDescriptionKey(description);
+  if (key.length < 3) return "";
+  const valid = new Set(getAllCategories(type).map((c) => c.id));
+  const scores = new Map();
+  (state.finances || []).slice(0, 800).forEach((entry, index) => {
+    if (!entry || entry.type !== type || !valid.has(entry.category) || /^outros/.test(entry.category)) return;
+    const other = finDescriptionKey(entry.description);
+    if (!other) return;
+    const exact = other === key;
+    const near = !exact && key.length >= 5 && other.length >= 5 && (other.startsWith(`${key} `) || key.startsWith(`${other} `));
+    if (!exact && !near) return;
+    scores.set(entry.category, (scores.get(entry.category) || 0) + (exact ? 2 : 1) * (index < 20 ? 1.5 : 1));
+  });
+  let best = "";
+  let bestScore = 0;
+  for (const [id, score] of scores) if (score > bestScore) { best = id; bestScore = score; }
+  return best;
+}
+
+function finKeywordCategory(description, type) {
+  const working = ` ${String(description || "").toLowerCase()} `;
+  let categoryId = "";
+  let bestLen = 0;
+  for (const cat of getAllCategories(type)) {
+    const words = [...(FIN_CATEGORY_KEYWORDS[cat.id] || []), ...cat.label.replace(/^\S+\s*/, "").toLowerCase().split(/\s+/).filter((w) => w.length > 3)];
+    for (const kw of words) {
+      if (kw.length > bestLen && working.includes(kw)) { categoryId = cat.id; bestLen = kw.length; }
+    }
+  }
+  return categoryId;
+}
+
+function finSuggestCategory(description, { announce = true } = {}) {
+  const select = document.querySelector("#expenseCategory");
+  if (!select || select.dataset.userPicked === "1" || valueOf("#expenseId")) return;
+  if (finApplyRuleToForm(description)) return;
+  const type = valueOf("#expenseType") || "despesa";
+  const suggested = finLearnedCategory(description, type) || finKeywordCategory(description, type);
+  if (!suggested || suggested === select.value) return;
+  populateCategorySelect(suggested, type);
+  if (announce) showToast(`Categoria sugerida: ${finCatName(suggested)}`);
+}
+
 function resetExpenseForm() {
+  const pickedSelect = document.querySelector("#expenseCategory");
+  if (pickedSelect) delete pickedSelect.dataset.userPicked;
   finPendingEntrySource = "";
   finPendingRuleId = "";
   document.querySelector("#expenseForm").reset();
@@ -9413,92 +9474,6 @@ async function handleFinReceipt(file) {
   }
 }
 
-async function handleFinAudioBlob(blob, mimeType) {
-  const button = document.querySelector("#finAudioBtn");
-  finMediaBusy(button, true, "Entendendo o áudio…");
-  try {
-    const data = await finCallParser({ mode: "audio", audioBase64: await finBlobToBase64(blob), mimeType });
-    if (!data.amount) throw { handled: true, code: "no_amount", transcript: data.transcript };
-    fillExpenseFormFrom(data, "áudio");
-    showToast(`Entendi: “${data.transcript || data.description}”. Confira e toque em Registrar.`);
-  } catch (err) {
-    if (!err?.handled) console.error("Falha ao ler áudio:", err);
-    if (err?.transcript) showToast(`Ouvi “${err.transcript}”, mas não encontrei o valor. Diga, por exemplo: “almoço 32 reais hoje”.`);
-    else showToast(FIN_MEDIA_ERRORS[err?.code] || "Não consegui processar o áudio agora. Tente de novo ou preencha manualmente.");
-  } finally {
-    finMediaBusy(button, false, "Importar por áudio");
-  }
-}
-
-// Gravador WAV (16 kHz, mono): formato que a IA lê em qualquer navegador.
-let finRecorder = null;
-async function startFinRecording() {
-  const button = document.querySelector("#finAudioBtn");
-  const AudioCtx = window.AudioContext || window.webkitAudioContext;
-  if (!navigator.mediaDevices?.getUserMedia || !AudioCtx) { document.querySelector("#finAudioInput")?.click(); return; }
-  let stream;
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  } catch {
-    showToast("Sem acesso ao microfone. Você pode escolher um arquivo de áudio.");
-    document.querySelector("#finAudioInput")?.click();
-    return;
-  }
-  const ctx = new AudioCtx();
-  const source = ctx.createMediaStreamSource(stream);
-  const processor = ctx.createScriptProcessor(4096, 1, 1);
-  const chunks = [];
-  processor.onaudioprocess = (e) => chunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
-  source.connect(processor);
-  processor.connect(ctx.destination);
-  const timer = setTimeout(() => stopFinRecording(), 30000);
-  finRecorder = { stream, ctx, source, processor, chunks, timer, rate: ctx.sampleRate };
-  button?.classList.add("is-recording");
-  button?.setAttribute("aria-pressed", "true");
-  const label = button?.querySelector("span");
-  if (label) label.textContent = "Gravando… toque para parar";
-  const iconUse = button?.querySelector("use");
-  if (iconUse) iconUse.setAttribute("href", "#i-stop");
-}
-
-function finEncodeWav(chunks, inputRate, outRate = 16000) {
-  const total = chunks.reduce((s, c) => s + c.length, 0);
-  const merged = new Float32Array(total);
-  let offset = 0;
-  chunks.forEach((c) => { merged.set(c, offset); offset += c.length; });
-  const ratio = inputRate / outRate;
-  const length = Math.floor(merged.length / ratio);
-  const buffer = new ArrayBuffer(44 + length * 2);
-  const view = new DataView(buffer);
-  const write = (o, s) => { for (let i = 0; i < s.length; i += 1) view.setUint8(o + i, s.charCodeAt(i)); };
-  write(0, "RIFF"); view.setUint32(4, 36 + length * 2, true); write(8, "WAVE"); write(12, "fmt ");
-  view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
-  view.setUint32(24, outRate, true); view.setUint32(28, outRate * 2, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true);
-  write(36, "data"); view.setUint32(40, length * 2, true);
-  for (let i = 0; i < length; i += 1) {
-    const sample = Math.max(-1, Math.min(1, merged[Math.floor(i * ratio)] || 0));
-    view.setInt16(44 + i * 2, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
-  }
-  return new Blob([buffer], { type: "audio/wav" });
-}
-
-function stopFinRecording() {
-  if (!finRecorder) return;
-  const { stream, ctx, source, processor, chunks, timer, rate } = finRecorder;
-  finRecorder = null;
-  clearTimeout(timer);
-  source.disconnect(); processor.disconnect();
-  stream.getTracks().forEach((t) => t.stop());
-  ctx.close().catch(() => {});
-  const button = document.querySelector("#finAudioBtn");
-  button?.classList.remove("is-recording");
-  button?.setAttribute("aria-pressed", "false");
-  button?.querySelector("use")?.setAttribute("href", "#i-mic");
-  const seconds = chunks.reduce((s, c) => s + c.length, 0) / rate;
-  if (seconds < 0.8) { finMediaBusy(button, false, "Importar por áudio"); showToast("Áudio muito curto. Toque, fale o lançamento e toque de novo para parar."); return; }
-  handleFinAudioBlob(finEncodeWav(chunks, rate), "audio/wav");
-}
-
 function bindFinanceBoard() {
   // Espaço + mês sobem para o cabeçalho (aparecem só na tela de Finanças)
   const slot = document.querySelector("#bdTopSlot");
@@ -9568,15 +9543,6 @@ function bindFinanceBoard() {
   const receiptInput = document.querySelector("#finReceiptInput");
   document.querySelector("#finReceiptBtn")?.addEventListener("click", () => receiptInput?.click());
   receiptInput?.addEventListener("change", () => { handleFinReceipt(receiptInput.files?.[0]); receiptInput.value = ""; });
-  const audioInput = document.querySelector("#finAudioInput");
-  document.querySelector("#finAudioBtn")?.addEventListener("click", () => { if (finRecorder) stopFinRecording(); else startFinRecording(); });
-  audioInput?.addEventListener("change", () => {
-    const file = audioInput.files?.[0];
-    audioInput.value = "";
-    if (!file) return;
-    if (file.size > 3 * 1024 * 1024) { showToast("Áudio grande demais. Envie até 3 MB (cerca de 1 minuto)."); return; }
-    handleFinAudioBlob(file, file.type || "audio/ogg");
-  });
 }
 
 function renderFinances() {
@@ -9880,6 +9846,7 @@ function openCategoryPicker() {
 
   function selectCategory(catId) {
     const select = document.querySelector("#expenseCategory");
+    select.dataset.userPicked = "1";
     select.value = catId;
     select.dispatchEvent(new Event("change"));
     syncCategoryTrigger();
@@ -11197,7 +11164,7 @@ function renderFinIngest() {
   const rows = [
     { key: "whatsapp", icon: "whatsapp", title: "WhatsApp", sub: linked ? "Ativa • Lê gastos e recibos" : "Registre gastos mandando mensagem", chip: linked ? '<span class="bf-chip is-on">Conectado</span>' : '<span class="bf-chip is-link">Conectar</span>' },
     { key: "photo", icon: "camera", title: "Foto", sub: "Ativa • Lê notas e boletos", chip: '<span class="bf-chip is-on">Ativo</span>' },
-    { key: "audio", icon: "mic", title: "Áudio", sub: "Ativa • Transcreve e categoriza", chip: '<span class="bf-chip is-on">Ativo</span>' },
+    { key: "audio", icon: "mic", title: "Áudio", sub: linked ? "Pelo WhatsApp • Mande um áudio para o Pulsinho" : "Pelo WhatsApp • Conecte para lançar falando", chip: linked ? '<span class="bf-chip is-on">Ativo</span>' : '<span class="bf-chip is-link">Conectar</span>' },
   ];
   root.innerHTML = rows.map((row) => `<button type="button" class="bf-row bf-ingest" data-ingest="${row.key}">
       <span class="bf-row-ico${row.key === "whatsapp" ? " is-wa" : ""}">${bdIcon(row.icon)}</span>
@@ -11206,13 +11173,14 @@ function renderFinIngest() {
 }
 
 function openFinIngest(key) {
-  if (key === "whatsapp") {
+  // Áudio é recebido pelo WhatsApp (o app não grava mais áudio).
+  if (key === "whatsapp" || key === "audio") {
     setView("settings");
     requestAnimationFrame(() => document.querySelector("#whatsappLinkedBlock")?.closest("section, .panel, .settings-card")?.scrollIntoView({ behavior: "smooth", block: "start" }));
     return;
   }
   setFinBoardTab("lancamentos");
-  requestAnimationFrame(() => document.querySelector(key === "photo" ? "#finReceiptBtn" : "#finAudioBtn")?.click());
+  requestAnimationFrame(() => document.querySelector("#finReceiptBtn")?.click());
 }
 
 // ---------- Fechamento mensal ----------
@@ -11409,8 +11377,19 @@ function bindFinControlBoard() {
   // Regras: ao terminar de digitar a descrição, já sugere tipo e categoria.
   on("#expenseDescription", "change", (event) => {
     if (valueOf("#expenseId")) return;
-    const rule = finApplyRuleToForm(event.target.value);
-    if (rule) showToast(`Regra aplicada: ${finCatName(rule.categoryId)}.`);
+    const rule = finMatchRule(event.target.value);
+    if (rule && document.querySelector("#expenseCategory")?.dataset.userPicked !== "1") {
+      finApplyRuleToForm(event.target.value);
+      showToast(`Regra aplicada: ${finCatName(rule.categoryId)}.`);
+      return;
+    }
+    finSuggestCategory(event.target.value);
+  });
+  // Enquanto digita: sugere em silêncio (o aviso aparece ao terminar).
+  let finSuggestTimer = 0;
+  on("#expenseDescription", "input", (event) => {
+    window.clearTimeout(finSuggestTimer);
+    finSuggestTimer = window.setTimeout(() => finSuggestCategory(event.target.value, { announce: false }), 500);
   });
 }
 
@@ -11695,6 +11674,7 @@ window.jumpPlannerToDay = jumpPlannerToDay;
 window.selectPlannerDay = selectPlannerDay;
 window.togglePlannerGoalExpand = togglePlannerGoalExpand;
 window.openPlannerTaskActions = openPlannerTaskActions;
+window.openPlannerEventActions = openPlannerEventActions;
 window.submitGoalMilestoneForm = submitGoalMilestoneForm;
 window.submitSubtaskForm = submitSubtaskForm;
 window.updateGoalProgress = updateGoalProgress;

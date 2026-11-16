@@ -20,6 +20,7 @@
 const crypto = require("node:crypto");
 const { findBestMatches } = require("./parseCommandIntent");
 const { guessSpecificCategoryId } = require("./localTextFallback");
+const { learnedCategoryId } = require("./financeCategories");
 
 const ACTION_TYPES = [
   "add_transaction", "add_task", "add_event", "add_note", "add_goal",
@@ -202,9 +203,11 @@ function normalizeAction(raw, ctx) {
     const rule = asArray(state.finRules).find((r) => r && r.active !== false && (r.type || "despesa") === kind
       && cleanText(r.match, 80) && normalizeSearch(`${description} ${ctx.rawMessage || ""}`).includes(normalizeSearch(r.match))
       && valid.some((c) => c.id === r.categoryId));
-    let categoryId = rule ? rule.categoryId : valid.some((c) => c.id === raw.categoryId) ? raw.categoryId : "";
+    // Depois das regras, vale como a pessoa já categorizou essa descrição.
+    const learned = rule ? "" : learnedCategoryId(state, description, kind, { categories });
+    let categoryId = rule ? rule.categoryId : learned || (valid.some((c) => c.id === raw.categoryId) ? raw.categoryId : "");
     if (!categoryId) categoryId = guessSpecificCategoryId(`${description} ${ctx.rawMessage || ""}`, kind, categories) || "";
-    const lowConfidence = !rule && (!categoryId || raw.categoryConfidence === "baixa");
+    const lowConfidence = !rule && !learned && (!categoryId || raw.categoryConfidence === "baixa");
     if (!categoryId) categoryId = kind === "receita" ? "outros_receita" : "outros";
     const alternatives = asArray(raw.categoryAlternatives).filter((id) => valid.some((c) => c.id === id) && id !== categoryId).slice(0, 3);
     const date = validIsoDate(raw.date) || today;

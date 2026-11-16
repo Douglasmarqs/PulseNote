@@ -17,9 +17,10 @@
 // ============================================================
 
 const { fetchGatewayJson } = require("./aiGatewayFetch");
-const { fetchGeminiJson, fetchGeminiGrounded, GEMINI_MODEL } = require("./geminiFetch");
+const { fetchGeminiJson, fetchGeminiGrounded, geminiAllowedForPersonalText, GEMINI_MODEL } = require("./geminiFetch");
 const { buildFinanceForecast } = require("./financeForecast");
 const { normalizeActions, ACTION_TYPES, formatWhen, money, addDays } = require("./pulsinhoActions");
+const { categoryHabits } = require("./financeCategories");
 
 const TIME_ZONE = "America/Sao_Paulo";
 const NAVIGATION_TARGETS = new Set(["dashboard", "finances", "planner", "notes", "autopilot", "settings", "profile"]);
@@ -325,6 +326,8 @@ function buildBrainContext(state, { now, workspaceId, lastFinanceEntry, message 
       lancamentosDoMes: monthEntries.slice(0, 80).map(({ id, date, description, amount, type, category }) => ({ id, date, description, amount, type, category })),
       ultimosLancamentos: finances.slice(0, 8).map(({ id, date, description, amount, type, category }) => ({ id, date, description, amount, type, category })),
       historicoMensal: monthlyHistory(finances, today),
+      // Como a pessoa costuma categorizar — imitar ao escolher categoryId.
+      categoriasHabituais: categoryHabits(state, 30),
       lancamentoRecenteNaConversa: recentFinance,
     },
     tarefasPendentes: pending,
@@ -377,7 +380,11 @@ title: título curto e claro, sem palavras de comando, data ou horário ("Ligar 
 content: conteúdo da nota
 amount: número em reais (ex.: 32.5)
 transactionType: "despesa" | "receita"
-categoryId: um id da lista de categorias abaixo, do mesmo tipo do lançamento; escolha a mais específica pelo sentido (uber→transporte, ifood→alimentacao, farmácia→saude, ração→pet)
+categoryId: um id da lista de categorias abaixo, do mesmo tipo do lançamento. Escolha pelo SENTIDO, não só pela palavra:
+  • Se a descrição (ou algo parecido) aparece em categoriasHabituais, use a mesma categoria que a pessoa costuma usar.
+  • Gastos: uber/99/ônibus→transporte; gasolina/posto/etanol→combustivel; ifood/restaurante/lanche/padaria/café→alimentacao; supermercado/feira/açougue/hortifruti→mercado; farmácia/remédio/consulta/exame/psicólogo→saude; luz/água/internet/celular/gás→contas; aluguel/condomínio/IPTU→moradia; netflix/spotify/app mensal→assinaturas; corte/salão/barbearia/manicure→beleza; ração/veterinário→pet; curso/faculdade/livro→educacao; presente para alguém→presentes; IPVA/taxa/imposto→impostos; parcela/empréstimo/juros→emprestimos.
+  • Receitas: salário/holerite/13º/férias/PLR/vale→salario; freela/cliente pagou/serviço/job/comissão/nota fiscal→freelance; vendi/venda/OLX/Mercado Livre/Enjoei→vendas; dividendos/rendimento/juros recebidos/resgate→investimentos; reembolso/estorno/cashback/restituição do IR/devolveram→reembolso; aluguel que recebo de inquilino→aluguel_receb; presente/mesada/pix de presente/bônus→presente; pensão/auxílio/benefício→pensao; prêmio/sorteio/aposta→premio; me emprestaram→emprestimo_receb.
+  • Use "outros"/"outros_receita" só quando nada se aplica de verdade — e então marque categoryConfidence "baixa".
 categoryConfidence: "alta" | "baixa" (baixa quando estiver chutando entre categorias)
 date: YYYY-MM-DD resolvendo datas relativas a partir de hoje (${now.today}); lançamentos sem data = hoje; "sexta" = a próxima sexta
 time: HH:MM em 24h
@@ -463,7 +470,8 @@ async function callBrainModel({ systemPrompt, history, message, providerPreferen
     systemPrompt, userPrompt: message, messages, label: "pulsinho_brain", timeoutMs: 15000, providerPreference, maxTokens: 1600, maxHistory: 20,
   });
   if (gateway.ok) return gateway;
-  if (!process.env.GEMINI_API_KEY) return gateway;
+  // A conversa leva dados pessoais: Gemini só como reserva no plano pago.
+  if (!process.env.GEMINI_API_KEY || !geminiAllowedForPersonalText()) return gateway;
   const transcript = history.length
     ? `CONVERSA RECENTE:\n${history.map((m) => `${m.role === "user" ? "Pessoa" : "Pulsinho"}: ${m.content}`).join("\n")}\n\n`
     : "";

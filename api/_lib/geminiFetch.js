@@ -144,4 +144,13 @@ async function fetchGeminiGrounded({ apiKey, systemPrompt, prompt, label = "grou
   }
 }
 
-module.exports = { fetchGeminiJson, fetchGeminiGrounded, GEMINI_MODEL };
+// O plano gratuito do Gemini permite que o Google use o conteúdo enviado
+// para melhorar produtos (com revisão humana). Por isso, sem a confirmação
+// de plano pago (GEMINI_PAID_TIER=true na Vercel), o Gemini não recebe
+// textos com dados pessoais quando existe alternativa (GPT/Claude pelo
+// gateway). Fotos/PDF e áudio continuam no Gemini — não há substituto.
+function geminiAllowedForPersonalText() {
+  return String(process.env.GEMINI_PAID_TIER || "").trim().toLowerCase() === "true";
+}
+
+module.exports = { fetchGeminiJson, fetchGeminiGrounded, geminiAllowedForPersonalText, GEMINI_MODEL };
