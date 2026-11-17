@@ -2813,6 +2813,7 @@ function renderPulsinhoConversation({ loading = false, error = "" } = {}) {
   document.querySelector("#bdChat")?.classList.toggle("is-thinking", loading);
   root.scrollTop = root.scrollHeight;
   updatePulsinhoJump();
+  updatePulsinhoSuggestions();
 }
 
 let pulsinhoIntroState = "pending";
@@ -2862,76 +2863,175 @@ function watchPulsinhoIntro() {
   observer.observe(chat);
 }
 
-// ── Digitar no Pulsinho (celular) ──────────────────────────────
-// O cartão continua sendo o cartão do Início (bordas, margens, cabeçalho).
-// Só enquanto o teclado está aberto ele se encaixa na área visível —
-// cabeçalho no topo, mensagens no meio e o campo logo acima do teclado —
-// e a barra inferior some (ela ficava entre o campo e o teclado). Ao
-// fechar o teclado, tudo volta ao normal.
+// ── Modo conversa do Pulsinho (celular) ────────────────────────
+// No Início o Pulsinho é um cartão. Ao tocar para digitar, o MESMO cartão
+// "levanta" da página (animação a partir de onde estava) e flutua sobre
+// ela, com o fundo escurecido: cabeçalho no topo, mensagens no meio e o
+// campo logo acima do teclado. Ele acompanha a área visível
+// (visualViewport) — sem rolar a página por trás, que era o que deixava a
+// conversa "toda lá embaixo" no iPhone. Com o teclado fechado ele ocupa a
+// tela para ler a conversa; ⌄, toque fora ou Esc devolve ao Início.
 const chatIsMobile = () => window.matchMedia?.("(max-width: 760px)").matches;
-let chatBaselineHeight = 0;
-let chatFitFrame = 0;
+let chatConvoFrame = 0;
+let pulsinhoConvoGuardUntil = 0;
 
-function chatKeyboardOpen() {
-  const vv = window.visualViewport;
-  const height = vv ? vv.height : window.innerHeight;
-  chatBaselineHeight = Math.max(chatBaselineHeight, window.innerHeight, height);
-  return chatBaselineHeight - height > 140;
+// Áreas seguras do aparelho (notch e barra de gestos) em pixels.
+function safeAreaInsets() {
+  let probe = document.querySelector("#pnSafeProbe");
+  if (!probe) {
+    probe = document.createElement("div");
+    probe.id = "pnSafeProbe";
+    probe.setAttribute("aria-hidden", "true");
+    probe.style.cssText = "position:fixed;left:0;top:0;width:0;height:0;visibility:hidden;pointer-events:none;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)";
+    document.body.appendChild(probe);
+  }
+  const style = getComputedStyle(probe);
+  return { top: parseFloat(style.paddingTop) || 0, bottom: parseFloat(style.paddingBottom) || 0 };
 }
 
-function fitPulsinhoToKeyboard() {
-  cancelAnimationFrame(chatFitFrame);
-  chatFitFrame = requestAnimationFrame(() => {
+function isPulsinhoConvo() {
+  return Boolean(document.querySelector("#bdChat")?.classList.contains("is-convo"));
+}
+
+function layoutPulsinhoConvo() {
+  cancelAnimationFrame(chatConvoFrame);
+  chatConvoFrame = requestAnimationFrame(() => {
     const chat = document.querySelector("#bdChat");
-    const input = document.querySelector("#pulseCommandInput");
-    if (!chat || !chatIsMobile() || document.activeElement !== input || !chatKeyboardOpen()) {
-      releasePulsinhoFit();
-      return;
-    }
+    if (!chat?.classList.contains("is-convo")) return;
     const vv = window.visualViewport;
     const viewTop = vv ? vv.offsetTop : 0;
-    // O cabeçalho do app (fixo no topo) continua à vista: o cartão encaixa
-    // logo abaixo dele e termina logo acima do teclado.
-    const headerBottom = Math.max(0, document.querySelector(".bd-topbar")?.getBoundingClientRect().bottom || 0);
-    const top = Math.max(viewTop, headerBottom);
-    const visible = (vv ? vv.height + viewTop : window.innerHeight) - top;
-    const gap = 10;
-    chat.style.setProperty("--chat-fit", `${Math.round(Math.max(240, visible - gap * 2))}px`);
-    chat.classList.add("is-fitted");
-    document.body.classList.add("bd-chat-typing");
-    const delta = chat.getBoundingClientRect().top - (top + gap);
-    if (Math.abs(delta) > 2) window.scrollBy(0, delta);
+    const viewHeight = vv ? vv.height : window.innerHeight;
+    const keyboard = window.innerHeight - viewHeight > 140 || (vv && screen.height - viewHeight > 250);
     const body = document.querySelector("#pulseCommandResponse");
-    if (body) body.scrollTop = body.scrollHeight;
+    const nearEnd = !body || body.scrollHeight - body.scrollTop - body.clientHeight < 200;
+    const { top: safeTop, bottom: safeBottom } = safeAreaInsets();
+    // Com o teclado aberto a conversa aproveita a altura toda; sem teclado
+    // ela flutua deixando o Início (escurecido) à vista em cima — tocar ali
+    // fecha, como uma folha.
+    const top = viewTop + (keyboard ? Math.max(10, safeTop + 6) : Math.max(safeTop + 10, Math.round(viewHeight * 0.11)));
+    const bottomGap = keyboard ? 8 : Math.max(10, safeBottom + 6);
+    chat.style.setProperty("--convo-top", `${Math.round(top)}px`);
+    chat.style.setProperty("--convo-h", `${Math.round(Math.max(240, viewTop + viewHeight - bottomGap - top))}px`);
+    chat.classList.toggle("has-keyboard", Boolean(keyboard));
+    // Quem estava lendo o fim da conversa continua vendo a última mensagem
+    // quando a altura muda (teclado abrindo/fechando).
+    if (nearEnd) setTimeout(scrollPulsinhoToEnd, 230);
+    const backdrop = document.querySelector("#bdChatBackdrop");
+    if (backdrop) backdrop.style.top = `${Math.round(viewTop)}px`;
   });
 }
 
-function releasePulsinhoFit() {
-  const chat = document.querySelector("#bdChat");
-  if (!chat?.classList.contains("is-fitted")) return;
-  chat.classList.remove("is-fitted");
-  chat.style.removeProperty("--chat-fit");
-  document.body.classList.remove("bd-chat-typing");
-  repairViewportAfterOverlay();
+function scrollPulsinhoToEnd() {
+  const body = document.querySelector("#pulseCommandResponse");
+  if (body) body.scrollTop = body.scrollHeight;
 }
+
+function updatePulsinhoSuggestions() {
+  const box = document.querySelector("#bdChatSuggest");
+  if (!box) return;
+  const hasUserMessage = pulsinhoConversation.some((item) => item.role === "user");
+  box.hidden = !isPulsinhoConvo() || hasUserMessage || Boolean(document.querySelector("#pulseCommandInput")?.value.trim());
+}
+
+function openPulsinhoConvo() {
+  const chat = document.querySelector("#bdChat");
+  if (!chat || isPulsinhoConvo() || !chatIsMobile() || !document.querySelector("#dashboardView")?.contains(chat)) return;
+  const from = chat.getBoundingClientRect();
+  // Guarda o lugar do cartão na página (nada pula por baixo).
+  const placeholder = document.createElement("div");
+  placeholder.id = "bdChatPlaceholder";
+  placeholder.className = "bd-chat-ph";
+  placeholder.style.height = `${Math.round(from.height)}px`;
+  chat.before(placeholder);
+  let backdrop = document.querySelector("#bdChatBackdrop");
+  if (!backdrop) {
+    backdrop = document.createElement("div");
+    backdrop.id = "bdChatBackdrop";
+    backdrop.className = "bd-chat-backdrop";
+    // Ignora o "clique fantasma" do mesmo toque que abriu a conversa.
+    backdrop.addEventListener("click", () => { if (Date.now() > pulsinhoConvoGuardUntil) closePulsinhoConvo(); });
+    backdrop.addEventListener("touchmove", (event) => event.preventDefault(), { passive: false });
+    document.body.appendChild(backdrop);
+  }
+  backdrop.hidden = false;
+  chat.classList.add("is-convo");
+  document.body.classList.add("bd-chat-convo");
+  document.documentElement.classList.add("pn-scroll-locked");
+  document.querySelector("#bdChatClose")?.removeAttribute("hidden");
+  layoutPulsinhoConvo();
+  // Animação: o cartão sai de onde estava e "levanta" até o lugar novo.
+  requestAnimationFrame(() => {
+    const to = chat.getBoundingClientRect();
+    if (!to.height || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    chat.animate([
+      { transform: `translate(${from.left - to.left}px, ${from.top - to.top}px)`, opacity: 0.6 },
+      { transform: "none", opacity: 1 },
+    ], { duration: 300, easing: "cubic-bezier(.2,.9,.3,1)" });
+    backdrop.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 240, easing: "ease-out" });
+  });
+  scrollPulsinhoToEnd();
+  updatePulsinhoSuggestions();
+}
+
+function closePulsinhoConvo() {
+  const chat = document.querySelector("#bdChat");
+  if (!chat || !isPulsinhoConvo()) return;
+  document.querySelector("#pulseCommandInput")?.blur();
+  chat.classList.remove("is-convo", "has-keyboard");
+  chat.style.removeProperty("--convo-top");
+  chat.style.removeProperty("--convo-h");
+  document.body.classList.remove("bd-chat-convo");
+  document.documentElement.classList.remove("pn-scroll-locked");
+  document.querySelector("#bdChatClose")?.setAttribute("hidden", "");
+  const backdrop = document.querySelector("#bdChatBackdrop");
+  if (backdrop) backdrop.hidden = true;
+  document.querySelector("#bdChatPlaceholder")?.remove();
+  updatePulsinhoSuggestions();
+  repairViewportAfterOverlay();
+  requestAnimationFrame(() => {
+    const rect = chat.getBoundingClientRect();
+    if (rect.bottom > window.innerHeight || rect.top < 0) chat.scrollIntoView({ block: "center" });
+    scrollPulsinhoToEnd();
+  });
+}
+
+// Mantém os nomes usados em outros pontos do app.
+function releasePulsinhoFit() { closePulsinhoConvo(); }
 
 function bindPulsinhoKeyboardFit() {
   const input = document.querySelector("#pulseCommandInput");
   if (!input || input.dataset.fitBound === "1") return;
   input.dataset.fitBound = "1";
+  // Entra no modo conversa ANTES do foco (no toque), assim o iPhone não
+  // rola a página para mostrar o campo. O foco (e o teclado) vem no fim
+  // do mesmo toque, já com o cartão no lugar novo.
+  const enter = () => { if (chatIsMobile()) openPulsinhoConvo(); };
+  input.addEventListener("touchstart", (event) => {
+    if (!chatIsMobile() || isPulsinhoConvo() || event.touches.length > 1) return;
+    event.preventDefault();
+    openPulsinhoConvo();
+    pulsinhoConvoGuardUntil = Date.now() + 600;
+    document.addEventListener("touchend", () => input.focus({ preventScroll: true }), { once: true });
+  }, { passive: false });
   input.addEventListener("focus", () => {
-    if (!chatIsMobile()) return;
-    // O teclado leva um instante para abrir: confere algumas vezes.
-    [60, 280, 520].forEach((ms) => setTimeout(fitPulsinhoToKeyboard, ms));
+    enter();
+    [80, 320, 600].forEach((ms) => setTimeout(() => { layoutPulsinhoConvo(); scrollPulsinhoToEnd(); }, ms));
   });
-  input.addEventListener("blur", () => {
-    setTimeout(() => { if (document.activeElement !== input) releasePulsinhoFit(); }, 220);
+  input.addEventListener("input", updatePulsinhoSuggestions);
+  input.addEventListener("blur", () => setTimeout(layoutPulsinhoConvo, 120));
+  document.querySelector("#bdChatClose")?.addEventListener("click", closePulsinhoConvo);
+  document.querySelector("#bdChatSuggest")?.addEventListener("click", (event) => {
+    const chip = event.target.closest("[data-chat-suggest]");
+    if (!chip) return;
+    input.value = chip.dataset.chatSuggest;
+    input.focus({ preventScroll: true });
+    try { input.setSelectionRange(input.value.length, input.value.length); } catch { /* sem seleção */ }
+    updatePulsinhoSuggestions();
   });
-  window.visualViewport?.addEventListener("resize", () => {
-    if (document.activeElement === input) fitPulsinhoToKeyboard();
-    else releasePulsinhoFit();
-  });
-  window.addEventListener("orientationchange", () => { chatBaselineHeight = 0; });
+  window.visualViewport?.addEventListener("resize", layoutPulsinhoConvo);
+  window.visualViewport?.addEventListener("scroll", layoutPulsinhoConvo);
+  window.addEventListener("resize", () => { if (!chatIsMobile()) closePulsinhoConvo(); else layoutPulsinhoConvo(); });
+  document.addEventListener("keydown", (event) => { if (event.key === "Escape" && isPulsinhoConvo()) closePulsinhoConvo(); });
 }
 
 function updatePulsinhoJump() {
@@ -4633,6 +4733,14 @@ function viewHeadingGlyph(view, hour) {
       return `<svg class="pn-glyph pn-glyph--sun" viewBox="0 0 32 32" aria-hidden="true"><defs><radialGradient id="pgSun" cx="38%" cy="34%" r="70%"><stop offset="0" stop-color="#fff4b8"/><stop offset=".55" stop-color="#ffc83d"/><stop offset="1" stop-color="#ff9640"/></radialGradient></defs><g class="pg-rays" stroke="#ffb547" stroke-width="2.3" stroke-linecap="round"><path d="M16 2.8v3.4"/><path d="M16 25.8v3.4"/><path d="M2.8 16h3.4"/><path d="M25.8 16h3.4"/><path d="M6.7 6.7l2.4 2.4"/><path d="M22.9 22.9l2.4 2.4"/><path d="M6.7 25.3l2.4-2.4"/><path d="M22.9 9.1l2.4-2.4"/></g><circle class="pg-sun" cx="16" cy="16" r="7.4" fill="url(#pgSun)"/></svg>`;
     }
     return `<svg class="pn-glyph pn-glyph--moon" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="pgMoon" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#e6dcff"/><stop offset="1" stop-color="#9b86ff"/></linearGradient><mask id="pgMoonCut"><rect width="32" height="32" fill="#fff"/><circle cx="21.5" cy="11" r="8.2" fill="#000"/></mask></defs><circle class="pg-moon" cx="14.5" cy="17.5" r="10" fill="url(#pgMoon)" mask="url(#pgMoonCut)"/><path class="pg-star pg-star--a" d="M24 4.5l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z" fill="#ffe17a"/><circle class="pg-star pg-star--b" cx="28" cy="13" r="1.3" fill="#9fe8ff"/><circle class="pg-star pg-star--c" cx="19.5" cy="11" r="1" fill="#fff"/></svg>`;
+  }
+  if (view === "planner") {
+    // Calendário com argolas que balançam e um ✓ sendo marcado no dia.
+    return `<svg class="pn-glyph pn-glyph--planner" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="pgCal" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8fe3ff"/><stop offset="1" stop-color="#4f8dff"/></linearGradient><linearGradient id="pgCalTop" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#8b7bff"/><stop offset="1" stop-color="#6a5cff"/></linearGradient></defs><rect x="4" y="6.5" width="24" height="21.5" rx="5" fill="url(#pgCal)"/><path d="M4 11.5a5 5 0 015-5h14a5 5 0 015 5V13H4z" fill="url(#pgCalTop)"/><g class="pg-rings" fill="none" stroke="#e8e4ff" stroke-width="2.4" stroke-linecap="round"><path class="pg-ring pg-ring--a" d="M10.5 4v5"/><path class="pg-ring pg-ring--b" d="M21.5 4v5"/></g><g fill="#fff" opacity=".55"><circle cx="9.5" cy="17.5" r="1.3"/><circle cx="16" cy="17.5" r="1.3"/><circle cx="9.5" cy="23" r="1.3"/></g><circle class="pg-day" cx="21.5" cy="21.5" r="4.6" fill="#fff"/><path class="pg-tick" d="M19.3 21.6l1.6 1.6 3-3.2" fill="none" stroke="#2fcf8b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" pathLength="10"/></svg>`;
+  }
+  if (view === "finances") {
+    // Barras crescendo, linha de tendência subindo e uma moeda que quica.
+    return `<svg class="pn-glyph pn-glyph--finance" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="pgBar" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#16a974"/><stop offset="1" stop-color="#5ff0b0"/></linearGradient><radialGradient id="pgCoin" cx="38%" cy="32%" r="70%"><stop offset="0" stop-color="#fff2b0"/><stop offset=".6" stop-color="#ffc83d"/><stop offset="1" stop-color="#e09400"/></radialGradient></defs><rect class="pg-bar pg-bar--1" x="4" y="18" width="5.2" height="10" rx="1.8" fill="url(#pgBar)" opacity=".75"/><rect class="pg-bar pg-bar--2" x="11.4" y="13.5" width="5.2" height="14.5" rx="1.8" fill="url(#pgBar)" opacity=".88"/><rect class="pg-bar pg-bar--3" x="18.8" y="9" width="5.2" height="19" rx="1.8" fill="url(#pgBar)"/><path class="pg-trend" d="M4.5 14.5l7-5 5 2.5 7-6.5" fill="none" stroke="#8b7bff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" pathLength="10"/><g class="pg-coin"><circle cx="26.5" cy="6.8" r="4.3" fill="url(#pgCoin)" stroke="#c98500" stroke-width=".9"/><circle cx="26.5" cy="6.8" r="2.5" fill="none" stroke="#fff5c7" stroke-width="1" opacity=".85"/></g></svg>`;
   }
   if (view === "notes") {
     return `<svg class="pn-glyph pn-glyph--notes" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="pgPad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#9d8bff"/><stop offset="1" stop-color="#6a5cff"/></linearGradient></defs><rect x="4.5" y="4" width="18" height="23" rx="4" fill="url(#pgPad)"/><path class="pg-line pg-line--1" d="M8.5 11h10" stroke="#fff" stroke-width="2" stroke-linecap="round" pathLength="10"/><path class="pg-line pg-line--2" d="M8.5 15.5h10" stroke="#fff" stroke-width="2" stroke-linecap="round" pathLength="10" opacity=".85"/><path class="pg-line pg-line--3" d="M8.5 20h6" stroke="#fff" stroke-width="2" stroke-linecap="round" pathLength="10" opacity=".7"/><g class="pg-pencil"><path d="M19.6 25.6l1-4.1 7.6-7.6a1.9 1.9 0 0 1 2.7 2.7l-7.6 7.6z" fill="#ffc83d" stroke="#0d1424" stroke-width="1.2" stroke-linejoin="round"/><path d="M19.6 25.6l1-4.1 3.1 3.1z" fill="#ffe7c2" stroke="#0d1424" stroke-width="1.2" stroke-linejoin="round"/><path d="M27.2 14.9l2.7 2.7" stroke="#0d1424" stroke-width="1.2"/></g></svg>`;
@@ -6570,9 +6678,16 @@ function openPlannerTaskEditor(id) {
 
 function setPlannerTab(tab) {
   plannerActiveTab = tab;
-  document.querySelectorAll("#plannerView .planner-tabs button").forEach((b) => {
-    b.classList.toggle("active", b.dataset.plannerTab === tab);
+  const buttons = [...document.querySelectorAll("#plannerView .planner-tabs button[data-planner-tab]")];
+  buttons.forEach((b) => {
+    const on = b.dataset.plannerTab === tab;
+    b.classList.toggle("active", on);
+    b.setAttribute("aria-selected", String(on));
+    b.tabIndex = on ? 0 : -1;
   });
+  // Indicador deslizante: a pílula ativa corre até a aba escolhida.
+  const tabs = document.querySelector("#plannerView .planner-tabs");
+  if (tabs) tabs.style.setProperty("--tab-i", String(Math.max(0, buttons.findIndex((b) => b.dataset.plannerTab === tab))));
   document.querySelectorAll("#plannerView .planner-subview").forEach((el) => {
     el.classList.toggle("active", el.dataset.plannerSubview === tab);
   });
@@ -6580,9 +6695,26 @@ function setPlannerTab(tab) {
 }
 
 function bindPlannerNav() {
-  document.querySelectorAll("#plannerView .planner-tabs button[data-planner-tab]").forEach((btn) => {
+  const tabButtons = [...document.querySelectorAll("#plannerView .planner-tabs button[data-planner-tab]")];
+  tabButtons.forEach((btn, index) => {
     btn.addEventListener("click", () => setPlannerTab(btn.dataset.plannerTab));
+    // Setas do teclado trocam de aba (padrão de abas acessíveis).
+    btn.addEventListener("keydown", (event) => {
+      if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
+      event.preventDefault();
+      const next = tabButtons[(index + (event.key === "ArrowRight" ? 1 : tabButtons.length - 1)) % tabButtons.length];
+      setPlannerTab(next.dataset.plannerTab);
+      next.focus();
+    });
   });
+  const tabsEl = document.querySelector("#plannerView .planner-tabs");
+  if (tabsEl && !tabsEl.querySelector(".bp-tab-ink")) {
+    const ink = document.createElement("span");
+    ink.className = "bp-tab-ink";
+    ink.setAttribute("aria-hidden", "true");
+    tabsEl.prepend(ink);
+    tabsEl.style.setProperty("--tab-i", String(Math.max(0, tabButtons.findIndex((b) => b.classList.contains("active")))));
+  }
   document.querySelector("#plannerDayPrev")?.addEventListener("click", () => changePlannerDay(-1));
   document.querySelector("#plannerDayNext")?.addEventListener("click", () => changePlannerDay(1));
   document.querySelector("#plannerDayToday")?.addEventListener("click", goToPlannerToday);

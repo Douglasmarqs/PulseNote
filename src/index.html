@@ -132,7 +132,7 @@
     <!-- Camada de experiência: uma linguagem única para todas as áreas. -->
     <link rel="stylesheet" href="/src/experience.css?v=3" />
     <!-- Sistema visual dos quadros (claro/escuro, desktop/mobile). Carrega por último. -->
-    <link rel="stylesheet" href="/src/boards.css?v=14" />
+    <link rel="stylesheet" href="/src/boards.css?v=15" />
   </head>
   <body class="bd">
     <!-- Tela de abertura já no HTML: aparece na primeira pintura, antes de
@@ -448,6 +448,7 @@
                   <i class="bd-chat-online"></i>
                 </span>
                 <div><h3>Pulsinho <span class="bd-badge">IA</span></h3><p id="bdChatStatus">Online agora</p></div>
+                <button type="button" class="bd-icon-btn bd-chat-close" id="bdChatClose" aria-label="Fechar conversa" hidden><svg class="i"><use href="#i-chev-down"/></svg></button>
                 <div class="bd-chat-menu-wrap">
                   <button type="button" class="bd-icon-btn bd-chat-more" id="bdChatMore" aria-haspopup="menu" aria-expanded="false" aria-controls="bdChatMenu" aria-label="Opções da conversa"><svg class="i"><use href="#i-dots-v"/></svg></button>
                   <div class="bd-chat-menu" id="bdChatMenu" role="menu" hidden>
@@ -459,6 +460,12 @@
               <div class="bd-chat-stage">
                 <div id="pulseCommandResponse" class="bd-chat-body" role="log" aria-live="polite"></div>
                 <button type="button" class="bd-chat-jump" id="bdChatJump" hidden aria-label="Ir para a mensagem mais recente"><svg class="i"><use href="#i-chev-down"/></svg></button>
+              </div>
+              <div class="bd-chat-suggest" id="bdChatSuggest" role="group" aria-label="Sugestões para começar" hidden>
+                <button type="button" data-chat-suggest="Gastei 30 no mercado">💸 Gastei 30 no mercado</button>
+                <button type="button" data-chat-suggest="O que tenho para hoje?">📅 O que tenho para hoje?</button>
+                <button type="button" data-chat-suggest="Me lembra de pagar a luz amanhã às 9h">⏰ Lembrete amanhã às 9h</button>
+                <button type="button" data-chat-suggest="Como estão meus gastos este mês?">📊 Meus gastos do mês</button>
               </div>
               <form id="pulseCommandForm" class="bd-chat-form">
                 <input id="pulseCommandInput" type="text" maxlength="1600" autocomplete="off" enterkeyhint="send" placeholder="Fale com o Pulsinho…" aria-label="Fale com o Pulsinho" />
@@ -2144,7 +2151,7 @@
     <script src="/src/recurring-detector.js?v=1"></script>
     <script src="/src/card-installments.js?v=1"></script>
     <script src="/src/notifications.js?v=36" defer></script>
-    <script type="module" src="/src/app.js?v=51"></script>
+    <script type="module" src="/src/app.js?v=52"></script>
     <script type="module" src="/src/push-notifications.js?v=35"></script>
     <!-- Configuração inicial (primeiro acesso) — ver src/onboarding.js -->
   <div id="onboardingRoot" class="bdo" role="dialog" aria-modal="true" aria-labelledby="bdoTitle" hidden></div>

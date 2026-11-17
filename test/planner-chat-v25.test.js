@@ -24,13 +24,25 @@ test("tela não fica deslocada depois do teclado (iPhone)", () => {
   assert.match(app, /modal\.hidden = true;\n  repairViewportAfterOverlay\(\);/);
 });
 
-test("Pulsinho continua no cartão e só se encaixa acima do teclado (sem tela cheia)", () => {
+test("Pulsinho: modo conversa flutuante no celular, preso à área visível", () => {
   assert.doesNotMatch(html, /id="bdChatExpand"/);
   assert.doesNotMatch(css, /\.bd-chat\.is-fullscreen/);
-  assert.match(app, /function fitPulsinhoToKeyboard\(\)/);
-  assert.match(app, /chat\.style\.setProperty\("--chat-fit"/);
-  assert.match(css, /\.bd-chat\.is-fitted \{ height: var\(--chat-fit\) !important;/);
-  assert.match(css, /body\.bd-chat-typing \.bd-tabbar/);
+  for (const id of ["bdChatClose", "bdChatSuggest"]) assert.match(html, new RegExp(`id="${id}"`));
+  assert.match(app, /function openPulsinhoConvo\(\)/);
+  assert.match(app, /function layoutPulsinhoConvo\(\)/);
+  assert.match(app, /chat\.style\.setProperty\("--convo-h"/);
+  assert.match(app, /input\.addEventListener\("touchstart", \(event\) => \{/);
+  assert.match(app, /Date\.now\(\) > pulsinhoConvoGuardUntil/, "toque que abre não fecha a conversa");
+  assert.match(css, /\.bd-chat\.is-convo \{/);
+  assert.match(css, /body\.bd-chat-convo \.bd-tabbar/);
+});
+
+test("Planner: abas com indicador deslizante e ilustrações de Planner e Finanças", () => {
+  assert.match(app, /tabs\.style\.setProperty\("--tab-i"/);
+  assert.match(app, /ink\.className = "bp-tab-ink"/);
+  assert.match(css, /#plannerView \.bp-tabs \.bp-tab-ink \{/);
+  assert.match(app, /pn-glyph--planner/);
+  assert.match(app, /pn-glyph--finance/);
 });
 
 test("app sem zoom: viewport, pinça bloqueada e toque duplo no CSS", () => {

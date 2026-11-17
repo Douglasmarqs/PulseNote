@@ -38,7 +38,8 @@
 // v48: abertura animada do Pulsinho e correção da faixa vazia ao fechar nota no iPhone.
 // v49: foco/metas novos, chat em tela cheia no celular, ilustrações nos títulos e reparo da tela após o teclado.
 // v50: editor de nota novo, Pulsinho encaixado acima do teclado, botões do foco e app sem zoom.
-const CACHE_NAME = "pulsenote-v50";
+// v51: modo conversa do Pulsinho, abas do Planner e ilustrações de Planner/Finanças.
+const CACHE_NAME = "pulsenote-v51";
 
 // ── Firebase Cloud Messaging (push em segundo plano) ──────────────
 // Isso é o que permite uma notificação aparecer mesmo com o PulseNote

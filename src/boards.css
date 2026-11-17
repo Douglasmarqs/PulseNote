@@ -3262,11 +3262,40 @@ html.pn-scroll-locked, html.pn-scroll-locked body { overflow: hidden; }
 .gm-add .bd-btn { height: 44px; padding: 0; justify-content: center; border-radius: 12px; }
 @media (prefers-reduced-motion: reduce) { .pf-ring-bar, .pf-ring, .pf-seg.is-next, .pf-empty-art, .pf-empty-art i, .pf-chip.is-done i { animation: none !important; } }
 
-/* ---------- v26: Pulsinho encaixado acima do teclado (celular) ---------- */
+/* ---------- v27: modo conversa do Pulsinho (celular) ---------- */
+.bd-chat-close { display: none; }
+.bd-chat-suggest { display: flex; gap: 8px; padding: 0 12px 10px; overflow-x: auto; scrollbar-width: none; }
+.bd-chat-suggest::-webkit-scrollbar { display: none; }
+.bd-chat-suggest[hidden] { display: none; }
+.bd-chat-suggest button { flex: none; height: 34px; padding: 0 13px; border: 1px solid var(--bd-line-strong); border-radius: 999px; background: color-mix(in srgb, var(--bd-card-2) 80%, transparent); color: var(--bd-text); font: inherit; font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer; transition: border-color .15s, transform .12s; animation: bdPopIn .3s ease-out both; }
+.bd-chat-suggest button:nth-child(2) { animation-delay: .05s; } .bd-chat-suggest button:nth-child(3) { animation-delay: .1s; } .bd-chat-suggest button:nth-child(4) { animation-delay: .15s; }
+.bd-chat-suggest button:active { transform: scale(.95); }
+.bd-chat-suggest button:hover { border-color: var(--bd-primary); }
+.bd-chat-backdrop { position: fixed; left: 0; right: 0; top: 0; height: 200vh; z-index: 440; background: rgba(3, 6, 16, .62); -webkit-backdrop-filter: blur(8px) saturate(120%); backdrop-filter: blur(8px) saturate(120%); touch-action: none; }
+.bd-chat-backdrop[hidden] { display: none; }
 @media (max-width: 760px) {
-  .bd-chat.is-fitted { height: var(--chat-fit) !important; min-height: 0 !important; max-height: none !important; }
-  body.bd-chat-typing .bd-tabbar, body.bd-chat-typing .pn-ptr { display: none !important; }
+  .bd-chat-ph { border-radius: 18px; border: 1px dashed color-mix(in srgb, var(--bd-line-strong) 70%, transparent); background: color-mix(in srgb, var(--bd-card) 40%, transparent); }
+  .bd-chat.is-convo {
+    position: fixed !important; left: 10px; right: 10px; top: var(--convo-top, 10px); z-index: 450;
+    height: var(--convo-h, 80dvh) !important; min-height: 0 !important; max-height: none !important; margin: 0 !important;
+    border-radius: 22px !important; border-color: color-mix(in srgb, var(--bd-primary) 35%, var(--bd-line-strong)) !important;
+    box-shadow: 0 30px 70px -20px rgba(0,0,0,.75), 0 0 0 1px color-mix(in srgb, var(--bd-primary) 12%, transparent) !important;
+    transition: height .2s cubic-bezier(.2,.9,.3,1), top .2s cubic-bezier(.2,.9,.3,1);
+  }
+  .bd-chat.is-convo .bd-chat-head > .bd-chat-close { display: grid; flex: none; }
+  .bd-chat.is-convo .bd-chat-head > .bd-chat-close:not([hidden]) { border-radius: 50%; border: 1px solid var(--bd-line-strong); background: color-mix(in srgb, var(--bd-card-2) 75%, transparent); }
+  .bd-chat.is-convo .bd-chat-head { padding: 12px 12px 10px 14px; }
+  .bd-chat.is-convo .bd-chat-body { overscroll-behavior: contain; }
+  .bd-chat.is-convo .bd-chat-form { border-radius: 0 0 22px 22px; padding: 10px 12px 12px; }
+  .bd-chat.is-convo.has-keyboard .bd-chat-form { padding-bottom: 10px; }
+  /* Nada por cima da conversa nem "recortes" para o fixed */
+  body.bd-chat-convo .bd-tabbar, body.bd-chat-convo .pn-ptr, body.bd-chat-convo .bp-fab { visibility: hidden !important; }
+  body.bd-chat-convo .view, body.bd-chat-convo .bd-dash, body.bd-chat-convo .bd-main, body.bd-chat-convo main, body.bd-chat-convo .app-main { transform: none !important; filter: none !important; contain: none !important; }
+  /* Mensagens apoiadas embaixo, perto do campo (como num app de mensagens) */
+  .bd-chat.is-convo .bd-chat-body { display: flex; flex-direction: column; }
+  .bd-chat.is-convo .bd-chat-body > :first-child { margin-top: auto; }
 }
+@media (prefers-reduced-motion: reduce) { .bd-chat.is-convo, .bd-chat-suggest button { transition: none; animation: none; } }
 /* Etapas nomeadas: chips alinhados à esquerda; no celular, lista tocável */
 #plannerFocus .pf-chips, .gm-card .pf-chips { display: flex; flex-wrap: wrap; justify-content: flex-start; align-items: stretch; overflow: visible; }
 #plannerFocus .pf-chips li, .gm-card .pf-chips li { display: block; width: auto; margin: 0; padding: 0; text-align: left; }
@@ -3421,3 +3450,61 @@ button.bn-nd-chip:hover { border-color: var(--c); }
   .bn-detail .bn-tool-sep { margin: 0 1px; }
 }
 @media (min-width: 761px) { .bn-tool-row { flex-wrap: wrap; overflow: visible; } .bn-detail .bn-detail-title { font-size: 21px !important; } }
+
+/* ---------- v27: abas do Planner (Lista · Dia · Semana · Mês) ---------- */
+#plannerView .bp-tabs.planner-tabs {
+  --tab-gap: 4px; position: relative; isolation: isolate; display: inline-grid !important; grid-template-columns: repeat(4, 112px) !important;
+  gap: var(--tab-gap) !important; width: auto; min-width: 0; padding: 5px !important; overflow: visible !important;
+  border: 1px solid var(--bd-line-strong) !important; border-radius: 18px !important;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--bd-card-2) 85%, transparent), color-mix(in srgb, var(--bd-card) 90%, transparent)) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.04), 0 12px 28px -22px rgba(0,0,0,.8) !important;
+}
+#plannerView .bp-tabs .bp-tab-ink {
+  position: absolute; z-index: 0; top: 5px; bottom: 5px; left: 5px;
+  width: calc((100% - 10px - 3 * var(--tab-gap)) / 4); border-radius: 13px;
+  background: linear-gradient(135deg, #7b6bff 0%, #5b4dff 55%, #4f7bff 100%);
+  box-shadow: 0 10px 22px -10px rgba(91, 77, 255, .85), inset 0 1px 0 rgba(255,255,255,.22);
+  transform: translateX(calc(var(--tab-i, 0) * (100% + var(--tab-gap))));
+  transition: transform .34s cubic-bezier(.3,1.25,.5,1);
+}
+#plannerView .bp-tabs.planner-tabs button {
+  position: relative; z-index: 1; display: inline-flex !important; align-items: center; justify-content: center; gap: 7px !important;
+  min-width: 0 !important; height: 40px !important; min-height: 0 !important; padding: 0 10px !important;
+  border: 0 !important; border-radius: 13px !important; background: transparent !important; box-shadow: none !important;
+  color: var(--bd-text-2) !important; font: inherit; font-size: 13.5px !important; font-weight: 600 !important; letter-spacing: .005em;
+  cursor: pointer; transition: color .2s, transform .12s;
+}
+#plannerView .bp-tabs.planner-tabs button:hover { color: var(--bd-text) !important; }
+#plannerView .bp-tabs.planner-tabs button:active { transform: scale(.96); }
+#plannerView .bp-tabs.planner-tabs button.active { color: #fff !important; font-weight: 700 !important; }
+#plannerView .bp-tabs.planner-tabs button .i { width: 17px !important; height: 17px !important; flex: none; stroke-width: 2.1; transition: transform .3s cubic-bezier(.3,1.5,.5,1); }
+#plannerView .bp-tabs.planner-tabs button.active .i { transform: scale(1.1); }
+#plannerView .bp-tabs.planner-tabs button span { font-size: inherit !important; }
+#plannerView .bp-tabs.planner-tabs button:focus-visible { outline: 0; box-shadow: 0 0 0 2px var(--bd-primary) !important; }
+:root[data-theme="light"] #plannerView .bp-tabs.planner-tabs { background: #fff !important; }
+@media (max-width: 760px) {
+  #plannerView .bp-tabs.planner-tabs { display: grid !important; grid-template-columns: repeat(4, minmax(0, 1fr)) !important; width: 100%; padding: 5px !important; }
+  #plannerView .bp-tabs.planner-tabs button { flex-direction: row; height: 42px !important; gap: 6px !important; padding: 0 4px !important; font-size: 13px !important; }
+  #plannerView .bp-tabs.planner-tabs button .i { width: 16px !important; height: 16px !important; }
+}
+@media (max-width: 360px) {
+  #plannerView .bp-tabs.planner-tabs button { flex-direction: column; height: 50px !important; gap: 3px !important; font-size: 11.5px !important; }
+}
+@media (prefers-reduced-motion: reduce) { #plannerView .bp-tabs .bp-tab-ink { transition: none; } }
+
+/* ---------- v27: ilustrações do Planner e de Finanças ---------- */
+.pn-glyph--planner .pg-ring { transform-box: view-box; animation: pgRingSwing 3.2s ease-in-out infinite; }
+.pn-glyph--planner .pg-ring--a { transform-origin: 10.5px 4px; }
+.pn-glyph--planner .pg-ring--b { transform-origin: 21.5px 4px; animation-delay: .2s; }
+.pn-glyph--planner .pg-day { animation: pgDayPop 3.6s ease-in-out infinite; }
+.pn-glyph--planner .pg-tick { stroke-dasharray: 10 10; animation: pgTick 3.6s ease-in-out infinite; }
+.pn-glyph--finance .pg-bar { transform-box: fill-box; transform-origin: bottom; animation: pgBarGrow 3.8s cubic-bezier(.3,1.3,.5,1) infinite; }
+.pn-glyph--finance .pg-bar--2 { animation-delay: .12s; }
+.pn-glyph--finance .pg-bar--3 { animation-delay: .24s; }
+.pn-glyph--finance .pg-trend { stroke-dasharray: 10 10; animation: pgWrite 3.8s ease-in-out infinite; }
+.pn-glyph--finance .pg-coin { transform-box: fill-box; transform-origin: center; animation: pgCoin 3.8s ease-in-out infinite; }
+@keyframes pgRingSwing { 0%, 70%, 100% { transform: rotate(0); } 78% { transform: rotate(-14deg); } 86% { transform: rotate(10deg); } 93% { transform: rotate(-5deg); } }
+@keyframes pgDayPop { 0%, 18% { transform: scale(.4); opacity: 0; } 30%, 88% { transform: scale(1); opacity: 1; } 100% { transform: scale(.4); opacity: 0; } }
+@keyframes pgTick { 0%, 30% { stroke-dashoffset: 10; } 46%, 88% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: 10; } }
+@keyframes pgBarGrow { 0% { transform: scaleY(.35); } 22%, 86% { transform: scaleY(1); } 100% { transform: scaleY(.35); } }
+@keyframes pgCoin { 0%, 30% { transform: translateY(0) rotateY(0); } 40% { transform: translateY(-3px) rotateY(180deg); } 50% { transform: translateY(0) rotateY(360deg); } 56% { transform: translateY(-1px); } 62%, 100% { transform: translateY(0); } }
