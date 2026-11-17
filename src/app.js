@@ -2209,7 +2209,7 @@ function normalizeState(parsed) {
     if (!t.subtasks) t.subtasks = [];
     if (t.recurrence === undefined) t.recurrence = null;
     if (t.dueTime === undefined) t.dueTime = "";
-    if (!Number.isFinite(Number(t.reminder))) t.reminder = 15;
+    t.reminder = normalizeReminderValue(t.reminder);
   });
 
   parsed.notes.forEach((n) => { if (!n.tags) n.tags = []; });
@@ -2454,6 +2454,37 @@ function saveState() {
   }
 }
 
+
+// Lembrete de tarefa/compromisso: minutos de antecedência ou "none".
+// "Sem lembrete" é a opção padrão dos formulários; antes ela virava NaN
+// (Number("none")), que ao recarregar era trocado por 15 min — e o aviso
+// chegava mesmo sem ninguém ter pedido. Agora "none" é guardado como está
+// e o servidor (api/send-reminders.js) já ignora esse valor.
+function normalizeReminderValue(value, fallback = 15) {
+  // NaN/null vêm de tarefas salvas com "Sem lembrete" antes da correção.
+  if (value === "none" || value === false || value === null || (typeof value === "number" && Number.isNaN(value))) return "none";
+  if (value === undefined || value === "") return fallback;
+  const minutes = Number(value);
+  return Number.isFinite(minutes) && minutes >= 0 ? Math.min(10080, Math.round(minutes)) : fallback;
+}
+
+function readReminderChoice(selectSelector, customSelector) {
+  const selected = document.querySelector(selectSelector)?.value || "none";
+  if (selected === "none") return "none";
+  if (selected === "custom") {
+    const custom = Number(document.querySelector(customSelector)?.value);
+    return Math.min(10080, Math.max(1, Number.isFinite(custom) && custom > 0 ? Math.round(custom) : 15));
+  }
+  return normalizeReminderValue(selected);
+}
+
+function setReminderChoice(selectSelector, customSelector, wrapSelector, value) {
+  const reminder = normalizeReminderValue(value);
+  const preset = reminder === "none" || [0, 5, 15, 30, 60, 1440].includes(reminder);
+  document.querySelector(selectSelector).value = preset ? String(reminder) : "custom";
+  document.querySelector(customSelector).value = preset ? "" : reminder;
+  document.querySelector(wrapSelector).hidden = preset;
+}
 
 function createTask(title, status = "Pendente", priority = "Media", dueDate = todayIso, completedAt = "", dueTime = "", reminder = 15) {
   return {
@@ -2719,7 +2750,17 @@ function renderPulsinhoConversation({ loading = false, error = "" } = {}) {
   root.classList.toggle("is-loading", loading);
   const hour = new Date().getHours();
   const hello = hour < 5 ? "Boa noite" : hour < 12 ? "Bom dia" : hour < 18 ? "Boa tarde" : "Boa noite";
-  const intro = `<div class="bd-msg bd-msg--ai">${hello}, ${escapeHtml(bdFirstName())}! Sou o Pulsinho 💜 Pode falar comigo do seu jeito: registro gastos, crio tarefas e lembretes, marco compromissos, anoto ideias — ou a gente só conversa.</div>`;
+  const introText = `${hello}, ${bdFirstName()}! Sou o Pulsinho 💜 Pode falar comigo do seu jeito: registro gastos, crio tarefas e lembretes, marco compromissos, anoto ideias — ou a gente só conversa.`;
+  // Primeira vez que o painel aparece: o Pulsinho acena, "digita" e a
+  // saudação surge palavra por palavra. Depois disso, fica estática.
+  if (pulsinhoIntroState === "pending" && pulsinhoConversation.length) pulsinhoIntroState = "done";
+  const intro = pulsinhoIntroState === "pending"
+    ? ""
+    : pulsinhoIntroState === "typing"
+      ? '<div class="bd-typing bd-typing--intro" aria-label="Pulsinho está digitando"><i></i><i></i><i></i></div>'
+      : pulsinhoIntroState === "reveal"
+        ? `<div class="bd-msg bd-msg--ai bd-msg--intro is-revealing">${introText.split(" ").map((word, index) => `<span style="--w:${index}">${escapeHtml(word)} </span>`).join("")}</div>`
+        : `<div class="bd-msg bd-msg--ai bd-msg--intro">${escapeHtml(introText)}</div>`;
   const messages = pulsinhoConversation.map((message) => {
     const followUps = message === pulsinhoConversation.at(-1) && Array.isArray(message.followUps) ? message.followUps : [];
     const followUpHtml = followUps.length
@@ -2762,7 +2803,55 @@ function renderPulsinhoConversation({ loading = false, error = "" } = {}) {
   const loadingMessage = loading ? '<div class="bd-typing" aria-label="Pulsinho está pensando"><i></i><i></i><i></i></div>' : "";
   const errorMessage = error ? `<div class="bd-chat-error">${escapeHtml(error)}</div>` : "";
   root.innerHTML = `${intro}${messages}${loadingMessage}${errorMessage}${action}`;
+  document.querySelector("#bdChat")?.classList.toggle("is-thinking", loading);
   root.scrollTop = root.scrollHeight;
+  updatePulsinhoJump();
+}
+
+let pulsinhoIntroState = "pending";
+function playPulsinhoIntro() {
+  if (pulsinhoIntroState !== "pending") return;
+  const chat = document.querySelector("#bdChat");
+  const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  if (reduce || pulsinhoConversation.length) {
+    pulsinhoIntroState = "done";
+    renderPulsinhoConversation();
+    return;
+  }
+  pulsinhoIntroState = "typing";
+  chat?.classList.add("is-greeting");
+  renderPulsinhoConversation();
+  setTimeout(() => {
+    if (pulsinhoIntroState !== "typing") return;
+    pulsinhoIntroState = "reveal";
+    renderPulsinhoConversation();
+    setTimeout(() => {
+      if (pulsinhoIntroState === "reveal") pulsinhoIntroState = "done";
+      chat?.classList.remove("is-greeting");
+    }, 2200);
+  }, 1050);
+}
+
+// Toca a apresentação quando o painel aparece na tela pela primeira vez
+// (no celular ele fica mais abaixo no Início).
+function watchPulsinhoIntro() {
+  const chat = document.querySelector("#bdChat");
+  if (!chat || chat.dataset.introWatch === "1") return;
+  chat.dataset.introWatch = "1";
+  if (!("IntersectionObserver" in window)) { playPulsinhoIntro(); return; }
+  const observer = new IntersectionObserver((entries) => {
+    if (!entries.some((entry) => entry.isIntersecting)) return;
+    observer.disconnect();
+    playPulsinhoIntro();
+  }, { threshold: 0.35 });
+  observer.observe(chat);
+}
+
+function updatePulsinhoJump() {
+  const root = document.querySelector("#pulseCommandResponse");
+  const jump = document.querySelector("#bdChatJump");
+  if (!root || !jump) return;
+  jump.hidden = root.scrollHeight - root.scrollTop - root.clientHeight < 80;
 }
 
 async function askPulsinhoFromDashboard(question) {
@@ -2911,9 +3000,9 @@ function confirmPulsinhoAction() {
   }
 
   if (action.type === "create_task") {
-    state.tasks.unshift(createTask(title, "Pendente", ["Baixa", "Media", "Alta", "Urgente"].includes(payload.priority) ? payload.priority : "Media", validPulsinhoDate(payload.dueDate), "", String(payload.dueTime || "").slice(0, 5), Number(payload.reminder) || 15));
+    state.tasks.unshift(createTask(title, "Pendente", ["Baixa", "Media", "Alta", "Urgente"].includes(payload.priority) ? payload.priority : "Media", validPulsinhoDate(payload.dueDate), "", String(payload.dueTime || "").slice(0, 5), normalizeReminderValue(payload.reminder)));
   } else if (action.type === "create_event") {
-    state.events.push({ id: crypto.randomUUID(), title, date: validPulsinhoDate(payload.date), time: String(payload.time || "").slice(0, 5), location: String(payload.location || "Sem local").slice(0, 120), reminder: Number(payload.reminder) || 15, notes: String(payload.notes || "").slice(0, 500) });
+    state.events.push({ id: crypto.randomUUID(), title, date: validPulsinhoDate(payload.date), time: String(payload.time || "").slice(0, 5), location: String(payload.location || "Sem local").slice(0, 120), reminder: normalizeReminderValue(payload.reminder), notes: String(payload.notes || "").slice(0, 500) });
   } else if (action.type === "create_note") {
     state.notes.unshift({ id: crypto.randomUUID(), title, description: String(payload.description || "").slice(0, 3000), category: String(payload.category || "Geral").slice(0, 60), folder: "Entrada", tags: [], priority: "Media", checklist: [], attachments: [], goal: "", observations: "", color: "blue", textColor: "", favorite: false, createdAt: todayIso, convertedToTaskId: "" });
   } else if (action.type === "create_goal") {
@@ -3795,9 +3884,14 @@ function saveNote(event) {
   const textColor = normalizeNoteTextColor(valueOf("#noteTextColor"));
   const descriptionChanged = !existing || existing.description !== newDescription;
   const textColorChanged = Boolean(existing) && normalizeNoteTextColor(existing.textColor) !== textColor;
-  const descriptionHtml = existing && !descriptionChanged && !textColorChanged
-    ? existing.descriptionHtml || notePlainTextToHtml(newDescription, textColor)
-    : notePlainTextToHtml(newDescription, textColor);
+  // Conteúdo com formatação (negrito, listas, marca-texto…) vem do editor;
+  // texto puro continua salvo em "description" para busca, WhatsApp e IA.
+  const editorHtml = noteEditorHtml();
+  const descriptionHtml = editorHtml
+    ? editorHtml
+    : existing && !descriptionChanged && !textColorChanged
+      ? existing.descriptionHtml || notePlainTextToHtml(newDescription, textColor)
+      : notePlainTextToHtml(newDescription, textColor);
   const existingChecklist = existing?.checklist || [];
   const reusedChecklistIndexes = new Set();
   const checklist = splitLines(valueOf("#noteChecklist")).map((text, index) => {
@@ -3892,7 +3986,7 @@ function saveEvent(event) {
     date,
     time,
     location: valueOf("#eventLocation") || "Sem local",
-    reminder: Number(valueOf("#eventReminder")),
+    reminder: normalizeReminderValue(valueOf("#eventReminder")),
     notes: valueOf("#eventNotes"),
   });
   event.target.reset();
@@ -4002,7 +4096,8 @@ function resetNoteForm() {
   if (!form) return;
   form.reset();
   document.querySelector("#noteId").value = "";
-  document.querySelector("#notePriority").value = "Media";
+  setNoteEditorContent(null);
+  setNotePriorityUI("Media");
   document.querySelector("#noteColor").value = "blue";
   document.querySelectorAll("#noteColorPicker .note-color-dot").forEach((dot) => dot.classList.toggle("active", dot.dataset.noteColor === "blue"));
   setNoteDraftTextColor("");
@@ -4016,7 +4111,141 @@ function resetNoteForm() {
   enableAutogrowTextareas();
 }
 
+// ── Editor de "Nova nota" (com formatação) ─────────────────────
+// O <textarea id="noteDescription"> continua existindo como fonte do
+// texto puro; o editor visível guarda o HTML já higienizado.
+function noteEditorHtml() {
+  const editor = document.querySelector("#noteEditor");
+  if (!editor) return "";
+  const clean = sanitizeNoteHtml(editor.innerHTML);
+  return /<(b|strong|i|em|u|s|strike|mark|ul|ol|li|a|font)\b|style=/i.test(clean) ? clean : "";
+}
+
+function syncNoteEditorSource() {
+  const editor = document.querySelector("#noteEditor");
+  const source = document.querySelector("#noteDescription");
+  if (!editor || !source) return;
+  source.value = noteHtmlToPlainText(sanitizeNoteHtml(editor.innerHTML));
+  editor.classList.toggle("is-empty", !source.value.trim() && !editor.querySelector("li"));
+}
+
+function setNoteEditorContent(note) {
+  const editor = document.querySelector("#noteEditor");
+  if (!editor) return;
+  editor.innerHTML = note?.descriptionHtml
+    ? sanitizeNoteHtml(note.descriptionHtml)
+    : escapeHtml(note?.description || "").replace(/\n/g, "<br>");
+  syncNoteEditorSource();
+}
+
+const NOTE_PRIORITIES = ["Baixa", "Media", "Alta", "Urgente"];
+function notePriorityKey(priority) {
+  return { Baixa: "baixa", Media: "media", Alta: "alta", Urgente: "urgente" }[priority] || "media";
+}
+function notePriorityLabel(priority) {
+  return { Baixa: "Baixa", Media: "Média", Alta: "Alta", Urgente: "Urgente" }[priority] || "Média";
+}
+
+function setNotePriorityUI(priority) {
+  const value = NOTE_PRIORITIES.includes(priority) ? priority : "Media";
+  const select = document.querySelector("#notePriority");
+  if (select) select.value = value;
+  document.querySelectorAll("#notePrioritySeg [data-prio]").forEach((button) => {
+    const active = button.dataset.prio === value;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-checked", String(active));
+    button.tabIndex = active ? 0 : -1;
+  });
+  document.querySelectorAll("#notePriorityPicker .note-priority-dot").forEach((d) => d.classList.toggle("active", d.dataset.priority === value));
+}
+
+function updateNoteEditorTools() {
+  const editor = document.querySelector("#noteEditor");
+  if (!editor || document.activeElement !== editor) return;
+  const states = {
+    bold: "bold", italic: "italic", underline: "underline", strike: "strikeThrough",
+    ul: "insertUnorderedList", ol: "insertOrderedList",
+  };
+  document.querySelectorAll("#noteEditorTools [data-ne-cmd]").forEach((button) => {
+    const cmd = button.dataset.neCmd;
+    let on = false;
+    try {
+      if (states[cmd]) on = document.queryCommandState(states[cmd]);
+      if (cmd === "highlight") on = /253,\s*230,\s*138|254,\s*240,\s*138|fde68a/i.test(String(document.queryCommandValue("backColor")));
+    } catch { on = false; }
+    if (button.hasAttribute("aria-pressed")) button.setAttribute("aria-pressed", String(on));
+  });
+}
+
+function bindNoteEditor() {
+  const editor = document.querySelector("#noteEditor");
+  const tools = document.querySelector("#noteEditorTools");
+  if (!editor || !tools || editor.dataset.bound === "1") return;
+  editor.dataset.bound = "1";
+  // Mantém a seleção no editor ao tocar nos botões.
+  tools.addEventListener("mousedown", (event) => { if (event.target.closest("[data-ne-cmd]")) event.preventDefault(); });
+  tools.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-ne-cmd]");
+    if (!button) return;
+    const cmd = button.dataset.neCmd;
+    if (cmd === "checklist") {
+      const field = document.querySelector("#noteChecklistField");
+      if (field?.hidden) document.querySelector("#noteChecklistToggle")?.click();
+      document.querySelector("#noteChecklist")?.focus();
+      return;
+    }
+    if (document.activeElement !== editor) editor.focus();
+    try {
+      document.execCommand("styleWithCSS", false, false);
+      if (cmd === "bold") document.execCommand("bold");
+      else if (cmd === "italic") document.execCommand("italic");
+      else if (cmd === "underline") document.execCommand("underline");
+      else if (cmd === "strike") document.execCommand("strikeThrough");
+      else if (cmd === "ul") document.execCommand("insertUnorderedList");
+      else if (cmd === "ol") document.execCommand("insertOrderedList");
+      else if (cmd === "highlight") {
+        document.execCommand("styleWithCSS", false, true);
+        const on = /253,\s*230,\s*138/.test(String(document.queryCommandValue("backColor")));
+        document.execCommand("backColor", false, on ? "transparent" : "#fde68a");
+      } else if (cmd === "clear") {
+        document.execCommand("removeFormat");
+        document.execCommand("styleWithCSS", false, true);
+        document.execCommand("backColor", false, "transparent");
+      }
+    } catch { /* navegador sem execCommand: o texto continua editável */ }
+    syncNoteEditorSource();
+    updateNoteEditorTools();
+  });
+  editor.addEventListener("input", syncNoteEditorSource);
+  editor.addEventListener("keyup", updateNoteEditorTools);
+  editor.addEventListener("mouseup", updateNoteEditorTools);
+  editor.addEventListener("focus", updateNoteEditorTools);
+  // Colar entra como texto puro (sem estilos de sites ou de outros apps).
+  editor.addEventListener("paste", (event) => {
+    const text = event.clipboardData?.getData("text/plain");
+    if (typeof text !== "string") return;
+    event.preventDefault();
+    document.execCommand("insertText", false, text.slice(0, 20000));
+  });
+  syncNoteEditorSource();
+
+  const seg = document.querySelector("#notePrioritySeg");
+  seg?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-prio]");
+    if (button) setNotePriorityUI(button.dataset.prio);
+  });
+  seg?.addEventListener("keydown", (event) => {
+    if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
+    event.preventDefault();
+    const current = NOTE_PRIORITIES.indexOf(document.querySelector("#notePriority")?.value || "Media");
+    const next = NOTE_PRIORITIES[(current + (event.key === "ArrowRight" || event.key === "ArrowDown" ? 1 : 3)) % 4];
+    setNotePriorityUI(next);
+    seg.querySelector(`[data-prio="${next}"]`)?.focus();
+  });
+}
+
 function bindNoteQuickControls() {
+  bindNoteEditor();
   document.querySelectorAll("#noteColorPicker .note-color-dot").forEach((dot) => {
     dot.addEventListener("click", () => {
       document.querySelectorAll("#noteColorPicker .note-color-dot").forEach((item) => item.classList.remove("active"));
@@ -4492,46 +4721,122 @@ function renderBoardsSparkline(series) {
   svg.innerHTML = `<defs><linearGradient id="bdSparkFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#25d388" stop-opacity=".45"/><stop offset="1" stop-color="#25d388" stop-opacity="0"/></linearGradient></defs><path d="${line} L200 70 L0 70 Z" fill="url(#bdSparkFill)"/><path d="${line}" fill="none" stroke="#25d388" stroke-width="1.6" stroke-linecap="round"/>`;
 }
 
-const BD_CATEGORY_SHORT = { alimentacao: "Aliment.", mercado: "Mercado", transporte: "Transp.", assinaturas: "Assin.", investimentos_desp: "Invest." };
+// ── Gastos por categoria: rosca + ranking ───────────────────────
+// Paleta categórica validada (contraste e daltonismo) para os dois temas;
+// a ordem é fixa e "Outros" fica sempre no cinza neutro. A identidade de
+// cada fatia nunca depende só da cor: a lista ao lado traz ícone e nome.
+const BD_CAT_COLORS = 6;
+
+function bdCategoryLabel(id) {
+  return String(findCategory(id).label || "Outros").replace(/^[^\p{L}\p{N}]+/u, "").trim() || "Outros";
+}
 
 function bdCategoryName(id) {
-  if (BD_CATEGORY_SHORT[id]) return BD_CATEGORY_SHORT[id];
-  const label = String(findCategory(id).label || "Outros").replace(/^[^\p{L}\p{N}]+/u, "").trim();
+  const label = bdCategoryLabel(id);
   return label.length > 9 ? `${label.slice(0, 8)}.` : label;
 }
 
+function bdArcPath(cx, cy, r, start, end) {
+  const a0 = (start - 90) * Math.PI / 180;
+  const a1 = (end - 90) * Math.PI / 180;
+  const large = end - start > 180 ? 1 : 0;
+  return `M${(cx + r * Math.cos(a0)).toFixed(2)} ${(cy + r * Math.sin(a0)).toFixed(2)} A${r} ${r} 0 ${large} 1 ${(cx + r * Math.cos(a1)).toFixed(2)} ${(cy + r * Math.sin(a1)).toFixed(2)}`;
+}
+
+let bdCatsAnimated = false;
 function renderBoardsCategories(monthEntries) {
   const host = document.querySelector("#bdCats");
   if (!host) return;
+  host.style.gridTemplateColumns = "";
   const expenses = monthEntries.filter((f) => f.type === "despesa");
   const total = expenses.reduce((sum, f) => sum + (Number(f.amount) || 0), 0);
   if (!total) {
-    host.innerHTML = '<div class="bd-empty" style="grid-column:1/-1;align-self:center">Nenhum gasto neste mês.</div>';
+    host.innerHTML = `<div class="bd-cats-empty">
+      <span class="bd-cats-empty-ring" aria-hidden="true">${bdIcon("piggy")}</span>
+      <strong>Nenhum gasto neste mês</strong>
+      <small>Quando você registrar despesas, a divisão por categoria aparece aqui.</small>
+    </div>`;
     return;
   }
   const byCat = new Map();
   for (const f of expenses) byCat.set(f.category || "outros", (byCat.get(f.category || "outros") || 0) + (Number(f.amount) || 0));
   const sorted = [...byCat.entries()].sort((a, b) => b[1] - a[1]);
-  const top = sorted.slice(0, 5);
-  const restTotal = sorted.slice(5).reduce((sum, [, v]) => sum + v, 0);
-  const rows = top.map(([id, value]) => ({ id, value }));
-  const outrosExisting = rows.find((r) => r.id === "outros");
-  if (restTotal) {
-    if (outrosExisting) outrosExisting.value += restTotal;
-    else rows.push({ id: "outros", value: restTotal });
-  }
-  const maxPct = Math.max(...rows.map((r) => r.value / total));
-  host.style.gridTemplateColumns = `repeat(${rows.length}, 1fr)`;
-  host.innerHTML = rows.map((r) => {
-    const pct = r.value / total;
+  // Até 5 categorias com cor própria; o restante vira "Outros" (cinza).
+  const named = sorted.filter(([id]) => id !== "outros").slice(0, 5);
+  const restValue = total - named.reduce((sum, [, value]) => sum + value, 0);
+  const rows = named.map(([id, value], index) => ({ id, value, slot: index + 1 }));
+  if (restValue > 0.004) rows.push({ id: "outros", value: restValue, slot: 0, rest: sorted.length - named.length });
 
-    return `<div class="bd-cat" title="${escapeHtml(findCategory(r.id).label)} · ${escapeHtml(formatCurrency(r.value))}">
-      <span class="bd-cat-pct">${Math.round(pct * 100)}%</span>
-      <span class="bd-cat-track"><i class="bd-cat-bar" style="height:${Math.max(6, (pct / maxPct) * 100).toFixed(1)}%"></i></span>
-      <span class="bd-cat-ico">${finCategoryIconHtml(r.id)}</span>
-      <span class="bd-cat-name">${escapeHtml(bdCategoryName(r.id))}</span>
-    </div>`;
+  // Rosca: fatias com 2px de respiro entre elas (o fundo do cartão aparece).
+  const size = 168;
+  const cx = size / 2;
+  const radius = 64;
+  const stroke = 18;
+  const gap = rows.length > 1 ? 2.4 : 0;
+  let cursor = 0;
+  const arcs = rows.map((row, index) => {
+    const sweep = (row.value / total) * 360;
+    const start = cursor + gap / 2;
+    const end = Math.max(start + 0.6, cursor + sweep - gap / 2);
+    cursor += sweep;
+    const d = rows.length === 1
+      ? `M${cx} ${cx - radius} a${radius} ${radius} 0 1 1 -0.01 0`
+      : bdArcPath(cx, cx, radius, start, Math.min(end, start + 359.4));
+    return `<path class="bd-donut-seg" data-cat-index="${index}" d="${d}" style="--seg:var(--bd-cat-${row.slot})" pathLength="100"><title>${escapeHtml(bdCategoryLabel(row.id))}: ${escapeHtml(formatCurrency(row.value))}</title></path>`;
   }).join("");
+  const top = rows[0];
+  const topPct = Math.round((top.value / total) * 100);
+
+  host.innerHTML = `<div class="bd-cats-viz${bdCatsAnimated ? "" : " is-intro"}">
+    <figure class="bd-donut" aria-label="Gastos do mês por categoria: total ${escapeHtml(formatCurrency(total))}">
+      <svg viewBox="0 0 ${size} ${size}" aria-hidden="true">
+        <circle class="bd-donut-track" cx="${cx}" cy="${cx}" r="${radius}" stroke-width="${stroke}"/>
+        <g stroke-width="${stroke}">${arcs}</g>
+      </svg>
+      <figcaption class="bd-donut-center">
+        <small>Total gasto</small>
+        <strong>${escapeHtml(formatCurrency(total))}</strong>
+        <span>${expenses.length} lançamento${expenses.length === 1 ? "" : "s"}</span>
+      </figcaption>
+    </figure>
+    <ol class="bd-cat-list">
+      ${rows.map((row, index) => {
+        const pct = (row.value / total) * 100;
+        const label = row.id === "outros" && row.rest > 1 ? `Outros · ${row.rest} categorias` : bdCategoryLabel(row.id);
+        return `<li class="bd-cat-row" data-cat-index="${index}" style="--seg:var(--bd-cat-${row.slot})" tabindex="0">
+          <span class="bd-cat-chip">${finCategoryIconHtml(row.id)}</span>
+          <span class="bd-cat-main">
+            <span class="bd-cat-line"><strong>${escapeHtml(label)}</strong><b>${escapeHtml(formatCurrency(row.value))}</b></span>
+            <span class="bd-cat-meter"><i style="width:${Math.max(2, pct).toFixed(1)}%"></i></span>
+          </span>
+          <span class="bd-cat-share">${pct >= 10 ? Math.round(pct) : pct.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%</span>
+        </li>`;
+      }).join("")}
+    </ol>
+  </div>
+  <p class="bd-cats-insight">${bdIcon("sparkle")}<span><b>${escapeHtml(bdCategoryLabel(top.id))}</b> concentra ${topPct}% dos gastos do mês.</span></p>`;
+  bdCatsAnimated = true;
+}
+
+// Destaca fatia e linha juntas (passar o mouse, focar ou tocar).
+function bindBoardsCategories() {
+  const host = document.querySelector("#bdCats");
+  if (!host || host.dataset.bound === "1") return;
+  host.dataset.bound = "1";
+  const highlight = (index) => {
+    host.querySelectorAll("[data-cat-index]").forEach((el) => el.classList.toggle("is-active", index !== null && el.dataset.catIndex === index));
+    host.querySelector(".bd-cats-viz")?.classList.toggle("has-active", index !== null);
+  };
+  host.addEventListener("pointerover", (event) => {
+    const target = event.target.closest("[data-cat-index]");
+    highlight(target ? target.dataset.catIndex : null);
+  });
+  host.addEventListener("pointerleave", () => highlight(null));
+  host.addEventListener("focusin", (event) => {
+    const target = event.target.closest("[data-cat-index]");
+    if (target) highlight(target.dataset.catIndex);
+  });
+  host.addEventListener("focusout", () => highlight(null));
 }
 
 function bdDueLabel(dueIso) {
@@ -4542,23 +4847,62 @@ function bdDueLabel(dueIso) {
 }
 
 function bdRecurringIcon(item) {
-  const text = `${item.description || ""} ${item.categoryId || ""}`.toLowerCase();
+  const text = `${item.description || ""} ${item.categoryId || ""} ${item.category || ""}`.toLowerCase();
   if (/aluguel|moradia|condom/.test(text)) return "home";
   if (/internet|wifi|net\b/.test(text)) return "wifi";
-  if (/cart|fatura/.test(text)) return "card";
-  return "card";
+  if (/luz|energia|agua|água|gas\b|gás/.test(text)) return "bolt";
+  if (/celular|telefone|plano/.test(text)) return "phone";
+  if (/streaming|netflix|spotify|assinatura/.test(text)) return "tv";
+  return "receipt";
 }
 
-function renderBoardsToday() {
-  const host = document.querySelector("#bdToday");
-  if (!host) return;
+function bdShortDate(iso) {
+  const d = new Date(`${iso}T12:00:00`);
+  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+// Agenda do dia no Início: compromissos de hoje, tarefas do dia (e as
+// atrasadas) e contas fixas que vencem nos próximos dias — tudo numa
+// lista só, na ordem em que acontece.
+function bdAgendaItems() {
   const monthKey = todayIso.slice(0, 7);
   const [year, month] = monthKey.split("-").map(Number);
   const daysInMonth = new Date(year, month, 0).getDate();
   const todayDay = Number(todayIso.slice(8, 10));
-  const entries = bdWorkspaceFinances();
+  const now = new Date();
+  const nowHm = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
   const items = [];
 
+  for (const event of state.events.filter((e) => e.date === todayIso)) {
+    const ends = event.endTime || event.time || "";
+    const past = Boolean(event.time) && ends < nowHm;
+    const where = event.location && event.location !== "Sem local" ? event.location : "";
+    items.push({
+      kind: "event", order: `1 ${event.time || "00:00"}`, icon: "calendar", tone: "blue",
+      title: event.title, sub: [event.endTime ? `${event.time}–${event.endTime}` : "Compromisso", where].filter(Boolean).join(" · "),
+      trail: event.time ? { text: event.time, cls: "time" } : { text: "Dia todo", cls: "time" },
+      past, view: "planner", focus: "agenda",
+    });
+  }
+
+  for (const task of state.tasks) {
+    if (!task || task.status === "Cancelada" || !task.dueDate) continue;
+    const done = task.status === "Concluida";
+    if (done && !(task.completedAt === todayIso && task.dueDate <= todayIso)) continue;
+    if (!done && task.dueDate > todayIso) continue;
+    const overdue = !done && task.dueDate < todayIso;
+    const important = task.priority === "Urgente" || task.priority === "Alta";
+    items.push({
+      kind: "task", order: overdue ? `0 ${task.dueDate}` : `1 ${task.dueTime || "23:59"}`,
+      icon: done ? "check-circle" : overdue ? "alert" : "task-check", tone: done ? "green" : overdue ? "red" : important ? "amber" : "violet",
+      title: task.title,
+      sub: overdue ? `Tarefa atrasada · venceu ${bdShortDate(task.dueDate)}` : done ? "Tarefa concluída" : `Tarefa${important ? ` · prioridade ${task.priority.toLowerCase()}` : ""}`,
+      trail: overdue ? { text: "Atrasada", cls: "danger" } : task.dueTime ? { text: task.dueTime, cls: "time" } : { text: "Hoje", cls: "soft" },
+      done, overdue, view: "planner", focus: "tasks",
+    });
+  }
+
+  const entries = bdWorkspaceFinances();
   for (const item of (state.finRecurrents || []).filter((r) => (r.workspaceId || "personal") === activeWorkspaceId)) {
     if (item.active === false || isRecurrentSkipped(item, monthKey)) continue;
     const dueDay = Math.min(Number(item.day) || 1, daysInMonth);
@@ -4566,27 +4910,84 @@ function renderBoardsToday() {
     const alreadyLogged = entries.some((e) => e.date.startsWith(monthKey) && e.description === item.description && Number(e.amount) === Number(item.amount));
     if (alreadyLogged) continue;
     const dueIso = `${monthKey}-${String(dueDay).padStart(2, "0")}`;
+    const income = item.type === "receita";
     items.push({
-      sort: `${dueIso} 99:99`, icon: bdRecurringIcon(item), tone: "tone-violet", title: item.description,
-      sub: bdDueLabel(dueIso), amount: `${item.type === "receita" ? "+ " : ""}${formatCurrency(Number(item.amount) || 0)}`,
+      kind: "bill", order: `2 ${dueIso}`, icon: income ? "coin" : bdRecurringIcon(item), tone: income ? "green" : dueDay === todayDay ? "red" : "amber",
+      title: item.description, sub: bdDueLabel(dueIso),
+      trail: { text: `${income ? "+ " : ""}${formatCurrency(Number(item.amount) || 0)}`, cls: "amount" },
+      view: "finances",
     });
   }
-  for (const event of state.events.filter((e) => e.date === todayIso)) {
-    items.push({
-      sort: `${event.date} ${event.time || "00:00"}`, icon: "calendar", tone: "tone-blue", title: event.title,
-      sub: `Hoje${event.time ? ` • ${event.time}` : ""}${event.location ? ` · ${event.location}` : ""}`, amount: "",
-    });
+  return items.sort((a, b) => a.order.localeCompare(b.order));
+}
+
+function renderBoardsToday() {
+  const host = document.querySelector("#bdToday");
+  if (!host) return;
+  const summary = document.querySelector("#bdTodaySummary");
+  const items = bdAgendaItems();
+  const count = (kind) => items.filter((item) => item.kind === kind && !item.done).length;
+  if (summary) {
+    const events = count("event");
+    const tasks = count("task");
+    const bills = count("bill");
+    const doneTasks = items.filter((item) => item.kind === "task" && item.done).length;
+    const totalTasks = tasks + doneTasks;
+    summary.hidden = !items.length;
+    summary.innerHTML = items.length ? `
+      <span class="bd-ts tone-blue" title="Compromissos hoje">${bdIcon("calendar")}<b>${events}</b><small>${events === 1 ? "compromisso" : "compromissos"}</small></span>
+      <span class="bd-ts tone-violet" title="Tarefas para hoje">${bdIcon("task-check")}<b>${totalTasks ? `${doneTasks}/${totalTasks}` : 0}</b><small>${totalTasks === 1 ? "tarefa" : "tarefas"}</small></span>
+      <span class="bd-ts tone-amber" title="Contas nos próximos 7 dias">${bdIcon("receipt")}<b>${bills}</b><small>${bills === 1 ? "conta" : "contas"}</small></span>` : "";
   }
-  items.sort((a, b) => a.sort.localeCompare(b.sort));
   if (!items.length) {
-    host.innerHTML = '<li class="bd-empty" style="display:block;border:0">Nada para hoje. Aproveite o dia livre.</li>';
+    host.innerHTML = `<li class="bd-agenda-empty">
+      <span class="bd-agenda-empty-art" aria-hidden="true">${bdIcon("sun")}<i></i><i></i><i></i></span>
+      <strong>Dia livre por aqui</strong>
+      <small>Nenhum compromisso, tarefa ou conta para hoje.</small>
+      <span class="bd-agenda-empty-actions">
+        <button type="button" class="bd-chip-btn" data-agenda-add="event">${bdIcon("calendar")}Compromisso</button>
+        <button type="button" class="bd-chip-btn" data-agenda-add="task">${bdIcon("task-check")}Tarefa</button>
+      </span>
+    </li>`;
     return;
   }
-  host.innerHTML = items.slice(0, 4).map((item) => `<li>
-    <span class="bd-li-ico ${item.tone}">${bdIcon(item.icon)}</span>
-    <span class="bd-li-main"><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.sub)}</small></span>
-    ${item.amount ? `<span class="bd-li-amt">${escapeHtml(item.amount)}</span>` : ""}
-  </li>`).join("");
+  const visible = items.slice(0, 5);
+  const hidden = items.length - visible.length;
+  host.innerHTML = visible.map((item) => `<li class="bd-ag${item.past ? " is-past" : ""}${item.done ? " is-done" : ""}${item.overdue ? " is-overdue" : ""}" data-agenda-view="${item.view}"${item.focus ? ` data-agenda-focus="${item.focus}"` : ""} role="button" tabindex="0">
+    <span class="bd-li-ico tone-${item.tone}">${bdIcon(item.icon)}</span>
+    <span class="bd-li-main"><strong>${escapeHtml(item.title || "")}</strong><small>${escapeHtml(item.sub || "")}</small></span>
+    <span class="bd-ag-trail is-${item.trail.cls}">${item.trail.cls === "time" ? bdIcon("clock") : ""}${escapeHtml(item.trail.text)}</span>
+  </li>`).join("") + (hidden > 0
+    ? `<li class="bd-ag-more"><button type="button" data-agenda-view="planner" data-agenda-focus="agenda">Ver mais ${hidden} ${hidden === 1 ? "item" : "itens"} ${bdIcon("arrow-right")}</button></li>`
+    : "");
+}
+
+function bindBoardsToday() {
+  const host = document.querySelector("#bdToday");
+  if (!host || host.dataset.bound === "1") return;
+  host.dataset.bound = "1";
+  const go = (target) => {
+    const add = target.dataset.agendaAdd;
+    if (add) { openPlannerQuickAdd(add); return; }
+    const view = target.dataset.agendaView;
+    if (!view) return;
+    setView(view);
+    if (view === "planner") {
+      if (target.dataset.agendaFocus === "tasks") setPlannerTab("list");
+      if (target.dataset.agendaFocus === "agenda") setPlannerTab("day");
+    }
+  };
+  host.addEventListener("click", (event) => {
+    const target = event.target.closest("[data-agenda-view], [data-agenda-add]");
+    if (target) go(target);
+  });
+  host.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    const target = event.target.closest(".bd-ag[data-agenda-view]");
+    if (!target) return;
+    event.preventDefault();
+    go(target);
+  });
 }
 
 function bdTrendHtml(pct, { inverse = false } = {}) {
@@ -4595,6 +4996,43 @@ function bdTrendHtml(pct, { inverse = false } = {}) {
   const good = inverse ? !up : up;
   const text = `${up ? "+" : "-"}${Math.abs(pct).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
   return `<b class="${good ? "" : "down"}">${bdIcon(up ? "arrow-up" : "arrow-down")}${text}</b> vs. mês anterior`;
+}
+
+// Resultado do mês: quanto sobrou (ou faltou), a fatia da renda que já
+// foi gasta numa barra só e as duas linhas de entrada/saída.
+function renderBoardsResult(receitas, despesas) {
+  const card = document.querySelector("#bdResult");
+  const result = receitas - despesas;
+  document.querySelector("#bdResIn").textContent = formatCurrency(receitas);
+  document.querySelector("#bdResOut").textContent = formatCurrency(despesas);
+  const totalEl = document.querySelector("#bdResTotal");
+  totalEl.textContent = `${result > 0 ? "+ " : result < 0 ? "− " : ""}${formatCurrency(Math.abs(result))}`;
+  if (!card) return;
+  const negative = result < 0;
+  card.classList.toggle("is-negative", negative);
+  card.classList.toggle("is-empty", !receitas && !despesas);
+  const label = document.querySelector("#bdResLabel");
+  if (label) label.textContent = !receitas && !despesas ? "Sem movimentação no mês" : negative ? "Faltou no mês" : "Sobrou no mês";
+  const spentPct = receitas > 0 ? (despesas / receitas) * 100 : despesas > 0 ? 100 : 0;
+  const meter = document.querySelector("#bdResMeter");
+  const bar = document.querySelector("#bdResMeterSpent");
+  if (bar) {
+    bar.style.width = `${Math.min(100, spentPct).toFixed(1)}%`;
+    bar.className = spentPct > 100 ? "is-over" : spentPct >= 85 ? "is-warn" : "";
+  }
+  if (meter) meter.setAttribute("aria-label", receitas > 0 ? `Gastos somam ${Math.round(spentPct)}% das receitas do mês` : "Sem receitas registradas no mês");
+  const outNote = document.querySelector("#bdResOutNote");
+  if (outNote) outNote.textContent = receitas > 0 ? `${Math.round(spentPct)}% das receitas` : "Saídas do mês";
+  const rate = document.querySelector("#bdResRate");
+  if (rate) {
+    const savings = receitas > 0 ? Math.round((result / receitas) * 100) : null;
+    rate.hidden = savings === null;
+    if (savings !== null) {
+      rate.className = `bd-res-badge ${savings >= 20 ? "is-good" : savings >= 0 ? "is-ok" : "is-bad"}`;
+      rate.textContent = savings >= 0 ? `Guardou ${savings}%` : `${Math.abs(savings)}% acima`;
+      rate.title = savings >= 0 ? "Parte das receitas que sobrou no mês" : "Quanto os gastos passaram das receitas";
+    }
+  }
 }
 
 function renderBoardsDashboard() {
@@ -4640,27 +5078,344 @@ function renderBoardsDashboard() {
   const incomeTrend = document.querySelector("#bdIncomeTrend");
   if (incomeTrend) incomeTrend.innerHTML = prevIncome ? bdTrendHtml(((receitas - prevIncome) / prevIncome) * 100) : "Entradas do mês";
 
-  // Resultado do mês
-  const result = receitas - despesas;
-  document.querySelector("#bdResIn").textContent = formatCurrency(receitas);
-  document.querySelector("#bdResOut").textContent = formatCurrency(despesas);
-  const totalEl = document.querySelector("#bdResTotal");
-  totalEl.textContent = `${result >= 0 ? "+ " : "- "}${formatCurrency(Math.abs(result))}`;
-  totalEl.closest("li")?.classList.toggle("negative", result < 0);
+  renderBoardsResult(receitas, despesas);
 
   renderBoardsSparkline(bdBalanceSeries(30));
   renderBoardsEvolution();
   renderBoardsCategories(monthEntries);
   renderBoardsToday();
 
-  const overdue = state.tasks.some((t) => t.status !== "Concluida" && t.status !== "Cancelada" && t.dueDate && t.dueDate < todayIso);
-  const dot = document.querySelector("#bdBellDot");
-  if (dot) dot.hidden = !overdue;
+  updateBellDot();
+  renderNotificationCenter();
   const chatRoot = document.querySelector("#pulseCommandResponse");
   if (chatRoot && !chatRoot.children.length) renderPulsinhoConversation();
 }
 
+// ── Central de notificações (sininho) ─────────────────────────
+// Mostra o que pede atenção agora (tarefas atrasadas, agenda de hoje,
+// contas, orçamento e metas) e o estado do push NESTE aparelho, com o
+// passo a passo para ativar no celular. Os mesmos avisos chegam por push
+// e WhatsApp pelo servidor (api/send-reminders.js).
+function notificationCenterItems() {
+  const items = [];
+  const now = new Date();
+  const nowHm = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+  const tomorrow = offsetDate(1);
+  for (const task of state.tasks || []) {
+    if (!task || task.status === "Concluida" || task.status === "Cancelada" || !task.dueDate) continue;
+    if (task.dueDate < todayIso) {
+      items.push({ key: `task-late:${task.id}:${task.dueDate}`, group: "attention", icon: "alert", tone: "red", title: task.title, body: `Tarefa atrasada · venceu ${bdShortDate(task.dueDate)}`, view: "planner", focus: "tasks", sort: `0${task.dueDate}` });
+    } else if (task.dueDate === todayIso) {
+      const late = task.dueTime && task.dueTime < nowHm;
+      items.push({ key: `task-today:${task.id}:${task.dueDate}`, group: "today", icon: late ? "alert" : "task-check", tone: late ? "red" : "violet", title: task.title, body: task.dueTime ? `Tarefa · ${late ? "era" : "vence"} às ${task.dueTime}` : "Tarefa · vence hoje", view: "planner", focus: "tasks", sort: `1${task.dueTime || "99"}` });
+    } else if (task.dueDate === tomorrow) {
+      items.push({ key: `task-tomorrow:${task.id}:${task.dueDate}`, group: "soon", icon: "task-check", tone: "violet", title: task.title, body: `Tarefa · amanhã${task.dueTime ? ` às ${task.dueTime}` : ""}`, view: "planner", focus: "tasks", sort: `2${task.dueTime || "99"}` });
+    }
+  }
+  for (const event of state.events || []) {
+    if (!event?.date) continue;
+    if (event.date === todayIso && (!event.time || (event.endTime || event.time) >= nowHm)) {
+      items.push({ key: `event:${event.id}:${event.date}`, group: "today", icon: "calendar", tone: "blue", title: event.title, body: event.time ? `Compromisso · ${event.time}${event.location && event.location !== "Sem local" ? ` · ${event.location}` : ""}` : "Compromisso · dia todo", view: "planner", focus: "agenda", sort: `1${event.time || "00"}` });
+    } else if (event.date === tomorrow) {
+      items.push({ key: `event:${event.id}:${event.date}`, group: "soon", icon: "calendar", tone: "blue", title: event.title, body: `Compromisso · amanhã${event.time ? ` às ${event.time}` : ""}`, view: "planner", focus: "agenda", sort: `2${event.time || "00"}` });
+    }
+  }
+  for (const bill of bdAgendaItems().filter((item) => item.kind === "bill")) {
+    const today = /hoje/i.test(bill.sub);
+    items.push({ key: `bill:${bill.title}:${bill.sub}`, group: today ? "today" : "soon", icon: bill.icon, tone: today ? "red" : "amber", title: bill.title, body: `${bill.sub.split(" • ")[0]} · ${bill.trail.text}`, view: "finances", sort: `3${bill.sub}` });
+  }
+  const monthKey = todayIso.slice(0, 7);
+  const monthEntries = bdWorkspaceFinances().filter((f) => f.date.startsWith(monthKey));
+  const income = monthEntries.filter((f) => f.type === "receita").reduce((sum, f) => sum + (Number(f.amount) || 0), 0);
+  const spent = monthEntries.filter((f) => f.type === "despesa").reduce((sum, f) => sum + (Number(f.amount) || 0), 0);
+  if (income > 0 && spent / income >= 0.7) {
+    const pct = Math.round((spent / income) * 100);
+    items.push({ key: `budget:${monthKey}:${pct >= 90 ? 90 : 70}`, group: "attention", icon: "wallet", tone: pct >= 90 ? "red" : "amber", title: pct >= 90 ? "Orçamento no limite" : "Atenção ao orçamento", body: `Você já usou ${pct}% das receitas deste mês.`, view: "finances", sort: "05" });
+  }
+  for (const goal of state.goals || []) {
+    const pct = Number(goal?.target) > 0 ? (Number(goal.current) / Number(goal.target)) * 100 : 0;
+    if (pct >= 80 && pct < 100) items.push({ key: `goal:${goal.id}:80`, group: "soon", icon: "target", tone: "green", title: `Quase lá: ${goal.title}`, body: `Meta ${Math.round(pct)}% completa. Falta pouco!`, view: "planner", focus: "goals", sort: "4" });
+  }
+  return items.sort((a, b) => a.sort.localeCompare(b.sort));
+}
+
+function bellSeenKey() {
+  return currentUser?.uid ? `pn_bell_seen:${currentUser.uid}` : "";
+}
+function readBellSeen() {
+  try { return new Set(JSON.parse(localStorage.getItem(bellSeenKey()) || "[]")); } catch { return new Set(); }
+}
+function writeBellSeen(keys) {
+  try { if (bellSeenKey()) localStorage.setItem(bellSeenKey(), JSON.stringify([...keys].slice(-300))); } catch { /* sem armazenamento: só não lembra o que já foi visto */ }
+}
+
+function updateBellDot() {
+  const dot = document.querySelector("#bdBellDot");
+  if (!dot || !state) return;
+  const seen = readBellSeen();
+  const unseen = notificationCenterItems().filter((item) => !seen.has(item.key)).length;
+  dot.hidden = unseen === 0;
+  const bell = document.querySelector("#bdBellBtn");
+  if (bell) bell.setAttribute("aria-label", unseen ? `Notificações: ${unseen} nova${unseen === 1 ? "" : "s"}` : "Notificações");
+}
+
+function pushDeviceStatus() {
+  const ua = navigator.userAgent || "";
+  const ios = /iP(hone|ad|od)/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+  const standalone = window.matchMedia?.("(display-mode: standalone)").matches || navigator.standalone === true;
+  const supported = "Notification" in window && "serviceWorker" in navigator && "PushManager" in window;
+  if (window.pushNotificationsAreRegistered?.() === true && state.appReminderOptIn !== false) return { code: "on", ios };
+  if (ios && !standalone) return { code: "ios-install", ios };
+  if (!supported) return { code: "unsupported", ios };
+  if (Notification.permission === "denied") return { code: "denied", ios };
+  return { code: "off", ios };
+}
+
+function renderPushCard() {
+  const status = pushDeviceStatus();
+  const whatsapp = state.whatsappReminderOptIn && state.whatsappLinkedPhone;
+  const whatsappLine = `<button type="button" class="bd-notif-wa${whatsapp ? " is-on" : ""}" data-notif-go="whatsapp">${bdIcon("whatsapp")}<span>Lembretes no WhatsApp: <b>${whatsapp ? "ativos" : "desligados"}</b></span>${bdIcon("chev-right")}</button>`;
+  if (status.code === "on") {
+    return `<div class="bd-push is-on">
+      <span class="bd-push-ico">${bdIcon("bell-ring")}</span>
+      <div class="bd-push-copy"><strong>Push ativo neste aparelho</strong><small>Os avisos chegam mesmo com o app fechado.</small></div>
+      <button type="button" class="bd-btn" data-notif-test>${bdIcon("send")}Testar</button>
+    </div>${whatsappLine}`;
+  }
+  if (status.code === "ios-install") {
+    return `<div class="bd-push is-setup">
+      <span class="bd-push-ico">${bdIcon("smartphone")}</span>
+      <div class="bd-push-copy"><strong>Receba no iPhone como um app</strong><small>A Apple só entrega notificações para o PulseNote instalado na Tela de Início.</small></div>
+      <ol class="bd-push-steps">
+        <li><span>1</span>Toque em ${bdIcon("share-ios")}<b>Compartilhar</b> no Safari</li>
+        <li><span>2</span>Escolha <b>Adicionar à Tela de Início</b></li>
+        <li><span>3</span>Abra pelo ícone e toque no sininho para ativar</li>
+      </ol>
+    </div>${whatsappLine}`;
+  }
+  if (status.code === "unsupported") {
+    return `<div class="bd-push is-muted"><span class="bd-push-ico">${bdIcon("bell")}</span><div class="bd-push-copy"><strong>Este navegador não recebe push</strong><small>Use o Chrome, Edge ou Safari atualizado — ou instale o PulseNote como app.</small></div></div>${whatsappLine}`;
+  }
+  if (status.code === "denied") {
+    return `<div class="bd-push is-warn"><span class="bd-push-ico">${bdIcon("alert")}</span><div class="bd-push-copy"><strong>Notificações bloqueadas</strong><small>${status.ios ? "No iPhone: Ajustes → Notificações → PulseNote → Permitir Notificações." : "Libere as notificações do site nas configurações do navegador (ícone de cadeado ao lado do endereço)."}</small></div></div>${whatsappLine}`;
+  }
+  return `<div class="bd-push is-off">
+    <span class="bd-push-ico">${bdIcon("bell-ring")}</span>
+    <div class="bd-push-copy"><strong>Ative os avisos neste aparelho</strong><small>Lembretes de tarefas, compromissos e contas, mesmo com o app fechado.</small></div>
+    <button type="button" class="bd-btn bd-btn--primary" data-notif-enable>Ativar</button>
+  </div>${whatsappLine}`;
+}
+
+let notifSeenAtOpen = new Set();
+function renderNotificationCenter() {
+  const panel = document.querySelector("#bdNotif");
+  if (!panel || panel.hidden) return;
+  const items = notificationCenterItems();
+  const groups = [["attention", "Precisa de atenção"], ["today", "Hoje"], ["soon", "Em breve"]];
+  const count = panel.querySelector("#bdNotifCount");
+  if (count) { count.textContent = String(items.length); count.hidden = !items.length; }
+  panel.querySelector("#bdNotifPush").innerHTML = renderPushCard();
+  const list = panel.querySelector("#bdNotifList");
+  list.innerHTML = items.length
+    ? groups.map(([id, label]) => {
+      const group = items.filter((item) => item.group === id);
+      if (!group.length) return "";
+      return `<section class="bd-notif-group"><h3>${label}</h3>${group.map((item) => `<button type="button" class="bd-notif-item" data-notif-view="${item.view}"${item.focus ? ` data-notif-focus="${item.focus}"` : ""}>
+        <span class="bd-li-ico tone-${item.tone}">${bdIcon(item.icon)}</span>
+        <span class="bd-notif-text"><strong>${escapeHtml(item.title || "")}</strong><small>${escapeHtml(item.body || "")}</small></span>
+        ${notifSeenAtOpen.has(item.key) ? "" : '<i class="bd-notif-new" aria-label="Nova"></i>'}
+      </button>`).join("")}</section>`;
+    }).join("")
+    : `<div class="bd-notif-empty"><span>${bdIcon("check-circle")}</span><strong>Tudo em dia!</strong><small>Sem pendências, compromissos ou contas pedindo atenção agora.</small></div>`;
+}
+
+function ensureNotificationCenter() {
+  let panel = document.querySelector("#bdNotif");
+  if (panel) return panel;
+  panel = document.createElement("div");
+  panel.id = "bdNotif";
+  panel.className = "bd-notif";
+  panel.hidden = true;
+  panel.innerHTML = `<div class="bd-notif-backdrop" data-notif-close></div>
+    <section class="bd-notif-panel" role="dialog" aria-modal="true" aria-labelledby="bdNotifTitle">
+      <span class="bd-notif-grab" aria-hidden="true"></span>
+      <header class="bd-notif-head">
+        <h2 id="bdNotifTitle">Notificações <span class="bd-notif-count" id="bdNotifCount" hidden></span></h2>
+        <button type="button" class="bd-icon-btn" data-notif-close aria-label="Fechar">${bdIcon("x")}</button>
+      </header>
+      <div class="bd-notif-scroll">
+        <div id="bdNotifPush"></div>
+        <div id="bdNotifList" class="bd-notif-list"></div>
+      </div>
+      <footer class="bd-notif-foot"><button type="button" class="bd-link" data-notif-go="settings">${bdIcon("sliders")}Preferências de notificação</button></footer>
+    </section>`;
+  document.body.appendChild(panel);
+  panel.addEventListener("click", async (event) => {
+    if (event.target.closest("[data-notif-close]")) { closeNotificationCenter(); return; }
+    const go = event.target.closest("[data-notif-go]");
+    if (go) {
+      closeNotificationCenter();
+      setView("settings");
+      requestAnimationFrame(() => openSettingsSection(go.dataset.notifGo === "whatsapp" ? "integracoes" : "notificacoes"));
+      return;
+    }
+    const item = event.target.closest("[data-notif-view]");
+    if (item) {
+      closeNotificationCenter();
+      setView(item.dataset.notifView);
+      if (item.dataset.notifView === "planner") {
+        if (item.dataset.notifFocus === "tasks") setPlannerTab("list");
+        if (item.dataset.notifFocus === "agenda") setPlannerTab("day");
+      }
+      return;
+    }
+    const enable = event.target.closest("[data-notif-enable]");
+    if (enable) {
+      enable.disabled = true;
+      const allowed = await window.requestNotificationPermission?.();
+      if (allowed) { state.appReminderOptIn = true; saveState(); }
+      renderNotificationCenter();
+      renderWhatsAppSettings?.();
+      return;
+    }
+    const test = event.target.closest("[data-notif-test]");
+    if (test) {
+      test.disabled = true;
+      try {
+        const result = await pulseApi("/api/pulsinho", { method: "POST", body: JSON.stringify({ action: "push-test" }) });
+        showToast(result.accepted ? `Teste enviado para ${result.accepted} aparelho${result.accepted === 1 ? "" : "s"}. Confira a notificação! 🔔` : "O serviço de push não aceitou o envio. Tente ativar de novo neste aparelho.");
+      } catch (error) {
+        showToast(error?.code === "push_test_cooldown" ? "Aguarde um minutinho para testar de novo."
+          : error?.code === "no_push_devices" ? "Nenhum aparelho com push ativo. Toque em Ativar neste aparelho."
+            : "Não consegui enviar o teste agora. Tente novamente em instantes.");
+      } finally {
+        setTimeout(() => { test.disabled = false; }, 4000);
+      }
+    }
+  });
+  panel.addEventListener("keydown", (event) => { if (event.key === "Escape") closeNotificationCenter(); });
+  return panel;
+}
+
+function openNotificationCenter() {
+  const panel = ensureNotificationCenter();
+  notifSeenAtOpen = readBellSeen();
+  panel.hidden = false;
+  document.body.classList.add("bd-notif-open");
+  document.querySelector("#bdBellBtn")?.setAttribute("aria-expanded", "true");
+  renderNotificationCenter();
+  // Abrir a central conta como "visto": o ponto do sino some.
+  writeBellSeen(new Set([...notifSeenAtOpen, ...notificationCenterItems().map((item) => item.key)]));
+  updateBellDot();
+  requestAnimationFrame(() => panel.querySelector(".bd-notif-head [data-notif-close]")?.focus({ preventScroll: true }));
+}
+
+function closeNotificationCenter() {
+  const panel = document.querySelector("#bdNotif");
+  if (!panel || panel.hidden) return;
+  panel.hidden = true;
+  document.body.classList.remove("bd-notif-open");
+  const bell = document.querySelector("#bdBellBtn");
+  bell?.setAttribute("aria-expanded", "false");
+  bell?.focus({ preventScroll: true });
+}
+
+// ── Puxar para atualizar (app instalado no celular) ────────────
+// No PWA não existe o "puxar" do navegador. Com a tela no topo, arrastar
+// para baixo mostra o indicador; soltando depois do ponto, o app recarrega
+// (busca a versão mais nova e os dados do servidor). Não age dentro de
+// janelas, campos de texto ou listas que estejam roladas.
+function bindPullToRefresh() {
+  const standalone = window.matchMedia?.("(display-mode: standalone)").matches || navigator.standalone === true;
+  const touch = "ontouchstart" in window || navigator.maxTouchPoints > 0;
+  if (!touch || !standalone || document.querySelector(".pn-ptr")) return;
+  document.documentElement.classList.add("pn-ptr-enabled");
+  const indicator = document.createElement("div");
+  indicator.className = "pn-ptr";
+  indicator.setAttribute("aria-hidden", "true");
+  indicator.innerHTML = `<span class="pn-ptr-bubble">${bdIcon("refresh")}</span><span class="pn-ptr-label">Puxe para atualizar</span>`;
+  document.body.appendChild(indicator);
+  const label = indicator.querySelector(".pn-ptr-label");
+  const THRESHOLD = 78;
+  const MAX = 120;
+  let startY = 0;
+  let startX = 0;
+  let pulling = false;
+  let distance = 0;
+  let refreshing = false;
+
+  const blocked = (target) => {
+    if (document.body.classList.contains("bd-notif-open") || document.body.classList.contains("st-drawer-open")) return true;
+    if (target.closest?.("input, textarea, select, [contenteditable='true'], [role='dialog'], .modal, .bn-form-wrap.is-open, .bn-detail-wrap:not([hidden]), .bd-chat-body, .bd-confirm")) return true;
+    for (let el = target; el && el !== document.body; el = el.parentElement) {
+      if (el.scrollTop > 0) return true;
+    }
+    return false;
+  };
+  const paint = () => {
+    const progress = Math.min(1, distance / THRESHOLD);
+    indicator.style.setProperty("--ptr-y", `${Math.min(distance, MAX) * 0.62}px`);
+    indicator.style.setProperty("--ptr-rot", `${Math.round(progress * 300)}deg`);
+    indicator.style.opacity = String(Math.min(1, distance / 30));
+    indicator.classList.toggle("is-ready", distance >= THRESHOLD);
+    if (label) label.textContent = distance >= THRESHOLD ? "Solte para atualizar" : "Puxe para atualizar";
+  };
+  const reset = () => {
+    pulling = false;
+    distance = 0;
+    indicator.classList.add("is-settling");
+    paint();
+    setTimeout(() => indicator.classList.remove("is-settling", "is-visible"), 250);
+  };
+
+  window.addEventListener("touchstart", (event) => {
+    if (refreshing || event.touches.length !== 1 || window.scrollY > 0 || blocked(event.target)) return;
+    startY = event.touches[0].clientY;
+    startX = event.touches[0].clientX;
+    pulling = true;
+    distance = 0;
+  }, { passive: true });
+  window.addEventListener("touchmove", (event) => {
+    if (!pulling || refreshing) return;
+    const dy = event.touches[0].clientY - startY;
+    const dx = Math.abs(event.touches[0].clientX - startX);
+    if (window.scrollY > 0 || dy <= 0 || dx > dy) {
+      if (distance) reset(); else pulling = false;
+      return;
+    }
+    distance = dy;
+    indicator.classList.add("is-visible");
+    indicator.classList.remove("is-settling");
+    paint();
+  }, { passive: true });
+  window.addEventListener("touchend", () => {
+    if (!pulling || refreshing) return;
+    if (distance < THRESHOLD) { reset(); return; }
+    refreshing = true;
+    pulling = false;
+    indicator.classList.add("is-refreshing", "is-settling");
+    indicator.style.setProperty("--ptr-y", "54px");
+    if (label) label.textContent = "Atualizando…";
+    try { navigator.vibrate?.(8); } catch { /* sem vibração */ }
+    // Grava o que estiver pendente antes de recarregar.
+    try { if (ndCurrentNoteId) flushNoteDetailSave(); } catch { /* segue */ }
+    setTimeout(() => window.location.reload(), 450);
+  }, { passive: true });
+  window.addEventListener("touchcancel", () => { if (pulling) reset(); }, { passive: true });
+}
+
+function toggleNotificationCenter() {
+  const panel = document.querySelector("#bdNotif");
+  if (panel && !panel.hidden) closeNotificationCenter();
+  else openNotificationCenter();
+}
+
+window.addEventListener("pulsenote:push-status", () => renderNotificationCenter());
+
 function bindBoardsShell() {
+  bindBoardsToday();
+  bindBoardsCategories();
+  bindPullToRefresh();
   // Intervalo do gráfico de evolução
   document.querySelector("#bdEvoRange")?.addEventListener("click", (event) => {
     const button = event.target.closest("[data-range]");
@@ -4672,9 +5427,11 @@ function bindBoardsShell() {
   const chart = document.querySelector("#bdEvoChart");
   if (chart && "ResizeObserver" in window) {
     let lastWidth = 0;
+    let lastHeight = 0;
     new ResizeObserver(() => {
-      if (Math.abs(chart.clientWidth - lastWidth) < 2) return;
+      if (Math.abs(chart.clientWidth - lastWidth) < 2 && Math.abs(chart.clientHeight - lastHeight) < 2) return;
       lastWidth = chart.clientWidth;
+      lastHeight = chart.clientHeight;
       renderBoardsEvolution();
     }).observe(chart);
   }
@@ -4690,8 +5447,11 @@ function bindBoardsShell() {
   });
   searchInput?.addEventListener("blur", () => { if (!searchInput.value.trim()) search?.classList.remove("open"); });
   searchInput?.addEventListener("keydown", (event) => { if (event.key === "Escape") { searchInput.blur(); search?.classList.remove("open"); } });
-  // Sino → preferências de notificação
-  document.querySelector("#bdBellBtn")?.addEventListener("click", () => setView("settings"));
+  // Sino → central de notificações (lista do dia + push neste aparelho)
+  document.querySelector("#bdBellBtn")?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    toggleNotificationCenter();
+  });
   // Logo → Início
   document.querySelectorAll("[data-nav-home]").forEach((link) => link.addEventListener("click", (event) => { event.preventDefault(); setView("dashboard"); }));
   // Cartão do Pulsinho na lateral abre a conversa
@@ -4702,14 +5462,48 @@ function bindBoardsShell() {
       document.querySelector("#pulseCommandInput")?.focus({ preventScroll: true });
     });
   });
-  document.querySelector("#bdChatMore")?.addEventListener("click", () => {
-    pulsinhoConversation.length = 0;
-    pendingPulsinhoAction = null;
-    pendingPulsinhoActions = [];
-    pulsinhoUndo.clear();
-    persistPulsinhoConversation();
-    renderPulsinhoConversation();
+  // Menu "⋮" do Pulsinho: nova conversa ou escolher a IA.
+  const chatMore = document.querySelector("#bdChatMore");
+  const chatMenu = document.querySelector("#bdChatMenu");
+  const closeChatMenu = () => {
+    if (!chatMenu || chatMenu.hidden) return;
+    chatMenu.hidden = true;
+    chatMore?.setAttribute("aria-expanded", "false");
+  };
+  chatMore?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    if (!chatMenu) return;
+    chatMenu.hidden = !chatMenu.hidden;
+    chatMore.setAttribute("aria-expanded", String(!chatMenu.hidden));
+    if (!chatMenu.hidden) chatMenu.querySelector("button")?.focus();
   });
+  chatMenu?.addEventListener("click", (event) => {
+    const item = event.target.closest("[data-chat-menu]");
+    if (!item) return;
+    closeChatMenu();
+    if (item.dataset.chatMenu === "new") {
+      pulsinhoConversation.length = 0;
+      pendingPulsinhoAction = null;
+      pendingPulsinhoActions = [];
+      pulsinhoUndo.clear();
+      persistPulsinhoConversation();
+      pulsinhoIntroState = "pending";
+      playPulsinhoIntro();
+      document.querySelector("#pulseCommandInput")?.focus({ preventScroll: true });
+    } else if (item.dataset.chatMenu === "ai") {
+      setView("settings");
+      requestAnimationFrame(() => openSettingsSection("inteligencia"));
+    }
+  });
+  document.addEventListener("click", (event) => { if (!event.target.closest(".bd-chat-menu-wrap")) closeChatMenu(); });
+  document.addEventListener("keydown", (event) => { if (event.key === "Escape" && chatMenu && !chatMenu.hidden) { closeChatMenu(); chatMore?.focus(); } });
+  // Rolagem da conversa: botão para voltar à mensagem mais recente.
+  const chatBody = document.querySelector("#pulseCommandResponse");
+  chatBody?.addEventListener("scroll", updatePulsinhoJump, { passive: true });
+  document.querySelector("#bdChatJump")?.addEventListener("click", () => {
+    chatBody?.scrollTo({ top: chatBody.scrollHeight, behavior: "smooth" });
+  });
+  watchPulsinhoIntro();
 }
 
 function renderDashboard() {
@@ -5539,11 +6333,7 @@ function openPlannerTaskEditor(id) {
   document.querySelector("#pqaTaskPriority").value = task.priority || "Media";
   document.querySelector("#pqaTaskDue").value = task.dueDate || "";
   document.querySelector("#pqaTaskTime").value = task.dueTime || "";
-  const reminder = task.reminder === undefined || task.reminder === null ? 15 : Number(task.reminder);
-  const preset = [0, 5, 15, 30, 60, 1440].includes(reminder);
-  document.querySelector("#pqaTaskReminder").value = preset ? String(reminder) : "custom";
-  document.querySelector("#pqaTaskReminderMinutes").value = preset ? "" : reminder;
-  document.querySelector("#pqaTaskReminderCustom").hidden = preset;
+  setReminderChoice("#pqaTaskReminder", "#pqaTaskReminderMinutes", "#pqaTaskReminderCustom", task.reminder);
   document.querySelectorAll("#plannerQuickAddType button").forEach((b) => { b.hidden = b.dataset.quickType !== "task"; });
   setTimeout(() => document.querySelector("#pqaTitle")?.focus(), 50);
 }
@@ -6061,12 +6851,7 @@ function openPlannerEventEditor(id) {
   document.querySelector("#pqaEventEndTime").value = ev.endTime || "";
   document.querySelector("#pqaEventLocation").value = ev.location === "Sem local" ? "" : (ev.location || "");
   document.querySelector("#pqaEventNotes").value = ev.notes || "";
-  const reminder = Number(ev.reminder || 15);
-  const select = document.querySelector("#pqaEventReminder");
-  const preset = [5, 15, 30, 60, 1440].includes(reminder);
-  select.value = preset ? String(reminder) : "custom";
-  document.querySelector("#pqaEventReminderMinutes").value = preset ? "" : reminder;
-  document.querySelector("#pqaEventReminderCustom").hidden = preset;
+  setReminderChoice("#pqaEventReminder", "#pqaEventReminderMinutes", "#pqaEventReminderCustom", ev.reminder);
   setPlannerQuickAddType("event");
   setTimeout(() => document.querySelector("#pqaTitle")?.focus(), 50);
 }
@@ -6128,11 +6913,7 @@ function submitPlannerQuickAdd(event) {
     const priority = document.querySelector("#pqaTaskPriority").value;
     const due = document.querySelector("#pqaTaskDue").value || todayIso;
     const dueTime = document.querySelector("#pqaTaskTime").value || "";
-    const selectedReminder = document.querySelector("#pqaTaskReminder").value;
-    const customReminder = Number(document.querySelector("#pqaTaskReminderMinutes").value);
-    const reminder = selectedReminder === "custom"
-      ? Math.min(10080, Math.max(5, Number.isFinite(customReminder) ? customReminder : 15))
-      : Number(selectedReminder || 15);
+    const reminder = readReminderChoice("#pqaTaskReminder", "#pqaTaskReminderMinutes");
     if (plannerEditingTaskId) {
       state.tasks = state.tasks.map((item) => item.id === plannerEditingTaskId ? { ...item, title, priority, dueDate: due, dueTime, reminder } : item);
       showToast("Tarefa atualizada.");
@@ -6149,11 +6930,7 @@ function submitPlannerQuickAdd(event) {
       return;
     }
     const location = valueOf("#pqaEventLocation") || "Sem local";
-    const selectedReminder = document.querySelector("#pqaEventReminder").value;
-    const customReminder = Number(document.querySelector("#pqaEventReminderMinutes").value);
-    const reminder = selectedReminder === "custom"
-      ? Math.min(10080, Math.max(5, Number.isFinite(customReminder) ? customReminder : 15))
-      : Number(selectedReminder || 15);
+    const reminder = readReminderChoice("#pqaEventReminder", "#pqaEventReminderMinutes");
     const notes = valueOf("#pqaEventNotes") || "";
     const eventRecord = { id: plannerEditingEventId || crypto.randomUUID(), title, date, time, location, reminder, notes };
     if (endTimeRaw) eventRecord.endTime = endTimeRaw;
@@ -6275,7 +7052,9 @@ function setNotesFolderFilter(folder) {
 }
 
 function renderNoteCard(note, searchQuery) {
-  const tone = noteColorTone(note);
+  // A cor do cartão segue a prioridade: verde (baixa), âmbar (média),
+  // laranja (alta) e vermelho (urgente) — sempre com o nome escrito junto.
+  const prio = notePriorityKey(note.priority);
   const items = note.checklist || [];
   const done = items.filter(noteChecklistItemDone).length;
   const titleHtml = highlightMatch(escapeHtml(note.title || "Sem título"), searchQuery);
@@ -6284,9 +7063,10 @@ function renderNoteCard(note, searchQuery) {
     : highlightMatch(escapeHtml(note.description || ""), searchQuery).replace(/\n/g, "<br>");
   const selected = note.id === ndCurrentNoteId && notesPanelMode();
   const complete = items.length > 0 && done === items.length;
-  return `<article class="bn-card${selected ? " is-selected" : ""}" style="--nc:${tone.border}" data-note-id="${note.id}" tabindex="0" role="button" aria-label="Abrir nota ${escapeHtml(note.title || "")}" onclick="openNoteDetail('${note.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openNoteDetail('${note.id}')}">
+  return `<article class="bn-card bn-card--${prio}${selected ? " is-selected" : ""}" style="--nc:var(--np-${prio})" data-note-id="${note.id}" tabindex="0" role="button" aria-label="Abrir nota ${escapeHtml(note.title || "")}" onclick="openNoteDetail('${note.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openNoteDetail('${note.id}')}">
     <header>
       <span class="bn-card-ico">${bdIcon(noteIconFor(note))}</span>
+      <span class="bn-prio-chip">${bdIcon(prio === "urgente" ? "alert" : "flag")}${escapeHtml(notePriorityLabel(note.priority))}</span>
       <button type="button" class="bn-star${note.favorite ? " is-on" : ""}" onclick="event.stopPropagation(); toggleFavorite('${note.id}')" aria-pressed="${!!note.favorite}" aria-label="${note.favorite ? "Remover dos favoritos" : "Favoritar"}"><svg class="i" ${note.favorite ? 'fill="currentColor"' : ""}><use href="#i-star"/></svg></button>
     </header>
     <h4>${titleHtml}</h4>
@@ -6343,10 +7123,11 @@ function editNote(id) {
   document.querySelector("#noteId").value = note.id;
   document.querySelector("#noteTitle").value = note.title;
   document.querySelector("#noteDescription").value = note.description;
+  setNoteEditorContent(note);
   document.querySelector("#noteCategory").value = note.category;
   document.querySelector("#noteFolder").value = note.folder;
   document.querySelector("#noteTags").value = note.tags.join(", ");
-  document.querySelector("#notePriority").value = note.priority;
+  setNotePriorityUI(note.priority);
   document.querySelector("#noteColor").value = note.color || "blue";
   setNoteDraftTextColor(note.textColor || "");
   document.querySelectorAll("#noteColorPicker .note-color-dot").forEach((dot) =>
@@ -6444,8 +7225,8 @@ let ndCurrentNoteId = null;
 // `<b>`/`<i>` — sem isso aqui, o sanitizador jogaria essa formatação
 // fora sem querer.
 function sanitizeNoteHtml(html) {
-  const allowedTags = new Set(["B", "STRONG", "I", "EM", "U", "UL", "OL", "LI", "A", "BR", "DIV", "SPAN", "MARK", "P", "FONT"]);
-  const allowedStyles = ["color", "backgroundColor", "fontWeight", "fontStyle"];
+  const allowedTags = new Set(["B", "STRONG", "I", "EM", "U", "UL", "OL", "LI", "A", "BR", "DIV", "SPAN", "MARK", "P", "FONT", "S", "STRIKE"]);
+  const allowedStyles = ["color", "backgroundColor", "fontWeight", "fontStyle", "textDecorationLine"];
   const template = document.createElement("template");
   template.innerHTML = String(html || "");
 
@@ -6491,7 +7272,7 @@ function sanitizeNoteHtml(html) {
 function noteHtmlToPlainText(html) {
   const template = document.createElement("template");
   template.innerHTML = String(html || "");
-  const BLOCK_TAGS = new Set(["DIV", "P"]);
+  const BLOCK_TAGS = new Set(["DIV", "P", "UL", "OL"]);
   let text = "";
   const walk = (root) => {
     root.childNodes.forEach((child) => {
@@ -6500,9 +7281,17 @@ function noteHtmlToPlainText(html) {
       } else if (child.nodeType === Node.ELEMENT_NODE) {
         if (child.tagName === "BR") {
           text += "\n";
+        } else if (child.tagName === "LI") {
+          // Listas viram texto legível (WhatsApp, busca e exportação).
+          const ordered = child.parentElement?.tagName === "OL";
+          const position = [...(child.parentElement?.children || [])].indexOf(child) + 1;
+          if (text && !text.endsWith("\n")) text += "\n";
+          text += ordered ? `${position}. ` : "• ";
+          walk(child);
+          text += "\n";
         } else {
           walk(child);
-          if (BLOCK_TAGS.has(child.tagName)) text += "\n";
+          if (BLOCK_TAGS.has(child.tagName) && !text.endsWith("\n")) text += "\n";
         }
       }
     });
@@ -6591,8 +7380,8 @@ function openNoteDetail(id) {
   renderNoteDetailChecklist(note);
 
   document.querySelector("#ndMeta").textContent =
-    `${(note.folder || note.category || "Geral").trim()} • Atualizado ${noteWhen(note)}`;
-  document.querySelector(".bn-detail-ico")?.style.setProperty("--nc", noteColorTone(note).border);
+    `${(note.folder || note.category || "Geral").trim()} • Prioridade ${notePriorityLabel(note.priority).toLowerCase()} • Atualizado ${noteWhen(note)}`;
+  document.querySelector(".bn-detail-ico")?.style.setProperty("--nc", `var(--np-${notePriorityKey(note.priority)})`);
   const detailIcon = document.querySelector(".bn-detail-ico use");
   if (detailIcon) detailIcon.setAttribute("href", `#i-${noteIconFor(note)}`);
   document.querySelector("#ndFavBtn").classList.toggle("is-fav", !!note.favorite);

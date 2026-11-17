@@ -12,6 +12,12 @@
 // PulseNote instalado como app (PWA), igual a um aplicativo nativo.
 // ============================================================
 
+// Lembrete desligado: "none" (padrão dos formulários), false, ou os valores
+// null/NaN que tarefas antigas com "Sem lembrete" acabaram guardando.
+function reminderOff(value) {
+  return value === false || value === "none" || value === null || (typeof value === "number" && Number.isNaN(value));
+}
+
 const NOTIFIED_KEY_PREFIX = "pn_notified_";
 
 function recordPushSetupStatus(code) {
@@ -145,7 +151,7 @@ function checkTaskNotifications() {
   // tarefas antigas, sem horário, continuam no resumo diário logo abaixo.
   if (tasksOn) window.PulseNoteState.tasks.forEach((task) => {
     if (task.status === "Concluida" || task.status === "Cancelada" || !task.dueDate || !task.dueTime) return;
-    if (task.reminder === false || task.reminder === "none") return;
+    if (reminderOff(task.reminder)) return;
     const dueAt = new Date(`${task.dueDate}T${task.dueTime}`);
     const minutesUntil = (dueAt - now) / 60000;
     const reminderMinutes = Number(task.reminder ?? 15);
@@ -164,11 +170,11 @@ function checkTaskNotifications() {
 
   const overdue = window.PulseNoteState.tasks.filter(
     (t) => t.status !== "Concluida" && t.status !== "Cancelada"
-      && t.reminder !== false && t.reminder !== "none" && t.dueDate && t.dueDate < today
+      && !reminderOff(t.reminder) && t.dueDate && t.dueDate < today
   );
   const dueToday = window.PulseNoteState.tasks.filter(
     (t) => t.status !== "Concluida" && t.status !== "Cancelada"
-      && t.reminder !== false && t.reminder !== "none" && t.dueDate === today && !t.dueTime
+      && !reminderOff(t.reminder) && t.dueDate === today && !t.dueTime
   );
 
   if (tasksOn && overdue.length > 0 && !alreadyNotifiedToday("tasks_overdue")) {
@@ -201,7 +207,7 @@ function checkEventNotifications() {
 
   window.PulseNoteState.events.forEach((event) => {
     if (!event.date || !event.time || event.status === "Concluida" || event.status === "Cancelada") return;
-    if (event.reminder === false || event.reminder === "none") return;
+    if (reminderOff(event.reminder)) return;
     const eventDateTime = new Date(`${event.date}T${event.time}`);
     const minutesUntil = (eventDateTime - now) / 60000;
     const reminderMinutes = Number(event.reminder ?? 15);

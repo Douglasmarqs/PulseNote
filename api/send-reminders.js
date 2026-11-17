@@ -191,52 +191,30 @@ async function sendWhatsAppReminder(phone, bodyText) {
   }
 }
 
-// Manda o push pra todos os tokens deste usuário de uma vez. Devolve os
-// tokens que a Google já considera mortos (app desinstalado, permissão
-// revogada faz tempo etc.) pra gente limpar do Firestore.
-async function sendPush(fb, tokens, notification) {
-  if (!tokens || tokens.length === 0) return { invalidTokens: [] };
-  const response = await fb.messaging().sendEachForMulticast({
-    tokens,
-    webpush: { headers: { Urgency: "high", TTL: "3600" } },
-    // Sempre "data" (nunca "notification") — assim o FCM nunca mostra
-    // nada sozinho, e quem decide a aparência é sempre o
-    // onBackgroundMessage do sw.js (ou o onMessage do
-    // push-notifications.js, se o app estiver aberto).
-    data: {
-      title: notification.title,
-      body: notification.body,
-      tag: notification.tag,
-      view: notification.view || "dashboard",
-      itemId: notification.itemId != null ? String(notification.itemId) : "",
-    },
-  });
-  const invalidTokens = [];
-  response.responses.forEach((r, i) => {
-    if (!r.success) {
-      const code = r.error?.code || "";
-      if (code.includes("registration-token-not-registered") || code.includes("invalid-argument")) {
-        invalidTokens.push(tokens[i]);
-      }
-    }
-  });
-  return { invalidTokens, accepted: response.successCount, failed: response.failureCount };
-}
+// O envio de push (FCM) mora em _lib/pushSend.js, compartilhado com o
+// "Enviar teste" do sininho no app.
+const { sendPush } = require("./_lib/pushSend");
 
 // ── Checagens — mesma lógica de src/notifications.js, só que lendo o
 //    state direto do Firestore (Admin SDK) em vez de window.PulseNoteState.
 //    "plain" é a versão sem formatação/emoji, usada como {{1}} do
 //    template do WhatsApp.
+// Lembrete desligado: "none" (padrão dos formulários), false, ou os valores
+// null/NaN que tarefas antigas com "Sem lembrete" acabaram guardando.
+function reminderOff(value) {
+  return value === false || value === "none" || value === null || (typeof value === "number" && Number.isNaN(value));
+}
+
 function buildNotifications(state, todayIso, now, timeZone = DEFAULT_TIME_ZONE) {
   const results = [];
   const isOpen = (item) => item.status !== "Concluida" && item.status !== "Cancelada";
 
   const tasks = Array.isArray(state.tasks) ? state.tasks : [];
-  const overdue = tasks.filter((t) => t && isOpen(t) && t.reminder !== false && t.reminder !== "none" && t.dueDate && t.dueDate < todayIso);
+  const overdue = tasks.filter((t) => t && isOpen(t) && !reminderOff(t.reminder) && t.dueDate && t.dueDate < todayIso);
   // Tarefas com hora própria recebem um único aviso na antecedência que a
   // pessoa escolheu. As sem hora continuam no resumo diário, para manter
   // compatibilidade com tarefas antigas e com quem só define o dia.
-  const dueToday = tasks.filter((t) => t && isOpen(t) && t.reminder !== false && t.reminder !== "none" && t.dueDate === todayIso && !t.dueTime);
+  const dueToday = tasks.filter((t) => t && isOpen(t) && !reminderOff(t.reminder) && t.dueDate === todayIso && !t.dueTime);
   if (overdue.length > 0) {
     results.push({
       key: "tasksOverdue",
@@ -265,7 +243,7 @@ function buildNotifications(state, todayIso, now, timeZone = DEFAULT_TIME_ZONE) 
     const taskDateTime = zonedDateTimeToUtc(task.dueDate, task.dueTime, timeZone);
     if (!taskDateTime || Number.isNaN(taskDateTime.getTime())) return;
     const minutesUntil = (taskDateTime - now) / 60000;
-    if (task.reminder === false || task.reminder === "none") return;
+    if (reminderOff(task.reminder)) return;
     const reminderMinutes = Number(task.reminder ?? 15);
     if (minutesUntil > -60 && minutesUntil <= reminderMinutes) {
       results.push({
@@ -282,7 +260,7 @@ function buildNotifications(state, todayIso, now, timeZone = DEFAULT_TIME_ZONE) 
   });
 
   (Array.isArray(state.events) ? state.events : []).forEach((event) => {
-    if (!event || !event.date || !event.time || !isOpen(event) || event.reminder === false || event.reminder === "none") return;
+    if (!event || !event.date || !event.time || !isOpen(event) || reminderOff(event.reminder)) return;
     const eventDateTime = zonedDateTimeToUtc(event.date, event.time, timeZone);
     if (!eventDateTime || Number.isNaN(eventDateTime.getTime())) return;
     const minutesUntil = (eventDateTime - now) / 60000;

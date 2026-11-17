@@ -600,10 +600,10 @@ async function applyPendingAssistantAction(fb, uid, pending) {
     const isoDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || "")) ? value : getTodayInBrazil();
     if (pending.type === "create_task") {
       state.tasks = Array.isArray(state.tasks) ? state.tasks : [];
-      state.tasks.unshift({ id, title, status: "Pendente", priority: ["Baixa", "Media", "Alta", "Urgente"].includes(payload.priority) ? payload.priority : "Media", dueDate: isoDate(payload.dueDate), createdAt: getTodayInBrazil(), completedAt: "", dueTime: String(payload.dueTime || "").slice(0, 5), reminder: Number(payload.reminder) || 15, sourceNoteId: "", subtasks: [], recurrence: null });
+      state.tasks.unshift({ id, title, status: "Pendente", priority: ["Baixa", "Media", "Alta", "Urgente"].includes(payload.priority) ? payload.priority : "Media", dueDate: isoDate(payload.dueDate), createdAt: getTodayInBrazil(), completedAt: "", dueTime: String(payload.dueTime || "").slice(0, 5), reminder: payload.reminder === "none" ? "none" : (Number.isInteger(Number(payload.reminder)) && payload.reminder !== null && payload.reminder !== "" ? Math.min(10080, Math.max(0, Number(payload.reminder))) : 15), sourceNoteId: "", subtasks: [], recurrence: null });
     } else if (pending.type === "create_event") {
       state.events = Array.isArray(state.events) ? state.events : [];
-      state.events.push({ id, title, date: isoDate(payload.date), time: String(payload.time || "").slice(0, 5), location: String(payload.location || "Sem local").slice(0, 120), reminder: Number(payload.reminder) || 15, notes: String(payload.notes || "").slice(0, 500) });
+      state.events.push({ id, title, date: isoDate(payload.date), time: String(payload.time || "").slice(0, 5), location: String(payload.location || "Sem local").slice(0, 120), reminder: payload.reminder === "none" ? "none" : (Number.isInteger(Number(payload.reminder)) && payload.reminder !== null && payload.reminder !== "" ? Math.min(10080, Math.max(0, Number(payload.reminder))) : 15), notes: String(payload.notes || "").slice(0, 500) });
     } else if (pending.type === "create_note") {
       state.notes = Array.isArray(state.notes) ? state.notes : [];
       state.notes.unshift({ id, title, description: String(payload.description || "").slice(0, 3000), category: String(payload.category || "Geral").slice(0, 60), folder: "Entrada", tags: [], priority: "Media", checklist: [], attachments: [], goal: "", observations: "", color: "blue", textColor: "", favorite: false, createdAt: getTodayInBrazil(), convertedToTaskId: "" });

@@ -6,6 +6,7 @@ const SERVER_OWNED_USER_COLLECTIONS = [
   "adminUsage",
   "whatsappAssistantThreads",
   "aiUsage",
+  "pushTests",
 ];
 
 const SERVER_OWNED_USER_QUERY_COLLECTIONS = [

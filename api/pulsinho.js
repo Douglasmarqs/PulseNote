@@ -4,6 +4,7 @@ const { rememberRequestOidc } = require("./_lib/aiGatewayFetch");
 const { buildFinanceForecast } = require("./_lib/financeForecast");
 const { askPulsinho } = require("./_lib/pulsinhoAssistant");
 const { loadFinanceState, PRIVATE_WORKSPACES } = require("./_lib/financeState");
+const { sendTestPush } = require("./_lib/pushSend");
 
 function bodyOf(req) {
   if (typeof req.body === "string") {
@@ -50,6 +51,13 @@ module.exports = async (req, res) => {
 
     const body = bodyOf(req);
     if (!body) return res.status(400).json({ error: "invalid_json" });
+    // Central de notificações → "Enviar teste": push só para os aparelhos
+    // da própria conta (uid do token verificado), no máximo 1 por minuto.
+    if (body.action === "push-test") {
+      const test = await sendTestPush(firebase, decoded.uid);
+      if (!test.ok) return res.status(test.status || 400).json({ error: test.error });
+      return res.status(200).json(test);
+    }
     const workspaceId = typeof body.workspaceId === "string" ? body.workspaceId : undefined;
     // A conversa precisa do estado pessoal (tarefas, agenda, notas, metas)
     // mesmo quando o espaço financeiro ativo é compartilhado; nesse caso
