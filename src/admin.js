@@ -23,6 +23,9 @@ const FEATURE_GROUPS = [
   ["Relatórios", ["pdfReports"]],
 ];
 const AREA_LABELS = { dashboard: "Início", planner: "Planner", notes: "Notas", finances: "Finanças", autopilot: "Autopilot", profile: "Perfil", settings: "Configurações" };
+// Abreviações dos papéis para a tabela de permissões no celular.
+const ROLE_SHORT = { owner: "Prop.", admin: "Adm.", finance: "Fin.", support: "Sup.", viewer: "Leit." };
+
 const SECTION_LABELS = {
   overview: "Visão geral", users: "Usuários", subscriptions: "Acessos e testes", plans: "Planos", charges: "Cobranças",
   features: "Recursos", integrations: "Integrações", security: "Equipe e segurança", settings: "Operação",
@@ -325,7 +328,10 @@ function openModal({ kicker = "", title, body, actions = [], wide = false, onOpe
   modal.hidden = false;
   document.documentElement.classList.add("ac-modal-open");
   modalCleanup = onOpen?.($("#adModalBody")) || null;
-  setTimeout(() => $("#adModalBody").querySelector("input:not([type=hidden]):not([type=checkbox]):not([type=radio]), select, textarea")?.focus(), 30);
+  // No celular não abre o teclado sozinho (no iPhone isso também dava zoom
+  // na página); o foco vai para a janela, para leitores de tela.
+  if (isTouchDevice()) setTimeout(() => $("#adModalTitle")?.focus({ preventScroll: true }), 30);
+  else setTimeout(() => $("#adModalBody").querySelector("input:not([type=hidden]):not([type=checkbox]):not([type=radio]), select, textarea")?.focus(), 30);
 }
 
 function closeModal() {
@@ -1231,7 +1237,7 @@ function renderAdmins() {
   $("#adAdminForm").hidden = !owner;
   $("#adAdminFormLocked").hidden = owner;
   const roles = ["owner", "admin", "finance", "support", "viewer"];
-  $("#adRolesMatrix").innerHTML = `<div class="ac-matrix-row ac-matrix-head"><span>Permissão</span>${roles.map((role) => `<span title="${escapeHtml(ROLE_INFO[role][1])}">${ROLE_INFO[role][0]}</span>`).join("")}</div>${PERMISSION_LABELS.map(([key, label]) => `<div class="ac-matrix-row"><span>${escapeHtml(label)}</span>${roles.map((role) => `<span>${ROLE_PERMISSIONS_UI[role].includes(key) ? `<b class="is-yes">${icon("check")}</b>` : `<b class="is-no">—</b>`}</span>`).join("")}</div>`).join("")}`;
+  $("#adRolesMatrix").innerHTML = `<div class="ac-matrix-row ac-matrix-head"><span>Permissão</span>${roles.map((role) => `<span title="${escapeHtml(ROLE_INFO[role][0])}: ${escapeHtml(ROLE_INFO[role][1])}" data-short="${escapeHtml(ROLE_SHORT[role] || ROLE_INFO[role][0].slice(0, 4))}">${ROLE_INFO[role][0]}</span>`).join("")}</div>${PERMISSION_LABELS.map(([key, label]) => `<div class="ac-matrix-row"><span>${escapeHtml(label)}</span>${roles.map((role) => `<span>${ROLE_PERMISSIONS_UI[role].includes(key) ? `<b class="is-yes">${icon("check")}</b>` : `<b class="is-no">—</b>`}</span>`).join("")}</div>`).join("")}`;
 }
 
 // ── Carregamento ─────────────────────────────────────────────────────
@@ -1303,6 +1309,33 @@ async function loadAdmins() {
   renderAdmins();
 }
 
+function isTouchDevice() {
+  return typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches;
+}
+
+// Celular: o título da seção sai da barra do topo (que fica fixa e fina)
+// e vai para o começo do conteúdo; no computador volta para o topo.
+function placeHeading() {
+  const heading = document.querySelector(".ad-topbar .ad-heading, .ad-main > .ad-heading");
+  const topbar = document.querySelector(".ad-topbar");
+  const main = document.querySelector(".ad-main");
+  if (!heading || !topbar || !main || typeof main.insertBefore !== "function" || typeof topbar.querySelector !== "function") return;
+  if (isCompact()) {
+    if (heading.parentElement !== main) main.insertBefore(heading, main.firstChild);
+  } else if (heading.parentElement !== topbar) {
+    topbar.insertBefore(heading, topbar.querySelector(".ad-topbar-actions"));
+  }
+}
+
+function syncMobileTabs() {
+  const active = document.querySelector?.("#adMobileTabs .is-active");
+  if (!active || !isCompact()) return;
+  const bar = $("#adMobileTabs");
+  if (!bar || typeof bar.scrollTo !== "function") return;
+  const left = active.offsetLeft - (bar.clientWidth - active.offsetWidth) / 2;
+  bar.scrollTo?.({ left: Math.max(0, left), behavior: "smooth" });
+}
+
 function isCompact() {
   return typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(max-width: 820px)").matches;
 }
@@ -1316,6 +1349,7 @@ async function showSection(section) {
   document.querySelectorAll(".pn-console-view").forEach((element) => element.classList.toggle("is-active", element.id === `pn-console-${section}`));
   document.querySelectorAll("[data-section]").forEach((button) => button.classList.toggle("is-active", button.dataset.section === section));
   closeMenu();
+  syncMobileTabs();
   setLoadError();
   renderBulkBar();
   globalThis.scrollTo?.({ top: 0, behavior: "smooth" });
@@ -1339,7 +1373,14 @@ async function showSection(section) {
 
 // ── Eventos ──────────────────────────────────────────────────────────
 function bindNavigation() {
-  $("#adMobileTabs").innerHTML = Object.entries(SECTION_LABELS).map(([key, label]) => `<button type="button" data-section="${key}">${label}</button>`).join("");
+  $("#adMobileTabs").innerHTML = Object.entries(SECTION_LABELS).map(([key, label]) => `<button type="button" data-section="${key}"${key === (state.currentSection || "overview") ? ' class="is-active"' : ""}>${label}</button>`).join("");
+  $("#adMobileTabs").setAttribute("role", "navigation");
+  placeHeading();
+  let resizeTimer = null;
+  if (typeof window !== "undefined" && typeof window.addEventListener === "function") window.addEventListener("resize", () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => { placeHeading(); syncMobileTabs(); if (!isCompact()) closeMenu(); }, 120);
+  });
   document.addEventListener("click", (event) => {
     const target = event.target;
     if (typeof target?.closest !== "function") return;

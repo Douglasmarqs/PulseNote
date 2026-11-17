@@ -10,7 +10,7 @@
   <link rel="icon" type="image/png" href="/icons/favicon-32.png" />
   <link rel="stylesheet" href="/src/admin.css?v=35" />
   <link rel="stylesheet" href="/src/admin-boards.css?v=4" />
-  <link rel="stylesheet" href="/src/admin-console.css?v=1" />
+  <link rel="stylesheet" href="/src/admin-console.css?v=2" />
 </head>
 <body>
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
@@ -309,7 +309,7 @@
                 <p class="ad-security-note" id="adAdminFormLocked" hidden><svg class="i" aria-hidden="true"><use href="#i-lock"/></svg>Apenas o proprietário principal gerencia a equipe.</p>
               </div>
             </div>
-            <div class="ad-card"><div class="ad-card-head"><div><h2>O que cada papel pode fazer</h2><p>As permissões são conferidas pelo servidor em toda ação — esconder um botão não é a única proteção.</p></div></div><div class="ac-table-wrap"><div id="adRolesMatrix" class="ac-matrix"></div></div></div>
+            <div class="ad-card"><div class="ad-card-head"><div><h2>O que cada papel pode fazer</h2><p>As permissões são conferidas pelo servidor em toda ação — esconder um botão não é a única proteção.</p></div></div><div class="ac-table-wrap"><div id="adRolesMatrix" class="ac-matrix"></div></div><p class="ac-matrix-legend">Prop. = Proprietário · Adm. = Administrador · Fin. = Financeiro · Sup. = Suporte · Leit. = Leitura</p></div>
             <div class="ad-card"><div class="ad-card-head"><div><h2>Proteções ativas</h2></div></div>
               <ul class="ac-checklist">
                 <li><svg class="i" aria-hidden="true"><use href="#i-check-circle"/></svg><span><strong>Sessão verificada a cada ação</strong>O servidor confere o login (token revogável) e o papel antes de qualquer leitura ou alteração.</span></li>
@@ -344,8 +344,8 @@
   </div>
 
   <aside class="ad-user-drawer" id="adUserDrawer" aria-labelledby="adUserDrawerTitle" aria-hidden="true"><button class="ad-drawer-close" id="adUserDrawerClose" type="button" aria-label="Fechar detalhes"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button><div id="adUserDrawerContent"></div></aside>
-  <div class="ac-modal" id="adModal" hidden><div class="ac-modal-backdrop" data-modal-close></div><div class="ac-modal-card" role="dialog" aria-modal="true" aria-labelledby="adModalTitle"><header class="ac-modal-head"><div><span class="ad-card-kicker" id="adModalKicker"></span><h2 id="adModalTitle">—</h2></div><button type="button" class="ac-modal-x" data-modal-close aria-label="Fechar"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button></header><div class="ac-modal-body" id="adModalBody"></div><footer class="ac-modal-foot" id="adModalFoot"></footer></div></div>
+  <div class="ac-modal" id="adModal" hidden><div class="ac-modal-backdrop" data-modal-close></div><div class="ac-modal-card" role="dialog" aria-modal="true" aria-labelledby="adModalTitle"><header class="ac-modal-head"><div><span class="ad-card-kicker" id="adModalKicker"></span><h2 id="adModalTitle" tabindex="-1">—</h2></div><button type="button" class="ac-modal-x" data-modal-close aria-label="Fechar"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button></header><div class="ac-modal-body" id="adModalBody"></div><footer class="ac-modal-foot" id="adModalFoot"></footer></div></div>
   <div id="adToast" class="ad-toast" role="status" aria-live="polite" hidden></div>
-  <script type="module" src="/src/admin.js?v=36"></script>
+  <script type="module" src="/src/admin.js?v=37"></script>
 </body>
 </html>
