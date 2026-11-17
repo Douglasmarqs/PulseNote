@@ -35,7 +35,8 @@
 // que alguns bloqueadores de conteúdo ocultavam como se fosse publicidade.
 // v37: entrega as telas dos quadros (Finanças, Autopilot, Configurações e Administração).
 // v47: Início renovado (agenda, resultado, categorias), central de notificações e puxar para atualizar.
-const CACHE_NAME = "pulsenote-v47";
+// v48: abertura animada do Pulsinho e correção da faixa vazia ao fechar nota no iPhone.
+const CACHE_NAME = "pulsenote-v48";
 
 // ── Firebase Cloud Messaging (push em segundo plano) ──────────────
 // Isso é o que permite uma notificação aparecer mesmo com o PulseNote

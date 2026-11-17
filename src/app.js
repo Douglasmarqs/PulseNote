@@ -698,7 +698,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     overlay = document.createElement("div");
     overlay.id = "appLoadingOverlay";
     overlay.className = "app-loading-overlay";
-    overlay.innerHTML = `<div class="pulsinho"><div class="pulsinho__face"><div class="pulsinho__eyes"><span class="pulsinho__eye"></span><span class="pulsinho__eye"></span></div><svg class="pulsinho__pulse" viewBox="0 0 120 26"><path d="M0,13 L28,13 L36,3 L44,23 L52,13 L64,13 L70,6 L76,20 L82,13 L120,13"/></svg></div></div><strong class="app-loading-word">PulseNote</strong><div class="app-loading-track"><span></span></div>`;
+    overlay.innerHTML = `<div class="pulsinho-stage" aria-hidden="true"><i class="pulsinho-ring"></i><i class="pulsinho-ring"></i><span class="pulsinho-orbit"><i></i><i></i><i></i></span><div class="pulsinho-hop"><div class="pulsinho"><span class="pulsinho__cheeks"><i></i><i></i></span><div class="pulsinho__face"><div class="pulsinho__eyes"><span class="pulsinho__eye"></span><span class="pulsinho__eye"></span></div><svg class="pulsinho__pulse" viewBox="0 0 120 26"><path pathLength="100" d="M0,13 L28,13 L36,3 L44,23 L52,13 L64,13 L70,6 L76,20 L82,13 L120,13"/></svg></div></div></div></div><strong class="app-loading-word">PulseNote</strong><div class="app-loading-track"><span></span></div>`;
     document.body.appendChild(overlay);
   }
 
@@ -716,10 +716,17 @@ document.addEventListener("DOMContentLoaded", async () => {
   await appReady;
   clearTimeout(overlaySafetyTimer);
 
-  // Remove overlay com fade suave
-  overlay.style.transition = "opacity 300ms ease";
-  overlay.style.opacity = "0";
-  setTimeout(() => overlay.remove(), 320);
+  // Deixa a entrada do Pulsinho terminar (mesmo com os dados já em cache),
+  // então ele dá um pulinho de despedida e a abertura some suavemente.
+  const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  const shownFor = performance.now();
+  if (!reduceMotion && shownFor < 1400) await new Promise((resolve) => setTimeout(resolve, 1400 - shownFor));
+  overlay.classList.add("is-leaving");
+  setTimeout(() => {
+    overlay.style.transition = "opacity 300ms ease";
+    overlay.style.opacity = "0";
+    setTimeout(() => overlay.remove(), 320);
+  }, reduceMotion ? 0 : 260);
 
   if (!currentUser) return; // já foi redirecionado para login.html
   if (!currentUser.emailVerified) return; // gate de verificação já está sendo exibido
@@ -2826,7 +2833,15 @@ function playPulsinhoIntro() {
     pulsinhoIntroState = "reveal";
     renderPulsinhoConversation();
     setTimeout(() => {
-      if (pulsinhoIntroState === "reveal") pulsinhoIntroState = "done";
+      // Terminada a animação, a saudação vira texto normal (no iPhone,
+      // uma palavra animada às vezes ficava presa meio apagada).
+      if (pulsinhoIntroState === "reveal") {
+        pulsinhoIntroState = "done";
+        const root = document.querySelector("#pulseCommandResponse");
+        const keepScroll = root ? root.scrollTop : 0;
+        renderPulsinhoConversation();
+        if (root && pulsinhoConversation.length) root.scrollTop = keepScroll;
+      }
       chat?.classList.remove("is-greeting");
     }, 2200);
   }, 1050);
@@ -7313,21 +7328,43 @@ function hexToRgba(hex, alpha) {
 // no iOS (a página por trás ainda "arrasta"/balança) — a técnica que
 // funciona de verdade em todo lugar é fixar o body na posição atual.
 let ndScrollY = 0;
+// A nota aberta cobre a tela inteira, então basta impedir a rolagem do
+// fundo com overflow. Antes o corpo virava position:fixed; no iPhone (app
+// instalado, barra de status translúcida) isso às vezes deixava a página
+// deslocada ao fechar, com uma faixa vazia abaixo da barra inferior.
 function lockBackgroundScroll() {
   ndScrollY = window.scrollY || window.pageYOffset || 0;
   document.body.classList.add("note-detail-open");
-  document.body.style.position = "fixed";
-  document.body.style.top = `-${ndScrollY}px`;
-  document.body.style.left = "0";
-  document.body.style.right = "0";
+  document.documentElement.classList.add("pn-scroll-locked");
 }
 function unlockBackgroundScroll() {
+  const active = document.activeElement;
+  if (active && active !== document.body && typeof active.blur === "function") active.blur();
   document.body.classList.remove("note-detail-open");
+  document.documentElement.classList.remove("pn-scroll-locked");
+  // Limpa resíduos da versão anterior (caso a página tenha ficado travada).
   document.body.style.position = "";
   document.body.style.top = "";
   document.body.style.left = "";
   document.body.style.right = "";
   window.scrollTo(0, ndScrollY);
+  repairViewportAfterOverlay();
+}
+
+// Depois do teclado ou de uma tela cheia, o Safari do iPhone pode deixar a
+// área visível deslocada (a barra inferior "sobe"). Forçar a rolagem para a
+// mesma posição faz o navegador recalcular os elementos fixos.
+function repairViewportAfterOverlay() {
+  const fix = () => {
+    const y = Math.max(0, Math.min(window.scrollY, document.documentElement.scrollHeight - window.innerHeight));
+    window.scrollTo(0, y);
+    if (window.visualViewport && Math.abs(window.visualViewport.offsetTop) > 0.5) {
+      window.scrollTo(0, y + 1);
+      window.scrollTo(0, y);
+    }
+  };
+  requestAnimationFrame(fix);
+  setTimeout(fix, 320);
 }
 
 // Salva o estado atual do título/corpo — devolve true se algo

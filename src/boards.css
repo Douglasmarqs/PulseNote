@@ -2922,8 +2922,8 @@ html.is-maintenance body { overflow: hidden; }
 .bd-chat-stage { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .bd-chat-body { padding: 14px 14px 10px; scroll-behavior: smooth; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
   -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 14px, #000 calc(100% - 8px), transparent 100%); mask-image: linear-gradient(180deg, transparent 0, #000 14px, #000 calc(100% - 8px), transparent 100%); }
-.bd-msg--intro.is-revealing span { opacity: 0; animation: pulsinhoWord .35s ease-out forwards; animation-delay: calc(var(--w) * 32ms); }
-@keyframes pulsinhoWord { from { opacity: 0; filter: blur(3px); } to { opacity: 1; filter: none; } }
+.bd-msg--intro.is-revealing span { display: inline-block; white-space: pre; opacity: 0; animation: pulsinhoWord .35s ease-out forwards; animation-delay: calc(var(--w) * 32ms); }
+@keyframes pulsinhoWord { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
 .bd-typing--intro { animation: bdPopIn .3s ease-out both; }
 .bd-msg { animation: bdPopIn .28s ease-out both; transform-origin: bottom left; }
 .bd-msg--user { transform-origin: bottom right; }
@@ -3094,3 +3094,8 @@ html.pn-ptr-enabled, html.pn-ptr-enabled body { overscroll-behavior-y: none; }
   .bn-prio { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .bn-rich-tools { flex-wrap: wrap; overflow: visible; }
 }
+
+/* ---------- v23: trava de rolagem segura no iPhone ---------- */
+html.pn-scroll-locked, html.pn-scroll-locked body { overflow: hidden; }
+.bn-detail-wrap { overscroll-behavior: contain; }
+.bn-detail-scroll { overscroll-behavior: contain; }

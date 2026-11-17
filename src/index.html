@@ -50,13 +50,30 @@
       @media (prefers-color-scheme: dark) { html:not([data-theme="light"]) { background: #0a1020; } }
       /* Abertura completa sem depender de CSS externo: aparece pronta já no 1º quadro. */
       #appLoadingOverlay { position: fixed; inset: 0; z-index: 9998; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; background-color: #f6f7fc; color: #121633; font-family: Inter, "Segoe UI", system-ui, -apple-system, Roboto, sans-serif; transition: opacity .32s ease; }
-      #appLoadingOverlay .pulsinho { width: 96px; height: 96px; display: flex; align-items: center; justify-content: center; border-radius: 58% 42% 53% 47% / 55% 48% 52% 45%; background: linear-gradient(155deg, #7c6cff, #c07dff); box-shadow: 0 16px 36px -10px rgba(124,108,255,.6); animation: pnSplashBob 3.2s ease-in-out infinite, pnSplashMorph 6s ease-in-out infinite; }
+      /* Pulsinho: entra quicando, ondas de batimento ao redor, olhinhos
+         curiosos e o "pulso" desenhado como um eletrocardiograma. */
+      #appLoadingOverlay .pulsinho-stage { position: relative; display: grid; place-items: center; width: 168px; height: 168px; margin: -26px 0 -22px; }
+      #appLoadingOverlay .pulsinho-ring { position: absolute; inset: 36px; border-radius: 50%; border: 2px solid rgba(139,120,255,.55); opacity: 0; animation: pnSplashRing 2.4s cubic-bezier(.2,.7,.3,1) .7s infinite; }
+      #appLoadingOverlay .pulsinho-ring + .pulsinho-ring { animation-delay: 1.5s; border-color: rgba(34,195,166,.45); }
+      #appLoadingOverlay .pulsinho-orbit { position: absolute; inset: 0; animation: pnSplashOrbit 7s linear infinite; }
+      #appLoadingOverlay .pulsinho-orbit i { position: absolute; width: 7px; height: 7px; border-radius: 50%; opacity: 0; animation: pnSplashSpark 2.8s ease-in-out .9s infinite; }
+      #appLoadingOverlay .pulsinho-orbit i:nth-child(1) { top: 10px; left: 50%; background: #8b7bff; }
+      #appLoadingOverlay .pulsinho-orbit i:nth-child(2) { bottom: 22px; left: 14px; width: 5px; height: 5px; background: #22c3a6; animation-delay: 1.5s; }
+      #appLoadingOverlay .pulsinho-orbit i:nth-child(3) { bottom: 30px; right: 10px; width: 6px; height: 6px; background: #ff8fb8; animation-delay: 2.1s; }
+      #appLoadingOverlay .pulsinho-hop { animation: pnSplashEnter .9s cubic-bezier(.3,1.5,.5,1) both; }
+      #appLoadingOverlay .pulsinho { position: relative; width: 96px; height: 96px; display: flex; align-items: center; justify-content: center; border-radius: 58% 42% 53% 47% / 55% 48% 52% 45%; background: linear-gradient(155deg, #7c6cff, #c07dff); box-shadow: 0 16px 36px -10px rgba(124,108,255,.6), inset 0 2px 0 rgba(255,255,255,.22); animation: pnSplashBob 2.6s ease-in-out .9s infinite, pnSplashMorph 6s ease-in-out infinite; }
+      #appLoadingOverlay .pulsinho::after { content: ""; position: absolute; top: 14px; left: 20px; width: 22px; height: 12px; border-radius: 50%; background: rgba(255,255,255,.28); filter: blur(1px); transform: rotate(-22deg); }
       #appLoadingOverlay .pulsinho__face { width: 66px; }
-      #appLoadingOverlay .pulsinho__eyes { display: flex; justify-content: center; gap: 15px; margin-bottom: 9px; }
-      #appLoadingOverlay .pulsinho__eye { display: block; width: 11px; height: 11px; padding: 0; border-radius: 50%; background: #0c0d1c; animation: pnSplashBlink 4.4s ease-in-out infinite; }
+      #appLoadingOverlay .pulsinho__eyes { display: flex; justify-content: center; gap: 15px; margin-bottom: 9px; animation: pnSplashLook 4.8s ease-in-out 1s infinite; }
+      #appLoadingOverlay .pulsinho__eye { display: block; width: 11px; height: 11px; padding: 0; border-radius: 50%; background: #0c0d1c; animation: pnSplashBlink 3.6s ease-in-out .6s infinite; }
+      #appLoadingOverlay .pulsinho__cheeks { position: absolute; left: 50%; top: 52%; width: 70px; height: 8px; transform: translateX(-50%); display: flex; justify-content: space-between; pointer-events: none; }
+      #appLoadingOverlay .pulsinho__cheeks i { width: 12px; height: 7px; border-radius: 50%; background: rgba(255,120,170,.45); filter: blur(1.5px); }
       #appLoadingOverlay .pulsinho__pulse { display: block; width: 66px; height: 15px; overflow: visible; }
-      #appLoadingOverlay .pulsinho__pulse path { fill: none; stroke: rgba(255,255,255,.92); stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
-      #appLoadingOverlay .app-loading-word { font-size: 22px; font-weight: 800; letter-spacing: -.01em; color: inherit; }
+      #appLoadingOverlay .pulsinho__pulse path { fill: none; stroke: rgba(255,255,255,.95); stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 100 100; stroke-dashoffset: 0; animation: pnSplashBeat 2.2s ease-in-out .5s infinite; }
+      #appLoadingOverlay .app-loading-word { font-size: 22px; font-weight: 800; letter-spacing: -.01em; color: inherit; animation: pnSplashRise .6s ease-out .45s both; }
+      #appLoadingOverlay .app-loading-track { animation: pnSplashRise .6s ease-out .6s both; }
+      #appLoadingOverlay.is-leaving .pulsinho-hop { animation: pnSplashLeave .45s cubic-bezier(.4,0,.6,1) both; }
+      #appLoadingOverlay.is-leaving .app-loading-word, #appLoadingOverlay.is-leaving .app-loading-track { opacity: 0; transform: translateY(6px); transition: opacity .2s, transform .2s; }
       #appLoadingOverlay .app-loading-track { width: 120px; height: 3px; border-radius: 3px; background: rgba(18,22,51,.1); overflow: hidden; }
       #appLoadingOverlay .app-loading-track span { display: block; width: 40%; height: 100%; border-radius: 3px; background: linear-gradient(90deg, #6d5dfc, #22c3a6); animation: pnSplashSlide 1.1s ease-in-out infinite; }
       html[data-theme="aurora"] #appLoadingOverlay, html[data-theme="eclipse"] #appLoadingOverlay { background-color: #0a1020; color: #eef1ff; }
@@ -65,7 +82,15 @@
         html:not([data-theme="light"]) #appLoadingOverlay { background-color: #0a1020; color: #eef1ff; }
         html:not([data-theme="light"]) #appLoadingOverlay .app-loading-track { background: rgba(255,255,255,.12); }
       }
-      @keyframes pnSplashBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+      @keyframes pnSplashBob { 0%, 100% { transform: translateY(0) rotate(0); } 25% { transform: translateY(-7px) rotate(-3deg); } 50% { transform: translateY(0) rotate(0); } 75% { transform: translateY(-4px) rotate(2deg); } }
+      @keyframes pnSplashEnter { 0% { opacity: 0; transform: translateY(-70px) scale(.5); } 45% { opacity: 1; transform: translateY(8px) scale(1.12, .86); } 62% { transform: translateY(-10px) scale(.95, 1.06); } 78% { transform: translateY(2px) scale(1.03, .97); } 100% { opacity: 1; transform: none; } }
+      @keyframes pnSplashLeave { 0% { transform: none; } 35% { transform: translateY(6px) scale(1.08, .9); } 100% { opacity: 0; transform: translateY(-46px) scale(.8); } }
+      @keyframes pnSplashRing { 0% { opacity: .9; transform: scale(.75); } 100% { opacity: 0; transform: scale(1.55); } }
+      @keyframes pnSplashOrbit { to { transform: rotate(360deg); } }
+      @keyframes pnSplashSpark { 0%, 100% { opacity: 0; transform: scale(.4); } 40%, 60% { opacity: 1; transform: scale(1); } }
+      @keyframes pnSplashLook { 0%, 22%, 100% { transform: translateX(0); } 30%, 44% { transform: translateX(-4px); } 54%, 68% { transform: translateX(4px) translateY(-1px); } 78% { transform: translateX(0); } }
+      @keyframes pnSplashBeat { 0% { stroke-dashoffset: 100; } 45%, 70% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: -100; } }
+      @keyframes pnSplashRise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
       @keyframes pnSplashMorph { 0%, 100% { border-radius: 58% 42% 53% 47% / 55% 48% 52% 45%; } 50% { border-radius: 46% 54% 44% 56% / 48% 55% 45% 52%; } }
       @keyframes pnSplashBlink { 0%, 92%, 100% { transform: scaleY(1); } 96% { transform: scaleY(.1); } }
       @keyframes pnSplashSlide { 0% { transform: translateX(-150%); } 100% { transform: translateX(350%); } }
@@ -107,14 +132,18 @@
     <!-- Camada de experiência: uma linguagem única para todas as áreas. -->
     <link rel="stylesheet" href="/src/experience.css?v=3" />
     <!-- Sistema visual dos quadros (claro/escuro, desktop/mobile). Carrega por último. -->
-    <link rel="stylesheet" href="/src/boards.css?v=11" />
+    <link rel="stylesheet" href="/src/boards.css?v=12" />
   </head>
   <body class="bd">
     <!-- Tela de abertura já no HTML: aparece na primeira pintura, antes de
          qualquer JS, e o app.js só a remove quando os dados chegam. Antes ela
          era criada pelo app.js, e o app vazio aparecia por um instante. -->
     <div id="appLoadingOverlay" class="app-loading-overlay" role="status" aria-label="Carregando o PulseNote">
-      <div class="pulsinho"><div class="pulsinho__face"><div class="pulsinho__eyes"><span class="pulsinho__eye"></span><span class="pulsinho__eye"></span></div><svg class="pulsinho__pulse" viewBox="0 0 120 26"><path d="M0,13 L28,13 L36,3 L44,23 L52,13 L64,13 L70,6 L76,20 L82,13 L120,13"/></svg></div></div>
+      <div class="pulsinho-stage" aria-hidden="true">
+        <i class="pulsinho-ring"></i><i class="pulsinho-ring"></i>
+        <span class="pulsinho-orbit"><i></i><i></i><i></i></span>
+        <div class="pulsinho-hop"><div class="pulsinho"><span class="pulsinho__cheeks"><i></i><i></i></span><div class="pulsinho__face"><div class="pulsinho__eyes"><span class="pulsinho__eye"></span><span class="pulsinho__eye"></span></div><svg class="pulsinho__pulse" viewBox="0 0 120 26"><path pathLength="100" d="M0,13 L28,13 L36,3 L44,23 L52,13 L64,13 L70,6 L76,20 L82,13 L120,13"/></svg></div></div></div>
+      </div>
       <strong class="app-loading-word">PulseNote</strong>
       <div class="app-loading-track"><span></span></div>
     </div>
@@ -2105,7 +2134,7 @@
     <script src="/src/recurring-detector.js?v=1"></script>
     <script src="/src/card-installments.js?v=1"></script>
     <script src="/src/notifications.js?v=36" defer></script>
-    <script type="module" src="/src/app.js?v=48"></script>
+    <script type="module" src="/src/app.js?v=49"></script>
     <script type="module" src="/src/push-notifications.js?v=35"></script>
     <!-- Configuração inicial (primeiro acesso) — ver src/onboarding.js -->
   <div id="onboardingRoot" class="bdo" role="dialog" aria-modal="true" aria-labelledby="bdoTitle" hidden></div>
