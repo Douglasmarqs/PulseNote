@@ -24,12 +24,35 @@ test("tela não fica deslocada depois do teclado (iPhone)", () => {
   assert.match(app, /modal\.hidden = true;\n  repairViewportAfterOverlay\(\);/);
 });
 
-test("Pulsinho em tela cheia ao digitar no celular", () => {
-  assert.match(html, /id="bdChatExpand"/);
-  assert.match(app, /function openPulsinhoFullscreen\(\)/);
-  assert.match(app, /chat\.style\.setProperty\("--chat-vh"/);
-  assert.match(css, /\.bd-chat\.is-fullscreen \{/);
-  assert.match(css, /body\.bd-chat-open \.bd-tabbar/);
+test("Pulsinho continua no cartão e só se encaixa acima do teclado (sem tela cheia)", () => {
+  assert.doesNotMatch(html, /id="bdChatExpand"/);
+  assert.doesNotMatch(css, /\.bd-chat\.is-fullscreen/);
+  assert.match(app, /function fitPulsinhoToKeyboard\(\)/);
+  assert.match(app, /chat\.style\.setProperty\("--chat-fit"/);
+  assert.match(css, /\.bd-chat\.is-fitted \{ height: var\(--chat-fit\) !important;/);
+  assert.match(css, /body\.bd-chat-typing \.bd-tabbar/);
+});
+
+test("app sem zoom: viewport, pinça bloqueada e toque duplo no CSS", () => {
+  for (const page of ["src/index.html", "src/admin.html", "src/login.html", "src/forgot-password.html"]) {
+    assert.match(read(page), /maximum-scale=1, user-scalable=no/, page);
+  }
+  assert.match(app, /function lockPageZoom\(\)/);
+  assert.match(css, /html, body \{ touch-action: manipulation;/);
+});
+
+test("nota aberta redesenhada: status, etiquetas, barra completa e contagem", () => {
+  for (const id of ["ndStatus", "ndChips", "ndCount"]) assert.match(html, new RegExp(`id="${id}"`));
+  assert.match(html, /data-nd-cmd="strike"/);
+  assert.match(app, /document\.execCommand\("strikeThrough"\)/);
+  assert.match(app, /function renderNoteDetailMeta\(note\)/);
+  assert.match(css, /\.bn-tool-row > button\[aria-pressed="true"\]/);
+});
+
+test("Foco: navegação em pílula e botão Voltar com rótulo", () => {
+  assert.match(app, /class="pf-pager" role="group"/);
+  assert.match(app, /<span>Voltar<\/span>/);
+  assert.match(css, /\.pf-pager \{/);
 });
 
 test("Foco da semana: anel, etapas tocáveis e metas com desfazer", () => {

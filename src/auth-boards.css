@@ -145,3 +145,7 @@ body.bda {
 .bda-brand--mobile .bd-mascot { --s: 32px; }
 @keyframes pulsinhoMorph { 0%, 100% { border-radius: 58% 42% 53% 47% / 55% 48% 52% 45%; } 50% { border-radius: 46% 54% 44% 56% / 50% 56% 44% 50%; } }
 @keyframes pulsinhoBlink { 0%, 92%, 100% { transform: scaleY(1); } 96% { transform: scaleY(0.1); } }
+
+/* v26: sem zoom (pinça e toque duplo) */
+html, body { touch-action: manipulation; -webkit-text-size-adjust: 100%; }
+@media (max-width: 760px) { input, select, textarea { font-size: max(16px, 1em); } }

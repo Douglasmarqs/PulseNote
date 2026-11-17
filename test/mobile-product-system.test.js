@@ -6,9 +6,9 @@ const path = require("node:path");
 const html = fs.readFileSync(path.join(__dirname, "../src/index.html"), "utf8");
 const css = fs.readFileSync(path.join(__dirname, "../src/product-system.css"), "utf8");
 
-test("viewport preserva zoom e acompanha o teclado virtual", () => {
+test("viewport estático (sem zoom, pedido do produto) e acompanha o teclado virtual", () => {
   assert.match(html, /viewport-fit=cover, interactive-widget=resizes-content/);
-  assert.doesNotMatch(html, /user-scalable=no|maximum-scale=1/);
+  assert.match(html, /maximum-scale=1, user-scalable=no/);
 });
 
 test("controles móveis recebem toque imediato sem bloquear texto comum", () => {

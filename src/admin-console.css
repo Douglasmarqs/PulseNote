@@ -632,3 +632,5 @@ html:has(.ac-modal:not([hidden])), html:has(.ad-user-drawer.is-open), html:has(.
   .ad-step-index { font-size: 11px !important; }
   .ac-drawer-trial small, .ad-user-drawer small { font-size: 12px; }
 }
+/* v26: painel sem zoom (pinça e toque duplo) */
+html, body { touch-action: manipulation; }

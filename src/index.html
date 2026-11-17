@@ -2,7 +2,7 @@
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
     <title>PulseNote - Produtividade pessoal</title>
 
     <!-- Aplica o tema (claro/escuro/sistema) ANTES da primeira pintura da
@@ -132,7 +132,7 @@
     <!-- Camada de experiência: uma linguagem única para todas as áreas. -->
     <link rel="stylesheet" href="/src/experience.css?v=3" />
     <!-- Sistema visual dos quadros (claro/escuro, desktop/mobile). Carrega por último. -->
-    <link rel="stylesheet" href="/src/boards.css?v=13" />
+    <link rel="stylesheet" href="/src/boards.css?v=14" />
   </head>
   <body class="bd">
     <!-- Tela de abertura já no HTML: aparece na primeira pintura, antes de
@@ -260,6 +260,7 @@
         <symbol id="i-expand" viewBox="0 0 24 24"><path d="M15 3.5h5.5V9"/><path d="M20.5 3.5L14 10"/><path d="M9 20.5H3.5V15"/><path d="M3.5 20.5L10 14"/></symbol>
         <symbol id="i-arrow-in" viewBox="0 0 24 24"><path d="M17 7L7 17"/><path d="M16 17H7V8"/></symbol>
         <symbol id="i-arrow-out" viewBox="0 0 24 24"><path d="M7 17L17 7"/><path d="M8 7h9v9"/></symbol>
+        <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3.5 7.5a2 2 0 012-2h4l2 2.5h7a2 2 0 012 2v7.5a2 2 0 01-2 2h-13a2 2 0 01-2-2z"/></symbol>
         <symbol id="i-highlighter" viewBox="0 0 24 24"><path d="M9 11l-5 5v4h4l5-5"/><path d="M13 7l4 4"/><path d="M9 11l6.5-6.5a2.1 2.1 0 013 3L12 14"/><path d="M14 21h7"/></symbol>
         <symbol id="i-strike" viewBox="0 0 24 24"><path d="M4 12h16"/><path d="M16.5 7.5C16 5.6 14.2 4.5 12 4.5c-2.6 0-4.5 1.4-4.5 3.4 0 1.7 1.1 2.7 3.2 3.4"/><path d="M8 16.5c.5 1.9 2.2 3 4.3 3 2.6 0 4.5-1.4 4.5-3.4 0-.8-.2-1.4-.6-2"/></symbol>
         <symbol id="i-eraser" viewBox="0 0 24 24"><path d="M7 20h13"/><path d="M5.5 15.5l9-9a2 2 0 012.8 0l2.2 2.2a2 2 0 010 2.8L12 19H8.5l-3-3a1.4 1.4 0 010-2z"/><path d="M10 11l5 5"/></symbol>
@@ -447,7 +448,6 @@
                   <i class="bd-chat-online"></i>
                 </span>
                 <div><h3>Pulsinho <span class="bd-badge">IA</span></h3><p id="bdChatStatus">Online agora</p></div>
-                <button type="button" class="bd-icon-btn bd-chat-expand" id="bdChatExpand" aria-label="Abrir conversa em tela cheia" aria-pressed="false"><svg class="i i-open"><use href="#i-expand"/></svg><svg class="i i-close"><use href="#i-chev-down"/></svg></button>
                 <div class="bd-chat-menu-wrap">
                   <button type="button" class="bd-icon-btn bd-chat-more" id="bdChatMore" aria-haspopup="menu" aria-expanded="false" aria-controls="bdChatMenu" aria-label="Opções da conversa"><svg class="i"><use href="#i-dots-v"/></svg></button>
                   <div class="bd-chat-menu" id="bdChatMenu" role="menu" hidden>
@@ -1133,11 +1133,7 @@
                 <div class="bd-card bn-detail" role="region" aria-label="Nota aberta">
                   <div class="bn-detail-head">
                     <button type="button" class="bd-icon-btn bn-detail-back" id="closeNoteDetail" aria-label="Voltar"><svg class="i"><use href="#i-arrow-left"/></svg></button>
-                    <span class="bn-head-ico bn-detail-ico"><svg class="i"><use href="#i-calendar"/></svg></span>
-                    <div class="bn-detail-titles">
-                      <input id="ndTitle" class="bn-detail-title" maxlength="80" placeholder="Título" aria-label="Título da nota" />
-                      <p class="bn-detail-meta"><svg class="i"><use href="#i-calendar"/></svg><span id="ndMeta"></span></p>
-                    </div>
+                    <span class="bn-nd-status" id="ndStatus" role="status" aria-live="polite"><i aria-hidden="true"></i><span>Salvo</span></span>
                     <div class="bn-menu-wrap">
                       <button type="button" class="bd-icon-btn" id="ndMenuBtn" aria-haspopup="true" aria-expanded="false" aria-label="Mais opções da nota"><svg class="i"><use href="#i-dots-v"/></svg></button>
                       <div class="bn-menu" id="ndMenu" hidden>
@@ -1148,27 +1144,38 @@
                     </div>
                   </div>
 
+                  <div class="bn-nd-hero">
+                    <span class="bn-head-ico bn-detail-ico"><svg class="i"><use href="#i-calendar"/></svg></span>
+                    <div class="bn-detail-titles">
+                      <input id="ndTitle" class="bn-detail-title" maxlength="80" placeholder="Título da nota" aria-label="Título da nota" autocomplete="off" />
+                      <div class="bn-nd-chips" id="ndChips"></div>
+                      <p class="bn-detail-meta sr-only"><span id="ndMeta"></span></p>
+                    </div>
+                  </div>
+
                   <div class="bn-toolbar" id="noteDetailToolbar" role="toolbar" aria-label="Formatação">
-                    <button type="button" data-nd-cmd="bold" title="Negrito" aria-label="Negrito"><b>B</b></button>
-                    <button type="button" data-nd-cmd="italic" title="Itálico" aria-label="Itálico"><i>I</i></button>
-                    <button type="button" data-nd-cmd="underline" title="Sublinhado" aria-label="Sublinhado"><u>U</u></button>
-                    <span class="bn-tool-sep"></span>
-                    <button type="button" data-nd-cmd="ul" title="Lista" aria-label="Lista com marcadores"><svg class="i"><use href="#i-list"/></svg></button>
-                    <button type="button" data-nd-cmd="ol" title="Lista numerada" aria-label="Lista numerada"><svg class="i"><use href="#i-list-num"/></svg></button>
-                    <span class="bn-tool-sep"></span>
-                    <button type="button" data-nd-cmd="link" title="Link" aria-label="Inserir link"><svg class="i"><use href="#i-link"/></svg></button>
-                    <button type="button" data-nd-cmd="more" title="Mais" aria-label="Mais formatação" aria-expanded="false"><svg class="i"><use href="#i-dots-h"/></svg></button>
+                    <div class="bn-tool-row">
+                      <button type="button" data-nd-cmd="bold" title="Negrito" aria-label="Negrito" aria-pressed="false"><b>B</b></button>
+                      <button type="button" data-nd-cmd="italic" title="Itálico" aria-label="Itálico" aria-pressed="false"><i>I</i></button>
+                      <button type="button" data-nd-cmd="underline" title="Sublinhado" aria-label="Sublinhado" aria-pressed="false"><u>U</u></button>
+                      <button type="button" data-nd-cmd="strike" title="Riscado" aria-label="Riscado" aria-pressed="false"><svg class="i"><use href="#i-strike"/></svg></button>
+                      <span class="bn-tool-sep"></span>
+                      <button type="button" data-nd-cmd="highlight" class="bn-tool-mark" title="Marca-texto" aria-label="Marca-texto"><svg class="i"><use href="#i-highlighter"/></svg></button>
+                      <button type="button" data-nd-cmd="ul" title="Lista" aria-label="Lista com marcadores" aria-pressed="false"><svg class="i"><use href="#i-list"/></svg></button>
+                      <button type="button" data-nd-cmd="ol" title="Lista numerada" aria-label="Lista numerada" aria-pressed="false"><svg class="i"><use href="#i-list-num"/></svg></button>
+                      <button type="button" data-nd-cmd="checklist" title="Checklist" aria-label="Adicionar checklist"><svg class="i"><use href="#i-check-circle"/></svg></button>
+                      <span class="bn-tool-sep"></span>
+                      <button type="button" data-nd-cmd="link" title="Link" aria-label="Inserir link"><svg class="i"><use href="#i-link"/></svg></button>
+                      <button type="button" data-nd-cmd="more" class="bn-tool-aa" title="Cor do texto" aria-label="Cor do texto e limpar formatação" aria-expanded="false"><span>Aa</span></button>
+                    </div>
                     <div class="bn-tool-panel" id="ndMorePanel" hidden>
-                      <span class="bn-tool-label">Destaque</span>
-                      <button type="button" class="bn-mark-btn" data-nd-cmd="highlight" aria-label="Destacar trecho"><span>Destacar</span></button>
                       <span class="bn-tool-label">Cor do texto</span>
                       <button type="button" class="nd-swatch" data-nd-color="#8b5cf6" style="background:#8b5cf6" aria-label="Texto lilás" aria-pressed="false"></button>
                       <button type="button" class="nd-swatch" data-nd-color="#ff375f" style="background:#ff375f" aria-label="Texto vermelho" aria-pressed="false"></button>
                       <button type="button" class="nd-swatch" data-nd-color="#30d158" style="background:#30d158" aria-label="Texto verde" aria-pressed="false"></button>
                       <button type="button" class="nd-swatch" data-nd-color="#0a84ff" style="background:#0a84ff" aria-label="Texto azul" aria-pressed="false"></button>
                       <button type="button" class="nd-swatch" data-nd-color="#bf5af2" style="background:#bf5af2" aria-label="Texto roxo" aria-pressed="false"></button>
-                      <button type="button" class="bn-text-btn" data-nd-cmd="clear">Limpar formatação</button>
-                      <button type="button" class="bn-text-btn" data-nd-cmd="checklist">Adicionar checklist</button>
+                      <button type="button" class="bn-text-btn" data-nd-cmd="clear"><svg class="i"><use href="#i-eraser"/></svg>Limpar formatação</button>
                     </div>
                   </div>
                   <form class="bn-link-form" id="ndLinkForm" hidden novalidate>
@@ -1191,8 +1198,9 @@
                   </div>
 
                   <div class="bn-detail-foot">
+                    <span class="bn-nd-count" id="ndCount" aria-live="off">0 palavras</span>
                     <button type="button" class="bd-btn" id="ndConvertTaskBtn"><svg class="i"><use href="#i-bolt"/></svg><span>Virar tarefa</span></button>
-                    <button type="button" class="bd-btn bd-btn--primary" id="ndSaveBtn"><span>Salvar</span></button>
+                    <button type="button" class="bd-btn bd-btn--primary" id="ndSaveBtn"><svg class="i"><use href="#i-check"/></svg><span>Salvar</span></button>
                   </div>
                 </div>
               </div>
@@ -2136,7 +2144,7 @@
     <script src="/src/recurring-detector.js?v=1"></script>
     <script src="/src/card-installments.js?v=1"></script>
     <script src="/src/notifications.js?v=36" defer></script>
-    <script type="module" src="/src/app.js?v=50"></script>
+    <script type="module" src="/src/app.js?v=51"></script>
     <script type="module" src="/src/push-notifications.js?v=35"></script>
     <!-- Configuração inicial (primeiro acesso) — ver src/onboarding.js -->
   <div id="onboardingRoot" class="bdo" role="dialog" aria-modal="true" aria-labelledby="bdoTitle" hidden></div>

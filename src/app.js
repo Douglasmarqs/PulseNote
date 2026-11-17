@@ -2862,65 +2862,76 @@ function watchPulsinhoIntro() {
   observer.observe(chat);
 }
 
-// ── Conversa em tela cheia (celular) ──────────────────────────
-// Ao tocar no campo do Pulsinho no celular, a conversa ocupa exatamente a
-// área visível acima do teclado (visualViewport), sem a barra inferior —
-// como num app de mensagens. O botão ⌄ volta para o Início.
+// ── Digitar no Pulsinho (celular) ──────────────────────────────
+// O cartão continua sendo o cartão do Início (bordas, margens, cabeçalho).
+// Só enquanto o teclado está aberto ele se encaixa na área visível —
+// cabeçalho no topo, mensagens no meio e o campo logo acima do teclado —
+// e a barra inferior some (ela ficava entre o campo e o teclado). Ao
+// fechar o teclado, tudo volta ao normal.
 const chatIsMobile = () => window.matchMedia?.("(max-width: 760px)").matches;
-function updatePulsinhoViewport() {
-  const chat = document.querySelector("#bdChat");
-  if (!chat?.classList.contains("is-fullscreen")) return;
+let chatBaselineHeight = 0;
+let chatFitFrame = 0;
+
+function chatKeyboardOpen() {
   const vv = window.visualViewport;
   const height = vv ? vv.height : window.innerHeight;
-  chat.style.setProperty("--chat-vh", `${Math.round(height)}px`);
-  chat.style.setProperty("--chat-top", `${Math.round(vv ? vv.offsetTop : 0)}px`);
-  chat.classList.toggle("is-keyboard", Boolean(vv) && window.innerHeight - vv.height > 120);
-  const body = document.querySelector("#pulseCommandResponse");
-  if (body && body.scrollHeight - body.scrollTop - body.clientHeight < 160) body.scrollTop = body.scrollHeight;
+  chatBaselineHeight = Math.max(chatBaselineHeight, window.innerHeight, height);
+  return chatBaselineHeight - height > 140;
 }
 
-function openPulsinhoFullscreen() {
-  const chat = document.querySelector("#bdChat");
-  if (!chat || chat.classList.contains("is-fullscreen") || !chatIsMobile()) return;
-  chat.classList.add("is-fullscreen");
-  document.body.classList.add("bd-chat-open");
-  document.documentElement.classList.add("pn-scroll-locked");
-  document.querySelector("#bdChatExpand")?.setAttribute("aria-pressed", "true");
-  document.querySelector("#bdChatExpand")?.setAttribute("aria-label", "Fechar tela cheia");
-  updatePulsinhoViewport();
-  window.visualViewport?.addEventListener("resize", updatePulsinhoViewport);
-  window.visualViewport?.addEventListener("scroll", updatePulsinhoViewport);
-  const body = document.querySelector("#pulseCommandResponse");
-  if (body) body.scrollTop = body.scrollHeight;
-}
-
-function closePulsinhoFullscreen() {
-  const chat = document.querySelector("#bdChat");
-  if (!chat?.classList.contains("is-fullscreen")) return;
-  document.querySelector("#pulseCommandInput")?.blur();
-  chat.classList.remove("is-fullscreen", "is-keyboard");
-  document.body.classList.remove("bd-chat-open");
-  document.documentElement.classList.remove("pn-scroll-locked");
-  window.visualViewport?.removeEventListener("resize", updatePulsinhoViewport);
-  window.visualViewport?.removeEventListener("scroll", updatePulsinhoViewport);
-  const expand = document.querySelector("#bdChatExpand");
-  expand?.setAttribute("aria-pressed", "false");
-  expand?.setAttribute("aria-label", "Abrir conversa em tela cheia");
-  repairViewportAfterOverlay();
-  requestAnimationFrame(() => chat.scrollIntoView({ block: "end" }));
-}
-
-function bindPulsinhoFullscreen() {
-  const input = document.querySelector("#pulseCommandInput");
-  if (!input || input.dataset.fullscreenBound === "1") return;
-  input.dataset.fullscreenBound = "1";
-  input.addEventListener("focus", () => { if (chatIsMobile() && document.querySelector("#dashboardView")?.contains(input)) openPulsinhoFullscreen(); });
-  document.querySelector("#bdChatExpand")?.addEventListener("click", () => {
-    if (document.querySelector("#bdChat")?.classList.contains("is-fullscreen")) closePulsinhoFullscreen();
-    else { openPulsinhoFullscreen(); input.focus({ preventScroll: true }); }
+function fitPulsinhoToKeyboard() {
+  cancelAnimationFrame(chatFitFrame);
+  chatFitFrame = requestAnimationFrame(() => {
+    const chat = document.querySelector("#bdChat");
+    const input = document.querySelector("#pulseCommandInput");
+    if (!chat || !chatIsMobile() || document.activeElement !== input || !chatKeyboardOpen()) {
+      releasePulsinhoFit();
+      return;
+    }
+    const vv = window.visualViewport;
+    const viewTop = vv ? vv.offsetTop : 0;
+    // O cabeçalho do app (fixo no topo) continua à vista: o cartão encaixa
+    // logo abaixo dele e termina logo acima do teclado.
+    const headerBottom = Math.max(0, document.querySelector(".bd-topbar")?.getBoundingClientRect().bottom || 0);
+    const top = Math.max(viewTop, headerBottom);
+    const visible = (vv ? vv.height + viewTop : window.innerHeight) - top;
+    const gap = 10;
+    chat.style.setProperty("--chat-fit", `${Math.round(Math.max(240, visible - gap * 2))}px`);
+    chat.classList.add("is-fitted");
+    document.body.classList.add("bd-chat-typing");
+    const delta = chat.getBoundingClientRect().top - (top + gap);
+    if (Math.abs(delta) > 2) window.scrollBy(0, delta);
+    const body = document.querySelector("#pulseCommandResponse");
+    if (body) body.scrollTop = body.scrollHeight;
   });
-  document.addEventListener("keydown", (event) => { if (event.key === "Escape") closePulsinhoFullscreen(); });
-  window.addEventListener("resize", () => { if (!chatIsMobile()) closePulsinhoFullscreen(); });
+}
+
+function releasePulsinhoFit() {
+  const chat = document.querySelector("#bdChat");
+  if (!chat?.classList.contains("is-fitted")) return;
+  chat.classList.remove("is-fitted");
+  chat.style.removeProperty("--chat-fit");
+  document.body.classList.remove("bd-chat-typing");
+  repairViewportAfterOverlay();
+}
+
+function bindPulsinhoKeyboardFit() {
+  const input = document.querySelector("#pulseCommandInput");
+  if (!input || input.dataset.fitBound === "1") return;
+  input.dataset.fitBound = "1";
+  input.addEventListener("focus", () => {
+    if (!chatIsMobile()) return;
+    // O teclado leva um instante para abrir: confere algumas vezes.
+    [60, 280, 520].forEach((ms) => setTimeout(fitPulsinhoToKeyboard, ms));
+  });
+  input.addEventListener("blur", () => {
+    setTimeout(() => { if (document.activeElement !== input) releasePulsinhoFit(); }, 220);
+  });
+  window.visualViewport?.addEventListener("resize", () => {
+    if (document.activeElement === input) fitPulsinhoToKeyboard();
+    else releasePulsinhoFit();
+  });
+  window.addEventListener("orientationchange", () => { chatBaselineHeight = 0; });
 }
 
 function updatePulsinhoJump() {
@@ -4660,7 +4671,7 @@ function applyViewHeading(view) {
 // O painel do Pulsinho é um só: no Autopilot ele vai para a coluna da direita
 // (como no quadro) e volta para o Início ao sair. A conversa continua a mesma.
 function placePulsinhoPanel(view) {
-  if (view !== "dashboard") closePulsinhoFullscreen();
+  if (view !== "dashboard") releasePulsinhoFit();
   const chat = document.querySelector("#bdChat");
   const slot = document.querySelector("#apChatSlot");
   const home = document.querySelector("#dashboardView .bd-dash");
@@ -5520,7 +5531,23 @@ function toggleNotificationCenter() {
 
 window.addEventListener("pulsenote:push-status", () => renderNotificationCenter());
 
+// App estático, sem zoom: o Safari do iPhone ignora "user-scalable=no" do
+// viewport, então o gesto de pinça e o toque duplo são bloqueados aqui.
+// Os campos já usam 16px no celular (sem o zoom automático ao tocar).
+function lockPageZoom() {
+  if (document.documentElement.dataset.zoomLocked === "1") return;
+  document.documentElement.dataset.zoomLocked = "1";
+  const stop = (event) => event.preventDefault();
+  ["gesturestart", "gesturechange", "gestureend"].forEach((type) => document.addEventListener(type, stop, { passive: false }));
+  document.addEventListener("touchmove", (event) => {
+    if (event.touches.length > 1 || (typeof event.scale === "number" && event.scale !== 1)) event.preventDefault();
+  }, { passive: false });
+  // Toque duplo: resolvido no CSS (touch-action: manipulation), sem
+  // atrasar ou perder toques rápidos em botões como +/−.
+}
+
 function bindBoardsShell() {
+  lockPageZoom();
   bindBoardsToday();
   bindBoardsCategories();
   bindPullToRefresh();
@@ -5613,7 +5640,7 @@ function bindBoardsShell() {
     chatBody?.scrollTo({ top: chatBody.scrollHeight, behavior: "smooth" });
   });
   watchPulsinhoIntro();
-  bindPulsinhoFullscreen();
+  bindPulsinhoKeyboardFit();
 }
 
 function renderDashboard() {
@@ -6246,23 +6273,34 @@ function renderPlannerFocus() {
   const status = stats.complete
     ? "Meta concluída — que tal a próxima?"
     : `${stats.done} de ${stats.total} etapa${stats.total === 1 ? "" : "s"} · falta${stats.remaining === 1 ? "" : "m"} ${stats.remaining}`;
+  // Cabeçalho próprio (rótulo + navegação), assim o título nunca fica
+  // espremido pelos botões. A navegação entre metas é uma pílula ‹ 2/3 ›.
+  const pager = total > 1
+    ? `<div class="pf-pager" role="group" aria-label="Trocar meta em foco">
+        <button type="button" data-focus-action="prev" aria-label="Meta anterior">${bdIcon("chev-left")}</button>
+        <span aria-live="polite"><b>${index + 1}</b>/${total}</span>
+        <button type="button" data-focus-action="next" aria-label="Próxima meta">${bdIcon("chev-right")}</button>
+      </div>`
+    : "";
   root.innerHTML = `<div class="pf${stats.complete ? " is-complete" : ""}">
+    <div class="pf-head">
+      <span class="pf-kicker">${bdIcon("target")}Foco da semana</span>
+      <div class="pf-actions">
+        ${pager}
+        <button type="button" class="pf-more" data-focus-action="manage" aria-label="Todas as metas" title="Todas as metas">${bdIcon("dots-h")}</button>
+      </div>
+    </div>
     ${goalRingHtml(stats)}
     <div class="pf-main">
-      <span class="pf-kicker">${bdIcon("target")}Foco da semana${total > 1 ? ` · ${index + 1} de ${total}` : ""}</span>
       <h3>${escapeHtml(goal.title)}</h3>
       <p>${escapeHtml(status)}</p>
-    </div>
-    <div class="pf-actions">
-      ${total > 1 ? `<button type="button" class="bd-icon-btn" data-focus-action="prev" aria-label="Meta anterior">${bdIcon("chev-left")}</button><button type="button" class="bd-icon-btn" data-focus-action="next" aria-label="Próxima meta">${bdIcon("chev-right")}</button>` : ""}
-      <button type="button" class="bd-icon-btn" data-focus-action="manage" aria-label="Todas as metas" title="Todas as metas">${bdIcon("dots-v")}</button>
     </div>
     <div class="pf-steps">${goalStepsHtml(goal, stats, "focus")}</div>
     <div class="pf-foot">
       ${stats.complete
-        ? `<button type="button" class="bd-btn pf-undo" data-focus-action="step" data-goal-id="${goal.id}" data-delta="-1" aria-label="Desfazer última etapa">${bdIcon("undo")}</button>
+        ? `<button type="button" class="pf-undo" data-focus-action="step" data-goal-id="${goal.id}" data-delta="-1" aria-label="Desfazer última etapa" title="Desfazer última etapa">${bdIcon("undo")}<span>Desfazer</span></button>
            <button type="button" class="bd-btn bd-btn--primary pf-advance" data-focus-action="new-goal">${bdIcon("plus")}Nova meta</button>`
-        : `<button type="button" class="bd-btn pf-undo" data-focus-action="step" data-goal-id="${goal.id}" data-delta="-1" aria-label="Voltar uma etapa"${stats.done ? "" : " disabled"}>${bdIcon("undo")}</button>
+        : `<button type="button" class="pf-undo" data-focus-action="step" data-goal-id="${goal.id}" data-delta="-1" aria-label="Voltar uma etapa" title="Voltar uma etapa"${stats.done ? "" : " disabled"}>${bdIcon("undo")}<span>Voltar</span></button>
            <button type="button" class="bd-btn bd-btn--primary pf-advance" data-focus-action="step" data-goal-id="${goal.id}" data-delta="1">${bdIcon("check")}<span>${nextMs ? `Concluir: ${escapeHtml(nextMs.title)}` : "Avancei uma etapa"}</span></button>`}
     </div>
   </div>`;
@@ -7637,6 +7675,53 @@ function flushNoteDetailSave() {
   return true;
 }
 
+// Cabeçalho da nota aberta: pasta, prioridade (toque para trocar) e
+// última atualização como etiquetas; o texto completo fica em #ndMeta
+// para leitores de tela.
+function renderNoteDetailMeta(note) {
+  const prio = notePriorityKey(note.priority);
+  const folder = (note.folder || note.category || "Geral").trim();
+  document.querySelector("#ndMeta").textContent =
+    `${folder} • Prioridade ${notePriorityLabel(note.priority).toLowerCase()} • Atualizado ${noteWhen(note)}`;
+  document.querySelector(".bn-detail-ico")?.style.setProperty("--nc", `var(--np-${prio})`);
+  document.querySelector(".bn-detail")?.style.setProperty("--nc", `var(--np-${prio})`);
+  const chips = document.querySelector("#ndChips");
+  if (chips) {
+    chips.innerHTML = `<button type="button" class="bn-nd-chip is-prio" data-nd-prio style="--c:var(--np-${prio})" aria-label="Prioridade ${escapeHtml(notePriorityLabel(note.priority))}. Toque para trocar">${bdIcon(prio === "urgente" ? "alert" : "flag")}${escapeHtml(notePriorityLabel(note.priority))}</button>
+      <button type="button" class="bn-nd-chip" data-nd-folder aria-label="Pasta ${escapeHtml(folder)}. Toque para editar categoria, pasta e tags">${bdIcon("folder")}${escapeHtml(folder)}</button>
+      <span class="bn-nd-chip is-muted">${bdIcon("clock")}${escapeHtml(noteWhen(note))}</span>`;
+  }
+}
+
+function setNdStatus(mode) {
+  const el = document.querySelector("#ndStatus");
+  if (!el) return;
+  el.dataset.state = mode;
+  const label = el.querySelector("span");
+  if (label) label.textContent = mode === "editing" ? "Editando…" : "Salvo";
+}
+
+function updateNdCount() {
+  const el = document.querySelector("#ndCount");
+  const body = document.querySelector("#ndBody");
+  if (!el || !body) return;
+  const words = (body.innerText || "").trim().split(/\s+/).filter(Boolean).length;
+  el.textContent = `${words} palavra${words === 1 ? "" : "s"}`;
+}
+
+function updateNdToolbarState() {
+  const body = document.querySelector("#ndBody");
+  if (!body) return;
+  const sel = window.getSelection();
+  if (!sel?.rangeCount || !body.contains(sel.anchorNode)) return;
+  const map = { bold: "bold", italic: "italic", underline: "underline", strike: "strikeThrough", ul: "insertUnorderedList", ol: "insertOrderedList" };
+  document.querySelectorAll("#noteDetailToolbar [data-nd-cmd][aria-pressed]").forEach((button) => {
+    let on = false;
+    try { on = map[button.dataset.ndCmd] ? document.queryCommandState(map[button.dataset.ndCmd]) : false; } catch { on = false; }
+    button.setAttribute("aria-pressed", String(on));
+  });
+}
+
 function openNoteDetail(id) {
   const note = state.notes.find((item) => item.id === id);
   if (!note) return;
@@ -7656,9 +7741,9 @@ function openNoteDetail(id) {
 
   renderNoteDetailChecklist(note);
 
-  document.querySelector("#ndMeta").textContent =
-    `${(note.folder || note.category || "Geral").trim()} • Prioridade ${notePriorityLabel(note.priority).toLowerCase()} • Atualizado ${noteWhen(note)}`;
-  document.querySelector(".bn-detail-ico")?.style.setProperty("--nc", `var(--np-${notePriorityKey(note.priority)})`);
+  renderNoteDetailMeta(note);
+  setNdStatus("saved");
+  updateNdCount();
   const detailIcon = document.querySelector(".bn-detail-ico use");
   if (detailIcon) detailIcon.setAttribute("href", `#i-${noteIconFor(note)}`);
   document.querySelector("#ndFavBtn").classList.toggle("is-fav", !!note.favorite);
@@ -7821,9 +7906,28 @@ function bindNoteDetail() {
   // já foi escrito até ali não se perde. Não precisa redesenhar a
   // lista de notas a cada save (ela fica escondida atrás do modal
   // mesmo); só grava o estado — a lista atualiza quando a nota fecha.
-  const autosaveNoteDetail = debounce(() => flushNoteDetailSave(), 800);
-  document.querySelector("#ndTitle").addEventListener("input", autosaveNoteDetail);
-  body.addEventListener("input", autosaveNoteDetail);
+  const autosaveNoteDetail = debounce(() => { flushNoteDetailSave(); setNdStatus("saved"); }, 800);
+  const onNdInput = () => { setNdStatus("editing"); updateNdCount(); autosaveNoteDetail(); };
+  document.querySelector("#ndTitle").addEventListener("input", onNdInput);
+  body.addEventListener("input", onNdInput);
+  ["keyup", "mouseup", "touchend", "focus"].forEach((type) => body.addEventListener(type, () => setTimeout(updateNdToolbarState, 0)));
+
+  // Etiquetas: prioridade troca a cada toque; pasta abre os campos extras.
+  document.querySelector("#ndChips")?.addEventListener("click", (event) => {
+    const note = state.notes.find((n) => n.id === ndCurrentNoteId);
+    if (!note) return;
+    if (event.target.closest("[data-nd-prio]")) {
+      const order = ["Baixa", "Media", "Alta", "Urgente"];
+      const next = order[(order.indexOf(note.priority) + 1) % order.length] || "Media";
+      flushNoteDetailSave();
+      state.notes = state.notes.map((n) => (n.id === note.id ? { ...n, priority: next, updatedAt: new Date().toISOString() } : n));
+      saveState();
+      renderNoteDetailMeta(state.notes.find((n) => n.id === note.id));
+      showToast(`Prioridade: ${notePriorityLabel(next)}`);
+    } else if (event.target.closest("[data-nd-folder]")) {
+      document.querySelector("#ndMoreFieldsBtn")?.click();
+    }
+  });
 
   document.querySelector("#ndDeleteBtn").addEventListener("click", () => {
     if (!ndCurrentNoteId) return;
@@ -7957,6 +8061,8 @@ function bindNoteDetail() {
       document.execCommand("italic");
     } else if (toolBtn.dataset.ndCmd === "underline") {
       document.execCommand("underline");
+    } else if (toolBtn.dataset.ndCmd === "strike") {
+      document.execCommand("strikeThrough");
     } else if (toolBtn.dataset.ndCmd === "ul") {
       document.execCommand("insertUnorderedList");
     } else if (toolBtn.dataset.ndCmd === "ol") {
@@ -7973,6 +8079,8 @@ function bindNoteDetail() {
     }
     saveNdSelection();
     flushNoteDetailSave();
+    updateNdToolbarState();
+    updateNdCount();
   });
 
   // Link: aplica no trecho selecionado (ou insere o próprio endereço)

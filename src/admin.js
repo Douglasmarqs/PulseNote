@@ -1373,7 +1373,19 @@ async function showSection(section) {
 }
 
 // ── Eventos ──────────────────────────────────────────────────────────
+// Painel estático, sem zoom de pinça (o Safari do iPhone ignora
+// user-scalable=no do viewport). Toque duplo é resolvido no CSS.
+function lockPageZoom() {
+  if (typeof document === "undefined" || typeof document.addEventListener !== "function") return;
+  const stop = (event) => event.preventDefault();
+  ["gesturestart", "gesturechange", "gestureend"].forEach((type) => document.addEventListener(type, stop, { passive: false }));
+  document.addEventListener("touchmove", (event) => {
+    if (event.touches?.length > 1) event.preventDefault();
+  }, { passive: false });
+}
+
 function bindNavigation() {
+  lockPageZoom();
   $("#adMobileTabs").innerHTML = Object.entries(SECTION_LABELS).map(([key, label]) => `<button type="button" data-section="${key}"${key === (state.currentSection || "overview") ? ' class="is-active"' : ""}>${label}</button>`).join("");
   $("#adMobileTabs").setAttribute("role", "navigation");
   placeHeading();
