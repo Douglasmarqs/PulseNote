@@ -2667,7 +2667,7 @@ html, body { overflow-x: clip; }
 .bd-dots button:focus-visible { outline: 2px solid var(--bd-primary); outline-offset: 3px; }
 .bd-dots { margin-top: 2px; }
 @media (max-width: 760px) {
-  .bd-kpis, #financesView .bf-kpis { scroll-behavior: smooth; overscroll-behavior-x: contain; }
+  .bd-kpis, #financesView .bf-kpis { overscroll-behavior-x: contain; }
 }
 
 /* Data compacta do formulário de finanças (nunca quebra linha). */
@@ -3508,3 +3508,137 @@ button.bn-nd-chip:hover { border-color: var(--c); }
 @keyframes pgTick { 0%, 30% { stroke-dashoffset: 10; } 46%, 88% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: 10; } }
 @keyframes pgBarGrow { 0% { transform: scaleY(.35); } 22%, 86% { transform: scaleY(1); } 100% { transform: scaleY(.35); } }
 @keyframes pgCoin { 0%, 30% { transform: translateY(0) rotateY(0); } 40% { transform: translateY(-3px) rotateY(180deg); } 50% { transform: translateY(0) rotateY(360deg); } 56% { transform: translateY(-1px); } 62%, 100% { transform: translateY(0); } }
+
+/* ==========================================================================
+   v28 — Nota aberta: botões revisados
+   ========================================================================== */
+/* No toque, :hover "gruda" depois do toque (o U parecia ligado). Realce de
+   passagem só em quem tem mouse; o estado real vem de aria-pressed. */
+.bn-tool-row > button:hover,
+.bn-detail-head .bd-icon-btn:hover,
+button.bn-nd-chip:hover { background: transparent; color: inherit; border-color: inherit; }
+.bn-tool-row > button:hover { color: var(--bd-text-2); }
+.bn-detail-head .bd-icon-btn:hover { border-color: var(--bd-line-strong); background: color-mix(in srgb, var(--bd-card-2) 75%, transparent); }
+button.bn-nd-chip:hover { border-color: color-mix(in srgb, var(--c) 30%, var(--bd-line)); background: color-mix(in srgb, var(--c) 10%, transparent); }
+@media (hover: hover) and (pointer: fine) {
+  .bn-tool-row > button:hover { background: var(--bd-card); color: var(--bd-text); }
+  .bn-detail-head .bd-icon-btn:hover { border-color: var(--bd-primary); }
+  button.bn-nd-chip:hover { border-color: var(--c); }
+}
+.bn-tool-row > button[aria-pressed="true"], .bn-tool-row > button[aria-expanded="true"] { background: var(--bd-primary-soft); color: var(--bd-primary-ink); }
+.bn-tool-row > button.bn-tool-mark[aria-pressed="true"] { background: color-mix(in srgb, #fde047 26%, transparent); }
+.bn-tool-row > button.bn-tool-mark[aria-pressed="true"] .i { color: #f5c400; }
+
+/* Cabeçalho: status e contagem de palavras juntos, menu à direita */
+.bn-detail-head .bn-nd-status { margin-right: 0; }
+.bn-detail-head .bn-nd-count { margin-right: auto; padding-left: 2px; font-size: 12px; }
+
+/* Rodapé: duas ações do mesmo tamanho, sem quebrar "Virar tarefa" */
+.bn-detail .bn-detail-foot { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.bn-detail .bn-detail-foot .bd-btn { min-width: 0; padding: 0 12px; white-space: nowrap; gap: 8px; }
+.bn-detail .bn-detail-foot .bd-btn span { overflow: hidden; text-overflow: ellipsis; }
+@media (min-width: 761px) { .bn-detail .bn-detail-foot { grid-template-columns: minmax(0, 1fr) auto auto; } .bn-detail .bn-detail-foot::before { content: ""; } }
+
+/* Texto: sem espaçamento extra (o navegador copiava esse valor para dentro
+   da nota ao formatar). Marca-texto sempre legível nos dois temas. */
+.bn-detail .bn-detail-body { letter-spacing: normal; }
+.bn-detail .bn-detail-body [style*="background"], .bn-rich-editor [style*="background"] { color: #1f2937; border-radius: 4px; padding: 0 2px; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+
+/* Checklist: remover item */
+.bn-check-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px; }
+.bn-check-del { display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 10px; background: transparent; color: var(--bd-text-3); cursor: pointer; opacity: .7; transition: opacity .15s, color .15s, background .15s; }
+.bn-check-del .i { width: 15px; height: 15px; }
+.bn-check-del:active { transform: scale(.9); }
+.bn-check-del:focus-visible { outline: 0; box-shadow: var(--bd-focus); opacity: 1; }
+@media (hover: hover) and (pointer: fine) {
+  .bn-check-del { opacity: 0; }
+  .bn-check-row:hover .bn-check-del, .bn-check-del:focus-visible { opacity: 1; }
+  .bn-check-del:hover { color: var(--bd-red, #ff5d6c); background: color-mix(in srgb, var(--bd-red, #ff5d6c) 12%, transparent); }
+}
+
+/* ==========================================================================
+   v28 — Troca de telas fluida
+   ========================================================================== */
+/* A entrada agora é feita bloco a bloco pelo app (direção da aba, sem mexer
+   nos botões flutuantes). A animação antiga da tela inteira sai para não
+   somar dois esmaecimentos. */
+.bd-main .view.active-view { animation: none; }
+@media (max-width: 760px) {
+  .bd-tabbar .bd-tab, .bd-tabbar .bd-tab-fab { position: relative; z-index: 1; }
+  .bd-tab-ink { position: absolute; left: 0; top: 0; z-index: 0; height: 30px; border-radius: 999px; background: var(--bd-primary-soft); opacity: 0; pointer-events: none;
+    transition: transform .44s cubic-bezier(.3, 1.25, .5, 1), opacity .2s ease; will-change: transform; }
+  .bd-tab-ink.is-instant { transition: opacity .2s ease; }
+  .bd-tab { transition: color .2s ease; }
+}
+@media (min-width: 761px) { .bd-tab-ink { display: none; } }
+@media (prefers-reduced-motion: reduce) { .bd-tab-ink { transition: none; } }
+
+/* ==========================================================================
+   v28 — Conversa com o Pulsinho
+   Bolhas agrupadas, "digitando" com o batimento do mascote, campo único
+   com o botão de enviar dentro e a conversa que fecha arrastando para baixo.
+   ========================================================================== */
+.bd-chat-body { gap: 3px; scroll-behavior: auto; padding: 14px 14px 12px; }
+.bd-chat-body > .is-start, .bd-chat-body > .bd-typing, .bd-chat-body > .bd-chat-error { margin-top: 10px; }
+.bd-chat-body > :first-child { margin-top: 0; }
+.bd-chat-body > * { flex-shrink: 0; }
+.bd-chat.is-convo .bd-chat-body > :first-child { margin-top: auto; }
+.bd-msg { max-width: 84%; padding: 9px 14px 10px; border: 0; border-radius: 20px; font-size: 13.5px; line-height: 1.5; animation: none; }
+.bd-msg--ai { background: var(--bd-bubble-ai); border: 1px solid color-mix(in srgb, var(--bd-line) 70%, transparent); border-radius: 20px 20px 20px 6px; }
+.bd-msg--user { background: var(--bd-bubble-user); border-radius: 20px 20px 6px 20px; box-shadow: 0 8px 18px -14px rgba(77, 64, 249, .9); }
+.bd-msg--ai:not(.is-start) { border-top-left-radius: 6px; }
+.bd-msg--user:not(.is-start) { border-top-right-radius: 6px; }
+.bd-msg.is-new { animation: pnMsgIn .34s cubic-bezier(.2, .9, .3, 1.15) both; transform-origin: 0% 100%; }
+.bd-msg--user.is-new { transform-origin: 100% 100%; }
+@keyframes pnMsgIn { from { opacity: 0; transform: translateY(10px) scale(.94); } to { opacity: 1; transform: none; } }
+
+/* "Digitando": um pulso percorre a linha do batimento */
+.bd-typing.bd-typing--pulse { display: inline-grid; place-items: center; align-self: flex-start; gap: 0; width: 96px; height: 42px; margin-bottom: 4px; padding: 0 12px; border: 1px solid color-mix(in srgb, var(--bd-line) 70%, transparent); border-radius: 20px 20px 20px 6px; background: var(--bd-bubble-ai); animation: pnMsgIn .28s cubic-bezier(.2, .9, .3, 1.15) both; transform-origin: 0% 100%; }
+.bd-typing--pulse svg { width: 72px; height: 20px; overflow: visible; }
+.bd-typing--pulse path { fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.bd-typing--pulse .bd-typing-base { stroke: color-mix(in srgb, var(--bd-text-3) 45%, transparent); }
+.bd-typing--pulse .bd-typing-beat { stroke: var(--bd-primary-ink); stroke-width: 2.4; stroke-dasharray: 22 100; stroke-dashoffset: 122; filter: drop-shadow(0 0 3px color-mix(in srgb, var(--bd-primary) 70%, transparent)); animation: pnBeat 1.25s cubic-bezier(.45, .05, .55, .95) infinite; }
+@keyframes pnBeat { from { stroke-dashoffset: 122; } to { stroke-dashoffset: 0; } }
+.bd-chat.is-thinking #bdChatStatus { color: var(--bd-primary-ink); }
+
+/* Campo único: texto e enviar dentro da mesma pílula */
+.bd-chat-form { display: block; padding: 10px 12px 12px; background: color-mix(in srgb, var(--bd-card-2) 45%, transparent); }
+.bd-composer { display: flex; align-items: center; gap: 6px; min-height: 48px; padding: 4px 4px 4px 16px; border: 1px solid var(--bd-line-strong); border-radius: 999px; background: var(--bd-input); transition: border-color .18s ease, box-shadow .18s ease; }
+.bd-composer:focus-within { border-color: var(--bd-primary); box-shadow: 0 0 0 4px color-mix(in srgb, var(--bd-primary) 18%, transparent); }
+.bd-chat-form .bd-composer input { flex: 1; min-width: 0; height: 40px; padding: 0; border: 0 !important; border-radius: 0 !important; background: transparent !important; box-shadow: none !important; outline: 0; color: var(--bd-text); font-size: 14.5px; }
+.bd-chat-form .bd-composer input:focus { border: 0 !important; box-shadow: none !important; }
+.bd-composer .bd-send { flex: none; width: 40px; height: 40px; border-radius: 50%; background: color-mix(in srgb, var(--bd-text) 8%, transparent); color: var(--bd-text-3); opacity: 1; box-shadow: none;
+  transition: background .2s ease, color .2s ease, box-shadow .2s ease, transform .3s cubic-bezier(.3, 1.6, .5, 1); }
+.bd-composer .bd-send .i { width: 17px; height: 17px; transition: transform .3s cubic-bezier(.3, 1.6, .5, 1); }
+.bd-chat-form .bd-composer input:placeholder-shown + .bd-send { opacity: 1; }
+.bd-chat-form .bd-composer input:not(:placeholder-shown) + .bd-send { background: linear-gradient(135deg, #6a5cff, #4d40f9); color: #fff; box-shadow: 0 8px 18px -8px rgba(77, 64, 249, .85); }
+.bd-chat-form .bd-composer input:not(:placeholder-shown) + .bd-send .i { transform: translateX(1px) rotate(-8deg); }
+.bd-composer .bd-send:active { transform: scale(.88); }
+.bd-chat.is-thinking .bd-composer .bd-send { pointer-events: none; }
+
+/* Sugestões: rolam de lado, com as pontas esmaecidas */
+.bd-chat-suggest { padding: 2px 12px 10px; -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 12px, #000 calc(100% - 28px), transparent 100%); mask-image: linear-gradient(90deg, transparent 0, #000 12px, #000 calc(100% - 28px), transparent 100%); }
+.bd-chat-suggest button { height: 36px; border-radius: 999px; font-size: 13px; }
+.bd-chat-suggest button:hover { border-color: var(--bd-line-strong); }
+@media (hover: hover) and (pointer: fine) { .bd-chat-suggest button:hover { border-color: var(--bd-primary); } }
+
+/* Ir para o fim: pílula centralizada, acima do campo */
+.bd-chat-jump { left: 50%; right: auto; bottom: 10px; width: 36px; height: 36px; transform: translateX(-50%); background: color-mix(in srgb, var(--bd-card) 92%, transparent); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+
+/* Alça de arrastar (só no modo conversa) */
+.bd-chat-grip { display: none; }
+@media (max-width: 760px) {
+  .bd-chat-form .bd-composer input { font-size: 16px; }
+  .bd-msg { font-size: 15px; max-width: 86%; }
+  .bd-chat.is-convo { transform: translate3d(0, var(--convo-drag, 0px), 0);
+    transition: height .2s cubic-bezier(.2, .9, .3, 1), top .2s cubic-bezier(.2, .9, .3, 1), transform .34s cubic-bezier(.2, .9, .3, 1); }
+  .bd-chat.is-convo.is-dragging { transition: none; }
+  .bd-chat.is-convo .bd-chat-head { padding-top: 18px; touch-action: none; }
+  .bd-chat.is-convo .bd-chat-grip { display: block; position: absolute; top: 7px; left: 50%; width: 38px; height: 4px; border-radius: 2px; background: var(--bd-line-strong); transform: translateX(-50%); }
+  .bd-chat.is-convo .bd-chat-form { padding: 8px 10px 10px; border-radius: 0 0 22px 22px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bd-msg.is-new, .bd-typing.bd-typing--pulse { animation: none; }
+  .bd-typing--pulse .bd-typing-beat { animation: none; stroke-dasharray: none; stroke-dashoffset: 0; }
+  .bd-composer .bd-send, .bd-composer .bd-send .i { transition: none; }
+}

@@ -2764,21 +2764,36 @@ function renderPulsinhoConversation({ loading = false, error = "" } = {}) {
   const intro = pulsinhoIntroState === "pending"
     ? ""
     : pulsinhoIntroState === "typing"
-      ? '<div class="bd-typing bd-typing--intro" aria-label="Pulsinho está digitando"><i></i><i></i><i></i></div>'
+      ? pulsinhoTypingHtml("Pulsinho está digitando", "bd-typing--intro")
       : pulsinhoIntroState === "reveal"
         ? `<div class="bd-msg bd-msg--ai bd-msg--intro is-revealing">${introText.split(" ").map((word, index) => `<span style="--w:${index}">${escapeHtml(word)} </span>`).join("")}</div>`
         : `<div class="bd-msg bd-msg--ai bd-msg--intro">${escapeHtml(introText)}</div>`;
-  const messages = pulsinhoConversation.map((message) => {
+  // Mensagens seguidas do mesmo lado formam um grupo (pouco espaço entre
+  // elas, "bico" só na última). Só as mensagens novas entram animadas —
+  // antes todas as bolhas "pulavam" de novo a cada resposta.
+  const sideOf = (message) => (message?.role === "user" ? "user" : "ai");
+  const introShown = pulsinhoIntroState === "reveal" || pulsinhoIntroState === "done";
+  const freshFrom = pulsinhoRenderedCount;
+  const messages = pulsinhoConversation.map((message, index) => {
     const followUps = message === pulsinhoConversation.at(-1) && Array.isArray(message.followUps) ? message.followUps : [];
     const followUpHtml = followUps.length
       ? `<div class="bd-followups">${followUps.map((item) => `<button type="button" data-pulsinho-followup="${escapeHtml(item)}">${escapeHtml(item)}</button>`).join("")}</div>`
       : "";
-    const side = message.role === "user" ? "user" : "ai";
+    const side = sideOf(message);
+    const prev = index ? pulsinhoConversation[index - 1] : introShown ? { role: "assistant" } : null;
+    const next = pulsinhoConversation[index + 1] || (loading ? { role: "assistant" } : null);
+    const classes = [
+      `bd-msg bd-msg--${side}`,
+      !prev || sideOf(prev) !== side ? "is-start" : "",
+      !next || sideOf(next) !== side ? "is-end" : "",
+      index >= freshFrom ? "is-new" : "",
+    ].filter(Boolean).join(" ");
     const actionsHtml = Array.isArray(message.actions) && message.actions.length
       ? `<div class="bd-msg-actions">${message.actions.map((item) => `<div class="bd-msg-action${item.undone ? " is-undone" : ""}"><span>${escapeHtml(item.summary)}</span>${item.undone ? "<em>Desfeito</em>" : item.undoKey ? `<button type="button" data-pulsinho-undo="${escapeHtml(item.undoKey)}">Desfazer</button>` : ""}</div>`).join("")}</div>`
       : "";
-    return `<div class="bd-msg bd-msg--${side}">${escapeHtml(message.content)}${actionsHtml}${followUpHtml}</div>`;
+    return `<div class="${classes}">${escapeHtml(message.content)}${actionsHtml}${followUpHtml}</div>`;
   }).join("");
+  pulsinhoRenderedCount = pulsinhoConversation.length;
   const multi = pendingPulsinhoActions.length
     ? `<section class="bd-confirm is-sheet" aria-label="Confirmação necessária">
         <div class="bd-confirm-head">
@@ -2807,16 +2822,26 @@ function renderPulsinhoConversation({ loading = false, error = "" } = {}) {
         </div>
       </section>`
     : "");
-  const loadingMessage = loading ? '<div class="bd-typing" aria-label="Pulsinho está pensando"><i></i><i></i><i></i></div>' : "";
+  const loadingMessage = loading ? pulsinhoTypingHtml("Pulsinho está pensando") : "";
   const errorMessage = error ? `<div class="bd-chat-error">${escapeHtml(error)}</div>` : "";
   root.innerHTML = `${intro}${messages}${loadingMessage}${errorMessage}${action}`;
   document.querySelector("#bdChat")?.classList.toggle("is-thinking", loading);
+  const status = document.querySelector("#bdChatStatus");
+  if (status) status.textContent = loading ? "Pensando…" : "Online agora";
   root.scrollTop = root.scrollHeight;
   updatePulsinhoJump();
   updatePulsinhoSuggestions();
 }
 
 let pulsinhoIntroState = "pending";
+let pulsinhoRenderedCount = Infinity; // primeira renderização: nada entra animado
+
+// "Digitando…" do Pulsinho: o mesmo traço de batimento do mascote passa
+// pela bolha, em vez dos três pontinhos genéricos.
+function pulsinhoTypingHtml(label, extraClass = "") {
+  return `<div class="bd-typing bd-typing--pulse ${extraClass}" role="status" aria-label="${escapeHtml(label)}"><svg viewBox="0 0 72 20" aria-hidden="true"><path class="bd-typing-base" d="M0 10 H22 L27 3 L33 17 L38 10 H72"/><path class="bd-typing-beat" pathLength="100" d="M0 10 H22 L27 3 L33 17 L38 10 H72"/></svg></div>`;
+}
+
 function playPulsinhoIntro() {
   if (pulsinhoIntroState !== "pending") return;
   const chat = document.querySelector("#bdChat");
@@ -2977,22 +3002,76 @@ function closePulsinhoConvo() {
   const chat = document.querySelector("#bdChat");
   if (!chat || !isPulsinhoConvo()) return;
   document.querySelector("#pulseCommandInput")?.blur();
-  chat.classList.remove("is-convo", "has-keyboard");
+  // Volta "pousando" no lugar do cartão (o inverso da abertura).
+  const from = chat.getBoundingClientRect();
+  const drag = parseFloat(chat.style.getPropertyValue("--convo-drag")) || 0;
+  chat.classList.remove("is-convo", "has-keyboard", "is-dragging");
   chat.style.removeProperty("--convo-top");
   chat.style.removeProperty("--convo-h");
+  chat.style.removeProperty("--convo-drag");
   document.body.classList.remove("bd-chat-convo");
   document.documentElement.classList.remove("pn-scroll-locked");
   document.querySelector("#bdChatClose")?.setAttribute("hidden", "");
   const backdrop = document.querySelector("#bdChatBackdrop");
-  if (backdrop) backdrop.hidden = true;
+  const reduce = prefersReducedMotion();
+  if (backdrop && !backdrop.hidden) {
+    if (reduce || typeof backdrop.animate !== "function") backdrop.hidden = true;
+    else backdrop.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 220, easing: "ease-out" }).finished.then(() => { backdrop.hidden = true; }, () => { backdrop.hidden = true; });
+  }
   document.querySelector("#bdChatPlaceholder")?.remove();
   updatePulsinhoSuggestions();
   repairViewportAfterOverlay();
+  const to = chat.getBoundingClientRect();
+  if (!reduce && to.height && typeof chat.animate === "function") {
+    chat.animate([
+      { transform: `translate(${from.left - to.left}px, ${from.top - to.top}px)`, opacity: drag > 0 ? 0.85 : 1 },
+      { transform: "none", opacity: 1 },
+    ], { duration: 280, easing: "cubic-bezier(.2,.9,.3,1)" });
+  }
   requestAnimationFrame(() => {
     const rect = chat.getBoundingClientRect();
     if (rect.bottom > window.innerHeight || rect.top < 0) chat.scrollIntoView({ block: "center" });
     scrollPulsinhoToEnd();
   });
+}
+
+// Arrastar o cabeçalho para baixo fecha a conversa, como uma folha.
+function bindPulsinhoDragToClose() {
+  const chat = document.querySelector("#bdChat");
+  const head = chat?.querySelector(".bd-chat-head");
+  if (!head || head.dataset.dragBound === "1") return;
+  head.dataset.dragBound = "1";
+  let startY = 0;
+  let startT = 0;
+  let dy = 0;
+  let active = false;
+  head.addEventListener("touchstart", (event) => {
+    if (!isPulsinhoConvo() || event.touches.length !== 1 || event.target.closest("button, a, input")) return;
+    active = true;
+    startY = event.touches[0].clientY;
+    startT = Date.now();
+    dy = 0;
+  }, { passive: true });
+  head.addEventListener("touchmove", (event) => {
+    if (!active) return;
+    dy = Math.max(0, event.touches[0].clientY - startY);
+    if (dy > 4) {
+      event.preventDefault();
+      chat.classList.add("is-dragging");
+      // Resistência: acompanha o dedo, cada vez mais "pesado".
+      chat.style.setProperty("--convo-drag", `${Math.round(dy < 120 ? dy : 120 + (dy - 120) * 0.35)}px`);
+    }
+  }, { passive: false });
+  const end = () => {
+    if (!active) return;
+    active = false;
+    const fast = dy > 40 && dy / Math.max(1, Date.now() - startT) > 0.6;
+    if (dy > 110 || fast) { closePulsinhoConvo(); return; }
+    chat.classList.remove("is-dragging");
+    chat.style.removeProperty("--convo-drag");
+  };
+  head.addEventListener("touchend", end);
+  head.addEventListener("touchcancel", end);
 }
 
 // Mantém os nomes usados em outros pontos do app.
@@ -3020,6 +3099,7 @@ function bindPulsinhoKeyboardFit() {
   input.addEventListener("input", updatePulsinhoSuggestions);
   input.addEventListener("blur", () => setTimeout(layoutPulsinhoConvo, 120));
   document.querySelector("#bdChatClose")?.addEventListener("click", closePulsinhoConvo);
+  bindPulsinhoDragToClose();
   document.querySelector("#bdChatSuggest")?.addEventListener("click", (event) => {
     const chip = event.target.closest("[data-chat-suggest]");
     if (!chip) return;
@@ -4039,12 +4119,15 @@ function setView(view, { fromHistory = false } = {}) {
   target.classList.add("active-view");
   applyViewHeading(view);
   placePulsinhoPanel(view);
-  if (view === "dashboard") requestAnimationFrame(renderBoardsEvolution);
+  // Desenha o gráfico da Home já no mesmo quadro em que ela aparece. Antes
+  // ia para o próximo quadro: o primeiro mostrava o gráfico antigo e, logo
+  // depois, ele se redesenhava — a "leve recentralizada" ao voltar para a Home.
+  if (view === "dashboard") renderBoardsEvolution();
   if (view === "notes") renderNotes();
-  // Trocas de area precisam começar no topo imediatamente. O scroll suave
-  // deixava o cabecalho parcialmente cortado durante a transicao, sobretudo
-  // no mobile e em navegadores que preservam a posicao anterior.
-  window.scrollTo({ top: 0, behavior: "auto" });
+  // Trocas de area precisam começar no topo imediatamente. "instant" ignora
+  // qualquer scroll-behavior: smooth herdado do CSS (com "auto" o navegador
+  // podia animar a subida, o que parecia a tela se reajustando sozinha).
+  try { window.scrollTo({ top: 0, left: 0, behavior: "instant" }); } catch { window.scrollTo(0, 0); }
   // A primeira renderização dos cards de Receitas/Despesas/Saldo geralmente
   // acontece com a aba Finanças ainda escondida (clientWidth 0), então o
   // autofit em fitCurrencyValues() desiste sem ajustar o tamanho da fonte
@@ -4055,11 +4138,80 @@ function setView(view, { fromHistory = false } = {}) {
   if (view === "finances") fitCurrencyValues("finReceitas", "finDespesas", "finSaldo");
   if (view === "dashboard") fitCurrencyValues("summaryFinSaldo", "dashFinReceitas", "dashFinDespesas", "dashFinSaldo");
   if (view === "autopilot" || view === "dashboard") autopilotUi.show();
+  if (previousView !== view) {
+    syncTabbarInk(view, { animate: true });
+    animateViewEntrance(target, previousView, view);
+  }
 
   // A navegação entre áreas ganha uma entrada real no histórico: voltar no
   // navegador/celular retorna à tela anterior em vez de sair do app.
   if (!fromHistory && previousView !== view) {
     history.pushState({ ...(history.state || {}), pnView: view, noteDetail: false }, "");
+  }
+}
+
+// ── Troca de telas fluida ───────────────────────────────────────
+// Ordem das abas do celular: a tela nova entra pelo lado para onde a
+// pessoa "andou" (direita ao avançar, esquerda ao voltar). Telas fora da
+// barra (Perfil, Configurações, Autopiloto) sobem de leve.
+const VIEW_ORDER = { dashboard: 0, planner: 1, notes: 2, finances: 3 };
+const prefersReducedMotion = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+// Elementos fixos (botões flutuantes, folhas, conversa) não podem ficar
+// dentro de algo com transform — senão "pulam" durante a animação.
+const VIEW_FIXED_SELECTOR = ".bp-fab, .bf-fab, .bn-detail-wrap, .bn-form-wrap, .bn-sheet-backdrop, .bd-chat-backdrop, .modal-backdrop, .bf-pop, .ap-confirm, .st-drawer, .bd-chat.is-convo";
+
+function animateViewEntrance(target, fromView, toView) {
+  if (!target || typeof target.animate !== "function" || prefersReducedMotion()) return;
+  const from = VIEW_ORDER[fromView];
+  const to = VIEW_ORDER[toView];
+  const lateral = from !== undefined && to !== undefined && from !== to;
+  const dx = lateral ? (to > from ? 14 : -14) : 0;
+  const dy = lateral ? 0 : 10;
+  const wrapper = target.children.length === 1 ? target.firstElementChild : target;
+  const blocks = [...wrapper.children].filter((el) => el.getClientRects().length && getComputedStyle(el).position !== "fixed");
+  target.classList.add("pn-entering");
+  const easing = "cubic-bezier(.2, .8, .2, 1)";
+  let last = null;
+  blocks.slice(0, 10).forEach((el, index) => {
+    const holdsFixed = Boolean(el.querySelector(VIEW_FIXED_SELECTOR)) || el.matches(VIEW_FIXED_SELECTOR);
+    const frames = holdsFixed
+      ? [{ opacity: 0 }, { opacity: 1 }]
+      : [{ opacity: 0, transform: `translate3d(${dx}px, ${dy}px, 0)` }, { opacity: 1, transform: "translate3d(0, 0, 0)" }];
+    last = el.animate(frames, { duration: lateral ? 300 : 260, delay: Math.min(index, 4) * 24, easing, fill: "backwards" });
+  });
+  const done = () => target.classList.remove("pn-entering");
+  if (last) last.finished.then(done, done); else done();
+  // Título e subtítulo trocam junto, sem "piscar".
+  [elements.viewTitle, document.querySelector("#viewSubtitle")].forEach((el, index) => {
+    el?.animate?.([{ opacity: 0, transform: `translate3d(${dx / 3}px, ${lateral ? 0 : 4}px, 0)` }, { opacity: 1, transform: "none" }], { duration: 240, delay: index * 30, easing, fill: "backwards" });
+  });
+}
+
+// Barra inferior: uma pílula desliza até a aba ativa.
+function syncTabbarInk(view = activeView, { animate = false } = {}) {
+  const bar = document.querySelector(".bd-tabbar");
+  if (!bar || !bar.getClientRects().length) return;
+  let ink = bar.querySelector(".bd-tab-ink");
+  if (!ink) {
+    ink = document.createElement("span");
+    ink.className = "bd-tab-ink";
+    ink.setAttribute("aria-hidden", "true");
+    bar.prepend(ink);
+  }
+  const tab = bar.querySelector(`.bd-tab[data-view="${view}"]`);
+  if (!tab) { ink.style.opacity = "0"; return; }
+  const icon = tab.querySelector(".bd-tab-icon") || tab;
+  const barBox = bar.getBoundingClientRect();
+  const box = icon.getBoundingClientRect();
+  const width = 52;
+  const x = box.left - barBox.left + box.width / 2 - width / 2;
+  const y = box.top - barBox.top + box.height / 2 - 15;
+  ink.classList.toggle("is-instant", !animate || prefersReducedMotion() || ink.style.opacity !== "1");
+  ink.style.transform = `translate3d(${Math.round(x)}px, ${Math.round(y)}px, 0)`;
+  ink.style.width = `${width}px`;
+  ink.style.opacity = "1";
+  if (animate && !prefersReducedMotion()) {
+    tab.querySelector(".bd-tab-icon")?.animate?.([{ transform: "translateY(0) scale(1)" }, { transform: "translateY(-2px) scale(1.12)" }, { transform: "translateY(0) scale(1)" }], { duration: 360, easing: "cubic-bezier(.3, 1.4, .5, 1)" });
   }
 }
 
@@ -4306,6 +4458,8 @@ function resetNoteForm() {
   if (moreDetails) moreDetails.open = false;
   document.querySelector("#noteEditingBanner").hidden = true;
   document.querySelector("#noteSaveBtnLabel").textContent = "Salvar nota";
+  const formHeading = document.querySelector("#noteFormHeading");
+  if (formHeading) formHeading.textContent = "Nova nota";
   enableAutogrowTextareas();
 }
 
@@ -4369,7 +4523,7 @@ function updateNoteEditorTools() {
     let on = false;
     try {
       if (states[cmd]) on = document.queryCommandState(states[cmd]);
-      if (cmd === "highlight") on = /253,\s*230,\s*138|254,\s*240,\s*138|fde68a/i.test(String(document.queryCommandValue("backColor")));
+      if (cmd === "highlight") on = noteHighlightActive();
     } catch { on = false; }
     if (button.hasAttribute("aria-pressed")) button.setAttribute("aria-pressed", String(on));
   });
@@ -4403,14 +4557,14 @@ function bindNoteEditor() {
       else if (cmd === "ol") document.execCommand("insertOrderedList");
       else if (cmd === "highlight") {
         document.execCommand("styleWithCSS", false, true);
-        const on = /253,\s*230,\s*138/.test(String(document.queryCommandValue("backColor")));
-        document.execCommand("backColor", false, on ? "transparent" : "#fde68a");
+        document.execCommand("backColor", false, noteHighlightActive() ? "transparent" : "#fde68a");
       } else if (cmd === "clear") {
         document.execCommand("removeFormat");
         document.execCommand("styleWithCSS", false, true);
         document.execCommand("backColor", false, "transparent");
       }
     } catch { /* navegador sem execCommand: o texto continua editável */ }
+    scrubNoteEditorStyles(editor);
     syncNoteEditorSource();
     updateNoteEditorTools();
   });
@@ -4642,6 +4796,10 @@ function bdSetupPager(scroller, dots, itemSelector) {
     return best;
   };
   const paint = () => {
+    // Tela escondida (outra aba aberta): não mexe nas bolinhas. Antes elas
+    // sumiam aqui e voltavam ao reabrir a Home, empurrando tudo abaixo dos
+    // cartões alguns pixels para baixo.
+    if (!scroller.clientWidth) return;
     const items = visibleItems();
     const overflow = scroller.scrollWidth > scroller.clientWidth + 4 && items.length > 1;
     dots.style.display = overflow ? "" : "none";
@@ -5656,6 +5814,9 @@ function lockPageZoom() {
 
 function bindBoardsShell() {
   lockPageZoom();
+  requestAnimationFrame(() => syncTabbarInk());
+  document.fonts?.ready?.then(() => syncTabbarInk());
+  window.addEventListener("resize", debounce(() => syncTabbarInk(), 120), { passive: true });
   bindBoardsToday();
   bindBoardsCategories();
   bindPullToRefresh();
@@ -7451,8 +7612,9 @@ function renderNoteCard(note, searchQuery) {
   const items = note.checklist || [];
   const done = items.filter(noteChecklistItemDone).length;
   const titleHtml = highlightMatch(escapeHtml(note.title || "Sem título"), searchQuery);
-  const preview = note.descriptionHtml
-    ? sanitizeNoteHtml(note.descriptionHtml)
+  const cleanHtml = note.descriptionHtml ? sanitizeNoteHtml(note.descriptionHtml) : "";
+  const preview = cleanHtml && (noteHtmlToPlainText(cleanHtml) || !String(note.description || "").trim())
+    ? cleanHtml
     : highlightMatch(escapeHtml(note.description || ""), searchQuery).replace(/\n/g, "<br>");
   const selected = note.id === ndCurrentNoteId && notesPanelMode();
   const complete = items.length > 0 && done === items.length;
@@ -7555,6 +7717,8 @@ function editNote(id) {
   document.querySelector("#noteEditingBanner").hidden = false;
   document.querySelector("#noteEditingTitle").textContent = note.title;
   document.querySelector("#noteSaveBtnLabel").textContent = "Salvar alterações";
+  const formHeading = document.querySelector("#noteFormHeading");
+  if (formHeading) formHeading.textContent = "Editar nota";
 
   enableAutogrowTextareas();
   setView("notes");
@@ -7598,6 +7762,27 @@ function deleteNote(id) {
   showToast("Anotacao excluida.");
 }
 
+function deleteNoteWithUndo(id) {
+  const index = state.notes.findIndex((note) => note.id === id);
+  if (index < 0) return;
+  const removed = state.notes[index];
+  state.notes = state.notes.filter((note) => note.id !== id);
+  saveState();
+  renderAll();
+  showToast("Nota excluída.", {
+    actionLabel: "Desfazer",
+    onAction: () => {
+      if (state.notes.some((note) => note.id === removed.id)) return;
+      const notes = [...state.notes];
+      notes.splice(Math.min(index, notes.length), 0, removed);
+      state.notes = notes;
+      saveState();
+      renderAll();
+      showToast("Nota restaurada.");
+    },
+  });
+}
+
 // ══════════════════════════════════════════════════════════════════
 // Nota em tela cheia (estilo iPhone Notes) — título + corpo com
 // formatação de verdade (negrito, destaque colorido), aberta ao
@@ -7636,7 +7821,7 @@ function sanitizeNoteHtml(html) {
       }
       if (node.tagName === "FONT" && node.getAttribute("color")) node.style.color = node.getAttribute("color");
       const keptStyles = node.style
-        ? allowedStyles.map((prop) => [prop, node.style[prop]]).filter(([, value]) => value)
+        ? allowedStyles.map((prop) => [prop, node.style[prop]]).filter(([prop, value]) => noteStyleValueKept(prop, value))
         : [];
       const href = node.tagName === "A" ? String(node.getAttribute("href") || "").trim() : "";
       [...node.attributes].forEach((attr) => node.removeAttribute(attr.name));
@@ -7652,10 +7837,67 @@ function sanitizeNoteHtml(html) {
         }
       }
       clean(node);
+      // <span>/<font> sem estilo nenhum não muda nada: some, fica o texto.
+      if ((node.tagName === "SPAN" || node.tagName === "FONT") && !node.attributes.length) node.replaceWith(...node.childNodes);
     });
   };
   clean(template.content);
   return template.innerHTML;
+}
+
+// Cor CSS -> {r,g,b,a}. Aceita só #rgb, #rrggbb e rgb()/rgba(); nomes
+// de cor e qualquer outra coisa voltam null (e são descartados).
+function noteCssRgb(value) {
+  const v = String(value || "").trim().toLowerCase();
+  let m = v.match(/^rgba?\(\s*(\d{1,3})[\s,]+(\d{1,3})[\s,]+(\d{1,3})(?:\s*[,/]\s*([\d.]+%?))?\s*\)$/);
+  if (m) {
+    const a = m[4] === undefined ? 1 : m[4].endsWith("%") ? parseFloat(m[4]) / 100 : parseFloat(m[4]);
+    return { r: +m[1], g: +m[2], b: +m[3], a };
+  }
+  m = v.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/);
+  if (!m) return null;
+  const hex = m[1].length === 3 ? m[1].replace(/./g, "$&$&") : m[1];
+  return { r: parseInt(hex.slice(0, 2), 16), g: parseInt(hex.slice(2, 4), 16), b: parseInt(hex.slice(4, 6), 16), a: 1 };
+}
+
+// Ao formatar (lista, negrito, limpar…), o navegador costuma "copiar"
+// a cor do tema para dentro do texto: branco no escuro, quase preto no
+// claro. Gravada na nota, essa cor deixava o texto invisível ao trocar de
+// tema — a nota parecia vazia. Só cores vivas (escolhidas pela pessoa:
+// paleta de texto e marca-texto) são guardadas; cinzas, branco, preto e
+// transparente saem e o texto volta a seguir o tema.
+function noteColorIsVivid(value) {
+  const c = noteCssRgb(value);
+  if (!c || c.a < 0.08) return false;
+  return Math.max(c.r, c.g, c.b) - Math.min(c.r, c.g, c.b) >= 48;
+}
+
+function noteStyleValueKept(prop, value) {
+  if (!value) return false;
+  if (prop === "color" || prop === "backgroundColor") return noteColorIsVivid(value);
+  if (prop === "textDecorationLine") return value !== "none";
+  return true;
+}
+
+// Mesma limpeza, mas direto no editor aberto (sem trocar os nós, para
+// não perder o cursor nem a seleção).
+const NOTE_EDITOR_STYLE_PROPS = { color: "color", "background-color": "backgroundColor", "font-weight": "fontWeight", "font-style": "fontStyle", "text-decoration-line": "textDecorationLine" };
+function scrubNoteEditorStyles(root) {
+  root?.querySelectorAll("[style]").forEach((el) => {
+    [...el.style].forEach((name) => {
+      const prop = NOTE_EDITOR_STYLE_PROPS[name];
+      if (!prop || !noteStyleValueKept(prop, el.style.getPropertyValue(name))) el.style.removeProperty(name);
+    });
+    if (!el.style.length) el.removeAttribute("style");
+  });
+}
+
+// Marca-texto: amarelo da nota aberta (#fde047) e do editor de nova nota (#fde68a).
+function noteHighlightActive() {
+  try {
+    const c = noteCssRgb(document.queryCommandValue("backColor"));
+    return Boolean(c && c.a > 0.08 && c.r > 240 && c.g > 200 && c.b < 160);
+  } catch { return false; }
 }
 
 // Corpo formatado -> texto puro (pra description/preview/busca), com
@@ -7849,9 +8091,37 @@ function updateNdToolbarState() {
   const map = { bold: "bold", italic: "italic", underline: "underline", strike: "strikeThrough", ul: "insertUnorderedList", ol: "insertOrderedList" };
   document.querySelectorAll("#noteDetailToolbar [data-nd-cmd][aria-pressed]").forEach((button) => {
     let on = false;
-    try { on = map[button.dataset.ndCmd] ? document.queryCommandState(map[button.dataset.ndCmd]) : false; } catch { on = false; }
+    try {
+      if (button.dataset.ndCmd === "highlight") on = noteHighlightActive();
+      else on = map[button.dataset.ndCmd] ? document.queryCommandState(map[button.dataset.ndCmd]) : false;
+    } catch { on = false; }
     button.setAttribute("aria-pressed", String(on));
   });
+}
+
+// Fora do texto, nenhum botão da barra fica "aceso".
+function resetNdToolbarState() {
+  document.querySelectorAll("#noteDetailToolbar [data-nd-cmd][aria-pressed]").forEach((button) => button.setAttribute("aria-pressed", "false"));
+}
+
+// Fecha a nota e só então segue para outra ação. No celular a nota tem uma
+// entrada própria no histórico: history.back() é assíncrono, e trocar de
+// tela antes do "popstate" chegar fazia o app voltar sozinho para Notas
+// (era o que acontecia com "Virar tarefa").
+let ndAfterClose = null;
+function closeNoteDetailThen(next) {
+  if (!ndCurrentNoteId) { next?.(); return; }
+  const waitsForHistory = !notesPanelMode() && Boolean(history.state?.noteDetail);
+  if (!waitsForHistory) {
+    closeNoteDetail({ updateHistory: false });
+    next?.();
+    return;
+  }
+  let done = false;
+  const run = () => { if (done) return; done = true; ndAfterClose = null; next?.(); };
+  ndAfterClose = run;
+  closeNoteDetail();
+  setTimeout(run, 450); // reserva, caso o navegador não dispare popstate
 }
 
 function openNoteDetail(id) {
@@ -7864,11 +8134,22 @@ function openNoteDetail(id) {
   document.querySelector("#ndMenu")?.setAttribute("hidden", "");
   document.querySelector("#ndMorePanel")?.setAttribute("hidden", "");
   document.querySelector("#ndLinkForm")?.setAttribute("hidden", "");
+  document.querySelector("#ndMenuBtn")?.setAttribute("aria-expanded", "false");
+  document.querySelectorAll('#noteDetailToolbar [data-nd-cmd="more"], #noteDetailToolbar [data-nd-cmd="link"]').forEach((button) => button.setAttribute("aria-expanded", "false"));
+  document.querySelectorAll("#noteDetailToolbar [data-nd-color]").forEach((button) => {
+    button.setAttribute("aria-pressed", "false");
+    button.classList.remove("is-selected");
+  });
+  resetNdToolbarState();
 
   document.querySelector("#ndTitle").value = note.title || "";
   const body = document.querySelector("#ndBody");
-  body.innerHTML = note.descriptionHtml
-    ? sanitizeNoteHtml(note.descriptionHtml)
+  // Se o HTML guardado não tem texto nenhum (ex.: só "<br>") mas a nota
+  // tem descrição — notas criadas pelo WhatsApp/IA ou salvas por versões
+  // antigas —, o corpo mostra a descrição em vez de abrir vazio.
+  const storedHtml = note.descriptionHtml ? sanitizeNoteHtml(note.descriptionHtml) : "";
+  body.innerHTML = storedHtml && (noteHtmlToPlainText(storedHtml) || !String(note.description || "").trim())
+    ? storedHtml
     : escapeHtml(note.description || "").replace(/\n/g, "<br>");
 
   renderNoteDetailChecklist(note);
@@ -7916,10 +8197,11 @@ function renderNoteDetailChecklist(note) {
   progressBar.style.width = `${items.length ? Math.round((completed / items.length) * 100) : 0}%`;
   list.innerHTML = items.map((item, index) => {
     const done = noteChecklistItemDone(item);
-    return `<button type="button" class="bn-check-item${done ? " is-done" : ""}" onclick="toggleNoteChecklistItem('${note.id}', ${index})" aria-pressed="${done}">
+    const text = escapeHtml(noteChecklistItemText(item));
+    return `<div class="bn-check-row"><button type="button" class="bn-check-item${done ? " is-done" : ""}" onclick="toggleNoteChecklistItem('${escapeHtml(note.id)}', ${index})" aria-pressed="${done}">
       <span class="bn-check-box">${done ? bdIcon("check") : ""}</span>
-      <span>${escapeHtml(noteChecklistItemText(item))}</span>
-    </button>`;
+      <span>${text}</span>
+    </button><button type="button" class="bn-check-del" data-nd-check-del="${index}" aria-label="Remover “${text}”">${bdIcon("x")}</button></div>`;
   }).join("");
 }
 
@@ -7977,6 +8259,7 @@ function saveNoteDetail() {
     return;
   }
   closeNoteDetail();
+  showToast("Nota salva.");
 }
 
 // Tela de Notas: atalhos do celular, busca própria, pastas e "+ Pasta".
@@ -8061,12 +8344,12 @@ function bindNoteDetail() {
     }
   });
 
+  // Excluir sem confirm() (falha no app instalado do iPhone): a nota sai
+  // na hora e o aviso oferece "Desfazer", que devolve ela no mesmo lugar.
   document.querySelector("#ndDeleteBtn").addEventListener("click", () => {
     if (!ndCurrentNoteId) return;
-    if (!confirm("Excluir essa anotação? Não dá pra desfazer.")) return;
     const id = ndCurrentNoteId;
-    closeNoteDetail();
-    deleteNote(id);
+    closeNoteDetailThen(() => deleteNoteWithUndo(id));
   });
 
   document.querySelector("#ndFavBtn").addEventListener("click", () => {
@@ -8077,20 +8360,59 @@ function bindNoteDetail() {
     document.querySelector("#ndFavBtn svg").setAttribute("fill", note?.favorite ? "currentColor" : "none");
     const favLabel = document.querySelector("#ndFavBtn span");
     if (favLabel) favLabel.textContent = note?.favorite ? "Remover dos favoritos" : "Favoritar";
+    showToast(note?.favorite ? "Nota adicionada aos favoritos." : "Nota removida dos favoritos.");
   });
 
   document.querySelector("#ndConvertTaskBtn").addEventListener("click", () => {
     if (!ndCurrentNoteId) return;
     const id = ndCurrentNoteId;
-    closeNoteDetail();
-    convertNoteToTask(id);
+    closeNoteDetailThen(() => convertNoteToTask(id));
   });
 
+  // "Categoria, pasta e tags" abre a edição já em "Mais detalhes", com o
+  // campo de pasta em foco — antes caía no topo do formulário inteiro.
   document.querySelector("#ndMoreFieldsBtn").addEventListener("click", () => {
     if (!ndCurrentNoteId) return;
     const id = ndCurrentNoteId;
-    closeNoteDetail();
-    editNote(id);
+    closeNoteDetailThen(() => {
+      editNote(id);
+      const details = document.querySelector(".note-more-details");
+      if (details) details.open = true;
+      setTimeout(() => {
+        const folder = document.querySelector("#noteFolder");
+        folder?.scrollIntoView({ block: "center" });
+        folder?.focus({ preventScroll: true });
+      }, 120);
+    });
+  });
+
+  // Remover item da checklist (com desfazer).
+  document.querySelector("#ndChecklistItems")?.addEventListener("click", (event) => {
+    const del = event.target.closest("[data-nd-check-del]");
+    if (!del) return;
+    const note = state.notes.find((n) => n.id === ndCurrentNoteId);
+    const index = Number(del.dataset.ndCheckDel);
+    if (!note || !note.checklist?.[index]) return;
+    const removed = note.checklist[index];
+    note.checklist = note.checklist.filter((_, i) => i !== index);
+    note.updatedAt = new Date().toISOString();
+    saveState();
+    renderNoteDetailChecklist(note);
+    renderNotes();
+    showToast("Item removido.", {
+      actionLabel: "Desfazer",
+      onAction: () => {
+        const current = state.notes.find((n) => n.id === note.id);
+        if (!current) return;
+        const list = [...(current.checklist || [])];
+        list.splice(Math.min(index, list.length), 0, removed);
+        current.checklist = list;
+        current.updatedAt = new Date().toISOString();
+        saveState();
+        if (ndCurrentNoteId === current.id) renderNoteDetailChecklist(current);
+        renderNotes();
+      },
+    });
   });
 
   // ── Formatação (negrito/itálico/destaque) ──────────────────────
@@ -8157,6 +8479,7 @@ function bindNoteDetail() {
         toolBtn.setAttribute("aria-expanded", String(!morePanel.hidden));
       } else if (panelCommand === "link") {
         linkForm.hidden = !linkForm.hidden;
+        toolBtn.setAttribute("aria-expanded", String(!linkForm.hidden));
         if (!linkForm.hidden) setTimeout(() => document.querySelector("#ndLinkInput")?.focus(), 30);
       } else {
         ndChecklistAdding = true;
@@ -8175,12 +8498,48 @@ function bindNoteDetail() {
       sel.removeAllRanges();
       sel.addRange(savedRange);
     }
+    const beforeHtml = body.innerHTML;
 
     // styleWithCSS garante que backColor produza mesmo um
     // background-color de CSS de verdade (sem isso, alguns navegadores
     // ficam inconsistentes sobre como aplicam a cor de destaque).
     document.execCommand("styleWithCSS", false, true);
-    if (swatch) {
+    if (toolBtn?.dataset.ndCmd === "clear") {
+      // Sem trecho marcado, limpa a nota inteira (com desfazer).
+      const whole = !sel?.rangeCount || sel.getRangeAt(0).collapsed;
+      if (whole) {
+        const all = document.createRange();
+        all.selectNodeContents(body);
+        sel.removeAllRanges();
+        sel.addRange(all);
+      }
+      document.execCommand("removeFormat");
+      document.execCommand("backColor", false, "transparent");
+      body.querySelectorAll("b, strong, i, em, u, s, strike, mark, font").forEach((el) => {
+        if (!whole && !sel.containsNode(el, false)) return;
+        el.replaceWith(...el.childNodes);
+      });
+      if (whole) {
+        body.querySelectorAll("[style]").forEach((el) => el.removeAttribute("style"));
+        sel.collapseToEnd();
+      }
+      toolbar.querySelectorAll("[data-nd-color]").forEach((button) => {
+        button.setAttribute("aria-pressed", "false");
+        button.classList.remove("is-selected");
+      });
+      if (whole && beforeHtml !== body.innerHTML) {
+        const noteId = ndCurrentNoteId;
+        showToast("Formatação removida da nota.", {
+          actionLabel: "Desfazer",
+          onAction: () => {
+            if (ndCurrentNoteId !== noteId) return;
+            body.innerHTML = sanitizeNoteHtml(beforeHtml);
+            flushNoteDetailSave();
+            updateNdCount();
+          },
+        });
+      }
+    } else if (swatch) {
       document.execCommand("foreColor", false, swatch.dataset.ndColor);
       toolbar.querySelectorAll("[data-nd-color]").forEach((button) => {
         const selected = button === swatch;
@@ -8200,20 +8559,19 @@ function bindNoteDetail() {
     } else if (toolBtn.dataset.ndCmd === "ol") {
       document.execCommand("insertOrderedList");
     } else if (toolBtn.dataset.ndCmd === "highlight") {
-      document.execCommand("backColor", false, "#fde047");
-    } else if (toolBtn.dataset.ndCmd === "clear") {
-      document.execCommand("backColor", false, "transparent");
-      document.execCommand("foreColor", false, getComputedStyle(body).color);
-      toolbar.querySelectorAll("[data-nd-color]").forEach((button) => {
-        button.setAttribute("aria-pressed", "false");
-        button.classList.remove("is-selected");
-      });
+      // Liga e desliga: tocar de novo num trecho marcado tira o marca-texto.
+      document.execCommand("backColor", false, noteHighlightActive() ? "transparent" : "#fde047");
     }
+    scrubNoteEditorStyles(body);
     saveNdSelection();
-    flushNoteDetailSave();
+    if (flushNoteDetailSave()) setNdStatus("saved");
     updateNdToolbarState();
     updateNdCount();
   });
+  // Ao sair do texto (toque fora, outro campo), a barra volta ao neutro.
+  body.addEventListener("blur", () => setTimeout(() => {
+    if (document.activeElement !== body) resetNdToolbarState();
+  }, 0));
 
   // Link: aplica no trecho selecionado (ou insere o próprio endereço)
   document.querySelector("#ndLinkForm")?.addEventListener("submit", (event) => {
@@ -8231,7 +8589,9 @@ function bindNoteDetail() {
     else document.execCommand("insertHTML", false, `<a href="${escapeHtml(url)}">${escapeHtml(url)}</a>&nbsp;`);
     document.querySelector("#ndLinkInput").value = "";
     event.target.hidden = true;
-    flushNoteDetailSave();
+    document.querySelector('#noteDetailToolbar [data-nd-cmd="link"]')?.setAttribute("aria-expanded", "false");
+    scrubNoteEditorStyles(body);
+    if (flushNoteDetailSave()) setNdStatus("saved");
   });
 
   // Menu "⋮" da nota
@@ -8279,6 +8639,7 @@ function bindNoteDetail() {
     }
     const view = event.state?.pnView;
     if (view && view !== activeView) setView(view, { fromHistory: true });
+    if (ndAfterClose) ndAfterClose();
   });
 }
 

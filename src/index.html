@@ -132,7 +132,7 @@
     <!-- Camada de experiência: uma linguagem única para todas as áreas. -->
     <link rel="stylesheet" href="/src/experience.css?v=3" />
     <!-- Sistema visual dos quadros (claro/escuro, desktop/mobile). Carrega por último. -->
-    <link rel="stylesheet" href="/src/boards.css?v=15" />
+    <link rel="stylesheet" href="/src/boards.css?v=16" />
   </head>
   <body class="bd">
     <!-- Tela de abertura já no HTML: aparece na primeira pintura, antes de
@@ -442,6 +442,7 @@
 
             <aside class="bd-card bd-chat" id="bdChat" aria-label="Pulsinho">
               <header class="bd-chat-head">
+                <span class="bd-chat-grip" aria-hidden="true"></span>
                 <span class="bd-chat-avatar" id="bdChatAvatar" aria-hidden="true">
                   <span class="bd-mascot bd-chat-mascot"><span class="bd-mascot__eyes"><i></i><i></i></span><svg class="bd-mascot__pulse" viewBox="0 0 120 26"><path d="M0,13 L28,13 L36,3 L44,23 L52,13 L64,13 L70,6 L76,20 L82,13 L120,13"/></svg></span>
                   <span class="bd-chat-wave">👋</span>
@@ -468,8 +469,10 @@
                 <button type="button" data-chat-suggest="Como estão meus gastos este mês?">📊 Meus gastos do mês</button>
               </div>
               <form id="pulseCommandForm" class="bd-chat-form">
-                <input id="pulseCommandInput" type="text" maxlength="1600" autocomplete="off" enterkeyhint="send" placeholder="Fale com o Pulsinho…" aria-label="Fale com o Pulsinho" />
-                <button type="submit" class="bd-send" aria-label="Enviar"><svg class="i"><use href="#i-send"/></svg></button>
+                <div class="bd-composer">
+                  <input id="pulseCommandInput" type="text" maxlength="1600" autocomplete="off" enterkeyhint="send" placeholder="Fale com o Pulsinho…" aria-label="Fale com o Pulsinho" />
+                  <button type="submit" class="bd-send" aria-label="Enviar"><svg class="i"><use href="#i-send"/></svg></button>
+                </div>
               </form>
             </aside>
           </div>
@@ -1023,7 +1026,7 @@
                 <form id="noteForm" class="bd-card bn-form">
                   <header class="bn-head">
                     <span class="bn-head-ico"><svg class="i"><use href="#i-note"/></svg></span>
-                    <h3>Nova nota</h3>
+                    <h3 id="noteFormHeading">Nova nota</h3>
                     <button id="resetNoteForm" type="button" class="bn-text-btn">Limpar</button>
                     <button type="button" class="bd-icon-btn bn-form-close" id="notesCloseForm" aria-label="Fechar"><svg class="i"><use href="#i-x"/></svg></button>
                   </header>
@@ -1141,6 +1144,7 @@
                   <div class="bn-detail-head">
                     <button type="button" class="bd-icon-btn bn-detail-back" id="closeNoteDetail" aria-label="Voltar"><svg class="i"><use href="#i-arrow-left"/></svg></button>
                     <span class="bn-nd-status" id="ndStatus" role="status" aria-live="polite"><i aria-hidden="true"></i><span>Salvo</span></span>
+                    <span class="bn-nd-count" id="ndCount" aria-live="off">0 palavras</span>
                     <div class="bn-menu-wrap">
                       <button type="button" class="bd-icon-btn" id="ndMenuBtn" aria-haspopup="true" aria-expanded="false" aria-label="Mais opções da nota"><svg class="i"><use href="#i-dots-v"/></svg></button>
                       <div class="bn-menu" id="ndMenu" hidden>
@@ -1167,12 +1171,12 @@
                       <button type="button" data-nd-cmd="underline" title="Sublinhado" aria-label="Sublinhado" aria-pressed="false"><u>U</u></button>
                       <button type="button" data-nd-cmd="strike" title="Riscado" aria-label="Riscado" aria-pressed="false"><svg class="i"><use href="#i-strike"/></svg></button>
                       <span class="bn-tool-sep"></span>
-                      <button type="button" data-nd-cmd="highlight" class="bn-tool-mark" title="Marca-texto" aria-label="Marca-texto"><svg class="i"><use href="#i-highlighter"/></svg></button>
+                      <button type="button" data-nd-cmd="highlight" class="bn-tool-mark" title="Marca-texto" aria-label="Marca-texto" aria-pressed="false"><svg class="i"><use href="#i-highlighter"/></svg></button>
                       <button type="button" data-nd-cmd="ul" title="Lista" aria-label="Lista com marcadores" aria-pressed="false"><svg class="i"><use href="#i-list"/></svg></button>
                       <button type="button" data-nd-cmd="ol" title="Lista numerada" aria-label="Lista numerada" aria-pressed="false"><svg class="i"><use href="#i-list-num"/></svg></button>
                       <button type="button" data-nd-cmd="checklist" title="Checklist" aria-label="Adicionar checklist"><svg class="i"><use href="#i-check-circle"/></svg></button>
                       <span class="bn-tool-sep"></span>
-                      <button type="button" data-nd-cmd="link" title="Link" aria-label="Inserir link"><svg class="i"><use href="#i-link"/></svg></button>
+                      <button type="button" data-nd-cmd="link" title="Link" aria-label="Inserir link" aria-expanded="false"><svg class="i"><use href="#i-link"/></svg></button>
                       <button type="button" data-nd-cmd="more" class="bn-tool-aa" title="Cor do texto" aria-label="Cor do texto e limpar formatação" aria-expanded="false"><span>Aa</span></button>
                     </div>
                     <div class="bn-tool-panel" id="ndMorePanel" hidden>
@@ -1205,7 +1209,6 @@
                   </div>
 
                   <div class="bn-detail-foot">
-                    <span class="bn-nd-count" id="ndCount" aria-live="off">0 palavras</span>
                     <button type="button" class="bd-btn" id="ndConvertTaskBtn"><svg class="i"><use href="#i-bolt"/></svg><span>Virar tarefa</span></button>
                     <button type="button" class="bd-btn bd-btn--primary" id="ndSaveBtn"><svg class="i"><use href="#i-check"/></svg><span>Salvar</span></button>
                   </div>
@@ -2151,7 +2154,7 @@
     <script src="/src/recurring-detector.js?v=1"></script>
     <script src="/src/card-installments.js?v=1"></script>
     <script src="/src/notifications.js?v=36" defer></script>
-    <script type="module" src="/src/app.js?v=52"></script>
+    <script type="module" src="/src/app.js?v=53"></script>
     <script type="module" src="/src/push-notifications.js?v=35"></script>
     <!-- Configuração inicial (primeiro acesso) — ver src/onboarding.js -->
   <div id="onboardingRoot" class="bdo" role="dialog" aria-modal="true" aria-labelledby="bdoTitle" hidden></div>
