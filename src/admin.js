@@ -521,7 +521,8 @@ function renderAccessChart(entries = []) {
   const total = visible.reduce((sum, entry) => sum + (Number(entry.users) || 0), 0);
   root.innerHTML = `<div class="ad-chart-summary"><strong>${total.toLocaleString("pt-BR")}</strong><span>contas pelo último acesso nos últimos 14 dias</span></div><div class="ad-bars">${visible.map((entry, index) => {
     const value = Number(entry.users) || 0;
-    const label = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short" }).format(new Date(`${entry.date}T12:00:00`));
+    // No celular a data vai curta (11/11) para caber embaixo da barra.
+    const label = new Intl.DateTimeFormat("pt-BR", isCompact() ? { day: "2-digit", month: "2-digit" } : { day: "2-digit", month: "short" }).format(new Date(`${entry.date}T12:00:00`));
     return `<div class="ad-bar-column" title="${escapeHtml(label)}: ${value}"><span class="ad-bar-value">${value || ""}</span><i style="--bar:${Math.max(value ? 10 : 2, Math.round((value / max) * 100))}%"></i>${index % 2 === 0 ? `<small>${escapeHtml(label)}</small>` : "<small aria-hidden=\"true\">&nbsp;</small>"}</div>`;
   }).join("")}</div><p class="ad-data-note">Cada conta aparece só no dia do acesso mais recente.</p>`;
 }

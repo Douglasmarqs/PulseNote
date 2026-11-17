@@ -577,3 +577,58 @@ html:has(.ac-modal:not([hidden])), html:has(.ad-user-drawer.is-open), html:has(.
   .ad-user-drawer .ad-drawer-close { position: sticky !important; top: 0; z-index: 6; margin: -16px -10px -24px auto; width: 40px !important; height: 40px !important; border-radius: 12px !important; background: var(--bd-card-2) !important; border-color: var(--bd-line-strong) !important; box-shadow: var(--bd-shadow-pop); }
   .ad-user-drawer { padding-left: 16px !important; padding-right: 16px !important; padding-top: calc(16px + env(safe-area-inset-top)) !important; }
 }
+
+/* ==========================================================================
+   v25 — "Engajamento e operação" e demais detalhes da visão geral (celular)
+   ========================================================================== */
+@media (max-width: 820px) {
+  .ad-engagement summary { padding: 14px 16px; }
+  .ad-engagement > :not(summary) { margin: 0 12px 12px !important; }
+  .ad-engagement .ad-insight-grid { display: grid; grid-template-columns: 1fr !important; gap: 12px; }
+  .ad-subcard { padding: 14px !important; border-radius: 14px; min-width: 0; overflow: hidden; }
+  .ad-subcard .ad-card-head { flex-wrap: wrap; }
+  .ad-subcard h3 { font-size: 16px; }
+  .ad-subcard .ad-card-head p { font-size: 12.5px; }
+  .ad-operation { padding: 14px !important; }
+  .ad-operation strong { font-size: 18px !important; }
+  .ad-operation small { font-size: 12px !important; }
+  /* Adoção do produto */
+  .ad-journey { gap: 14px !important; }
+  .ad-journey-step strong, .ad-journey-step b { font-size: 13.5px !important; }
+  .ad-journey-step small { font-size: 11.5px !important; }
+  .ad-journey-step i { height: 6px !important; }
+  /* Fluxo por área: divisória dentro do cartão, textos legíveis */
+  .ad-flow-divider { margin: 16px 0 12px !important; padding: 14px 0 0 !important; }
+  .ad-flow-divider strong { font-size: 14px !important; }
+  .ad-flow-divider small { font-size: 12px !important; }
+  .ad-flow-summary strong { font-size: 28px !important; }
+  .ad-flow-summary span { font-size: 12.5px !important; }
+  .ad-flow-areas { gap: 10px !important; }
+  .ad-flow-areas > div { grid-template-columns: minmax(84px, 108px) minmax(0, 1fr) 40px !important; gap: 10px !important; }
+  .ad-flow-areas span { font-size: 13px !important; }
+  .ad-flow-areas b { font-size: 13px !important; }
+  .ad-flow-areas i { height: 6px !important; }
+  .ad-flow-transitions { gap: 8px !important; }
+  .ad-flow-transitions > small { font-size: 12px !important; }
+  .ad-flow-transitions > span { padding: 7px 11px !important; font-size: 12.5px !important; }
+  /* Modo de manutenção: texto em cima, situação e botão embaixo */
+  .ad-engagement .ad-maintenance-card { display: grid !important; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "txt txt" "pill btn"; align-items: center; gap: 12px !important; padding: 14px !important; }
+  .ad-engagement .ad-maintenance-card > div { grid-area: txt; }
+  .ad-engagement .ad-maintenance-card strong { font-size: 15px; }
+  .ad-engagement .ad-maintenance-card small { font-size: 12.5px !important; line-height: 1.45; }
+  .ad-engagement .ad-maintenance-card > .ad-pill { grid-area: pill; justify-self: start; }
+  .ad-engagement .ad-maintenance-card > .ad-subtle-button { grid-area: btn; min-height: 40px; white-space: nowrap; }
+  /* Gráfico "Usuários que voltaram": rótulos sem cortar */
+  .ad-bars { gap: 4px !important; }
+  .ad-bar-column small { font-size: 9.5px !important; white-space: nowrap; }
+  /* Auditoria e prévias */
+  .ad-audit-row { font-size: 12.5px !important; }
+  .ad-audit-row time { font-size: 11.5px !important; }
+}
+@media (max-width: 820px) {
+  .ad-live-label, .ad-live-label span { font-size: 11.5px !important; }
+  .ad-chart-summary span, .ad-data-note { font-size: 12px !important; line-height: 1.45; }
+  .ad-bar-value { font-size: 10px !important; }
+  .ad-step-index { font-size: 11px !important; }
+  .ac-drawer-trial small, .ad-user-drawer small { font-size: 12px; }
+}

@@ -2862,6 +2862,67 @@ function watchPulsinhoIntro() {
   observer.observe(chat);
 }
 
+// ── Conversa em tela cheia (celular) ──────────────────────────
+// Ao tocar no campo do Pulsinho no celular, a conversa ocupa exatamente a
+// área visível acima do teclado (visualViewport), sem a barra inferior —
+// como num app de mensagens. O botão ⌄ volta para o Início.
+const chatIsMobile = () => window.matchMedia?.("(max-width: 760px)").matches;
+function updatePulsinhoViewport() {
+  const chat = document.querySelector("#bdChat");
+  if (!chat?.classList.contains("is-fullscreen")) return;
+  const vv = window.visualViewport;
+  const height = vv ? vv.height : window.innerHeight;
+  chat.style.setProperty("--chat-vh", `${Math.round(height)}px`);
+  chat.style.setProperty("--chat-top", `${Math.round(vv ? vv.offsetTop : 0)}px`);
+  chat.classList.toggle("is-keyboard", Boolean(vv) && window.innerHeight - vv.height > 120);
+  const body = document.querySelector("#pulseCommandResponse");
+  if (body && body.scrollHeight - body.scrollTop - body.clientHeight < 160) body.scrollTop = body.scrollHeight;
+}
+
+function openPulsinhoFullscreen() {
+  const chat = document.querySelector("#bdChat");
+  if (!chat || chat.classList.contains("is-fullscreen") || !chatIsMobile()) return;
+  chat.classList.add("is-fullscreen");
+  document.body.classList.add("bd-chat-open");
+  document.documentElement.classList.add("pn-scroll-locked");
+  document.querySelector("#bdChatExpand")?.setAttribute("aria-pressed", "true");
+  document.querySelector("#bdChatExpand")?.setAttribute("aria-label", "Fechar tela cheia");
+  updatePulsinhoViewport();
+  window.visualViewport?.addEventListener("resize", updatePulsinhoViewport);
+  window.visualViewport?.addEventListener("scroll", updatePulsinhoViewport);
+  const body = document.querySelector("#pulseCommandResponse");
+  if (body) body.scrollTop = body.scrollHeight;
+}
+
+function closePulsinhoFullscreen() {
+  const chat = document.querySelector("#bdChat");
+  if (!chat?.classList.contains("is-fullscreen")) return;
+  document.querySelector("#pulseCommandInput")?.blur();
+  chat.classList.remove("is-fullscreen", "is-keyboard");
+  document.body.classList.remove("bd-chat-open");
+  document.documentElement.classList.remove("pn-scroll-locked");
+  window.visualViewport?.removeEventListener("resize", updatePulsinhoViewport);
+  window.visualViewport?.removeEventListener("scroll", updatePulsinhoViewport);
+  const expand = document.querySelector("#bdChatExpand");
+  expand?.setAttribute("aria-pressed", "false");
+  expand?.setAttribute("aria-label", "Abrir conversa em tela cheia");
+  repairViewportAfterOverlay();
+  requestAnimationFrame(() => chat.scrollIntoView({ block: "end" }));
+}
+
+function bindPulsinhoFullscreen() {
+  const input = document.querySelector("#pulseCommandInput");
+  if (!input || input.dataset.fullscreenBound === "1") return;
+  input.dataset.fullscreenBound = "1";
+  input.addEventListener("focus", () => { if (chatIsMobile() && document.querySelector("#dashboardView")?.contains(input)) openPulsinhoFullscreen(); });
+  document.querySelector("#bdChatExpand")?.addEventListener("click", () => {
+    if (document.querySelector("#bdChat")?.classList.contains("is-fullscreen")) closePulsinhoFullscreen();
+    else { openPulsinhoFullscreen(); input.focus({ preventScroll: true }); }
+  });
+  document.addEventListener("keydown", (event) => { if (event.key === "Escape") closePulsinhoFullscreen(); });
+  window.addEventListener("resize", () => { if (!chatIsMobile()) closePulsinhoFullscreen(); });
+}
+
 function updatePulsinhoJump() {
   const root = document.querySelector("#pulseCommandResponse");
   const jump = document.querySelector("#bdChatJump");
@@ -4041,11 +4102,21 @@ function addGoalMilestone(id, event) {
   renderPlannerGoalsStrip();
 }
 
+// Com etapas nomeadas, o contador da meta acompanha as etapas marcadas
+// (assim conquistas e "meta concluída" valem para os dois jeitos).
+function syncGoalFromMilestones(goal) {
+  const list = goal?.milestones || [];
+  if (!list.length) return;
+  goal.target = list.length;
+  goal.current = list.filter((m) => m.done).length;
+}
+
 function toggleGoalMilestone(goalId, msId, event) {
   event?.stopPropagation();
   const goal = state.goals.find((g) => g.id === goalId);
   if (!goal) return;
   goal.milestones = (goal.milestones || []).map((m) => (m.id === msId ? { ...m, done: !m.done } : m));
+  syncGoalFromMilestones(goal);
   saveState();
   renderGoals();
   renderPlannerGoalsStrip();
@@ -4056,6 +4127,7 @@ function deleteGoalMilestone(goalId, msId, event) {
   const goal = state.goals.find((g) => g.id === goalId);
   if (!goal) return;
   goal.milestones = (goal.milestones || []).filter((m) => m.id !== msId);
+  syncGoalFromMilestones(goal);
   saveState();
   renderGoals();
   renderPlannerGoalsStrip();
@@ -4538,15 +4610,34 @@ function getOnboarding() {
   return onboardingController;
 }
 
+// Ilustração animada ao lado do título (no lugar dos emojis 👋 e 📝, que
+// mudam de aparência em cada aparelho): sol nascendo de manhã, sol à tarde,
+// lua com estrelas à noite e um bloquinho sendo escrito nas Notas.
+function viewHeadingGlyph(view, hour) {
+  if (view === "dashboard") {
+    if (hour >= 5 && hour < 12) {
+      return `<svg class="pn-glyph pn-glyph--sunrise" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="pgRise" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe17a"/><stop offset="1" stop-color="#ff8f4a"/></linearGradient><clipPath id="pgRiseClip"><rect x="0" y="0" width="32" height="22"/></clipPath></defs><g class="pg-rays" stroke="#ffb547" stroke-width="2.2" stroke-linecap="round"><path d="M16 4.5v3"/><path d="M6.6 8.6l2.1 2.1"/><path d="M25.4 8.6l-2.1 2.1"/><path d="M3 17h3"/><path d="M26 17h3"/></g><g clip-path="url(#pgRiseClip)"><circle class="pg-sun" cx="16" cy="21" r="7" fill="url(#pgRise)"/></g><path d="M4 22.5h24" stroke="#ff9f5a" stroke-width="2.2" stroke-linecap="round"/><path class="pg-haze" d="M9 26.5h14" stroke="#ffb98a" stroke-width="2" stroke-linecap="round" opacity=".7"/></svg>`;
+    }
+    if (hour >= 12 && hour < 18) {
+      return `<svg class="pn-glyph pn-glyph--sun" viewBox="0 0 32 32" aria-hidden="true"><defs><radialGradient id="pgSun" cx="38%" cy="34%" r="70%"><stop offset="0" stop-color="#fff4b8"/><stop offset=".55" stop-color="#ffc83d"/><stop offset="1" stop-color="#ff9640"/></radialGradient></defs><g class="pg-rays" stroke="#ffb547" stroke-width="2.3" stroke-linecap="round"><path d="M16 2.8v3.4"/><path d="M16 25.8v3.4"/><path d="M2.8 16h3.4"/><path d="M25.8 16h3.4"/><path d="M6.7 6.7l2.4 2.4"/><path d="M22.9 22.9l2.4 2.4"/><path d="M6.7 25.3l2.4-2.4"/><path d="M22.9 9.1l2.4-2.4"/></g><circle class="pg-sun" cx="16" cy="16" r="7.4" fill="url(#pgSun)"/></svg>`;
+    }
+    return `<svg class="pn-glyph pn-glyph--moon" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="pgMoon" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#e6dcff"/><stop offset="1" stop-color="#9b86ff"/></linearGradient><mask id="pgMoonCut"><rect width="32" height="32" fill="#fff"/><circle cx="21.5" cy="11" r="8.2" fill="#000"/></mask></defs><circle class="pg-moon" cx="14.5" cy="17.5" r="10" fill="url(#pgMoon)" mask="url(#pgMoonCut)"/><path class="pg-star pg-star--a" d="M24 4.5l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z" fill="#ffe17a"/><circle class="pg-star pg-star--b" cx="28" cy="13" r="1.3" fill="#9fe8ff"/><circle class="pg-star pg-star--c" cx="19.5" cy="11" r="1" fill="#fff"/></svg>`;
+  }
+  if (view === "notes") {
+    return `<svg class="pn-glyph pn-glyph--notes" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="pgPad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#9d8bff"/><stop offset="1" stop-color="#6a5cff"/></linearGradient></defs><rect x="4.5" y="4" width="18" height="23" rx="4" fill="url(#pgPad)"/><path class="pg-line pg-line--1" d="M8.5 11h10" stroke="#fff" stroke-width="2" stroke-linecap="round" pathLength="10"/><path class="pg-line pg-line--2" d="M8.5 15.5h10" stroke="#fff" stroke-width="2" stroke-linecap="round" pathLength="10" opacity=".85"/><path class="pg-line pg-line--3" d="M8.5 20h6" stroke="#fff" stroke-width="2" stroke-linecap="round" pathLength="10" opacity=".7"/><g class="pg-pencil"><path d="M19.6 25.6l1-4.1 7.6-7.6a1.9 1.9 0 0 1 2.7 2.7l-7.6 7.6z" fill="#ffc83d" stroke="#0d1424" stroke-width="1.2" stroke-linejoin="round"/><path d="M19.6 25.6l1-4.1 3.1 3.1z" fill="#ffe7c2" stroke="#0d1424" stroke-width="1.2" stroke-linejoin="round"/><path d="M27.2 14.9l2.7 2.7" stroke="#0d1424" stroke-width="1.2"/></g></svg>`;
+  }
+  return "";
+}
+
 function applyViewHeading(view) {
   const first = bdFirstName();
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Bom dia" : hour < 18 ? "Boa tarde" : "Boa noite";
   const compact = window.matchMedia("(max-width: 760px)").matches; // textos curtos do quadro mobile
   const headings = {
-    dashboard: [`${greeting}, ${first}! 👋`, compact ? "Seu panorama de hoje." : "Aqui está o seu panorama de hoje."],
+    dashboard: [`${greeting}, ${first}!`, compact ? "Seu panorama de hoje." : "Aqui está o seu panorama de hoje."],
     planner: ["Planner", "Organize suas tarefas, compromissos e metas."],
-    notes: [`Notas, ${first}! 📝`, compact ? "Capture ideias, organize e aja." : "Capture ideias, organize informações e transforme em ação."],
+    notes: [`Notas, ${first}!`, compact ? "Capture ideias, organize e aja." : "Capture ideias, organize informações e transforme em ação."],
     finances: ["Finanças", "Organize, acompanhe e evolua suas finanças."],
     autopilot: ["", ""],
     profile: ["Perfil", "Seu progresso, conquistas e estatísticas"],
@@ -4554,7 +4645,8 @@ function applyViewHeading(view) {
   };
   const [title, subtitle] = headings[view] || [viewTitles[view] || "", ""];
   if (elements.viewTitle) {
-    elements.viewTitle.textContent = title;
+    const glyph = viewHeadingGlyph(view, hour);
+    elements.viewTitle.innerHTML = `${escapeHtml(title)}${glyph}`;
     elements.viewTitle.style.display = title ? "" : "none";
   }
   const subtitleEl = document.querySelector("#viewSubtitle");
@@ -4568,6 +4660,7 @@ function applyViewHeading(view) {
 // O painel do Pulsinho é um só: no Autopilot ele vai para a coluna da direita
 // (como no quadro) e volta para o Início ao sair. A conversa continua a mesma.
 function placePulsinhoPanel(view) {
+  if (view !== "dashboard") closePulsinhoFullscreen();
   const chat = document.querySelector("#bdChat");
   const slot = document.querySelector("#apChatSlot");
   const home = document.querySelector("#dashboardView .bd-dash");
@@ -5431,6 +5524,7 @@ function bindBoardsShell() {
   bindBoardsToday();
   bindBoardsCategories();
   bindPullToRefresh();
+  bindKeyboardViewportRepair();
   // Intervalo do gráfico de evolução
   document.querySelector("#bdEvoRange")?.addEventListener("click", (event) => {
     const button = event.target.closest("[data-range]");
@@ -5519,6 +5613,7 @@ function bindBoardsShell() {
     chatBody?.scrollTo({ top: chatBody.scrollHeight, behavior: "smooth" });
   });
   watchPulsinhoIntro();
+  bindPulsinhoFullscreen();
 }
 
 function renderDashboard() {
@@ -6054,40 +6149,123 @@ function plannerFocusGoal() {
   return { goal: goals[index], index, total: goals.length };
 }
 
+// Progresso de uma meta. Com etapas nomeadas, elas mandam no progresso;
+// sem etapas, vale o número de etapas escolhido ao criar (target).
+function goalStats(goal) {
+  const milestones = goal?.milestones || [];
+  const named = milestones.length > 0;
+  const total = named ? milestones.length : Math.max(1, Number(goal?.target) || 1);
+  const done = named ? milestones.filter((m) => m.done).length : Math.min(total, Math.max(0, Number(goal?.current) || 0));
+  const percent = Math.round((done / total) * 100);
+  return { milestones, named, total, done, percent, remaining: total - done, complete: done >= total };
+}
+
+// Anel de progresso (SVG) usado no Foco e na lista de metas.
+function goalRingHtml(stats, size = "lg") {
+  const id = `gr${Math.random().toString(36).slice(2, 8)}`;
+  return `<span class="pf-ring pf-ring--${size}${stats.complete ? " is-complete" : ""}" role="img" aria-label="${stats.percent}% concluído">
+    <svg viewBox="0 0 64 64" aria-hidden="true">
+      <defs><linearGradient id="${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${stats.complete ? "#2fcf8b" : "#8b7bff"}"/><stop offset="1" stop-color="${stats.complete ? "#22c3a6" : "#22c3e6"}"/></linearGradient></defs>
+      <circle class="pf-ring-track" cx="32" cy="32" r="26"/>
+      <circle class="pf-ring-bar" cx="32" cy="32" r="26" pathLength="100" stroke="url(#${id})" style="--p:${stats.percent}"/>
+    </svg>
+    <span class="pf-ring-label">${stats.complete ? bdIcon("check") : `<b>${stats.percent}</b><small>%</small>`}</span>
+  </span>`;
+}
+
+// Etapas: com nome viram chips marcáveis; sem nome, uma trilha de
+// segmentos — tocar no 3º segmento marca "3 etapas feitas".
+function goalStepsHtml(goal, stats, scope) {
+  // No painel de metas as etapas nomeadas aparecem na lista expansível;
+  // aqui fica só a trilha de progresso, para não repetir.
+  if (stats.named && scope === "goal") {
+    return `<div class="pf-segs is-static" role="img" aria-label="${stats.done} de ${stats.total} etapas">${stats.milestones.map((m) => `<span class="pf-seg${m.done ? " is-done" : ""}"></span>`).join("")}</div>`;
+  }
+  if (stats.named) {
+    return `<ol class="pf-chips">${stats.milestones.map((m) => `<li><button type="button" class="pf-chip${m.done ? " is-done" : ""}" data-${scope}-action="toggle-ms" data-goal-id="${goal.id}" data-ms-id="${m.id}" aria-pressed="${m.done}">
+      <i>${m.done ? bdIcon("check") : ""}</i><span>${escapeHtml(m.title)}</span></button></li>`).join("")}</ol>`;
+  }
+  if (stats.total > 14) {
+    return `<div class="pf-track" role="img" aria-label="${stats.done} de ${stats.total} etapas"><i style="width:${stats.percent}%"></i></div>`;
+  }
+  return `<div class="pf-segs" role="group" aria-label="Etapas de ${escapeHtml(goal.title)}">${Array.from({ length: stats.total }, (_, i) => `<button type="button" class="pf-seg${i < stats.done ? " is-done" : ""}${i === stats.done ? " is-next" : ""}" data-${scope}-action="set-step" data-goal-id="${goal.id}" data-step="${i + 1}" aria-label="Etapa ${i + 1}${i < stats.done ? " (feita)" : ""}"></button>`).join("")}</div>`;
+}
+
+// Avança/volta uma etapa (marca o próximo marco ou soma no contador).
+function stepGoal(goalId, delta) {
+  const goal = state.goals.find((g) => g.id === goalId);
+  if (!goal) return;
+  const before = goalStats(goal);
+  if (before.named) {
+    const list = goal.milestones;
+    const target = delta > 0 ? list.find((m) => !m.done) : [...list].reverse().find((m) => m.done);
+    if (!target) return;
+    toggleGoalMilestone(goalId, target.id);
+  } else {
+    changeGoal(goalId, delta);
+  }
+  // (sem etapas nomeadas, changeGoal já comemora sozinho)
+  if (before.named && delta > 0 && !before.complete && goalStats(state.goals.find((g) => g.id === goalId)).complete) {
+    celebrate("Meta concluída! Mandou bem.");
+  }
+}
+
+function setGoalStep(goalId, step) {
+  const goal = state.goals.find((g) => g.id === goalId);
+  if (!goal) return;
+  const stats = goalStats(goal);
+  // Tocar na última etapa feita desfaz ela (fica fácil corrigir um toque).
+  const next = step === stats.done ? step - 1 : step;
+  updateGoalProgress(goalId, next);
+  renderPlannerGoalsStrip();
+  if (next >= stats.total && !stats.complete) celebrate("Meta concluída! Mandou bem.");
+}
+
+const GOAL_IDEAS = ["Ler 2 livros", "Correr 20 km", "Guardar R$ 500", "Estudar 10 horas"];
+
 function renderPlannerFocus() {
   const root = document.querySelector("#plannerFocus");
   if (!root) return;
   const focus = plannerFocusGoal();
   if (!focus) {
-    root.innerHTML = `<div class="bp-focus-top">
-      <span class="bp-focus-ico">${bdIcon("target")}</span>
-      <div class="bp-focus-title"><h3>Foco da semana</h3><p>Defina uma meta e acompanhe cada marco até concluir.</p></div>
-      <button type="button" class="bd-btn bd-btn--primary" data-focus-action="new-goal">${bdIcon("plus")}Nova meta</button>
+    root.innerHTML = `<div class="pf pf--empty">
+      <span class="pf-empty-art" aria-hidden="true">${bdIcon("target")}<i></i><i></i></span>
+      <div class="pf-main">
+        <span class="pf-kicker">Foco da semana</span>
+        <h3>Qual é a sua meta agora?</h3>
+        <p>Escolha uma meta, divida em etapas e veja o anel se completar a cada avanço.</p>
+        <div class="pf-ideas">${GOAL_IDEAS.map((idea) => `<button type="button" class="pf-idea" data-focus-action="idea" data-idea="${escapeHtml(idea)}">${escapeHtml(idea)}</button>`).join("")}</div>
+      </div>
+      <button type="button" class="bd-btn bd-btn--primary pf-cta" data-focus-action="new-goal">${bdIcon("plus")}Criar meta</button>
     </div>`;
     return;
   }
   const { goal, index, total } = focus;
-  const target = Math.max(1, Number(goal.target) || 1);
-  const percent = Math.min(100, Math.round(((Number(goal.current) || 0) / target) * 100));
-  const milestones = goal.milestones || [];
-  const msDone = milestones.filter((m) => m.done).length;
-  const steps = milestones.length
-    ? `<ol class="bp-steps">${milestones.map((m) => `<li class="${m.done ? "done" : ""}">
-        <button type="button" class="bp-step" data-focus-action="toggle-ms" data-goal-id="${goal.id}" data-ms-id="${m.id}" aria-pressed="${m.done}" aria-label="${m.done ? "Desmarcar" : "Concluir"} marco: ${escapeHtml(m.title)}">${m.done ? bdIcon("check") : ""}</button>
-        <span>${escapeHtml(m.title)}</span></li>`).join("")}</ol>`
-    : `<p class="bp-steps-empty">Sem marcos ainda. <button type="button" class="bd-link" data-focus-action="manage">Adicionar marcos</button></p>`;
-  root.innerHTML = `<div class="bp-focus-top">
-      <span class="bp-focus-ico">${bdIcon("target")}</span>
-      <div class="bp-focus-title"><h3>Foco da semana</h3><p>${escapeHtml(goal.title)}</p></div>
-      <div class="bp-focus-progress">
-        <div class="bp-focus-meta"><span><b>${percent}%</b> concluído</span><span>${milestones.length ? `${msDone} de ${milestones.length} marcos` : `${goal.current || 0} de ${target}`}</span></div>
-        <div class="bp-bar"><i style="width:${percent}%"></i></div>
-      </div>
-      <div class="bp-focus-actions">
-        ${total > 1 ? `<button type="button" class="bd-icon-btn" data-focus-action="prev" aria-label="Meta anterior">${bdIcon("chev-left")}</button><span class="bp-focus-pos">${index + 1}/${total}</span><button type="button" class="bd-icon-btn" data-focus-action="next" aria-label="Próxima meta">${bdIcon("chev-right")}</button>` : ""}
-        <button type="button" class="bd-icon-btn" data-focus-action="manage" aria-label="Gerenciar metas" title="Gerenciar metas">${bdIcon("dots-v")}</button>
-      </div>
-    </div>${steps}`;
+  const stats = goalStats(goal);
+  const nextMs = stats.named ? stats.milestones.find((m) => !m.done) : null;
+  const status = stats.complete
+    ? "Meta concluída — que tal a próxima?"
+    : `${stats.done} de ${stats.total} etapa${stats.total === 1 ? "" : "s"} · falta${stats.remaining === 1 ? "" : "m"} ${stats.remaining}`;
+  root.innerHTML = `<div class="pf${stats.complete ? " is-complete" : ""}">
+    ${goalRingHtml(stats)}
+    <div class="pf-main">
+      <span class="pf-kicker">${bdIcon("target")}Foco da semana${total > 1 ? ` · ${index + 1} de ${total}` : ""}</span>
+      <h3>${escapeHtml(goal.title)}</h3>
+      <p>${escapeHtml(status)}</p>
+    </div>
+    <div class="pf-actions">
+      ${total > 1 ? `<button type="button" class="bd-icon-btn" data-focus-action="prev" aria-label="Meta anterior">${bdIcon("chev-left")}</button><button type="button" class="bd-icon-btn" data-focus-action="next" aria-label="Próxima meta">${bdIcon("chev-right")}</button>` : ""}
+      <button type="button" class="bd-icon-btn" data-focus-action="manage" aria-label="Todas as metas" title="Todas as metas">${bdIcon("dots-v")}</button>
+    </div>
+    <div class="pf-steps">${goalStepsHtml(goal, stats, "focus")}</div>
+    <div class="pf-foot">
+      ${stats.complete
+        ? `<button type="button" class="bd-btn pf-undo" data-focus-action="step" data-goal-id="${goal.id}" data-delta="-1" aria-label="Desfazer última etapa">${bdIcon("undo")}</button>
+           <button type="button" class="bd-btn bd-btn--primary pf-advance" data-focus-action="new-goal">${bdIcon("plus")}Nova meta</button>`
+        : `<button type="button" class="bd-btn pf-undo" data-focus-action="step" data-goal-id="${goal.id}" data-delta="-1" aria-label="Voltar uma etapa"${stats.done ? "" : " disabled"}>${bdIcon("undo")}</button>
+           <button type="button" class="bd-btn bd-btn--primary pf-advance" data-focus-action="step" data-goal-id="${goal.id}" data-delta="1">${bdIcon("check")}<span>${nextMs ? `Concluir: ${escapeHtml(nextMs.title)}` : "Avancei uma etapa"}</span></button>`}
+    </div>
+  </div>`;
 }
 
 // ── Dica do Pulsinho (regras locais sobre os dados reais, sem chamar IA) ──
@@ -6100,10 +6278,9 @@ function renderPlannerTip() {
   const todayPending = todayTasks.filter(open);
   const todayEvents = state.events.filter((e) => e.date === todayIso);
   const focus = plannerFocusGoal();
-  const ms = focus?.goal.milestones || [];
-  const remaining = ms.filter((m) => !m.done).length;
+  const remaining = focus ? goalStats(focus.goal).remaining : 0;
   let text;
-  if (focus && ms.length && remaining > 0 && remaining <= 2) text = `Você está no ritmo! Falta${remaining === 1 ? "" : "m"} apenas ${remaining} marco${remaining === 1 ? "" : "s"} para concluir seu foco da semana.`;
+  if (focus && remaining > 0 && remaining <= 2) text = `Você está no ritmo! Falta${remaining === 1 ? "" : "m"} apenas ${remaining} etapa${remaining === 1 ? "" : "s"} para concluir seu foco da semana.`;
   else if (overdue.length) text = `Você tem ${overdue.length} tarefa${overdue.length === 1 ? "" : "s"} atrasada${overdue.length === 1 ? "" : "s"}. Que tal resolver a mais antiga primeiro?`;
   else if (todayTasks.length && !todayPending.length) text = "Tudo concluído por hoje. Ótimo trabalho!";
   else if (!todayTasks.length && !todayEvents.length) text = "Dia livre! Aproveite para planejar a semana.";
@@ -6405,13 +6582,58 @@ function bindPlannerNav() {
     if (!button) return;
     const action = button.dataset.focusAction;
     const count = state.goals.length;
-    if (action === "toggle-ms") toggleGoalMilestone(button.dataset.goalId, button.dataset.msId, event);
+    if (action === "toggle-ms") {
+      const before = goalStats(state.goals.find((g) => g.id === button.dataset.goalId));
+      toggleGoalMilestone(button.dataset.goalId, button.dataset.msId, event);
+      if (!before.complete && goalStats(state.goals.find((g) => g.id === button.dataset.goalId)).complete) celebrate("Meta concluída! Mandou bem.");
+    }
+    else if (action === "step") stepGoal(button.dataset.goalId, Number(button.dataset.delta) || 0);
+    else if (action === "set-step") setGoalStep(button.dataset.goalId, Number(button.dataset.step) || 0);
+    else if (action === "idea") {
+      openPlannerQuickAdd("goal");
+      const title = document.querySelector("#pqaTitle");
+      if (title) title.value = button.dataset.idea || "";
+    }
     else if (action === "manage") openPlannerGoalsModal();
     else if (action === "new-goal") openPlannerQuickAdd("goal");
     else if ((action === "prev" || action === "next") && count > 1) {
       const current = plannerFocusGoal()?.index ?? 0;
       plannerFocusIndex = (current + (action === "next" ? 1 : -1) + count) % count;
       renderPlannerGoalsStrip();
+    }
+  });
+  // Painel "Metas": ações dos cartões
+  document.querySelector("#plannerGoalsStrip")?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-goal-action]");
+    if (!button) return;
+    const id = button.dataset.goalId;
+    const action = button.dataset.goalAction;
+    if (action === "toggle-ms") {
+      const before = goalStats(state.goals.find((g) => g.id === id));
+      toggleGoalMilestone(id, button.dataset.msId, event);
+      if (!before.complete && goalStats(state.goals.find((g) => g.id === id)).complete) celebrate("Meta concluída! Mandou bem.");
+    } else if (action === "del-ms") deleteGoalMilestone(id, button.dataset.msId, event);
+    else if (action === "step") stepGoal(id, Number(button.dataset.delta) || 0);
+    else if (action === "set-step") setGoalStep(id, Number(button.dataset.step) || 0);
+    else if (action === "expand") {
+      togglePlannerGoalExpand(id, event);
+      if (plannerExpandedGoals.has(id)) requestAnimationFrame(() => document.querySelector(`#plannerGoalsStrip [data-goal-id="${id}"]`)?.scrollIntoView({ block: "nearest", behavior: "smooth" }));
+    } else if (action === "focus") {
+      plannerFocusIndex = state.goals.findIndex((g) => g.id === id);
+      renderPlannerGoalsStrip();
+      showToast("Meta colocada em foco.");
+    } else if (action === "delete") {
+      const goal = state.goals.find((g) => g.id === id);
+      if (!goal) return;
+      const position = state.goals.indexOf(goal);
+      deleteGoal(id);
+      if (plannerFocusIndex !== null && plannerFocusIndex >= state.goals.length) plannerFocusIndex = null;
+      renderPlannerGoalsStrip();
+      // Desfazer em vez de pedir confirmação (confirm() falha no PWA do iPhone).
+      showToast(`Meta “${goal.title}” excluída.`, {
+        actionLabel: "Desfazer",
+        onAction: () => { state.goals.splice(position, 0, goal); saveState(); renderAll(); renderPlannerGoalsStrip(); },
+      });
     }
   });
   document.querySelector("#plannerGoalsClose")?.addEventListener("click", closePlannerGoalsModal);
@@ -6490,69 +6712,52 @@ function renderPlannerGoalsStrip() {
     });
     return;
   }
-  root.innerHTML = goals
-    .map((goal) => {
-      const percent = Math.min(100, Math.round((goal.current / goal.target) * 100));
-      const isComplete = goal.current >= goal.target;
-      const milestones = goal.milestones || [];
-      const msDone = milestones.filter((m) => m.done).length;
-      const expanded = plannerExpandedGoals.has(goal.id);
-      // O formulário de novo marco fica sempre disponível dentro do painel
-      // expandido — antes dependia de window.prompt(), que não funciona
-      // (retorna null em silêncio) num PWA instalado em modo standalone no
-      // iOS, deixando "Adicionar marco" sem nenhum efeito visível.
-      const milestonesHtml = expanded
-        ? `
-        <div class="planner-goal-milestones">
-          ${
-            milestones.length
-              ? milestones
-                  .map(
-                    (m) => `
-            <div class="goal-milestone-row">
-              <button class="goal-milestone-check ${m.done ? "done" : ""}" onclick="toggleGoalMilestone('${goal.id}','${m.id}', event)">${m.done ? icon("check", 12) : ""}</button>
-              <span class="${m.done ? "done" : ""}">${escapeHtml(m.title)}</span>
-              <button class="mini-button planner-ms-remove" onclick="deleteGoalMilestone('${goal.id}','${m.id}', event)">${icon("x", 12)}</button>
-            </div>`
-                  )
-                  .join("")
-              : `<p class="planner-goal-milestones-empty">Sem marcos ainda.</p>`
-          }
-          <form class="planner-inline-add-form" onsubmit="return submitGoalMilestoneForm('${goal.id}', event)">
-            <input type="text" maxlength="60" placeholder="Novo marco..." autocomplete="off" />
-            <button type="submit" class="mini-button" title="Adicionar marco">${icon("plus", 13)}</button>
-          </form>
-        </div>`
-        : "";
-      return `
-      <article class="planner-goal-chip ${isComplete ? "is-complete" : ""} ${expanded ? "is-expanded" : ""}" data-goal-id="${goal.id}">
-        <div class="planner-goal-chip-top" onclick="togglePlannerGoalExpand('${goal.id}', event)">
-          <strong>${escapeHtml(goal.title)}</strong>
-          <span class="pill" style="${isComplete ? "background:var(--green);color:#fff;border-color:var(--green);" : ""}">${percent}%</span>
-        </div>
-        <div class="progress-track"><div style="width:${percent}%;background:${isComplete ? "var(--green)" : "linear-gradient(90deg,var(--accent),var(--purple))"}"></div></div>
-        <label class="planner-goal-progress-control" onclick="event.stopPropagation()">
-          <span>Progresso</span>
-          <input type="range" min="0" max="${Math.max(1, Number(goal.target) || 1)}" value="${Math.max(0, Number(goal.current) || 0)}" aria-label="Progresso de ${escapeHtml(goal.title)}" oninput="updateGoalProgress('${goal.id}', this.value, event)" />
-          <input class="planner-goal-number" type="number" min="0" max="${Math.max(1, Number(goal.target) || 1)}" value="${Math.max(0, Number(goal.current) || 0)}" inputmode="numeric" aria-label="Valor atual de ${escapeHtml(goal.title)}" oninput="updateGoalProgress('${goal.id}', this.value, event)" />
-          <span class="task-meta">de ${goal.target}</span>
-        </label>
-        <div class="planner-goal-chip-controls">
-          <div class="planner-goal-stepper">
-            <button class="mini-button" onclick="changeGoal('${goal.id}', -1)" title="Diminuir">−</button>
-            <span class="task-meta">${goal.current}/${goal.target}</span>
-            <button class="mini-button" onclick="changeGoal('${goal.id}', 1)" title="Aumentar">+</button>
-          </div>
-          <button class="planner-goal-ms-toggle" type="button" onclick="togglePlannerGoalExpand('${goal.id}', event)">
-            ${icon("flag", 13)}<span>${milestones.length ? `${msDone}/${milestones.length} marcos` : "Marcos"}</span>${icon("chevronRight", 13, "planner-goal-chevron")}
-          </button>
-          <button class="mini-button planner-row-delete" onclick="deleteGoal('${goal.id}')" title="Excluir meta">${icon("trash", 13)}</button>
-        </div>
-        ${milestonesHtml}
-      </article>
-    `;
-    })
-    .join("");
+  const focusId = plannerFocusGoal()?.goal?.id;
+  root.innerHTML = goals.map((goal) => goalManageCardHtml(goal, goal.id === focusId)).join("");
+}
+
+// Cartão de meta no painel "Metas": anel, trilha de etapas, controles
+// grandes ao toque e as etapas nomeadas (expansíveis) com campo para
+// adicionar mais. Sem prompt() nativo — não funciona no PWA do iPhone.
+function goalManageCardHtml(goal, isFocus) {
+  const stats = goalStats(goal);
+  const expanded = plannerExpandedGoals.has(goal.id);
+  const steps = expanded
+    ? `<div class="gm-steps">
+        ${stats.milestones.length
+          ? `<ul class="gm-ms">${stats.milestones.map((m) => `<li class="${m.done ? "is-done" : ""}">
+              <button type="button" class="gm-ms-check" data-goal-action="toggle-ms" data-goal-id="${goal.id}" data-ms-id="${m.id}" aria-pressed="${m.done}" aria-label="${m.done ? "Desmarcar" : "Concluir"} etapa: ${escapeHtml(m.title)}">${m.done ? bdIcon("check") : ""}</button>
+              <span>${escapeHtml(m.title)}</span>
+              <button type="button" class="gm-ms-del" data-goal-action="del-ms" data-goal-id="${goal.id}" data-ms-id="${m.id}" aria-label="Remover etapa ${escapeHtml(m.title)}">${bdIcon("x")}</button>
+            </li>`).join("")}</ul>`
+          : `<p class="gm-ms-empty">Dê nome às etapas para marcar uma a uma (ex.: “Capítulo 1”, “Primeiros 5 km”).</p>`}
+        <form class="gm-add" onsubmit="return submitGoalMilestoneForm('${goal.id}', event)">
+          <input type="text" maxlength="60" placeholder="Nova etapa…" autocomplete="off" enterkeyhint="done" aria-label="Nome da nova etapa" />
+          <button type="submit" class="bd-btn bd-btn--primary" aria-label="Adicionar etapa">${bdIcon("plus")}</button>
+        </form>
+      </div>`
+    : "";
+  return `<article class="gm-card${stats.complete ? " is-complete" : ""}${expanded ? " is-expanded" : ""}" data-goal-id="${goal.id}">
+    <div class="gm-top">
+      ${goalRingHtml(stats, "sm")}
+      <div class="gm-main">
+        <strong>${escapeHtml(goal.title)}</strong>
+        <small>${stats.complete ? "Concluída" : `${stats.done} de ${stats.total} etapa${stats.total === 1 ? "" : "s"}`}${isFocus ? ' · <b class="gm-focus-tag">em foco</b>' : ""}</small>
+      </div>
+      <button type="button" class="gm-icon gm-del" data-goal-action="delete" data-goal-id="${goal.id}" aria-label="Excluir meta ${escapeHtml(goal.title)}">${bdIcon("trash")}</button>
+    </div>
+    ${goalStepsHtml(goal, stats, "goal")}
+    <div class="gm-controls">
+      <div class="gm-stepper" role="group" aria-label="Ajustar progresso">
+        <button type="button" data-goal-action="step" data-goal-id="${goal.id}" data-delta="-1" aria-label="Voltar uma etapa"${stats.done ? "" : " disabled"}>−</button>
+        <span>${stats.done}/${stats.total}</span>
+        <button type="button" data-goal-action="step" data-goal-id="${goal.id}" data-delta="1" aria-label="Avançar uma etapa"${stats.complete ? " disabled" : ""}>+</button>
+      </div>
+      <button type="button" class="gm-toggle" data-goal-action="expand" data-goal-id="${goal.id}" aria-expanded="${expanded}">${bdIcon("flag")}<span>${stats.named ? "Etapas" : "Nomear etapas"}</span>${bdIcon("chev-down")}</button>
+      ${isFocus ? "" : `<button type="button" class="gm-icon" data-goal-action="focus" data-goal-id="${goal.id}" aria-label="Colocar em foco" title="Colocar em foco">${bdIcon("target")}</button>`}
+    </div>
+    ${steps}
+  </article>`;
 }
 
 // Cria um marco a partir do input do próprio card (sem prompt() nativo —
@@ -6567,10 +6772,11 @@ function submitGoalMilestoneForm(id, event) {
   if (!goal) return false;
   if (!goal.milestones) goal.milestones = [];
   goal.milestones.push({ id: crypto.randomUUID(), title, done: false });
+  syncGoalFromMilestones(goal);
   saveState();
   renderPlannerGoalsStrip();
   renderGoals();
-  const freshInput = document.querySelector(`[data-goal-id="${id}"] .planner-inline-add-form input`);
+  const freshInput = document.querySelector(`[data-goal-id="${id}"] .gm-add input, [data-goal-id="${id}"] .planner-inline-add-form input`);
   freshInput?.focus();
   return false;
 }
@@ -6842,7 +7048,9 @@ function openPlannerQuickAdd(type) {
 function closePlannerQuickAdd() {
   const modal = document.querySelector("#plannerQuickAddModal");
   if (!modal) return;
+  if (modal.contains(document.activeElement)) document.activeElement.blur();
   modal.hidden = true;
+  repairViewportAfterOverlay();
   document.querySelector("#plannerQuickAddForm")?.reset();
   plannerEditingEventId = null;
   plannerEditingTaskId = null;
@@ -7354,17 +7562,49 @@ function unlockBackgroundScroll() {
 // Depois do teclado ou de uma tela cheia, o Safari do iPhone pode deixar a
 // área visível deslocada (a barra inferior "sobe"). Forçar a rolagem para a
 // mesma posição faz o navegador recalcular os elementos fixos.
+// Em página curta (que não rola), rolar para a "mesma posição" não faz
+// nada — por isso a página ganha 2px de altura por um instante, rola 1px
+// e volta, o que obriga o Safari a reposicionar a barra inferior.
 function repairViewportAfterOverlay() {
   const fix = () => {
-    const y = Math.max(0, Math.min(window.scrollY, document.documentElement.scrollHeight - window.innerHeight));
+    const root = document.documentElement;
+    const y = Math.max(0, Math.min(window.scrollY, root.scrollHeight - window.innerHeight));
+    const previous = document.body.style.minHeight;
+    document.body.style.minHeight = "calc(100vh + 2px)";
+    window.scrollTo(0, y + 1);
     window.scrollTo(0, y);
-    if (window.visualViewport && Math.abs(window.visualViewport.offsetTop) > 0.5) {
-      window.scrollTo(0, y + 1);
-      window.scrollTo(0, y);
-    }
+    requestAnimationFrame(() => { document.body.style.minHeight = previous; });
   };
   requestAnimationFrame(fix);
-  setTimeout(fix, 320);
+  setTimeout(fix, 360);
+}
+
+// Repara a tela sempre que o teclado do celular fecha (qualquer campo,
+// em qualquer tela: planner, finanças, notas, chat…).
+function bindKeyboardViewportRepair() {
+  if (!("ontouchstart" in window) && !(navigator.maxTouchPoints > 0)) return;
+  const editable = (el) => Boolean(el?.matches?.("input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=button]):not([type=submit]), textarea, select, [contenteditable='true']"));
+  let pending = null;
+  document.addEventListener("focusout", (event) => {
+    if (!editable(event.target)) return;
+    clearTimeout(pending);
+    pending = setTimeout(() => { if (!editable(document.activeElement)) repairViewportAfterOverlay(); }, 160);
+  });
+  const vv = window.visualViewport;
+  if (vv) {
+    let lastHeight = vv.height;
+    vv.addEventListener("resize", () => {
+      // Teclado fechando: a área visível volta a crescer bastante.
+      if (vv.height - lastHeight > 120) repairViewportAfterOverlay();
+      lastHeight = vv.height;
+    });
+  }
+  // Janelas e folhas que se fecham (atributo hidden) também reparam.
+  if ("MutationObserver" in window) {
+    new MutationObserver((mutations) => {
+      if (mutations.some((m) => m.target.hidden && m.target.matches?.(".modal-backdrop, .modal, .bn-detail-wrap, [role='dialog'], [aria-modal='true']"))) repairViewportAfterOverlay();
+    }).observe(document.body, { attributes: true, attributeFilter: ["hidden"], subtree: true });
+  }
 }
 
 // Salva o estado atual do título/corpo — devolve true se algo
@@ -8411,12 +8651,34 @@ function debounce(fn, delay) {
   };
 }
 
-function showToast(message) {
+// options.actionLabel/onAction: botão no aviso (ex.: "Desfazer"), que
+// fica um pouco mais na tela para dar tempo de tocar.
+function showToast(message, options = {}) {
   const textEl = document.getElementById("toastText") || elements.toast;
   textEl.textContent = message;
+  let action = elements.toast.querySelector(".toast-action");
+  if (options.actionLabel && typeof options.onAction === "function") {
+    if (!action) {
+      action = document.createElement("button");
+      action.type = "button";
+      action.className = "toast-action";
+      elements.toast.appendChild(action);
+    }
+    action.textContent = options.actionLabel;
+    action.hidden = false;
+    action.onclick = () => {
+      action.hidden = true;
+      elements.toast.classList.remove("show", "has-action");
+      options.onAction();
+    };
+    elements.toast.classList.add("has-action");
+  } else {
+    if (action) action.hidden = true;
+    elements.toast.classList.remove("has-action");
+  }
   elements.toast.classList.add("show");
   window.clearTimeout(showToast.timer);
-  showToast.timer = window.setTimeout(() => elements.toast.classList.remove("show"), 2200);
+  showToast.timer = window.setTimeout(() => elements.toast.classList.remove("show", "has-action"), options.actionLabel ? 5000 : 2200);
 }
 window.PulseNoteShowToast = showToast; // ponte para notifications.js (script externo ao módulo)
 
