@@ -416,3 +416,81 @@
 #noteForm .bn-clb-input, .bn-detail .bn-check-text { resize: none; overflow: hidden; line-height: 1.4; padding-top: 8px !important; padding-bottom: 8px !important; height: auto; min-height: 36px; display: block; }
 .bn-clb-row, .bn-check-row { align-items: start !important; }
 .bn-clb-check, .bn-clb-del, .bn-check-toggle, .bn-check-del { margin-top: 3px; }
+
+/* ============================================================
+   Início — chips coloridos de "Seus compromissos de hoje"
+   ============================================================ */
+.bd-ts { --tc: var(--bd-primary); background: color-mix(in srgb, var(--tc) 10%, var(--bd-card)) !important; border: 1px solid color-mix(in srgb, var(--tc) 26%, transparent) !important; }
+.bd-ts.tone-blue { --tc: var(--bd-blue); }
+.bd-ts.tone-violet { --tc: var(--bd-violet); }
+.bd-ts.tone-red { --tc: var(--bd-red); }
+.bd-ts.tone-amber { --tc: var(--bd-amber); }
+.bd-ts .i { color: var(--tc); }
+.bd-ts b { color: color-mix(in srgb, var(--tc) 70%, var(--bd-text)); }
+.bd-ts small { color: color-mix(in srgb, var(--tc) 45%, var(--bd-text-2)); }
+@media (hover: hover) and (pointer: fine) {
+  .bd-ts:hover { background: color-mix(in srgb, var(--tc) 16%, var(--bd-card)) !important; border-color: color-mix(in srgb, var(--tc) 40%, transparent) !important; }
+}
+
+/* ============================================================
+   Início — gráfico "Gastos por categoria"
+   ============================================================ */
+/* Só interação com o gráfico: sem seleção de texto, sem menu de copiar. */
+.bd-cats-viz, .bd-cats-insight {
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+}
+.bd-cats { --bd-donut-glow: var(--bd-primary); }
+.bd-donut { width: 196px; }
+@container (min-width: 380px) {
+  .bd-cats-viz { grid-template-columns: 168px minmax(0, 1fr) !important; }
+  .bd-cats-viz .bd-donut { width: 168px !important; }
+}
+.bd-donut-track { stroke: color-mix(in srgb, var(--bd-text-3) 10%, transparent); }
+.bd-donut-inner { fill: none; stroke: color-mix(in srgb, var(--bd-text-3) 18%, transparent); stroke-width: 1; stroke-dasharray: 1.5 4; }
+.bd-donut-halo { transition: opacity .3s ease; opacity: .6; }
+.bd-cats-viz.has-active .bd-donut-halo { opacity: 1; }
+.bd-donut-seg-g { cursor: pointer; outline: 0; transform-box: view-box; transform-origin: center; transition: transform .28s cubic-bezier(.2,.9,.3,1.2), opacity .2s ease; }
+.bd-donut-hit { fill: none; stroke: transparent; stroke-width: 44px; pointer-events: stroke; }
+.bd-donut-seg { fill: none; stroke: var(--seg); stroke-linecap: butt; pointer-events: none; transition: stroke-width .25s ease, filter .25s ease; }
+.bd-donut-seg.is-round { stroke-linecap: round; }
+.bd-donut-seg-g.is-active { transform: translate(var(--dx), var(--dy)); }
+.bd-donut-seg-g.is-active .bd-donut-seg { stroke-width: 24px; filter: drop-shadow(0 3px 8px color-mix(in srgb, var(--seg) 55%, transparent)); }
+.bd-cats-viz.has-active .bd-donut-seg-g:not(.is-active) { opacity: .3; }
+.bd-cats-viz.has-active .bd-donut-seg:not(.is-active) { opacity: 1; } /* opacidade fica no grupo */
+.bd-donut-seg.is-active { stroke-width: inherit; }
+.bd-cats-viz.is-intro .bd-donut-seg { stroke-dasharray: 100 100; animation: bdDonutIn .9s cubic-bezier(.2,.8,.2,1) both; }
+.bd-cats-viz.is-intro .bd-donut-seg-g:nth-child(2) .bd-donut-seg { animation-delay: .08s; }
+.bd-cats-viz.is-intro .bd-donut-seg-g:nth-child(3) .bd-donut-seg { animation-delay: .16s; }
+.bd-cats-viz.is-intro .bd-donut-seg-g:nth-child(4) .bd-donut-seg { animation-delay: .24s; }
+.bd-cats-viz.is-intro .bd-donut-seg-g:nth-child(5) .bd-donut-seg { animation-delay: .32s; }
+.bd-cats-viz.is-intro .bd-donut-seg-g:nth-child(6) .bd-donut-seg { animation-delay: .40s; }
+/* Centro: botão redondo (toque volta ao total). */
+.bd-donut-center {
+  inset: 24% !important; padding: 0; border: 0; border-radius: 50%; cursor: pointer; font: inherit; color: inherit;
+  background: radial-gradient(circle at 50% 35%, color-mix(in srgb, var(--seg, var(--bd-primary)) 9%, var(--bd-card)) 0%, var(--bd-card) 72%);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--seg, var(--bd-primary)) 14%, transparent);
+  transition: background .3s ease, box-shadow .3s ease;
+}
+.bd-donut-center:focus-visible { outline: 0; box-shadow: var(--bd-focus); }
+.bd-donut-center small { max-width: 92px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bd-donut-center strong { font-size: 17px; }
+.bd-dc-ico { display: grid; place-items: center; width: 26px; height: 26px; margin-bottom: 2px; border-radius: 8px; color: var(--seg); background: color-mix(in srgb, var(--seg) 16%, transparent); }
+.bd-dc-ico .i { width: 14px; height: 14px; }
+.bd-dc-ico .fin-emoji-ico { font-size: 13px; }
+.bd-donut-center .bd-dc-pct { padding: 1px 7px; border-radius: 999px; font-size: 10.5px; font-weight: 700; color: var(--seg); background: color-mix(in srgb, var(--seg) 14%, transparent); }
+/* Legenda: linhas tocáveis, a escolhida fica marcada pela cor da categoria. */
+.bd-cat-row { cursor: pointer; -webkit-tap-highlight-color: transparent; position: relative; }
+.bd-cat-row[aria-pressed="true"] { background: color-mix(in srgb, var(--seg) 14%, transparent); box-shadow: inset 3px 0 0 var(--seg); }
+.bd-cat-row:active { transform: scale(.985); }
+.bd-cat-row .bd-cat-meter i { transition: filter .2s ease; }
+.bd-cat-row.is-active .bd-cat-share { color: var(--seg); }
+.bd-cats-insight { transition: background .25s ease; }
+.bd-cats-insight .i { color: var(--bd-violet); }
+@media (prefers-reduced-motion: reduce) {
+  .bd-donut-seg-g, .bd-donut-seg, .bd-donut-center { transition: none; }
+}
+.bd-donut-center small { max-width: 96px; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.2; text-align: center; }
+:root[data-theme="aurora"] .bd-ts, :root[data-theme="eclipse"] .bd-ts { background: color-mix(in srgb, var(--tc) 18%, var(--bd-card)) !important; border-color: color-mix(in srgb, var(--tc) 38%, transparent) !important; }
+:root[data-theme="aurora"] .bd-ts b, :root[data-theme="eclipse"] .bd-ts b { color: color-mix(in srgb, var(--tc) 55%, #fff); }
+:root[data-theme="aurora"] .bd-ts small, :root[data-theme="eclipse"] .bd-ts small { color: color-mix(in srgb, var(--tc) 40%, var(--bd-text-2)); }

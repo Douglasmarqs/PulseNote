@@ -5612,6 +5612,15 @@ function bdArcPath(cx, cy, r, start, end) {
 }
 
 let bdCatsAnimated = false;
+// Categoria escolhida no gráfico (continua escolhida quando a tela redesenha).
+let bdCatsSelected = null;
+let bdCatsData = null;
+
+// Gastos por categoria: rosca com pontas arredondadas e respiro entre as
+// fatias. Tocar numa fatia (ou na linha da legenda) destaca a categoria:
+// a fatia sai um pouco para fora, o centro mostra nome, valor e % e o
+// resumo embaixo conta quantos lançamentos e qual foi o maior. Tocar de
+// novo (ou no centro) volta ao total. Nada ali é texto selecionável.
 function renderBoardsCategories(monthEntries) {
   const host = document.querySelector("#bdCats");
   if (!host) return;
@@ -5619,6 +5628,7 @@ function renderBoardsCategories(monthEntries) {
   const expenses = monthEntries.filter((f) => f.type === "despesa");
   const total = expenses.reduce((sum, f) => sum + (Number(f.amount) || 0), 0);
   if (!total) {
+    bdCatsData = null;
     host.innerHTML = `<div class="bd-cats-empty">
       <span class="bd-cats-empty-ring" aria-hidden="true">${bdIcon("piggy")}</span>
       <strong>Nenhum gasto neste mês</strong>
@@ -5627,84 +5637,182 @@ function renderBoardsCategories(monthEntries) {
     return;
   }
   const byCat = new Map();
-  for (const f of expenses) byCat.set(f.category || "outros", (byCat.get(f.category || "outros") || 0) + (Number(f.amount) || 0));
-  const sorted = [...byCat.entries()].sort((a, b) => b[1] - a[1]);
+  for (const f of expenses) {
+    const id = f.category || "outros";
+    const entry = byCat.get(id) || { value: 0, count: 0, biggest: null };
+    const amount = Number(f.amount) || 0;
+    entry.value += amount;
+    entry.count += 1;
+    if (!entry.biggest || amount > (Number(entry.biggest.amount) || 0)) entry.biggest = f;
+    byCat.set(id, entry);
+  }
+  const sorted = [...byCat.entries()].sort((a, b) => b[1].value - a[1].value);
   // Até 5 categorias com cor própria; o restante vira "Outros" (cinza).
   const named = sorted.filter(([id]) => id !== "outros").slice(0, 5);
-  const restValue = total - named.reduce((sum, [, value]) => sum + value, 0);
-  const rows = named.map(([id, value], index) => ({ id, value, slot: index + 1 }));
-  if (restValue > 0.004) rows.push({ id: "outros", value: restValue, slot: 0, rest: sorted.length - named.length });
+  const rows = named.map(([id, info], index) => ({ id, ...info, slot: index + 1 }));
+  const restEntries = sorted.filter(([id]) => !named.some(([n]) => n === id));
+  const restValue = restEntries.reduce((sum, [, info]) => sum + info.value, 0);
+  if (restValue > 0.004) {
+    const biggest = restEntries.map(([, info]) => info.biggest).sort((a, b) => (Number(b.amount) || 0) - (Number(a.amount) || 0))[0];
+    rows.push({ id: "outros", value: restValue, count: restEntries.reduce((sum, [, info]) => sum + info.count, 0), biggest, slot: 0, rest: restEntries.length });
+  }
+  rows.forEach((row) => { row.pct = (row.value / total) * 100; });
+  bdCatsData = { rows, total, count: expenses.length };
+  if (bdCatsSelected && !rows.some((row) => row.id === bdCatsSelected)) bdCatsSelected = null;
 
-  // Rosca: fatias com 2px de respiro entre elas (o fundo do cartão aparece).
-  const size = 168;
-  const cx = size / 2;
-  const radius = 64;
-  const stroke = 18;
-  const gap = rows.length > 1 ? 2.4 : 0;
+  const size = 200;
+  const c = size / 2;
+  const radius = 74;
+  const stroke = 20;
+  const capDeg = ((stroke / 2) / radius) * (180 / Math.PI); // quanto a ponta redonda avança
+  const gapDeg = rows.length > 1 ? 3 : 0;
   let cursor = 0;
-  const arcs = rows.map((row, index) => {
+  const segments = rows.map((row, index) => {
     const sweep = (row.value / total) * 360;
-    const start = cursor + gap / 2;
-    const end = Math.max(start + 0.6, cursor + sweep - gap / 2);
+    const mid = cursor + sweep / 2;
+    let start = cursor + gapDeg / 2;
+    let end = cursor + sweep - gapDeg / 2;
+    // Pontas redondas só cabem em fatias com espaço; as finas ficam retas.
+    const round = rows.length > 1 && end - start > capDeg * 2 + 1.5;
+    if (round) { start += capDeg; end -= capDeg; }
+    end = Math.max(end, start + 0.6);
     cursor += sweep;
     const d = rows.length === 1
-      ? `M${cx} ${cx - radius} a${radius} ${radius} 0 1 1 -0.01 0`
-      : bdArcPath(cx, cx, radius, start, Math.min(end, start + 359.4));
-    return `<path class="bd-donut-seg" data-cat-index="${index}" d="${d}" style="--seg:var(--bd-cat-${row.slot})" pathLength="100"><title>${escapeHtml(bdCategoryLabel(row.id))}: ${escapeHtml(formatCurrency(row.value))}</title></path>`;
+      ? `M${c} ${c - radius} a${radius} ${radius} 0 1 1 -0.01 0`
+      : bdArcPath(c, c, radius, start, Math.min(end, start + 359.4));
+    const rad = (mid - 90) * Math.PI / 180;
+    const label = row.id === "outros" && row.rest > 1 ? `Outros (${row.rest} categorias)` : bdCategoryLabel(row.id);
+    return `<g class="bd-donut-seg-g" data-cat-index="${index}" style="--seg:var(--bd-cat-${row.slot});--dx:${(Math.cos(rad) * 6).toFixed(2)}px;--dy:${(Math.sin(rad) * 6).toFixed(2)}px" role="button" tabindex="-1" aria-label="${escapeHtml(label)}: ${escapeHtml(formatCurrency(row.value))}, ${Math.round(row.pct)}%">
+        <path class="bd-donut-hit" d="${d}"/>
+        <path class="bd-donut-seg${round ? " is-round" : ""}" d="${d}" pathLength="100"/>
+      </g>`;
   }).join("");
-  const top = rows[0];
-  const topPct = Math.round((top.value / total) * 100);
 
   host.innerHTML = `<div class="bd-cats-viz${bdCatsAnimated ? "" : " is-intro"}">
     <figure class="bd-donut" aria-label="Gastos do mês por categoria: total ${escapeHtml(formatCurrency(total))}">
-      <svg viewBox="0 0 ${size} ${size}" aria-hidden="true">
-        <circle class="bd-donut-track" cx="${cx}" cy="${cx}" r="${radius}" stroke-width="${stroke}"/>
-        <g stroke-width="${stroke}">${arcs}</g>
+      <svg viewBox="0 0 ${size} ${size}">
+        <defs>
+          <radialGradient id="bdDonutGlow" cx="50%" cy="50%" r="50%">
+            <stop offset="55%" stop-color="var(--bd-donut-glow)" stop-opacity="0"/>
+            <stop offset="100%" stop-color="var(--bd-donut-glow)" stop-opacity=".22"/>
+          </radialGradient>
+        </defs>
+        <circle class="bd-donut-halo" cx="${c}" cy="${c}" r="${radius - stroke / 2 - 4}" fill="url(#bdDonutGlow)"/>
+        <circle class="bd-donut-track" cx="${c}" cy="${c}" r="${radius}" stroke-width="${stroke}"/>
+        <circle class="bd-donut-inner" cx="${c}" cy="${c}" r="${radius - stroke / 2 - 7}"/>
+        <g class="bd-donut-segs" stroke-width="${stroke}">${segments}</g>
       </svg>
-      <figcaption class="bd-donut-center">
-        <small>Total gasto</small>
-        <strong>${escapeHtml(formatCurrency(total))}</strong>
-        <span>${expenses.length} lançamento${expenses.length === 1 ? "" : "s"}</span>
-      </figcaption>
+      <button type="button" class="bd-donut-center" data-cats-clear aria-label="Mostrar o total do mês"></button>
     </figure>
     <ol class="bd-cat-list">
       ${rows.map((row, index) => {
-        const pct = (row.value / total) * 100;
         const label = row.id === "outros" && row.rest > 1 ? `Outros · ${row.rest} categorias` : bdCategoryLabel(row.id);
-        return `<li class="bd-cat-row" data-cat-index="${index}" style="--seg:var(--bd-cat-${row.slot})" tabindex="0">
+        return `<li class="bd-cat-row" data-cat-index="${index}" style="--seg:var(--bd-cat-${row.slot})" tabindex="0" role="button" aria-pressed="false">
           <span class="bd-cat-chip">${finCategoryIconHtml(row.id)}</span>
           <span class="bd-cat-main">
             <span class="bd-cat-line"><strong>${escapeHtml(label)}</strong><b>${escapeHtml(formatCurrency(row.value))}</b></span>
-            <span class="bd-cat-meter"><i style="width:${Math.max(2, pct).toFixed(1)}%"></i></span>
+            <span class="bd-cat-meter"><i style="width:${Math.max(2, row.pct).toFixed(1)}%"></i></span>
           </span>
-          <span class="bd-cat-share">${pct >= 10 ? Math.round(pct) : pct.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%</span>
+          <span class="bd-cat-share">${row.pct >= 10 ? Math.round(row.pct) : row.pct.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%</span>
         </li>`;
       }).join("")}
     </ol>
   </div>
-  <p class="bd-cats-insight">${bdIcon("sparkle")}<span><b>${escapeHtml(bdCategoryLabel(top.id))}</b> concentra ${topPct}% dos gastos do mês.</span></p>`;
+  <p class="bd-cats-insight" aria-live="polite"></p>`;
   bdCatsAnimated = true;
+  paintBoardsCategories(null);
 }
 
-// Destaca fatia e linha juntas (passar o mouse, focar ou tocar).
+// Desenha o estado atual: categoria escolhida (ou prévia do mouse) ou total.
+function paintBoardsCategories(previewIndex) {
+  const host = document.querySelector("#bdCats");
+  if (!host || !bdCatsData) return;
+  const { rows, total, count } = bdCatsData;
+  const selectedIndex = bdCatsSelected ? rows.findIndex((row) => row.id === bdCatsSelected) : -1;
+  const index = previewIndex !== null && previewIndex !== undefined ? previewIndex : selectedIndex;
+  const row = index >= 0 ? rows[index] : null;
+  host.querySelector(".bd-cats-viz")?.classList.toggle("has-active", Boolean(row));
+  host.querySelectorAll("[data-cat-index]").forEach((el) => {
+    const on = Number(el.dataset.catIndex) === index;
+    el.classList.toggle("is-active", on);
+    if (el.classList.contains("bd-cat-row")) el.setAttribute("aria-pressed", String(Number(el.dataset.catIndex) === selectedIndex));
+  });
+  const center = host.querySelector(".bd-donut-center");
+  const insight = host.querySelector(".bd-cats-insight");
+  const key = row ? `cat:${row.id}` : "total";
+  if (center && center.dataset.key !== key) {
+    center.dataset.key = key;
+    center.style.setProperty("--seg", row ? `var(--bd-cat-${row.slot})` : "var(--bd-primary)");
+    center.innerHTML = row
+      ? `<span class="bd-dc-ico">${finCategoryIconHtml(row.id)}</span>
+         <small>${escapeHtml(row.id === "outros" && row.rest > 1 ? "Outros" : bdCategoryLabel(row.id)).replace(/\//g, "/<wbr>")}</small>
+         <strong>${escapeHtml(formatCurrency(row.value))}</strong>
+         <span class="bd-dc-pct">${Math.round(row.pct)}% do total</span>`
+      : `<small>Total gasto</small>
+         <strong>${escapeHtml(formatCurrency(total))}</strong>
+         <span>${count} lançamento${count === 1 ? "" : "s"}</span>`;
+    center.setAttribute("aria-label", row ? "Voltar ao total do mês" : `Total gasto no mês: ${formatCurrency(total)}`);
+    if (!prefersReducedMotion()) center.animate?.([{ opacity: 0, transform: "scale(.92)" }, { opacity: 1, transform: "scale(1)" }], { duration: 220, easing: "cubic-bezier(.2,.9,.3,1)" });
+  }
+  if (insight && insight.dataset.key !== key) {
+    insight.dataset.key = key;
+    if (row) {
+      const biggest = row.biggest;
+      const what = biggest ? escapeHtml(biggest.description || bdCategoryLabel(biggest.category)) : "";
+      insight.innerHTML = `${bdIcon("receipt")}<span><b>${row.count} lançamento${row.count === 1 ? "" : "s"}</b>${biggest ? ` · maior: <b>${escapeHtml(formatCurrency(Number(biggest.amount) || 0))}</b> em ${what}` : ""}</span>`;
+    } else {
+      const top = rows[0];
+      insight.innerHTML = `${bdIcon("sparkle")}<span><b>${escapeHtml(bdCategoryLabel(top.id))}</b> concentra ${Math.round(top.pct)}% dos gastos do mês. Toque numa fatia para detalhar.</span>`;
+    }
+  }
+}
+
+function selectBoardsCategory(index) {
+  if (!bdCatsData) return;
+  const row = bdCatsData.rows[index];
+  bdCatsSelected = !row || bdCatsSelected === row.id ? null : row.id;
+  if (bdCatsSelected) navigator.vibrate?.(8);
+  paintBoardsCategories(null);
+}
+
 function bindBoardsCategories() {
   const host = document.querySelector("#bdCats");
   if (!host || host.dataset.bound === "1") return;
   host.dataset.bound = "1";
-  const highlight = (index) => {
-    host.querySelectorAll("[data-cat-index]").forEach((el) => el.classList.toggle("is-active", index !== null && el.dataset.catIndex === index));
-    host.querySelector(".bd-cats-viz")?.classList.toggle("has-active", index !== null);
-  };
+  const fine = () => window.matchMedia?.("(hover: hover) and (pointer: fine)").matches;
+  host.addEventListener("click", (event) => {
+    if (event.target.closest("[data-cats-clear]")) { bdCatsSelected = null; paintBoardsCategories(null); return; }
+    const target = event.target.closest("[data-cat-index]");
+    if (target) selectBoardsCategory(Number(target.dataset.catIndex));
+  });
+  // Prévia ao passar o mouse (só com mouse de verdade; no toque vale o toque).
   host.addEventListener("pointerover", (event) => {
+    if (!fine()) return;
     const target = event.target.closest("[data-cat-index]");
-    highlight(target ? target.dataset.catIndex : null);
+    paintBoardsCategories(target ? Number(target.dataset.catIndex) : null);
   });
-  host.addEventListener("pointerleave", () => highlight(null));
-  host.addEventListener("focusin", (event) => {
-    const target = event.target.closest("[data-cat-index]");
-    if (target) highlight(target.dataset.catIndex);
+  host.addEventListener("pointerleave", () => { if (fine()) paintBoardsCategories(null); });
+  host.addEventListener("keydown", (event) => {
+    const row = event.target.closest(".bd-cat-row");
+    if (!row) return;
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      selectBoardsCategory(Number(row.dataset.catIndex));
+    } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      const rows = [...host.querySelectorAll(".bd-cat-row")];
+      const next = rows[rows.indexOf(row) + (event.key === "ArrowDown" ? 1 : -1)];
+      if (!next) return;
+      event.preventDefault();
+      next.focus();
+      if (bdCatsSelected) selectBoardsCategory(Number(next.dataset.catIndex));
+    } else if (event.key === "Escape" && bdCatsSelected) {
+      bdCatsSelected = null;
+      paintBoardsCategories(null);
+    }
   });
-  host.addEventListener("focusout", () => highlight(null));
+  // Toque longo não abre "copiar/selecionar" nem o menu do navegador.
+  host.addEventListener("contextmenu", (event) => { if (event.target.closest(".bd-cats-viz, .bd-cats-insight")) event.preventDefault(); });
+  host.addEventListener("selectstart", (event) => event.preventDefault());
 }
 
 function bdDueLabel(dueIso) {

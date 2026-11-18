@@ -168,3 +168,20 @@ test("PWA entrega a folha nova e invalida o cache antigo", () => {
   assert.match(sw, /"\/src\/refine\.css"/);
   assert.match(sw, /const CACHE_NAME = "pulsenote-v53";/);
 });
+
+test("Início: chips de compromissos coloridos por tipo", () => {
+  assert.match(refine, /\.bd-ts \{ --tc: var\(--bd-primary\); background: color-mix\(in srgb, var\(--tc\) 10%, var\(--bd-card\)\)/);
+  for (const tone of ["blue", "violet", "red", "amber"]) assert.match(refine, new RegExp(`\\.bd-ts\\.tone-${tone} \\{ --tc: var\\(--bd-${tone}\\); \\}`));
+});
+
+test("Gastos por categoria: toque seleciona a fatia e nada vira texto copiável", () => {
+  assert.match(app, /let bdCatsSelected = null;/);
+  assert.match(app, /function paintBoardsCategories\(previewIndex\)/);
+  assert.match(app, /function selectBoardsCategory\(index\)/);
+  assert.match(app, /class="bd-donut-hit"/, "área de toque maior que a fatia");
+  assert.match(app, /data-cats-clear/, "tocar no centro volta ao total");
+  assert.match(app, /addEventListener\("contextmenu"/);
+  assert.match(app, /addEventListener\("selectstart", \(event\) => event\.preventDefault\(\)\)/);
+  assert.doesNotMatch(extractFunction("renderBoardsCategories"), /<title>/, "sem tooltip nativo no toque longo");
+  assert.match(refine, /-webkit-user-select: none; user-select: none; -webkit-touch-callout: none;/);
+});
