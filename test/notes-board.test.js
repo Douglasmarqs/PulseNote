@@ -8,7 +8,7 @@ const html = read("src/index.html");
 const app = read("src/app.js");
 
 test("tela de Notas mantém todos os campos usados pelo app", () => {
-  for (const id of ["noteForm", "noteId", "noteTitle", "noteDescription", "notePriority", "noteChecklistToggle", "noteChecklistField", "noteChecklist",
+  for (const id of ["noteForm", "noteId", "noteTitle", "noteDescription", "notePriority", "noteChecklistBuilder", "noteChecklistItems", "noteChecklistAdd", "noteFolderPicker",
     "noteCategory", "noteFolder", "noteTags", "noteGoal", "noteAttachments", "noteObservations", "noteColor", "noteTextColor", "resetNoteForm",
     "noteEditingBanner", "cancelEditNote", "noteSaveBtnLabel", "noteFilter", "noteFolders", "notesList",
     "noteDetailModal", "closeNoteDetail", "ndTitle", "ndMeta", "ndBody", "ndFavBtn", "ndDeleteBtn", "ndMoreFieldsBtn", "ndConvertTaskBtn", "ndSaveBtn",

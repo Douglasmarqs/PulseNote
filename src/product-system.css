@@ -453,7 +453,8 @@ button { touch-action: manipulation; }
   --glass-saturation: 1.16;
 }
 
-:root:not([data-theme="light"]) {
+:root[data-theme="aurora"],
+:root[data-theme="eclipse"] {
   --bg: var(--pulse-abyss);
   --bg2: var(--pulse-night);
   --surface: var(--pulse-surface);
@@ -470,6 +471,30 @@ button { touch-action: manipulation; }
   --product-border: color-mix(in srgb, var(--line) 82%, white 5%);
   --product-shadow: 0 1px 0 rgba(255,255,255,.035) inset, 0 18px 46px rgba(0,0,0,.24);
   --product-shadow-raised: 0 1px 0 rgba(255,255,255,.055) inset, 0 28px 78px rgba(0,0,0,.38);
+}
+
+/* "Automático" só vira escuro quando o aparelho está escuro. Antes esta
+   regra valia sem a media query e misturava tokens escuros com o tema claro
+   (títulos quase brancos, Semana/Mês do Planner com cartões escuros). */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: var(--pulse-abyss);
+    --bg2: var(--pulse-night);
+    --surface: var(--pulse-surface);
+    --surface2: #171d34;
+    --text: var(--pulse-white);
+    --text2: #bec4d5;
+    --muted: var(--pulse-gray);
+    --line: #252c48;
+    --accent: var(--pulse-primary);
+    --accent2: #6c72ff;
+    --accent-soft: #162a62;
+    --product-card: color-mix(in srgb, var(--surface) 94%, transparent);
+    --product-card-soft: color-mix(in srgb, var(--surface2) 91%, transparent);
+    --product-border: color-mix(in srgb, var(--line) 82%, white 5%);
+    --product-shadow: 0 1px 0 rgba(255,255,255,.035) inset, 0 18px 46px rgba(0,0,0,.24);
+    --product-shadow-raised: 0 1px 0 rgba(255,255,255,.055) inset, 0 28px 78px rgba(0,0,0,.38);
+  }
 }
 
 :root[data-theme="light"] {

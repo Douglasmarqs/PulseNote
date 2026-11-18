@@ -22,8 +22,9 @@ test("nota aberta: Virar tarefa espera o histórico antes de trocar de tela", ()
 
 test("nota aberta: marca-texto liga e desliga, limpar remove tudo", () => {
   assert.match(app, /function noteHighlightActive\(\)/);
-  assert.match(app, /noteHighlightActive\(\) \? "transparent" : "#fde047"/);
-  assert.match(app, /document\.execCommand\("removeFormat"\);\n      document\.execCommand\("backColor", false, "transparent"\);/);
+  assert.match(app, /function noteToggleHighlight\(editor\)/);
+  assert.match(app, /function noteUnhighlight\(editor, texts\)/);
+  assert.match(app, /function noteClearFormatting\(editor, whole\)/);
   assert.doesNotMatch(app, /execCommand\("foreColor", false, getComputedStyle\(body\)\.color\)/, "não grava a cor do tema");
   assert.match(html, /data-nd-cmd="highlight"[^>]*aria-pressed="false"/);
 });

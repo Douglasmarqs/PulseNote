@@ -102,21 +102,26 @@ function syncThemeColorMeta(choice) {
   if (csMeta) csMeta.setAttribute("content", isDark ? "dark" : "light");
 }
 
+// "Automático" vira claro ou escuro conforme o aparelho. Resolver para um
+// atributo real evita que folhas de estilo diferentes interpretem a
+// ausência do atributo de jeitos diferentes (tema misturado).
+function resolveThemeChoice(choice) {
+  if (choice === "light" || choice === "aurora" || choice === "eclipse") return choice;
+  let dark = false;
+  try { dark = window.matchMedia("(prefers-color-scheme: dark)").matches; } catch { /* sem matchMedia */ }
+  return dark ? "aurora" : "light";
+}
+
 function applyTheme(choice) {
-  if (choice === "light" || choice === "aurora" || choice === "eclipse") {
-    document.documentElement.setAttribute("data-theme", choice);
-  } else {
-    document.documentElement.removeAttribute("data-theme"); // = "automático"
-  }
+  document.documentElement.setAttribute("data-theme", resolveThemeChoice(choice));
   syncThemeColorMeta(choice);
 }
 
 // Em modo "Automático", se a pessoa mudar o tema do aparelho com o app
-// aberto (sem tocar em nada dentro do PulseNote), a status bar nativa
-// acompanha.
+// aberto (sem tocar em nada dentro do PulseNote), o app inteiro acompanha.
 try {
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
-    if (getSavedTheme() === "system") syncThemeColorMeta("system");
+    if (getSavedTheme() === "system") applyTheme("system");
   });
 } catch { /* matchMedia/addEventListener indisponível — sem problema, é só um refinamento */ }
 
@@ -633,8 +638,11 @@ function toLocalIso(date) {
   return `${year}-${month}-${day}`;
 }
 
-const todayIso = toLocalIso(new Date());
-const tomorrowIso = offsetDate(1);
+// "Hoje" acompanha o relógio: com o app aberto de um dia para o outro
+// (PWA fica dias na memória do celular), tudo que depende da data —
+// compromissos de hoje, foco da semana, calendário — vira junto.
+let todayIso = toLocalIso(new Date());
+let tomorrowIso = offsetDate(1);
 const weekIso = offsetDate(5);
 const appTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Sao_Paulo";
 
@@ -660,6 +668,7 @@ let plannerActiveTab = "list"; // "list" | "day" | "week" | "month"
 let plannerDayDate = todayIso;
 let plannerWeekAnchor = todayIso; // qualquer data dentro da semana ativa
 let plannerMonthAnchor = todayIso; // qualquer data dentro do mês ativo
+let plannerMonthSelected = todayIso; // dia tocado no calendário do mês (mostra a agenda dele embaixo)
 let plannerExpandedGoals = new Set();
 let plannerExpandedTaskDetails = new Set(); // ids de tarefas com a checklist aberta — sem isso, qualquer alteração num item (concluir/excluir/adicionar) recriava a linha do zero e fechava a checklist na cara do usuário
 let plannerEditingEventId = null;
@@ -734,7 +743,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   const now = new Date();
   const hour = now.getHours();
-  const greeting = hour < 12 ? "Bom dia" : hour < 18 ? "Boa tarde" : "Boa noite";
+  const greeting = greetingForHour(hour);
   const greetingMood = hour < 12 ? "morning" : hour < 18 ? "afternoon" : "night";
   const dateStr = new Intl.DateTimeFormat("pt-BR", {
     day: "2-digit",
@@ -762,6 +771,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // Atualiza os contadores "Faltam Xh Ymin" da Agenda a cada 30s, em tempo real
   setInterval(updateEventCountdowns, 30000);
+  startLiveClock();
 
   bindNavigation();
   bindPremiumDashboard();
@@ -2536,7 +2546,8 @@ function bindNavigation() {
       // genérica do Planner. Cada atalho abre a lente que corresponde ao
       // conteúdo resumido no card e só então rola até a área em questão.
       if (plannerFocus === "tasks") setPlannerTab("list");
-      if (plannerFocus === "agenda") setPlannerTab("week");
+      // "Seus compromissos de hoje" → a lente Dia, já em hoje (é o mesmo recorte).
+      if (plannerFocus === "agenda") { plannerDayDate = todayIso; setPlannerTab("day"); }
       const target = plannerFocus === "goals"
         ? document.querySelector(".planner-goals-panel")
         : document.querySelector("#plannerView");
@@ -2756,7 +2767,7 @@ function renderPulsinhoConversation({ loading = false, error = "" } = {}) {
   if (!loading) persistPulsinhoConversation();
   root.classList.toggle("is-loading", loading);
   const hour = new Date().getHours();
-  const hello = hour < 5 ? "Boa noite" : hour < 12 ? "Bom dia" : hour < 18 ? "Boa tarde" : "Boa noite";
+  const hello = greetingForHour(hour);
   const introText = `${hello}, ${bdFirstName()}! Sou o Pulsinho 💜 Pode falar comigo do seu jeito: registro gastos, crio tarefas e lembretes, marco compromissos, anoto ideias — ou a gente só conversa.`;
   // Primeira vez que o painel aparece: o Pulsinho acena, "digita" e a
   // saudação surge palavra por palavra. Depois disso, fica estática.
@@ -2882,10 +2893,134 @@ function watchPulsinhoIntro() {
   if (!("IntersectionObserver" in window)) { playPulsinhoIntro(); return; }
   const observer = new IntersectionObserver((entries) => {
     if (!entries.some((entry) => entry.isIntersecting)) return;
+    // No celular, no Início, só aparece o balão: a apresentação toca quando
+    // a conversa abre de fato (ver openPulsinhoConvo).
+    if (pulsinhoTeaserMode()) return;
     observer.disconnect();
     playPulsinhoIntro();
   }, { threshold: 0.35 });
   observer.observe(chat);
+}
+
+// ── Balão do Pulsinho (Início, celular) ─────────────────────────
+// Em vez do cartão de conversa inteiro no meio do Início, o Pulsinho
+// aparece como um balão com uma chamada dele, montada com os dados reais
+// do dia (atrasadas, próximo compromisso, gastos). Tocar no balão abre a
+// conversa em tela cheia; os atalhos embaixo já respondem por você.
+const chatTeaserQuery = () => window.matchMedia?.("(max-width: 760px)").matches;
+function pulsinhoTeaserMode() {
+  const chat = document.querySelector("#bdChat");
+  return Boolean(chat && chatTeaserQuery() && document.querySelector("#dashboardView")?.contains(chat));
+}
+
+let pulsinhoTeaserIndex = 0;
+let pulsinhoTeaserTimer = 0;
+let pulsinhoTeaserCallsCache = [];
+
+function pulsinhoTeaserCalls() {
+  const firstName = (getUser()?.name || "").trim().split(/\s+/)[0] || "";
+  const hour = new Date().getHours();
+  const hello = `${greetingForHour(hour)}${firstName ? `, ${firstName}` : ""}!`;
+  const now = new Date();
+  const nowHm = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+  const { counts } = bdAgendaSnapshot();
+  const nextEvent = state.events
+    .filter((event) => event && event.date === todayIso && event.time && event.time >= nowHm)
+    .sort((a, b) => String(a.time).localeCompare(String(b.time)))[0];
+  const spentToday = bdWorkspaceFinances().some((entry) => entry.date === todayIso && entry.type === "despesa");
+  const todayAsk = { label: "O que tenho hoje?", send: "O que tenho para hoje?" };
+  const logSpend = { label: "Anotar gasto", prefill: "Gastei " };
+  const calls = [];
+  if (counts.overdue) {
+    calls.push({
+      text: `${counts.overdue === 1 ? "Uma tarefa ficou" : `${counts.overdue} tarefas ficaram`} para trás. Quer ver e reorganizar comigo?`,
+      actions: [{ label: "Ver atrasadas", send: "Quais tarefas estão atrasadas?" }, todayAsk],
+    });
+  }
+  if (nextEvent) {
+    calls.push({
+      text: `Seu próximo compromisso é “${nextEvent.title}” às ${nextEvent.time}.`,
+      actions: [todayAsk, { label: "Criar lembrete", prefill: "Me lembra de " }],
+    });
+  } else if (counts.tasksTotal > counts.tasksDone) {
+    const left = counts.tasksTotal - counts.tasksDone;
+    calls.push({
+      text: `${left === 1 ? "Falta 1 tarefa" : `Faltam ${left} tarefas`} para fechar o dia. Posso te ajudar a priorizar?`,
+      actions: [todayAsk, { label: "Nova tarefa", prefill: "Criar tarefa " }],
+    });
+  }
+  calls.push(spentToday
+    ? { text: "Quer saber como estão seus gastos do mês até agora?", actions: [{ label: "Gastos do mês", send: "Como estão meus gastos este mês?" }, logSpend] }
+    : { text: "Gastou algo hoje? Me conta do seu jeito que eu anoto.", actions: [logSpend, { label: "Gastos do mês", send: "Como estão meus gastos este mês?" }] });
+  calls.push({ text: "Me peça um lembrete, uma tarefa ou um resumo do mês — é só falar.", actions: [{ label: "Criar lembrete", prefill: "Me lembra de " }, todayAsk] });
+  calls[0] = { ...calls[0], text: `${hello} ${calls[0].text}` };
+  return calls;
+}
+
+function paintPulsinhoTeaser(call, { animate = false } = {}) {
+  const text = document.querySelector("#bdChatTeaserText");
+  const actions = document.querySelector("#bdChatTeaserActions");
+  if (!text || !actions || !call) return;
+  const apply = () => {
+    text.textContent = call.text;
+    actions.innerHTML = call.actions.map((action, index) => `<button type="button" class="bd-teaser-chip" data-teaser-action="${index}">${escapeHtml(action.label)}</button>`).join("");
+  };
+  const bubble = document.querySelector("#bdChatTeaser .bd-teaser-bubble");
+  if (!animate || prefersReducedMotion() || !bubble?.animate) { apply(); return; }
+  const out = [bubble, actions].map((el) => el.animate([{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(-4px)" }], { duration: 160, easing: "ease-in", fill: "forwards" }));
+  out[0].finished.then(() => {
+    apply();
+    out.forEach((animation) => animation.cancel());
+    bubble.animate([{ opacity: 0, transform: "translateY(5px)" }, { opacity: 1, transform: "none" }], { duration: 260, easing: "cubic-bezier(.2,.9,.3,1)" });
+    actions.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 260, delay: 60, easing: "ease-out", fill: "backwards" });
+  }, apply);
+}
+
+function renderPulsinhoTeaser({ keepIndex = true } = {}) {
+  if (!document.querySelector("#bdChatTeaser")) return;
+  pulsinhoTeaserCallsCache = pulsinhoTeaserCalls();
+  if (!keepIndex || pulsinhoTeaserIndex >= pulsinhoTeaserCallsCache.length) pulsinhoTeaserIndex = 0;
+  paintPulsinhoTeaser(pulsinhoTeaserCallsCache[pulsinhoTeaserIndex]);
+  schedulePulsinhoTeaser();
+}
+
+function schedulePulsinhoTeaser() {
+  clearTimeout(pulsinhoTeaserTimer);
+  if (prefersReducedMotion() || pulsinhoTeaserCallsCache.length < 2) return;
+  pulsinhoTeaserTimer = setTimeout(() => {
+    const visible = pulsinhoTeaserMode() && activeView === "dashboard" && !document.hidden && !isPulsinhoConvo();
+    if (visible) {
+      pulsinhoTeaserIndex = (pulsinhoTeaserIndex + 1) % pulsinhoTeaserCallsCache.length;
+      paintPulsinhoTeaser(pulsinhoTeaserCallsCache[pulsinhoTeaserIndex], { animate: true });
+    }
+    schedulePulsinhoTeaser();
+  }, 7000);
+}
+
+function bindPulsinhoTeaser() {
+  const teaser = document.querySelector("#bdChatTeaser");
+  if (!teaser || teaser.dataset.bound === "1") return;
+  teaser.dataset.bound = "1";
+  document.querySelector("#bdChatTeaserOpen")?.addEventListener("click", () => openPulsinhoConvo());
+  document.querySelector("#bdChatTeaserActions")?.addEventListener("click", (event) => {
+    const chip = event.target.closest("[data-teaser-action]");
+    if (!chip) return;
+    const action = pulsinhoTeaserCallsCache[pulsinhoTeaserIndex]?.actions?.[Number(chip.dataset.teaserAction)];
+    if (!action) return;
+    const input = document.querySelector("#pulseCommandInput");
+    const form = document.querySelector("#pulseCommandForm");
+    openPulsinhoConvo();
+    if (!input) return;
+    input.value = action.send || action.prefill || "";
+    updatePulsinhoSuggestions();
+    if (action.send && form) {
+      // Espera a conversa terminar de abrir para a mensagem entrar animada.
+      setTimeout(() => { if (typeof form.requestSubmit === "function") form.requestSubmit(); else form.dispatchEvent(new Event("submit", { cancelable: true })); }, prefersReducedMotion() ? 0 : 260);
+    } else {
+      input.focus({ preventScroll: true });
+      try { input.setSelectionRange(input.value.length, input.value.length); } catch { /* sem seleção */ }
+    }
+  });
 }
 
 // ── Modo conversa do Pulsinho (celular) ────────────────────────
@@ -2933,7 +3068,9 @@ function layoutPulsinhoConvo() {
     // Com o teclado aberto a conversa aproveita a altura toda; sem teclado
     // ela flutua deixando o Início (escurecido) à vista em cima — tocar ali
     // fecha, como uma folha.
-    const top = viewTop + (keyboard ? Math.max(10, safeTop + 6) : Math.max(safeTop + 10, Math.round(viewHeight * 0.11)));
+    // Aberta a partir do balão do Início, a conversa ocupa a tela (como um
+    // app de mensagens); o cartão antigo flutuava a 11% do topo.
+    const top = viewTop + (keyboard ? Math.max(10, safeTop + 6) : chat.classList.contains("from-teaser") ? Math.max(10, safeTop + 8) : Math.max(safeTop + 10, Math.round(viewHeight * 0.11)));
     const bottomGap = keyboard ? 8 : Math.max(10, safeBottom + 6);
     chat.style.setProperty("--convo-top", `${Math.round(top)}px`);
     chat.style.setProperty("--convo-h", `${Math.round(Math.max(240, viewTop + viewHeight - bottomGap - top))}px`);
@@ -2958,14 +3095,26 @@ function updatePulsinhoSuggestions() {
   box.hidden = !isPulsinhoConvo() || hasUserMessage || Boolean(document.querySelector("#pulseCommandInput")?.value.trim());
 }
 
+// Recorte (clip-path) que mostra só a área `rect` dentro do cartão `box`.
+function pulsinhoClipFor(rect, box, radius = 20) {
+  const t = Math.max(0, rect.top - box.top);
+  const r = Math.max(0, box.right - rect.right);
+  const b = Math.max(0, box.bottom - rect.bottom);
+  const l = Math.max(0, rect.left - box.left);
+  return `inset(${t.toFixed(1)}px ${r.toFixed(1)}px ${b.toFixed(1)}px ${l.toFixed(1)}px round ${radius}px)`;
+}
+
+let pulsinhoClosing = false;
+
 function openPulsinhoConvo() {
   const chat = document.querySelector("#bdChat");
-  if (!chat || isPulsinhoConvo() || !chatIsMobile() || !document.querySelector("#dashboardView")?.contains(chat)) return;
+  if (!chat || pulsinhoClosing || isPulsinhoConvo() || !chatIsMobile() || !document.querySelector("#dashboardView")?.contains(chat)) return;
+  const teaser = pulsinhoTeaserMode();
   const from = chat.getBoundingClientRect();
   // Guarda o lugar do cartão na página (nada pula por baixo).
   const placeholder = document.createElement("div");
   placeholder.id = "bdChatPlaceholder";
-  placeholder.className = "bd-chat-ph";
+  placeholder.className = `bd-chat-ph${teaser ? " is-teaser" : ""}`;
   placeholder.style.height = `${Math.round(from.height)}px`;
   chat.before(placeholder);
   let backdrop = document.querySelector("#bdChatBackdrop");
@@ -2979,48 +3128,93 @@ function openPulsinhoConvo() {
     document.body.appendChild(backdrop);
   }
   backdrop.hidden = false;
+  pulsinhoConvoGuardUntil = Date.now() + 450;
+  chat.classList.toggle("from-teaser", teaser);
   chat.classList.add("is-convo");
   document.body.classList.add("bd-chat-convo");
   document.documentElement.classList.add("pn-scroll-locked");
   document.querySelector("#bdChatClose")?.removeAttribute("hidden");
   layoutPulsinhoConvo();
-  // Animação: o cartão sai de onde estava e "levanta" até o lugar novo.
+  if (pulsinhoIntroState === "pending") playPulsinhoIntro();
+  const reduce = prefersReducedMotion();
   requestAnimationFrame(() => {
     const to = chat.getBoundingClientRect();
-    if (!to.height || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    if (!to.height || reduce || typeof chat.animate !== "function") return;
+    backdrop.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 260, easing: "ease-out" });
+    if (teaser) {
+      // O balão "se abre" até virar a tela de conversa: o recorte começa
+      // exatamente onde o balão estava e cresce até a tela inteira.
+      chat.animate([
+        { clipPath: pulsinhoClipFor(from, to, 22) },
+        { clipPath: "inset(0px 0px 0px 0px round 22px)" },
+      ], { duration: 420, easing: "cubic-bezier(.2,.9,.22,1)" });
+      chat.querySelectorAll(":scope > .bd-chat-head, :scope > .bd-chat-stage, :scope > .bd-chat-suggest, :scope > .bd-chat-form").forEach((part, index) => {
+        part.animate([{ opacity: 0, transform: "translateY(10px)" }, { opacity: 1, transform: "none" }], { duration: 300, delay: 90 + index * 40, easing: "cubic-bezier(.2,.9,.3,1)", fill: "backwards" });
+      });
+      return;
+    }
+    // Cartão antigo (fora do modo balão): "levanta" de onde estava.
     chat.animate([
       { transform: `translate(${from.left - to.left}px, ${from.top - to.top}px)`, opacity: 0.6 },
       { transform: "none", opacity: 1 },
     ], { duration: 300, easing: "cubic-bezier(.2,.9,.3,1)" });
-    backdrop.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 240, easing: "ease-out" });
   });
   scrollPulsinhoToEnd();
   updatePulsinhoSuggestions();
 }
 
-function closePulsinhoConvo() {
-  const chat = document.querySelector("#bdChat");
-  if (!chat || !isPulsinhoConvo()) return;
-  document.querySelector("#pulseCommandInput")?.blur();
-  // Volta "pousando" no lugar do cartão (o inverso da abertura).
-  const from = chat.getBoundingClientRect();
-  const drag = parseFloat(chat.style.getPropertyValue("--convo-drag")) || 0;
-  chat.classList.remove("is-convo", "has-keyboard", "is-dragging");
+function finishClosePulsinhoConvo(chat) {
+  chat.classList.remove("is-convo", "has-keyboard", "is-dragging", "from-teaser");
   chat.style.removeProperty("--convo-top");
   chat.style.removeProperty("--convo-h");
   chat.style.removeProperty("--convo-drag");
   document.body.classList.remove("bd-chat-convo");
   document.documentElement.classList.remove("pn-scroll-locked");
   document.querySelector("#bdChatClose")?.setAttribute("hidden", "");
-  const backdrop = document.querySelector("#bdChatBackdrop");
-  const reduce = prefersReducedMotion();
-  if (backdrop && !backdrop.hidden) {
-    if (reduce || typeof backdrop.animate !== "function") backdrop.hidden = true;
-    else backdrop.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 220, easing: "ease-out" }).finished.then(() => { backdrop.hidden = true; }, () => { backdrop.hidden = true; });
-  }
   document.querySelector("#bdChatPlaceholder")?.remove();
   updatePulsinhoSuggestions();
   repairViewportAfterOverlay();
+}
+
+function closePulsinhoConvo() {
+  const chat = document.querySelector("#bdChat");
+  if (!chat || !isPulsinhoConvo() || pulsinhoClosing) return;
+  document.querySelector("#pulseCommandInput")?.blur();
+  document.querySelector("#bdChatMenu")?.setAttribute("hidden", "");
+  const reduce = prefersReducedMotion();
+  const backdrop = document.querySelector("#bdChatBackdrop");
+  const hideBackdrop = () => { if (backdrop) backdrop.hidden = true; };
+  if (backdrop && !backdrop.hidden) {
+    if (reduce || typeof backdrop.animate !== "function") hideBackdrop();
+    else backdrop.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 240, easing: "ease-out" }).finished.then(hideBackdrop, hideBackdrop);
+  }
+  const placeholder = document.querySelector("#bdChatPlaceholder");
+  // Modo balão: a tela de conversa "se fecha" de volta para dentro do balão.
+  if (chat.classList.contains("from-teaser") && placeholder && !reduce && typeof chat.animate === "function") {
+    pulsinhoClosing = true;
+    const box = chat.getBoundingClientRect();
+    const target = placeholder.getBoundingClientRect();
+    chat.querySelectorAll(":scope > .bd-chat-head, :scope > .bd-chat-stage, :scope > .bd-chat-suggest, :scope > .bd-chat-form").forEach((part) => {
+      part.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, easing: "ease-in", fill: "forwards" });
+    });
+    const animation = chat.animate([
+      { clipPath: "inset(0px 0px 0px 0px round 22px)" },
+      { clipPath: pulsinhoClipFor(target, box, 22) },
+    ], { duration: 300, easing: "cubic-bezier(.4,0,.2,1)", fill: "forwards" });
+    const done = () => {
+      pulsinhoClosing = false;
+      chat.getAnimations?.().forEach((item) => item.cancel());
+      chat.querySelectorAll(":scope > *").forEach((part) => part.getAnimations?.().forEach((item) => item.cancel()));
+      finishClosePulsinhoConvo(chat);
+      document.querySelector("#bdChatTeaser")?.animate?.([{ opacity: 0, transform: "scale(.98)" }, { opacity: 1, transform: "none" }], { duration: 220, easing: "ease-out" });
+    };
+    animation.finished.then(done, done);
+    return;
+  }
+  // Volta "pousando" no lugar do cartão (o inverso da abertura).
+  const from = chat.getBoundingClientRect();
+  const drag = parseFloat(chat.style.getPropertyValue("--convo-drag")) || 0;
+  finishClosePulsinhoConvo(chat);
   const to = chat.getBoundingClientRect();
   if (!reduce && to.height && typeof chat.animate === "function") {
     chat.animate([
@@ -4215,11 +4409,32 @@ function syncTabbarInk(view = activeView, { animate = false } = {}) {
   }
 }
 
+// Salvar nota: valida, monta a nota, atualiza a tela na hora e grava em
+// segundo plano (sem redesenhar o app inteiro — era isso que dava o
+// "travadinha" ao salvar). Título vazio usa a primeira linha do texto.
+let noteFormSaving = false;
 function saveNote(event) {
-  event.preventDefault();
+  event?.preventDefault();
+  if (noteFormSaving) return;
+  syncNoteEditorSource();
   const id = document.querySelector("#noteId").value;
   const existing = state.notes.find((note) => note.id === id);
   const newDescription = valueOf("#noteDescription");
+  const items = noteDraftChecklist
+    .map((item) => ({ id: item.id || crypto.randomUUID(), text: String(item.text || "").trim(), done: Boolean(item.done) }))
+    .filter((item) => item.text);
+  const typedTitle = valueOf("#noteTitle");
+  if (!typedTitle && !newDescription && !items.length) {
+    setNoteFormError("Escreva um título, um texto ou um item de checklist para salvar.");
+    const titleInput = document.querySelector("#noteTitle");
+    titleInput?.focus();
+    document.querySelector("#noteForm")?.animate?.([
+      { transform: "translateX(0)" }, { transform: "translateX(-6px)" }, { transform: "translateX(6px)" }, { transform: "translateX(-3px)" }, { transform: "translateX(0)" },
+    ], { duration: 320, easing: "ease-in-out" });
+    return;
+  }
+  noteFormSaving = true;
+  const title = (typedTitle || newDescription.split("\n").find((line) => line.trim()) || items[0]?.text || "Sem título").trim().slice(0, 80);
   const textColor = normalizeNoteTextColor(valueOf("#noteTextColor"));
   const descriptionChanged = !existing || existing.description !== newDescription;
   const textColorChanged = Boolean(existing) && normalizeNoteTextColor(existing.textColor) !== textColor;
@@ -4231,37 +4446,16 @@ function saveNote(event) {
     : existing && !descriptionChanged && !textColorChanged
       ? existing.descriptionHtml || notePlainTextToHtml(newDescription, textColor)
       : notePlainTextToHtml(newDescription, textColor);
-  const existingChecklist = existing?.checklist || [];
-  const reusedChecklistIndexes = new Set();
-  const checklist = splitLines(valueOf("#noteChecklist")).map((text, index) => {
-    // Preserve a conclusao dos itens quando a pessoa edita outro campo da
-    // nota. Primeiro procuramos o mesmo texto (inclusive se ele mudou de
-    // posicao); se o texto foi renomeado, reaproveitamos o item da posicao.
-    let previousIndex = existingChecklist.findIndex((item, itemIndex) =>
-      !reusedChecklistIndexes.has(itemIndex) && noteChecklistItemText(item) === text
-    );
-    if (previousIndex < 0 && existingChecklist[index] && !reusedChecklistIndexes.has(index)) {
-      previousIndex = index;
-    }
-    if (previousIndex < 0) return { id: crypto.randomUUID(), text, done: false };
-
-    reusedChecklistIndexes.add(previousIndex);
-    const previousItem = existingChecklist[previousIndex];
-    return {
-      id: typeof previousItem === "object" && previousItem.id ? previousItem.id : crypto.randomUUID(),
-      text,
-      done: noteChecklistItemDone(previousItem),
-    };
-  });
   const payload = {
+    ...(existing || {}),
     id: id || crypto.randomUUID(),
-    title: valueOf("#noteTitle"),
+    title,
     description: newDescription,
-    category: valueOf("#noteCategory") || "Geral",
-    folder: valueOf("#noteFolder") || "Entrada",
+    category: valueOf("#noteCategory") || existing?.category || "Geral",
+    folder: valueOf("#noteFolder") || existing?.folder || "Entrada",
     tags: splitValues(valueOf("#noteTags")),
-    priority: valueOf("#notePriority"),
-    checklist,
+    priority: NOTE_PRIORITIES.includes(valueOf("#notePriority")) ? valueOf("#notePriority") : "Media",
+    checklist: items,
     attachments: splitValues(valueOf("#noteAttachments")),
     goal: valueOf("#noteGoal"),
     observations: valueOf("#noteObservations"),
@@ -4271,21 +4465,58 @@ function saveNote(event) {
     createdAt: existing?.createdAt || todayIso,
     updatedAt: new Date().toISOString(),
     convertedToTaskId: existing?.convertedToTaskId || "",
-    // A cor escolhida já aparece enquanto a pessoa escreve a primeira
-    // versão da nota. Ao salvar, guardamos também o HTML equivalente para
-    // que a cor apareça no cartão e no editor detalhado. Formatações ricas
-    // existentes continuam intactas enquanto texto/cor não forem alterados.
     descriptionHtml,
   };
 
-  state.notes = id ? state.notes.map((note) => (note.id === id ? payload : note)) : [payload, ...state.notes];
-  saveState();
+  const isNew = !existing;
+  state.notes = existing ? state.notes.map((note) => (note.id === payload.id ? payload : note)) : [payload, ...state.notes];
   resetNoteForm();
   closeNotesFormSheet();
-  renderAll();
+  if (isNew && notesFolderFilter !== "all" && notesFolderFilter !== payload.folder) notesFolderFilter = "all";
+  renderNotes();
+  flashNoteCard(payload.id);
   if (notesPanelMode()) openNoteDetail(payload.id);
-  showToast(id ? "Anotacao atualizada." : "Anotacao criada.");
+  showToast(isNew ? "Nota criada" : "Alterações salvas", isNew && !notesPanelMode()
+    ? { actionLabel: "Abrir", onAction: () => openNoteDetail(payload.id) }
+    : {});
+  queueNotePersist();
+  noteFormSaving = false;
 }
+
+// Destaque rápido no cartão que acabou de ser criado/alterado.
+function flashNoteCard(id) {
+  requestAnimationFrame(() => {
+    const card = document.querySelector(`#notesList .bn-card[data-note-id="${CSS.escape(id)}"]`);
+    if (!card) return;
+    card.classList.remove("is-flash");
+    void card.offsetWidth;
+    card.classList.add("is-flash");
+    setTimeout(() => card.classList.remove("is-flash"), 1300);
+  });
+}
+
+// Gravação em segundo plano: a tela responde primeiro; o estado vai para
+// o armazenamento local/Firestore no próximo momento livre do navegador.
+// Se o app for para o fundo antes disso, grava na hora.
+let notePersistQueued = false;
+function queueNotePersist() {
+  if (notePersistQueued) return;
+  notePersistQueued = true;
+  const run = () => {
+    if (!notePersistQueued) return;
+    notePersistQueued = false;
+    saveState();
+  };
+  if (typeof window.requestIdleCallback === "function") window.requestIdleCallback(run, { timeout: 900 });
+  else setTimeout(run, 120);
+}
+function flushNotePersist() {
+  if (!notePersistQueued) return;
+  notePersistQueued = false;
+  saveState();
+}
+window.addEventListener("pagehide", flushNotePersist);
+document.addEventListener("visibilitychange", () => { if (document.hidden) flushNotePersist(); });
 
 function saveTask(event) {
   event.preventDefault();
@@ -4448,19 +4679,29 @@ function resetNoteForm() {
   document.querySelector("#noteId").value = "";
   setNoteEditorContent(null);
   setNotePriorityUI("Media");
+  ["#noteCategory", "#noteTags", "#noteGoal", "#noteAttachments", "#noteObservations", "#noteFolder"].forEach((selector) => {
+    const field = document.querySelector(selector);
+    if (field) field.value = "";
+  });
   document.querySelector("#noteColor").value = "blue";
-  document.querySelectorAll("#noteColorPicker .note-color-dot").forEach((dot) => dot.classList.toggle("active", dot.dataset.noteColor === "blue"));
   setNoteDraftTextColor("");
-  document.querySelectorAll("#notePriorityPicker .note-priority-dot").forEach((d) => d.classList.toggle("active", d.dataset.priority === "Media"));
-  document.querySelector("#noteChecklistField").hidden = true;
-  document.querySelector("#noteChecklistToggle").classList.remove("active");
-  const moreDetails = document.querySelector(".note-more-details");
-  if (moreDetails) moreDetails.open = false;
+  noteDraftChecklist = [];
+  renderNoteChecklistBuilder();
+  closeNoteFolderNew();
+  renderNoteFolderPicker();
+  setNoteFormError("");
   document.querySelector("#noteEditingBanner").hidden = true;
   document.querySelector("#noteSaveBtnLabel").textContent = "Salvar nota";
   const formHeading = document.querySelector("#noteFormHeading");
   if (formHeading) formHeading.textContent = "Nova nota";
-  enableAutogrowTextareas();
+  paintNoteToolbar(document.querySelector("#noteEditorTools"), null, "neCmd");
+}
+
+function setNoteFormError(message) {
+  const el = document.querySelector("#noteFormError");
+  if (!el) return;
+  el.textContent = message || "";
+  el.hidden = !message;
 }
 
 // ── Editor de "Nova nota" (com formatação) ─────────────────────
@@ -4498,6 +4739,7 @@ function notePriorityLabel(priority) {
   return { Baixa: "Baixa", Media: "Média", Alta: "Alta", Urgente: "Urgente" }[priority] || "Média";
 }
 
+// Prioridade é um grupo de rádio: exatamente um botão marcado, sempre.
 function setNotePriorityUI(priority) {
   const value = NOTE_PRIORITIES.includes(priority) ? priority : "Media";
   const select = document.querySelector("#notePriority");
@@ -4508,70 +4750,53 @@ function setNotePriorityUI(priority) {
     button.setAttribute("aria-checked", String(active));
     button.tabIndex = active ? 0 : -1;
   });
-  document.querySelectorAll("#notePriorityPicker .note-priority-dot").forEach((d) => d.classList.toggle("active", d.dataset.priority === value));
 }
 
+// Mantido pelo nome antigo (outros pontos ainda chamam).
 function updateNoteEditorTools() {
   const editor = document.querySelector("#noteEditor");
-  if (!editor || document.activeElement !== editor) return;
-  const states = {
-    bold: "bold", italic: "italic", underline: "underline", strike: "strikeThrough",
-    ul: "insertUnorderedList", ol: "insertOrderedList",
-  };
-  document.querySelectorAll("#noteEditorTools [data-ne-cmd]").forEach((button) => {
-    const cmd = button.dataset.neCmd;
-    let on = false;
-    try {
-      if (states[cmd]) on = document.queryCommandState(states[cmd]);
-      if (cmd === "highlight") on = noteHighlightActive();
-    } catch { on = false; }
-    if (button.hasAttribute("aria-pressed")) button.setAttribute("aria-pressed", String(on));
-  });
+  paintNoteToolbar(document.querySelector("#noteEditorTools"), document.activeElement === editor ? editor : null, "neCmd");
 }
 
+let neSavedRange = null;
 function bindNoteEditor() {
   const editor = document.querySelector("#noteEditor");
   const tools = document.querySelector("#noteEditorTools");
   if (!editor || !tools || editor.dataset.bound === "1") return;
   editor.dataset.bound = "1";
+  const paint = () => paintNoteToolbar(tools, document.activeElement === editor ? editor : null, "neCmd");
+  const rememberRange = () => {
+    const range = noteSelectionIn(editor);
+    if (range) neSavedRange = range.cloneRange();
+  };
+  document.addEventListener("selectionchange", () => {
+    if (document.activeElement !== editor) return;
+    rememberRange();
+    paint();
+  });
   // Mantém a seleção no editor ao tocar nos botões.
   tools.addEventListener("mousedown", (event) => { if (event.target.closest("[data-ne-cmd]")) event.preventDefault(); });
   tools.addEventListener("click", (event) => {
     const button = event.target.closest("[data-ne-cmd]");
     if (!button) return;
     const cmd = button.dataset.neCmd;
-    if (cmd === "checklist") {
-      const field = document.querySelector("#noteChecklistField");
-      if (field?.hidden) document.querySelector("#noteChecklistToggle")?.click();
-      document.querySelector("#noteChecklist")?.focus();
-      return;
+    if (cmd === "checklist") { addNoteChecklistItem(); return; }
+    noteRestoreEditorSelection(editor, neSavedRange);
+    if (cmd === "clear") {
+      const range = noteSelectionIn(editor);
+      noteClearFormatting(editor, !range || range.collapsed);
+    } else {
+      noteApplyCommand(editor, cmd);
     }
-    if (document.activeElement !== editor) editor.focus();
-    try {
-      document.execCommand("styleWithCSS", false, false);
-      if (cmd === "bold") document.execCommand("bold");
-      else if (cmd === "italic") document.execCommand("italic");
-      else if (cmd === "underline") document.execCommand("underline");
-      else if (cmd === "strike") document.execCommand("strikeThrough");
-      else if (cmd === "ul") document.execCommand("insertUnorderedList");
-      else if (cmd === "ol") document.execCommand("insertOrderedList");
-      else if (cmd === "highlight") {
-        document.execCommand("styleWithCSS", false, true);
-        document.execCommand("backColor", false, noteHighlightActive() ? "transparent" : "#fde68a");
-      } else if (cmd === "clear") {
-        document.execCommand("removeFormat");
-        document.execCommand("styleWithCSS", false, true);
-        document.execCommand("backColor", false, "transparent");
-      }
-    } catch { /* navegador sem execCommand: o texto continua editável */ }
     scrubNoteEditorStyles(editor);
     syncNoteEditorSource();
-    updateNoteEditorTools();
+    rememberRange();
+    paint();
+    requestAnimationFrame(paint);
   });
-  editor.addEventListener("input", syncNoteEditorSource);
-  editor.addEventListener("keyup", updateNoteEditorTools);
-  editor.addEventListener("mouseup", updateNoteEditorTools);
-  editor.addEventListener("focus", updateNoteEditorTools);
+  editor.addEventListener("input", () => { notePending = null; syncNoteEditorSource(); setNoteFormError(""); });
+  editor.addEventListener("focus", paint);
+  editor.addEventListener("blur", () => setTimeout(paint, 0));
   // Colar entra como texto puro (sem estilos de sites ou de outros apps).
   editor.addEventListener("paste", (event) => {
     const text = event.clipboardData?.getData("text/plain");
@@ -4594,55 +4819,251 @@ function bindNoteEditor() {
     setNotePriorityUI(next);
     seg.querySelector(`[data-prio="${next}"]`)?.focus();
   });
+  document.querySelector("#noteTitle")?.addEventListener("input", () => setNoteFormError(""));
+  document.querySelector("#noteTitle")?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault(); // Enter no título vai para o conteúdo, não salva por acidente
+    editor.focus();
+  });
+}
+
+// ── Checklist da nova nota ──────────────────────────────────────
+// Cada item é um campo de verdade: marcar, editar, remover; Enter cria o
+// próximo, Backspace num item vazio apaga e volta para o anterior.
+let noteDraftChecklist = [];
+
+// Itens longos quebram linha (campo cresce com o texto) em vez de cortar.
+function autosizeCheckText(el) {
+  if (!el) return;
+  el.style.height = "auto";
+  el.style.height = `${Math.max(36, el.scrollHeight)}px`;
+}
+
+function renderNoteChecklistBuilder({ focusId = null, caret = "end" } = {}) {
+  const list = document.querySelector("#noteChecklistItems");
+  const count = document.querySelector("#noteChecklistCount");
+  const section = document.querySelector("#noteChecklistBuilder");
+  if (!list) return;
+  const filled = noteDraftChecklist.filter((item) => item.text.trim());
+  const done = filled.filter((item) => item.done).length;
+  if (count) count.textContent = filled.length ? `${done}/${filled.length} concluído${filled.length === 1 ? "" : "s"}` : "Opcional";
+  section?.classList.toggle("has-items", noteDraftChecklist.length > 0);
+  list.innerHTML = noteDraftChecklist.map((item) => `<li class="bn-clb-row${item.done ? " is-done" : ""}" data-clb-id="${escapeHtml(item.id)}">
+      <button type="button" class="bn-clb-check" data-clb-toggle aria-pressed="${item.done}" aria-label="${item.done ? "Desmarcar" : "Marcar"} item">${item.done ? bdIcon("check") : ""}</button>
+      <textarea class="bn-clb-input" rows="1" maxlength="120" placeholder="Item da checklist" autocomplete="off" enterkeyhint="next" aria-label="Item da checklist">${escapeHtml(item.text)}</textarea>
+      <button type="button" class="bn-clb-del" data-clb-del aria-label="Remover item">${bdIcon("x")}</button>
+    </li>`).join("");
+  list.querySelectorAll(".bn-clb-input").forEach(autosizeCheckText);
+  if (focusId) {
+    const input = list.querySelector(`[data-clb-id="${CSS.escape(focusId)}"] .bn-clb-input`);
+    if (input) {
+      input.focus({ preventScroll: false });
+      const pos = caret === "start" ? 0 : input.value.length;
+      try { input.setSelectionRange(pos, pos); } catch { /* sem seleção */ }
+    }
+  }
+}
+
+function addNoteChecklistItem(afterId = null, text = "") {
+  const last = noteDraftChecklist.at(-1);
+  if (!afterId && !text && last && !last.text.trim()) {
+    renderNoteChecklistBuilder({ focusId: last.id });
+    return;
+  }
+  const item = { id: crypto.randomUUID(), text, done: false };
+  const index = afterId ? noteDraftChecklist.findIndex((entry) => entry.id === afterId) : -1;
+  if (index >= 0) noteDraftChecklist.splice(index + 1, 0, item);
+  else noteDraftChecklist.push(item);
+  renderNoteChecklistBuilder({ focusId: item.id, caret: "start" });
+}
+
+function bindNoteChecklistBuilder() {
+  const list = document.querySelector("#noteChecklistItems");
+  if (!list || list.dataset.bound === "1") return;
+  list.dataset.bound = "1";
+  const itemOf = (el) => {
+    const row = el.closest("[data-clb-id]");
+    return row ? noteDraftChecklist.find((item) => item.id === row.dataset.clbId) : null;
+  };
+  list.addEventListener("input", (event) => {
+    const input = event.target.closest(".bn-clb-input");
+    const item = input && itemOf(input);
+    if (!item) return;
+    if (/\n/.test(input.value)) input.value = input.value.replace(/\n+/g, " ");
+    item.text = input.value;
+    autosizeCheckText(input);
+    setNoteFormError("");
+    const filled = noteDraftChecklist.filter((entry) => entry.text.trim());
+    const count = document.querySelector("#noteChecklistCount");
+    if (count) count.textContent = filled.length ? `${filled.filter((entry) => entry.done).length}/${filled.length} concluído${filled.length === 1 ? "" : "s"}` : "Opcional";
+  });
+  list.addEventListener("keydown", (event) => {
+    const input = event.target.closest(".bn-clb-input");
+    const item = input && itemOf(input);
+    if (!item) return;
+    const index = noteDraftChecklist.indexOf(item);
+    if (event.key === "Enter") {
+      event.preventDefault();
+      if (event.isComposing) return;
+      if (!input.value.trim()) return; // item vazio: não cria outro vazio
+      const caret = input.selectionStart ?? input.value.length;
+      // Enter no meio do texto quebra o item em dois, como numa lista.
+      const tail = input.value.slice(caret).trim();
+      if (tail) { item.text = input.value.slice(0, caret).trim(); }
+      addNoteChecklistItem(item.id, tail);
+    } else if (event.key === "Backspace" && !input.value && noteDraftChecklist.length) {
+      event.preventDefault();
+      noteDraftChecklist.splice(index, 1);
+      const previous = noteDraftChecklist[Math.max(0, index - 1)];
+      renderNoteChecklistBuilder({ focusId: previous?.id || null });
+      if (!previous) document.querySelector("#noteChecklistAdd")?.focus();
+    } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      const target = noteDraftChecklist[index + (event.key === "ArrowDown" ? 1 : -1)];
+      if (!target) return;
+      event.preventDefault();
+      list.querySelector(`[data-clb-id="${CSS.escape(target.id)}"] .bn-clb-input`)?.focus();
+    }
+  });
+  list.addEventListener("click", (event) => {
+    const item = itemOf(event.target);
+    if (!item) return;
+    if (event.target.closest("[data-clb-toggle]")) {
+      item.done = !item.done;
+      const row = event.target.closest("[data-clb-id]");
+      const button = row.querySelector("[data-clb-toggle]");
+      row.classList.toggle("is-done", item.done);
+      button.setAttribute("aria-pressed", String(item.done));
+      button.setAttribute("aria-label", `${item.done ? "Desmarcar" : "Marcar"} item`);
+      button.innerHTML = item.done ? bdIcon("check") : "";
+      const filled = noteDraftChecklist.filter((entry) => entry.text.trim());
+      const count = document.querySelector("#noteChecklistCount");
+      if (count) count.textContent = filled.length ? `${filled.filter((entry) => entry.done).length}/${filled.length} concluído${filled.length === 1 ? "" : "s"}` : "Opcional";
+    } else if (event.target.closest("[data-clb-del]")) {
+      const index = noteDraftChecklist.indexOf(item);
+      noteDraftChecklist.splice(index, 1);
+      const neighbour = noteDraftChecklist[index] || noteDraftChecklist[index - 1];
+      renderNoteChecklistBuilder({ focusId: neighbour?.id || null });
+      if (!neighbour) document.querySelector("#noteChecklistAdd")?.focus();
+    }
+  });
+  // Ao sair de um item vazio (que não seja o último em edição), ele some.
+  list.addEventListener("focusout", (event) => {
+    const input = event.target.closest(".bn-clb-input");
+    const item = input && itemOf(input);
+    if (!item || item.text.trim()) return;
+    setTimeout(() => {
+      const stillThere = noteDraftChecklist.includes(item);
+      const focusInside = list.contains(document.activeElement) || document.activeElement?.id === "noteChecklistAdd";
+      if (!stillThere || item.text.trim() || focusInside) return;
+      noteDraftChecklist = noteDraftChecklist.filter((entry) => entry !== item);
+      renderNoteChecklistBuilder();
+    }, 0);
+  });
+  document.querySelector("#noteChecklistAdd")?.addEventListener("click", () => addNoteChecklistItem());
+}
+
+// ── Pasta da nota (substitui o antigo "Organizar") ─────────────
+let noteExtraFolders = [];
+function noteFolderOptions() {
+  const counts = new Map();
+  state.notes.forEach((note) => {
+    const name = String(note.folder || "").trim();
+    if (name) counts.set(name, (counts.get(name) || 0) + 1);
+  });
+  noteExtraFolders.forEach((name) => { if (!counts.has(name)) counts.set(name, 0); });
+  if (!counts.has("Entrada")) counts.set("Entrada", 0);
+  return [...counts.keys()].sort((a, b) => (a === "Entrada" ? -1 : b === "Entrada" ? 1 : (counts.get(b) - counts.get(a)) || a.localeCompare(b, "pt-BR")));
+}
+
+function renderNoteFolderPicker() {
+  const root = document.querySelector("#noteFolderPicker");
+  if (!root) return;
+  const current = document.querySelector("#noteFolder")?.value || "Entrada";
+  const options = noteFolderOptions();
+  if (!options.includes(current)) options.push(current);
+  root.innerHTML = options.map((name) => `<button type="button" role="radio" class="bn-folder-chip" data-folder="${escapeHtml(name)}" aria-checked="${name === current}" tabindex="${name === current ? 0 : -1}">${bdIcon("folder")}<span>${escapeHtml(name)}</span></button>`).join("")
+    + `<button type="button" class="bn-folder-chip is-add" data-folder-new aria-expanded="${!document.querySelector("#noteFolderNewRow")?.hidden}">${bdIcon("plus")}<span>Nova pasta</span></button>`;
+}
+
+function setNoteFolderValue(name) {
+  const input = document.querySelector("#noteFolder");
+  if (input) input.value = name || "";
+  renderNoteFolderPicker();
+}
+
+function openNoteFolderNew() {
+  const row = document.querySelector("#noteFolderNewRow");
+  if (!row) return;
+  row.hidden = false;
+  renderNoteFolderPicker();
+  setTimeout(() => document.querySelector("#noteFolderNewInput")?.focus(), 30);
+}
+
+function closeNoteFolderNew() {
+  const row = document.querySelector("#noteFolderNewRow");
+  if (row) row.hidden = true;
+  const input = document.querySelector("#noteFolderNewInput");
+  if (input) input.value = "";
+}
+
+function commitNoteFolderNew() {
+  const input = document.querySelector("#noteFolderNewInput");
+  const name = String(input?.value || "").replace(/\s+/g, " ").trim().slice(0, 40);
+  if (!name) { input?.focus(); return; }
+  const existing = noteFolderOptions().find((folder) => folder.toLocaleLowerCase("pt-BR") === name.toLocaleLowerCase("pt-BR"));
+  if (!existing) noteExtraFolders.push(name);
+  closeNoteFolderNew();
+  setNoteFolderValue(existing || name);
+  document.querySelector(`#noteFolderPicker [data-folder="${CSS.escape(existing || name)}"]`)?.focus();
+}
+
+function bindNoteFolderPicker() {
+  const root = document.querySelector("#noteFolderPicker");
+  if (!root || root.dataset.bound === "1") return;
+  root.dataset.bound = "1";
+  root.addEventListener("click", (event) => {
+    if (event.target.closest("[data-folder-new]")) {
+      const row = document.querySelector("#noteFolderNewRow");
+      if (row?.hidden) openNoteFolderNew(); else { closeNoteFolderNew(); renderNoteFolderPicker(); }
+      return;
+    }
+    const chip = event.target.closest("[data-folder]");
+    if (chip) setNoteFolderValue(chip.dataset.folder);
+  });
+  root.addEventListener("keydown", (event) => {
+    if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return;
+    const chips = [...root.querySelectorAll("[data-folder]")];
+    const index = chips.indexOf(document.activeElement);
+    if (index < 0) return;
+    event.preventDefault();
+    const next = chips[(index + (event.key === "ArrowRight" ? 1 : chips.length - 1)) % chips.length];
+    setNoteFolderValue(next.dataset.folder);
+    root.querySelector(`[data-folder="${CSS.escape(next.dataset.folder)}"]`)?.focus();
+  });
+  document.querySelector("#noteFolderNewOk")?.addEventListener("click", commitNoteFolderNew);
+  document.querySelector("#noteFolderNewCancel")?.addEventListener("click", () => { closeNoteFolderNew(); renderNoteFolderPicker(); });
+  document.querySelector("#noteFolderNewInput")?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") { event.preventDefault(); commitNoteFolderNew(); }
+    if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); closeNoteFolderNew(); renderNoteFolderPicker(); }
+  });
 }
 
 function bindNoteQuickControls() {
   bindNoteEditor();
-  document.querySelectorAll("#noteColorPicker .note-color-dot").forEach((dot) => {
-    dot.addEventListener("click", () => {
-      document.querySelectorAll("#noteColorPicker .note-color-dot").forEach((item) => item.classList.remove("active"));
-      dot.classList.add("active");
-      document.querySelector("#noteColor").value = dot.dataset.noteColor;
-    });
-  });
-
-  document.querySelectorAll("#noteTextColorPicker [data-note-text-color]").forEach((button) => {
-    button.addEventListener("click", () => setNoteDraftTextColor(button.dataset.noteTextColor));
-  });
-
-  // Seletor de prioridade por bolinhas coloridas (substitui o <select> visível)
-  document.querySelectorAll("#notePriorityPicker .note-priority-dot").forEach((dot) => {
-    dot.addEventListener("click", () => {
-      document.querySelectorAll("#notePriorityPicker .note-priority-dot").forEach((d) => d.classList.remove("active"));
-      dot.classList.add("active");
-      document.querySelector("#notePriority").value = dot.dataset.priority;
-    });
-  });
-
-  // Mostra/esconde o campo de checklist sob demanda
-  const toggleBtn = document.querySelector("#noteChecklistToggle");
-  const field = document.querySelector("#noteChecklistField");
-  if (toggleBtn && field) {
-    toggleBtn.addEventListener("click", () => {
-      field.hidden = !field.hidden;
-      toggleBtn.classList.toggle("active", !field.hidden);
-      toggleBtn.setAttribute("aria-checked", String(!field.hidden));
-      if (!field.hidden) document.querySelector("#noteChecklist").focus();
-    });
-  }
-
-  // Botão "Limpar" — antes não fazia nada
-  document.querySelector("#resetNoteForm")?.addEventListener("click", () => {
+  bindNoteChecklistBuilder();
+  bindNoteFolderPicker();
+  renderNoteFolderPicker();
+  renderNoteChecklistBuilder();
+  // "Limpar" e "Cancelar edição": ligados uma única vez (antes eram dois
+  // listeners iguais em lugares diferentes, e o formulário limpava duas vezes).
+  const clear = () => {
     resetNoteForm();
-    document.querySelector("#noteTitle").focus();
-  });
-
-  // "Cancelar edição" dentro do aviso — mesmo efeito de Limpar, só que
-  // some sozinho quando não há edição em andamento (fica dentro do banner)
-  document.querySelector("#cancelEditNote")?.addEventListener("click", () => {
-    resetNoteForm();
-    document.querySelector("#noteTitle").focus();
-  });
+    document.querySelector("#noteTitle")?.focus();
+  };
+  const resetBtn = document.querySelector("#resetNoteForm");
+  if (resetBtn && resetBtn.dataset.bound !== "1") { resetBtn.dataset.bound = "1"; resetBtn.addEventListener("click", clear); }
+  const cancelBtn = document.querySelector("#cancelEditNote");
+  if (cancelBtn && cancelBtn.dataset.bound !== "1") { cancelBtn.dataset.bound = "1"; cancelBtn.addEventListener("click", clear); }
 }
 
 // Faz os textareas marcados crescerem junto com o texto, em vez de
@@ -4659,6 +5080,51 @@ function enableAutogrowTextareas() {
     }
     resize();
   });
+}
+
+// ── Relógio do app ───────────────────────────────────────────────
+// A cada 30s (e sempre que o app volta para a frente) confere a data.
+// Virou o dia: atualiza "hoje" e redesenha tudo. Mesmo dia: só refaz o
+// que depende da hora (compromissos que já passaram, foco da semana,
+// dica do Pulsinho) — barato e sem mexer em formulários abertos.
+// Uma regra só para "Bom dia/Boa tarde/Boa noite" (madrugada é noite),
+// usada no título, no balão e na conversa do Pulsinho.
+function greetingForHour(hour) {
+  return hour < 5 ? "Boa noite" : hour < 12 ? "Bom dia" : hour < 18 ? "Boa tarde" : "Boa noite";
+}
+
+function refreshTodayIfNeeded() {
+  const now = toLocalIso(new Date());
+  if (now === todayIso) return false;
+  const previous = todayIso;
+  todayIso = now;
+  tomorrowIso = offsetDate(1);
+  if (plannerDayDate === previous) plannerDayDate = now;
+  if (plannerWeekAnchor === previous) plannerWeekAnchor = now;
+  if (plannerMonthAnchor.slice(0, 7) === previous.slice(0, 7)) plannerMonthAnchor = now;
+  if (plannerMonthSelected === previous) plannerMonthSelected = now;
+  renderAll();
+  return true;
+}
+
+function refreshTimeSensitiveViews() {
+  if (refreshTodayIfNeeded()) return;
+  if (document.hidden) return;
+  applyViewHeading(activeView); // saudação acompanha a hora
+  if (activeView === "dashboard") renderBoardsToday();
+  if (activeView === "planner") {
+    renderPlannerFocus();
+    renderPlannerTip();
+    if (plannerActiveTab === "list") renderPlannerAgenda();
+  }
+}
+
+let liveClockTimer = 0;
+function startLiveClock() {
+  if (liveClockTimer) return;
+  liveClockTimer = setInterval(refreshTimeSensitiveViews, 30000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshTimeSensitiveViews(); });
+  window.addEventListener("focus", refreshTimeSensitiveViews);
 }
 
 function renderAll() {
@@ -4909,7 +5375,7 @@ function viewHeadingGlyph(view, hour) {
 function applyViewHeading(view) {
   const first = bdFirstName();
   const hour = new Date().getHours();
-  const greeting = hour < 12 ? "Bom dia" : hour < 18 ? "Boa tarde" : "Boa noite";
+  const greeting = greetingForHour(hour);
   const compact = window.matchMedia("(max-width: 760px)").matches; // textos curtos do quadro mobile
   const headings = {
     dashboard: [`${greeting}, ${first}!`, compact ? "Seu panorama de hoje." : "Aqui está o seu panorama de hoje."],
@@ -5063,19 +5529,36 @@ function bdNiceStep(raw) {
   return nice * 10 ** exp;
 }
 
+// Curva suave MONOTÔNICA (Fritsch–Carlson): passa por todos os pontos sem
+// "inventar" picos ou vales. A versão anterior (Catmull-Rom) fazia o saldo
+// subir antes de uma queda — um valor que nunca existiu — e podia levar a
+// linha para fora da área do gráfico.
 function bdSmoothPath(coords) {
-  if (coords.length < 3) return coords.map((p, i) => `${i ? "L" : "M"}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(" ");
+  const n = coords.length;
+  if (n < 3) return coords.map((p, i) => `${i ? "L" : "M"}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(" ");
+  const dx = [];
+  const slope = [];
+  for (let i = 0; i < n - 1; i += 1) {
+    dx[i] = coords[i + 1][0] - coords[i][0] || 1e-6;
+    slope[i] = (coords[i + 1][1] - coords[i][1]) / dx[i];
+  }
+  const tangent = new Array(n);
+  tangent[0] = slope[0];
+  tangent[n - 1] = slope[n - 2];
+  for (let i = 1; i < n - 1; i += 1) {
+    if (slope[i - 1] * slope[i] <= 0) tangent[i] = 0;
+    else {
+      const w1 = 2 * dx[i] + dx[i - 1];
+      const w2 = dx[i] + 2 * dx[i - 1];
+      tangent[i] = (w1 + w2) / (w1 / slope[i - 1] + w2 / slope[i]);
+    }
+  }
   let d = `M${coords[0][0].toFixed(1)} ${coords[0][1].toFixed(1)}`;
-  for (let i = 0; i < coords.length - 1; i += 1) {
-    const p0 = coords[i - 1] || coords[i];
-    const p1 = coords[i];
-    const p2 = coords[i + 1];
-    const p3 = coords[i + 2] || p2;
-    const c1x = p1[0] + (p2[0] - p0[0]) / 6;
-    const c1y = p1[1] + (p2[1] - p0[1]) / 6;
-    const c2x = p2[0] - (p3[0] - p1[0]) / 6;
-    const c2y = p2[1] - (p3[1] - p1[1]) / 6;
-    d += ` C${c1x.toFixed(1)} ${c1y.toFixed(1)} ${c2x.toFixed(1)} ${c2y.toFixed(1)} ${p2[0].toFixed(1)} ${p2[1].toFixed(1)}`;
+  for (let i = 0; i < n - 1; i += 1) {
+    const [x0, y0] = coords[i];
+    const [x1, y1] = coords[i + 1];
+    const h = dx[i] / 3;
+    d += ` C${(x0 + h).toFixed(1)} ${(y0 + tangent[i] * h).toFixed(1)} ${(x1 - h).toFixed(1)} ${(y1 - tangent[i + 1] * h).toFixed(1)} ${x1.toFixed(1)} ${y1.toFixed(1)}`;
   }
   return d;
 }
@@ -5101,9 +5584,9 @@ function renderBoardsSparkline(series) {
   const min = Math.min(...pts.map((p) => p.value));
   const max = Math.max(...pts.map((p) => p.value));
   const span = max - min || 1;
-  const coords = pts.map((p, i) => [(i / (pts.length - 1)) * 200, 58 - ((p.value - min) / span) * 46]);
+  const coords = pts.map((p, i) => [2 + (i / (pts.length - 1)) * 194, 58 - ((p.value - min) / span) * 46]);
   const line = bdSmoothPath(coords);
-  svg.innerHTML = `<defs><linearGradient id="bdSparkFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#25d388" stop-opacity=".45"/><stop offset="1" stop-color="#25d388" stop-opacity="0"/></linearGradient></defs><path d="${line} L200 70 L0 70 Z" fill="url(#bdSparkFill)"/><path d="${line}" fill="none" stroke="#25d388" stroke-width="1.6" stroke-linecap="round"/>`;
+  svg.innerHTML = `<defs><linearGradient id="bdSparkFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#25d388" stop-opacity=".45"/><stop offset="1" stop-color="#25d388" stop-opacity="0"/></linearGradient></defs><path d="${line} L200 70 L0 70 Z" fill="url(#bdSparkFill)"/><path d="${line}" fill="none" stroke="#25d388" stroke-width="1.8" stroke-linecap="round" vector-effect="non-scaling-stroke"/>`;
 }
 
 // ── Gastos por categoria: rosca + ranking ───────────────────────
@@ -5246,10 +5729,12 @@ function bdShortDate(iso) {
   return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
-// Agenda do dia no Início: compromissos de hoje, tarefas do dia (e as
-// atrasadas) e contas fixas que vencem nos próximos dias — tudo numa
-// lista só, na ordem em que acontece.
-function bdAgendaItems() {
+// Agenda do dia no Início — espelha o Planner: os MESMOS compromissos e
+// tarefas que a lente "Dia" mostra para hoje, mais as tarefas atrasadas
+// (o grupo "Atrasadas" da lista) e as contas fixas que vencem hoje
+// (recorrências de Finanças ainda não lançadas). Nada de prazos de outros
+// dias aqui: o cartão se chama "de hoje".
+function bdAgendaSnapshot() {
   const monthKey = todayIso.slice(0, 7);
   const [year, month] = monthKey.split("-").map(Number);
   const daysInMonth = new Date(year, month, 0).getDate();
@@ -5258,71 +5743,93 @@ function bdAgendaItems() {
   const nowHm = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
   const items = [];
 
-  for (const event of state.events.filter((e) => e.date === todayIso)) {
+  const events = state.events.filter((e) => e && e.date === todayIso);
+  for (const event of events) {
     const ends = event.endTime || event.time || "";
     const past = Boolean(event.time) && ends < nowHm;
     const where = event.location && event.location !== "Sem local" ? event.location : "";
     items.push({
-      kind: "event", order: `1 ${event.time || "00:00"}`, icon: "calendar", tone: "blue",
-      title: event.title, sub: [event.endTime ? `${event.time}–${event.endTime}` : "Compromisso", where].filter(Boolean).join(" · "),
-      trail: event.time ? { text: event.time, cls: "time" } : { text: "Dia todo", cls: "time" },
-      past, view: "planner", focus: "agenda",
+      kind: "event", order: `2 ${event.time || "00:00"} 0`, icon: "calendar", tone: "blue",
+      title: event.title, sub: [event.time ? plannerTimeRange(event) : "Dia todo", where].filter(Boolean).join(" · "),
+      trail: event.time ? { text: event.time, cls: "time" } : { text: "Dia todo", cls: "soft" },
+      past, id: event.id, view: "planner", focus: "agenda",
     });
   }
 
-  for (const task of state.tasks) {
-    if (!task || task.status === "Cancelada" || !task.dueDate) continue;
+  // Tarefas do dia: exatamente o filtro do Planner (vence hoje e não foi cancelada).
+  const todayTasks = state.tasks.filter((t) => t && t.dueDate === todayIso && t.status !== "Cancelada");
+  for (const task of todayTasks) {
     const done = task.status === "Concluida";
-    if (done && !(task.completedAt === todayIso && task.dueDate <= todayIso)) continue;
-    if (!done && task.dueDate > todayIso) continue;
-    const overdue = !done && task.dueDate < todayIso;
     const important = task.priority === "Urgente" || task.priority === "Alta";
     items.push({
-      kind: "task", order: overdue ? `0 ${task.dueDate}` : `1 ${task.dueTime || "23:59"}`,
-      icon: done ? "check-circle" : overdue ? "alert" : "task-check", tone: done ? "green" : overdue ? "red" : important ? "amber" : "violet",
+      kind: "task", order: done ? `4 ${task.dueTime || "99:99"}` : `2 ${task.dueTime || "99:98"} 1`,
+      icon: done ? "check-circle" : "task-check", tone: done ? "green" : important ? "amber" : "violet",
       title: task.title,
-      sub: overdue ? `Tarefa atrasada · venceu ${bdShortDate(task.dueDate)}` : done ? "Tarefa concluída" : `Tarefa${important ? ` · prioridade ${task.priority.toLowerCase()}` : ""}`,
-      trail: overdue ? { text: "Atrasada", cls: "danger" } : task.dueTime ? { text: task.dueTime, cls: "time" } : { text: "Hoje", cls: "soft" },
-      done, overdue, view: "planner", focus: "tasks",
+      sub: done ? "Tarefa concluída" : `Tarefa${important ? ` · prioridade ${String(task.priority).toLowerCase()}` : ""}`,
+      trail: task.dueTime ? { text: task.dueTime, cls: "time" } : { text: done ? "Feita" : "Hoje", cls: "soft" },
+      done, id: task.id, view: "planner", focus: "tasks",
     });
   }
 
+  // Atrasadas: mesmas do grupo "Atrasadas" do Planner, sempre no topo.
+  const overdueTasks = state.tasks.filter((t) => t && t.dueDate && t.dueDate < todayIso && t.status !== "Concluida" && t.status !== "Cancelada");
+  for (const task of overdueTasks) {
+    items.push({
+      kind: "overdue", order: `0 ${task.dueDate} ${task.dueTime || ""}`, icon: "alert", tone: "red",
+      title: task.title, sub: `Atrasada · venceu ${bdShortDate(task.dueDate)}`,
+      trail: { text: "Atrasada", cls: "danger" }, overdue: true, id: task.id, view: "planner", focus: "tasks",
+    });
+  }
+
+  // Contas fixas que vencem hoje (Finanças › Recorrências) e ainda não foram lançadas.
   const entries = bdWorkspaceFinances();
   for (const item of (state.finRecurrents || []).filter((r) => (r.workspaceId || "personal") === activeWorkspaceId)) {
     if (item.active === false || isRecurrentSkipped(item, monthKey)) continue;
     const dueDay = Math.min(Number(item.day) || 1, daysInMonth);
-    if (dueDay < todayDay || dueDay - todayDay > 7) continue;
+    if (dueDay !== todayDay) continue;
     const alreadyLogged = entries.some((e) => e.date.startsWith(monthKey) && e.description === item.description && Number(e.amount) === Number(item.amount));
     if (alreadyLogged) continue;
-    const dueIso = `${monthKey}-${String(dueDay).padStart(2, "0")}`;
     const income = item.type === "receita";
     items.push({
-      kind: "bill", order: `2 ${dueIso}`, icon: income ? "coin" : bdRecurringIcon(item), tone: income ? "green" : dueDay === todayDay ? "red" : "amber",
-      title: item.description, sub: bdDueLabel(dueIso),
+      kind: "bill", order: "3", icon: income ? "coin" : bdRecurringIcon(item), tone: income ? "green" : "amber",
+      title: item.description, sub: income ? "Receita fixa · entra hoje" : "Conta fixa · vence hoje",
       trail: { text: `${income ? "+ " : ""}${formatCurrency(Number(item.amount) || 0)}`, cls: "amount" },
       view: "finances",
     });
   }
-  return items.sort((a, b) => a.order.localeCompare(b.order));
+
+  items.sort((a, b) => a.order.localeCompare(b.order));
+  return {
+    items,
+    counts: {
+      events: events.length,
+      tasksDone: todayTasks.filter((t) => t.status === "Concluida").length,
+      tasksTotal: todayTasks.length,
+      overdue: overdueTasks.length,
+      bills: items.filter((item) => item.kind === "bill").length,
+    },
+  };
 }
+
+// Mantido para quem ainda chama pelo nome antigo.
+function bdAgendaItems() { return bdAgendaSnapshot().items; }
 
 function renderBoardsToday() {
   const host = document.querySelector("#bdToday");
   if (!host) return;
+  if (pulsinhoTeaserCallsCache.length) renderPulsinhoTeaser();
   const summary = document.querySelector("#bdTodaySummary");
-  const items = bdAgendaItems();
-  const count = (kind) => items.filter((item) => item.kind === kind && !item.done).length;
+  const { items, counts } = bdAgendaSnapshot();
   if (summary) {
-    const events = count("event");
-    const tasks = count("task");
-    const bills = count("bill");
-    const doneTasks = items.filter((item) => item.kind === "task" && item.done).length;
-    const totalTasks = tasks + doneTasks;
+    const chips = [
+      `<button type="button" class="bd-ts tone-blue" data-agenda-view="planner" data-agenda-focus="agenda" title="Os mesmos compromissos do Planner para hoje">${bdIcon("calendar")}<b>${counts.events}</b><small>${counts.events === 1 ? "compromisso" : "compromissos"}</small></button>`,
+      `<button type="button" class="bd-ts tone-violet" data-agenda-view="planner" data-agenda-focus="tasks" title="Tarefas que vencem hoje (feitas/total)">${bdIcon("task-check")}<b>${counts.tasksTotal ? `${counts.tasksDone}/${counts.tasksTotal}` : 0}</b><small>${counts.tasksTotal === 1 ? "tarefa" : "tarefas"}</small></button>`,
+      counts.overdue ? `<button type="button" class="bd-ts tone-red" data-agenda-view="planner" data-agenda-focus="tasks" title="Tarefas com prazo vencido">${bdIcon("alert")}<b>${counts.overdue}</b><small>${counts.overdue === 1 ? "atrasada" : "atrasadas"}</small></button>` : "",
+      counts.bills ? `<button type="button" class="bd-ts tone-amber" data-agenda-view="finances" title="Contas fixas de Finanças que vencem hoje">${bdIcon("receipt")}<b>${counts.bills}</b><small>${counts.bills === 1 ? "conta hoje" : "contas hoje"}</small></button>` : "",
+    ].filter(Boolean);
     summary.hidden = !items.length;
-    summary.innerHTML = items.length ? `
-      <span class="bd-ts tone-blue" title="Compromissos hoje">${bdIcon("calendar")}<b>${events}</b><small>${events === 1 ? "compromisso" : "compromissos"}</small></span>
-      <span class="bd-ts tone-violet" title="Tarefas para hoje">${bdIcon("task-check")}<b>${totalTasks ? `${doneTasks}/${totalTasks}` : 0}</b><small>${totalTasks === 1 ? "tarefa" : "tarefas"}</small></span>
-      <span class="bd-ts tone-amber" title="Contas nos próximos 7 dias">${bdIcon("receipt")}<b>${bills}</b><small>${bills === 1 ? "conta" : "contas"}</small></span>` : "";
+    summary.dataset.count = String(chips.length);
+    summary.innerHTML = items.length ? chips.join("") : "";
   }
   if (!items.length) {
     host.innerHTML = `<li class="bd-agenda-empty">
@@ -5359,13 +5866,16 @@ function bindBoardsToday() {
     setView(view);
     if (view === "planner") {
       if (target.dataset.agendaFocus === "tasks") setPlannerTab("list");
-      if (target.dataset.agendaFocus === "agenda") setPlannerTab("day");
+      if (target.dataset.agendaFocus === "agenda") { plannerDayDate = todayIso; setPlannerTab("day"); }
     }
+    if (view === "finances") setFinBoardTab("automacao");
   };
-  host.addEventListener("click", (event) => {
+  const onClick = (event) => {
     const target = event.target.closest("[data-agenda-view], [data-agenda-add]");
     if (target) go(target);
-  });
+  };
+  host.addEventListener("click", onClick);
+  document.querySelector("#bdTodaySummary")?.addEventListener("click", onClick);
   host.addEventListener("keydown", (event) => {
     if (event.key !== "Enter" && event.key !== " ") return;
     const target = event.target.closest(".bd-ag[data-agenda-view]");
@@ -5910,6 +6420,8 @@ function bindBoardsShell() {
   });
   watchPulsinhoIntro();
   bindPulsinhoKeyboardFit();
+  bindPulsinhoTeaser();
+  renderPulsinhoTeaser({ keepIndex: false });
 }
 
 function renderDashboard() {
@@ -6439,7 +6951,7 @@ function plannerFocusGoal() {
   if (!goals.length) return null;
   let index = plannerFocusIndex;
   if (index === null || index >= goals.length) {
-    const firstOpen = goals.findIndex((g) => Number(g.current) < Number(g.target));
+    const firstOpen = goals.findIndex((g) => !goalStats(g).complete);
     index = firstOpen >= 0 ? firstOpen : 0;
   }
   return { goal: goals[index], index, total: goals.length };
@@ -6519,20 +7031,38 @@ function setGoalStep(goalId, step) {
 
 const GOAL_IDEAS = ["Ler 2 livros", "Correr 20 km", "Guardar R$ 500", "Estudar 10 horas"];
 
+// Rótulo da semana do foco ("16–22 nov"): muda sozinho quando a semana vira.
+function plannerFocusWeekLabel() {
+  const days = getWeekDays(new Date(`${todayIso}T12:00:00`));
+  const first = new Date(`${days[0]}T12:00:00`);
+  const last = new Date(`${days[6]}T12:00:00`);
+  return first.getMonth() === last.getMonth()
+    ? `${first.getDate()}–${last.getDate()} ${BD_MONTHS[last.getMonth()]}`
+    : `${first.getDate()} ${BD_MONTHS[first.getMonth()]} – ${last.getDate()} ${BD_MONTHS[last.getMonth()]}`;
+}
+
+let plannerFocusExpanded = false;
+let plannerFocusPainted = { goalId: "", percent: 0 };
+let plannerFocusAdvanceTimer = 0;
+
+// Foco da semana — versão compacta: anel pequeno + título + trilha de
+// etapas numa linha, e um único botão para avançar. As etapas nomeadas
+// ficam recolhidas ("Ver etapas") para não empurrar a lista de tarefas.
 function renderPlannerFocus() {
   const root = document.querySelector("#plannerFocus");
   if (!root) return;
   const focus = plannerFocusGoal();
+  const week = plannerFocusWeekLabel();
   if (!focus) {
-    root.innerHTML = `<div class="pf pf--empty">
-      <span class="pf-empty-art" aria-hidden="true">${bdIcon("target")}<i></i><i></i></span>
-      <div class="pf-main">
-        <span class="pf-kicker">Foco da semana</span>
-        <h3>Qual é a sua meta agora?</h3>
-        <p>Escolha uma meta, divida em etapas e veja o anel se completar a cada avanço.</p>
-        <div class="pf-ideas">${GOAL_IDEAS.map((idea) => `<button type="button" class="pf-idea" data-focus-action="idea" data-idea="${escapeHtml(idea)}">${escapeHtml(idea)}</button>`).join("")}</div>
+    plannerFocusPainted = { goalId: "", percent: 0 };
+    root.innerHTML = `<div class="wf wf--empty">
+      <span class="wf-empty-ico" aria-hidden="true">${bdIcon("target")}</span>
+      <div class="wf-main">
+        <span class="wf-kicker">Foco da semana <em>${escapeHtml(week)}</em></span>
+        <h3>Escolha uma meta para acompanhar</h3>
       </div>
-      <button type="button" class="bd-btn bd-btn--primary pf-cta" data-focus-action="new-goal">${bdIcon("plus")}Criar meta</button>
+      <button type="button" class="bd-btn bd-btn--primary wf-cta" data-focus-action="new-goal">${bdIcon("plus")}<span>Criar meta</span></button>
+      <div class="wf-ideas" role="group" aria-label="Ideias de meta">${GOAL_IDEAS.map((idea) => `<button type="button" class="wf-idea" data-focus-action="idea" data-idea="${escapeHtml(idea)}">${escapeHtml(idea)}</button>`).join("")}</div>
     </div>`;
     return;
   }
@@ -6540,39 +7070,82 @@ function renderPlannerFocus() {
   const stats = goalStats(goal);
   const nextMs = stats.named ? stats.milestones.find((m) => !m.done) : null;
   const status = stats.complete
-    ? "Meta concluída — que tal a próxima?"
-    : `${stats.done} de ${stats.total} etapa${stats.total === 1 ? "" : "s"} · falta${stats.remaining === 1 ? "" : "m"} ${stats.remaining}`;
-  // Cabeçalho próprio (rótulo + navegação), assim o título nunca fica
-  // espremido pelos botões. A navegação entre metas é uma pílula ‹ 2/3 ›.
+    ? "Meta concluída"
+    : `${stats.done} de ${stats.total} etapa${stats.total === 1 ? "" : "s"}${nextMs ? ` · próxima: ${nextMs.title}` : ` · falta${stats.remaining === 1 ? "" : "m"} ${stats.remaining}`}`;
+  const sameGoal = plannerFocusPainted.goalId === goal.id;
+  const fromPercent = sameGoal ? plannerFocusPainted.percent : 0;
   const pager = total > 1
-    ? `<div class="pf-pager" role="group" aria-label="Trocar meta em foco">
+    ? `<div class="wf-pager" role="group" aria-label="Trocar meta em foco">
         <button type="button" data-focus-action="prev" aria-label="Meta anterior">${bdIcon("chev-left")}</button>
-        <span aria-live="polite"><b>${index + 1}</b>/${total}</span>
+        <span aria-live="polite">${index + 1}/${total}</span>
         <button type="button" data-focus-action="next" aria-label="Próxima meta">${bdIcon("chev-right")}</button>
       </div>`
     : "";
-  root.innerHTML = `<div class="pf${stats.complete ? " is-complete" : ""}">
-    <div class="pf-head">
-      <span class="pf-kicker">${bdIcon("target")}Foco da semana</span>
-      <div class="pf-actions">
+  // Trilha: cada segmento é uma etapa (tocar marca/desmarca). Mais de 14
+  // etapas sem nome viram uma barra contínua.
+  let track;
+  if (stats.named) {
+    track = `<div class="wf-track" role="group" aria-label="Etapas de ${escapeHtml(goal.title)}">${stats.milestones.map((m) => `<button type="button" class="wf-seg${m.done ? " is-done" : ""}${nextMs && m.id === nextMs.id ? " is-next" : ""}" data-focus-action="toggle-ms" data-goal-id="${goal.id}" data-ms-id="${m.id}" aria-pressed="${m.done}" aria-label="${m.done ? "Desmarcar" : "Concluir"} etapa: ${escapeHtml(m.title)}" title="${escapeHtml(m.title)}"></button>`).join("")}</div>`;
+  } else if (stats.total <= 14) {
+    track = `<div class="wf-track" role="group" aria-label="Etapas de ${escapeHtml(goal.title)}">${Array.from({ length: stats.total }, (_, i) => `<button type="button" class="wf-seg${i < stats.done ? " is-done" : ""}${i === stats.done ? " is-next" : ""}" data-focus-action="set-step" data-goal-id="${goal.id}" data-step="${i + 1}" aria-label="Etapa ${i + 1}${i < stats.done ? " (feita)" : ""}"></button>`).join("")}</div>`;
+  } else {
+    track = `<div class="wf-bar" role="img" aria-label="${stats.done} de ${stats.total} etapas"><i style="width:${stats.percent}%"></i></div>`;
+  }
+  const list = stats.named && plannerFocusExpanded
+    ? `<ol class="wf-list">${stats.milestones.map((m) => `<li><button type="button" class="wf-item${m.done ? " is-done" : ""}" data-focus-action="toggle-ms" data-goal-id="${goal.id}" data-ms-id="${m.id}" aria-pressed="${m.done}"><i aria-hidden="true">${m.done ? bdIcon("check") : ""}</i><span>${escapeHtml(m.title)}</span></button></li>`).join("")}</ol>`
+    : "";
+  root.innerHTML = `<div class="wf${stats.complete ? " is-complete" : ""}${sameGoal ? "" : " is-fresh"}" data-goal="${goal.id}">
+    <div class="wf-head">
+      <span class="wf-kicker">${bdIcon("target")}Foco da semana <em>${escapeHtml(week)}</em></span>
+      <div class="wf-tools">
         ${pager}
-        <button type="button" class="pf-more" data-focus-action="manage" aria-label="Todas as metas" title="Todas as metas">${bdIcon("dots-h")}</button>
+        <button type="button" class="wf-icon" data-focus-action="manage" aria-label="Todas as metas" title="Todas as metas">${bdIcon("dots-h")}</button>
       </div>
     </div>
-    ${goalRingHtml(stats)}
-    <div class="pf-main">
-      <h3>${escapeHtml(goal.title)}</h3>
-      <p>${escapeHtml(status)}</p>
+    <div class="wf-body">
+      <span class="wf-ring${stats.complete ? " is-complete" : ""}" role="img" aria-label="${stats.percent}% concluído">
+        <svg viewBox="0 0 44 44" aria-hidden="true"><circle class="wf-ring-track" cx="22" cy="22" r="18"/><circle class="wf-ring-bar" cx="22" cy="22" r="18" pathLength="100" style="--p:${fromPercent}"/></svg>
+        <span>${stats.complete ? bdIcon("check") : `<b>${stats.percent}</b><small>%</small>`}</span>
+      </span>
+      <div class="wf-main">
+        <h3 title="${escapeHtml(goal.title)}">${escapeHtml(goal.title)}</h3>
+        <p>${escapeHtml(status)}</p>
+      </div>
     </div>
-    <div class="pf-steps">${goalStepsHtml(goal, stats, "focus")}</div>
-    <div class="pf-foot">
-      ${stats.complete
-        ? `<button type="button" class="pf-undo" data-focus-action="step" data-goal-id="${goal.id}" data-delta="-1" aria-label="Desfazer última etapa" title="Desfazer última etapa">${bdIcon("undo")}<span>Desfazer</span></button>
-           <button type="button" class="bd-btn bd-btn--primary pf-advance" data-focus-action="new-goal">${bdIcon("plus")}Nova meta</button>`
-        : `<button type="button" class="pf-undo" data-focus-action="step" data-goal-id="${goal.id}" data-delta="-1" aria-label="Voltar uma etapa" title="Voltar uma etapa"${stats.done ? "" : " disabled"}>${bdIcon("undo")}<span>Voltar</span></button>
-           <button type="button" class="bd-btn bd-btn--primary pf-advance" data-focus-action="step" data-goal-id="${goal.id}" data-delta="1">${bdIcon("check")}<span>${nextMs ? `Concluir: ${escapeHtml(nextMs.title)}` : "Avancei uma etapa"}</span></button>`}
+    ${track}
+    ${list}
+    <div class="wf-foot">
+      ${stats.named ? `<button type="button" class="wf-link" data-focus-action="expand" aria-expanded="${plannerFocusExpanded}">${plannerFocusExpanded ? "Ocultar etapas" : `Ver etapas (${stats.total})`}${bdIcon("chev-down")}</button>` : "<span></span>"}
+      <div class="wf-actions">
+        <button type="button" class="wf-icon" data-focus-action="step" data-goal-id="${goal.id}" data-delta="-1" aria-label="${stats.complete ? "Desfazer última etapa" : "Voltar uma etapa"}" title="${stats.complete ? "Desfazer última etapa" : "Voltar uma etapa"}"${stats.done ? "" : " disabled"}>${bdIcon("undo")}</button>
+        ${stats.complete
+          ? `<button type="button" class="bd-btn bd-btn--primary wf-advance" data-focus-action="new-goal">${bdIcon("plus")}<span>Nova meta</span></button>`
+          : `<button type="button" class="bd-btn bd-btn--primary wf-advance" data-focus-action="step" data-goal-id="${goal.id}" data-delta="1">${bdIcon("check")}<span>Concluir etapa</span></button>`}
+      </div>
     </div>
   </div>`;
+  plannerFocusPainted = { goalId: goal.id, percent: stats.percent };
+  // O anel anda do valor anterior até o novo (sem reiniciar do zero).
+  const bar = root.querySelector(".wf-ring-bar");
+  if (bar && fromPercent !== stats.percent) requestAnimationFrame(() => requestAnimationFrame(() => bar.style.setProperty("--p", stats.percent)));
+}
+
+// Concluiu a meta em foco e há outra em aberto: depois de comemorar, o foco
+// passa sozinho para a próxima (sem precisar sair da tela nem recarregar).
+function schedulePlannerFocusAdvance(goalId) {
+  clearTimeout(plannerFocusAdvanceTimer);
+  const goal = state.goals.find((g) => g.id === goalId);
+  if (!goal || !goalStats(goal).complete) return;
+  const nextIndex = state.goals.findIndex((g) => g.id !== goalId && !goalStats(g).complete);
+  if (nextIndex < 0) return;
+  plannerFocusAdvanceTimer = setTimeout(() => {
+    const current = plannerFocusGoal();
+    if (current?.goal?.id !== goalId || !goalStats(current.goal).complete) return;
+    plannerFocusIndex = state.goals.findIndex((g) => g.id !== goalId && !goalStats(g).complete);
+    if (plannerFocusIndex < 0) plannerFocusIndex = null;
+    plannerFocusExpanded = false;
+    renderPlannerGoalsStrip();
+  }, 2600);
 }
 
 // ── Dica do Pulsinho (regras locais sobre os dados reais, sem chamar IA) ──
@@ -6596,16 +7169,25 @@ function renderPlannerTip() {
 }
 
 // ── Tarefas por grupo ───────────────────────────────────────
+// Lista organizada pelo que pede atenção primeiro: Atrasadas → Hoje →
+// Amanhã → Esta semana → Mais adiante → Sem data. Grupos vazios somem.
 function getPlannerTaskGroups() {
   const isOpen = (t) => t.status !== "Concluida" && t.status !== "Cancelada";
   const byDue = (a, b) => `${a.dueDate || "9999"}${a.dueTime || "99:99"}`.localeCompare(`${b.dueDate || "9999"}${b.dueTime || "99:99"}`) || (a.title || "").localeCompare(b.title || "");
+  const weekEnd = getWeekDays(new Date(`${todayIso}T12:00:00`))[6];
   const today = state.tasks.filter((t) => t.dueDate === todayIso && t.status !== "Cancelada").sort((a, b) => Number(a.status === "Concluida") - Number(b.status === "Concluida") || byDue(a, b));
-  const upcoming = state.tasks.filter((t) => isOpen(t) && (!t.dueDate || t.dueDate > todayIso)).sort(byDue);
   const overdue = state.tasks.filter((t) => isOpen(t) && t.dueDate && t.dueDate < todayIso).sort(byDue);
+  const tomorrow = state.tasks.filter((t) => isOpen(t) && t.dueDate === tomorrowIso).sort(byDue);
+  const week = state.tasks.filter((t) => isOpen(t) && t.dueDate > tomorrowIso && t.dueDate <= weekEnd).sort(byDue);
+  const later = state.tasks.filter((t) => isOpen(t) && t.dueDate > tomorrowIso && t.dueDate > weekEnd).sort(byDue);
+  const undated = state.tasks.filter((t) => isOpen(t) && !t.dueDate).sort(byDue);
   return [
-    { key: "today", label: "Hoje", items: today },
-    { key: "upcoming", label: "Próximas", items: upcoming },
-    { key: "overdue", label: "Atrasadas", items: overdue },
+    { key: "overdue", label: "Atrasadas", items: overdue, tone: "red" },
+    { key: "today", label: "Hoje", items: today, tone: "violet" },
+    { key: "tomorrow", label: "Amanhã", items: tomorrow, tone: "blue" },
+    { key: "week", label: "Esta semana", items: week, tone: "green" },
+    { key: "later", label: "Mais adiante", items: later, tone: "muted" },
+    { key: "undated", label: "Sem data", items: undated, tone: "muted" },
   ];
 }
 
@@ -6616,8 +7198,8 @@ function renderPlannerList() {
   const groups = getPlannerTaskGroups().map((g) => ({ ...g, items: g.items.filter((t) => !query || (t.title || "").toLowerCase().includes(query)) }));
   if (!plannerGroupsInitialised) {
     plannerGroupsInitialised = true;
-    // No celular só "Hoje" abre de início (como no quadro); no desktop tudo aberto.
-    if (window.matchMedia("(max-width: 760px)").matches) { plannerCollapsedGroups.add("upcoming"); plannerCollapsedGroups.add("overdue"); }
+    // No celular abrem só os grupos que pedem ação agora.
+    if (window.matchMedia("(max-width: 760px)").matches) ["week", "later", "undated"].forEach((key) => plannerCollapsedGroups.add(key));
   }
   const total = groups.reduce((sum, g) => sum + g.items.length, 0);
   const countEl = document.querySelector("#plannerTaskCount");
@@ -6626,7 +7208,7 @@ function renderPlannerList() {
     root.innerHTML = emptyStateHtml({
       iconName: "inbox",
       title: query ? "Nada encontrado" : "Sua lista está limpa",
-      desc: query ? "Nenhuma tarefa combina com a busca." : "Tarefas aparecem aqui, agrupadas em Hoje, Próximas e Atrasadas.",
+      desc: query ? "Nenhuma tarefa combina com a busca." : "Tarefas aparecem aqui, organizadas por prazo: atrasadas, hoje, amanhã e depois.",
       ctaLabel: query ? "" : "Adicionar tarefa",
       ctaOnClick: "openPlannerQuickAdd('task')",
     });
@@ -6634,10 +7216,15 @@ function renderPlannerList() {
   }
   root.innerHTML = groups.filter((g) => g.items.length).map((g) => {
     const collapsed = plannerCollapsedGroups.has(g.key);
-    return `<section class="bp-group${g.key === "overdue" ? " is-overdue" : ""}${collapsed ? " is-collapsed" : ""}" data-group="${g.key}">
+    const done = g.key === "today" ? g.items.filter((t) => t.status === "Concluida").length : 0;
+    const meta = g.key === "today" && g.items.length
+      ? `<span class="bp-group-meta">${done}/${g.items.length} feitas</span>`
+      : `<span class="bp-group-count">${g.items.length}</span>`;
+    return `<section class="bp-group bp-group--${g.tone}${g.key === "overdue" ? " is-overdue" : ""}${collapsed ? " is-collapsed" : ""}" data-group="${g.key}">
       <button type="button" class="bp-group-head" data-group-toggle="${g.key}" aria-expanded="${!collapsed}">
-        ${bdIcon("chev-down")}<span>${g.label} • ${g.items.length}</span><span class="bp-group-caret">${bdIcon("chev-down")}</span>
+        <span class="bp-group-label">${g.label}</span>${meta}<span class="bp-group-caret">${bdIcon("chev-down")}</span>
       </button>
+      ${g.key === "today" && g.items.length ? `<span class="bp-group-progress" aria-hidden="true"><i style="width:${Math.round((done / g.items.length) * 100)}%"></i></span>` : ""}
       <div class="bp-group-body">${g.items.map(renderPlannerTaskRow).join("")}</div>
     </section>`;
   }).join("");
@@ -6885,9 +7472,9 @@ function bindPlannerNav() {
   document.querySelector("#plannerMonthPrev")?.addEventListener("click", () => changePlannerMonth(-1));
   document.querySelector("#plannerMonthNext")?.addEventListener("click", () => changePlannerMonth(1));
   document.querySelector("#plannerMonthToday")?.addEventListener("click", goToPlannerThisMonth);
+  bindPlannerMonth();
   document.querySelector("#plannerNewGoalBtn")?.addEventListener("click", () => { closePlannerGoalsModal(); openPlannerQuickAdd("goal"); });
   document.querySelector("#plannerNewTaskBtn")?.addEventListener("click", () => openPlannerQuickAdd("task"));
-  document.querySelector("#plannerFab")?.addEventListener("click", () => openPlannerQuickAdd("task"));
 
   // Agenda do dia: ‹ › e alternância compromissos/tarefas
   document.querySelector("#plannerAgendaPrev")?.addEventListener("click", () => changePlannerDay(-1));
@@ -6920,6 +7507,7 @@ function bindPlannerNav() {
     }
     else if (action === "step") stepGoal(button.dataset.goalId, Number(button.dataset.delta) || 0);
     else if (action === "set-step") setGoalStep(button.dataset.goalId, Number(button.dataset.step) || 0);
+    else if (action === "expand") { plannerFocusExpanded = !plannerFocusExpanded; renderPlannerFocus(); }
     else if (action === "idea") {
       openPlannerQuickAdd("goal");
       const title = document.querySelector("#pqaTitle");
@@ -6930,8 +7518,11 @@ function bindPlannerNav() {
     else if ((action === "prev" || action === "next") && count > 1) {
       const current = plannerFocusGoal()?.index ?? 0;
       plannerFocusIndex = (current + (action === "next" ? 1 : -1) + count) % count;
+      plannerFocusExpanded = false;
+      clearTimeout(plannerFocusAdvanceTimer);
       renderPlannerGoalsStrip();
     }
+    if (["toggle-ms", "step", "set-step"].includes(action) && button.dataset.goalId) schedulePlannerFocusAdvance(button.dataset.goalId);
   });
   // Painel "Metas": ações dos cartões
   document.querySelector("#plannerGoalsStrip")?.addEventListener("click", (event) => {
@@ -7165,10 +7756,11 @@ function renderPlannerDay() {
   const label = document.querySelector("#plannerDayLabel");
   if (label) {
     const date = new Date(`${plannerDayDate}T12:00:00`);
-    let text = safeFormatDate(date, { weekday: "long", day: "2-digit", month: "long" }, plannerDayDate || "");
-    text = text.charAt(0).toUpperCase() + text.slice(1);
-    label.textContent = plannerDayDate === todayIso ? `Hoje · ${text}` : text;
+    const relative = plannerDayDate === todayIso ? "Hoje" : plannerDayDate === tomorrowIso ? "Amanhã" : plannerDayDate === offsetDate(-1) ? "Ontem" : "";
+    label.innerHTML = `${escapeHtml(`${PLANNER_WEEKDAY_NAMES[date.getDay()]}, ${date.getDate()} de ${BD_MONTHS_LONG[date.getMonth()].toLowerCase()}`)}${relative ? `<em class="bp-nav-tag${relative === "Hoje" ? " is-today" : ""}">${relative}</em>` : ""}`;
   }
+  const dayToday = document.querySelector("#plannerDayToday");
+  if (dayToday) dayToday.hidden = plannerDayDate === todayIso;
 
   const dayTasks = state.tasks.filter((t) => t.dueDate === plannerDayDate && t.status !== "Cancelada");
   const alldayRoot = document.querySelector("#plannerDayAllday");
@@ -7266,8 +7858,14 @@ function renderPlannerWeek() {
     const sameMonth = first.getMonth() === last.getMonth();
     const fmtDay = (d) => safeFormatDate(d, { day: "2-digit" }, "--");
     const fmtMonthFull = safeFormatDate(last, { month: "long", year: "numeric" }, "");
-    label.textContent = sameMonth ? `${fmtDay(first)} – ${fmtDay(last)} de ${fmtMonthFull}` : `${fmtDay(first)} – ${fmtDay(last)} de ${fmtMonthFull}`;
+    const current = days.includes(todayIso);
+    label.innerHTML = `${escapeHtml(sameMonth
+      ? `${first.getDate()} – ${last.getDate()} de ${BD_MONTHS_LONG[last.getMonth()].toLowerCase()}`
+      : `${first.getDate()} ${BD_MONTHS[first.getMonth()]} – ${last.getDate()} ${BD_MONTHS[last.getMonth()]}`)}${current ? '<em class="bp-nav-tag is-today">Esta semana</em>' : ""}`;
+    void fmtDay; void fmtMonthFull;
   }
+  const weekToday = document.querySelector("#plannerWeekToday");
+  if (weekToday) weekToday.hidden = days.includes(todayIso);
 
   const root = document.querySelector("#plannerWeekBody");
   if (!root) return;
@@ -7312,15 +7910,34 @@ function changePlannerMonth(delta) {
 
 function goToPlannerThisMonth() {
   plannerMonthAnchor = todayIso;
+  plannerMonthSelected = todayIso;
   renderPlannerMonth();
+}
+
+const PLANNER_WEEKDAY_NAMES = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
+
+// Mês: grade compacta (no celular, bolinhas por tipo; no computador, os
+// dois primeiros itens escritos) + a agenda do dia tocado logo abaixo.
+// Tocar num dia só seleciona; "Abrir dia" leva para a lente Dia.
+function plannerDayItems(date) {
+  const events = state.events.filter((e) => e && e.date === date).sort(sortEvent);
+  const tasks = state.tasks
+    .filter((t) => t && t.dueDate === date && t.status !== "Cancelada")
+    .sort((a, b) => Number(a.status === "Concluida") - Number(b.status === "Concluida") || (a.dueTime || "99:99").localeCompare(b.dueTime || "99:99"));
+  return { events, tasks };
 }
 
 function renderPlannerMonth() {
   const anchor = new Date(`${plannerMonthAnchor}T12:00:00`);
+  const monthKey = plannerMonthAnchor.slice(0, 7);
   const label = document.querySelector("#plannerMonthLabel");
   if (label) {
-    let text = safeFormatDate(anchor, { month: "long", year: "numeric" }, plannerMonthAnchor || "");
-    label.textContent = text.charAt(0).toUpperCase() + text.slice(1);
+    label.innerHTML = `${escapeHtml(`${BD_MONTHS_LONG[anchor.getMonth()]} de ${anchor.getFullYear()}`)}${monthKey === todayIso.slice(0, 7) ? '<em class="bp-nav-tag is-today">Este mês</em>' : ""}`;
+  }
+  const monthToday = document.querySelector("#plannerMonthToday");
+  if (monthToday) monthToday.hidden = monthKey === todayIso.slice(0, 7);
+  if (!plannerMonthSelected || plannerMonthSelected.slice(0, 7) !== monthKey) {
+    plannerMonthSelected = monthKey === todayIso.slice(0, 7) ? todayIso : `${monthKey}-01`;
   }
 
   const year = anchor.getFullYear();
@@ -7332,34 +7949,120 @@ function renderPlannerMonth() {
   if (!root) return;
 
   const cells = [];
-  for (let i = 0; i < leadingBlanks; i++) cells.push(`<div class="planner-month-cell is-blank"></div>`);
+  for (let i = 0; i < leadingBlanks; i++) cells.push(`<div class="planner-month-cell is-blank" aria-hidden="true"></div>`);
   days.forEach((date) => {
-    const dayTasks = state.tasks.filter((t) => t.dueDate === date && t.status !== "Cancelada" && t.status !== "Concluida");
-    const dayEvents = state.events.filter((e) => e.date === date);
-    const total = dayTasks.length + dayEvents.length;
+    const { events, tasks } = plannerDayItems(date);
+    const openTasks = tasks.filter((t) => t.status !== "Concluida");
+    const late = openTasks.filter((t) => date < todayIso);
+    const total = events.length + openTasks.length;
     const isToday = date === todayIso;
+    const isSelected = date === plannerMonthSelected;
     const items = [
-      ...dayEvents.map((event) => ({ label: event.title, kind: "event" })),
-      ...dayTasks.map((task) => ({ label: task.title, kind: "task" })),
+      ...events.map((event) => ({ label: `${event.time ? `${event.time} ` : ""}${event.title}`, kind: "event" })),
+      ...openTasks.map((task) => ({ label: task.title, kind: date < todayIso ? "late" : "task" })),
     ];
     const visibleItems = items.slice(0, 2)
       .map((item) => `<span class="planner-month-item is-${item.kind}" title="${escapeHtml(item.label)}">${escapeHtml(item.label)}</span>`)
       .join("");
     const remaining = items.length - 2;
+    const dots = [
+      events.length ? '<i class="is-event"></i>' : "",
+      openTasks.length - late.length > 0 ? '<i class="is-task"></i>' : "",
+      late.length ? '<i class="is-late"></i>' : "",
+    ].join("");
     const dateLabel = safeFormatDate(new Date(`${date}T12:00:00`), { day: "numeric", month: "long" }, date);
-    const ariaLabel = total ? `${dateLabel}: ${total} ${total === 1 ? "item" : "itens"}` : dateLabel;
-    cells.push(`
-      <button class="planner-month-cell ${isToday ? "is-today" : ""} ${total ? "has-items" : ""}" type="button" aria-label="${escapeHtml(ariaLabel)}" onclick="jumpPlannerToDay('${date}')">
+    const parts = [dateLabel];
+    if (events.length) parts.push(`${events.length} ${events.length === 1 ? "compromisso" : "compromissos"}`);
+    if (openTasks.length) parts.push(`${openTasks.length} ${openTasks.length === 1 ? "tarefa" : "tarefas"}`);
+    cells.push(`<button class="planner-month-cell${isToday ? " is-today" : ""}${isSelected ? " is-selected" : ""}${total ? " has-items" : ""}${date < todayIso ? " is-past" : ""}" type="button" data-month-day="${date}" aria-pressed="${isSelected}" aria-label="${escapeHtml(parts.join(", "))}">
         <span class="planner-month-cell-head">
-          <span class="planner-month-daynum">${new Date(`${date}T12:00:00`).getDate()}</span>
+          <span class="planner-month-daynum">${Number(date.slice(8, 10))}</span>
           ${total ? `<span class="planner-month-count">${total}</span>` : ""}
         </span>
-        ${total ? `<span class="planner-month-items">${visibleItems}${remaining > 0 ? `<span class="planner-month-more">+${remaining} ${remaining === 1 ? "item" : "itens"}</span>` : ""}</span>` : ""}
-      </button>
-    `);
+        ${dots ? `<span class="planner-month-dots" aria-hidden="true">${dots}</span>` : ""}
+        ${total ? `<span class="planner-month-items">${visibleItems}${remaining > 0 ? `<span class="planner-month-more">+${remaining}</span>` : ""}</span>` : ""}
+      </button>`);
   });
-
+  const trailing = (7 - (cells.length % 7)) % 7;
+  for (let i = 0; i < trailing; i++) cells.push(`<div class="planner-month-cell is-blank" aria-hidden="true"></div>`);
   root.innerHTML = cells.join("");
+  renderPlannerMonthDay();
+}
+
+function renderPlannerMonthDay() {
+  const panel = document.querySelector("#plannerMonthDay");
+  if (!panel) return;
+  const date = plannerMonthSelected;
+  const { events, tasks } = plannerDayItems(date);
+  const d = new Date(`${date}T12:00:00`);
+  const relative = date === todayIso ? "Hoje" : date === tomorrowIso ? "Amanhã" : date === offsetDate(-1) ? "Ontem" : "";
+  const title = `${PLANNER_WEEKDAY_NAMES[d.getDay()]}, ${d.getDate()} de ${BD_MONTHS_LONG[d.getMonth()].toLowerCase()}`;
+  const summary = [
+    `${events.length} ${events.length === 1 ? "compromisso" : "compromissos"}`,
+    `${tasks.length} ${tasks.length === 1 ? "tarefa" : "tarefas"}`,
+  ].join(" · ");
+  const body = events.length || tasks.length
+    ? `${events.map(renderPlannerEventRow).join("")}${tasks.map(renderPlannerTaskRow).join("")}`
+    : `<p class="bp-month-day-empty">${bdIcon("sparkle")}Nada marcado para este dia.</p>`;
+  panel.innerHTML = `<header class="bp-month-day-head">
+      <div><h3>${escapeHtml(title)}${relative ? ` <em class="bp-nav-tag${relative === "Hoje" ? " is-today" : ""}">${relative}</em>` : ""}</h3><p>${escapeHtml(summary)}</p></div>
+      <div class="bp-month-day-actions">
+        <button type="button" class="bd-icon-btn" data-month-add="${date}" aria-label="Adicionar neste dia" title="Adicionar neste dia">${bdIcon("plus")}</button>
+        <button type="button" class="bp-month-open" data-month-open="${date}">Abrir dia${bdIcon("arrow-right")}</button>
+      </div>
+    </header>
+    <div class="bp-month-day-body">${body}</div>`;
+}
+
+function selectPlannerMonthDay(date) {
+  if (!date) return;
+  const previous = plannerMonthSelected;
+  plannerMonthSelected = date;
+  document.querySelectorAll("#plannerMonthGrid [data-month-day]").forEach((cell) => {
+    const on = cell.dataset.monthDay === date;
+    cell.classList.toggle("is-selected", on);
+    cell.setAttribute("aria-pressed", String(on));
+  });
+  renderPlannerMonthDay();
+  if (previous !== date && !prefersReducedMotion()) {
+    document.querySelector("#plannerMonthDay .bp-month-day-body")?.animate?.([{ opacity: 0, transform: "translateY(6px)" }, { opacity: 1, transform: "none" }], { duration: 220, easing: "cubic-bezier(.2,.9,.3,1)" });
+  }
+}
+
+function bindPlannerMonth() {
+  const grid = document.querySelector("#plannerMonthGrid");
+  if (!grid || grid.dataset.bound === "1") return;
+  grid.dataset.bound = "1";
+  grid.addEventListener("click", (event) => {
+    const cell = event.target.closest("[data-month-day]");
+    if (!cell) return;
+    // Segundo toque no dia já selecionado abre a lente Dia.
+    if (cell.dataset.monthDay === plannerMonthSelected && event.detail > 0 && cell.classList.contains("is-selected") && cell.dataset.tapped === "1") {
+      jumpPlannerToDay(cell.dataset.monthDay);
+      return;
+    }
+    grid.querySelectorAll("[data-tapped]").forEach((el) => delete el.dataset.tapped);
+    cell.dataset.tapped = "1";
+    selectPlannerMonthDay(cell.dataset.monthDay);
+  });
+  // Setas do teclado andam pelos dias.
+  grid.addEventListener("keydown", (event) => {
+    const cell = event.target.closest("[data-month-day]");
+    const step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }[event.key];
+    if (!cell || !step) return;
+    const cells = [...grid.querySelectorAll("[data-month-day]")];
+    const next = cells[cells.indexOf(cell) + step];
+    if (!next) return;
+    event.preventDefault();
+    selectPlannerMonthDay(next.dataset.monthDay);
+    next.focus();
+  });
+  document.querySelector("#plannerMonthDay")?.addEventListener("click", (event) => {
+    const open = event.target.closest("[data-month-open]");
+    if (open) { jumpPlannerToDay(open.dataset.monthOpen); return; }
+    const add = event.target.closest("[data-month-add]");
+    if (add) openPlannerQuickAdd("task"); // a data já vem do dia selecionado
+  });
 }
 
 // ── Adicionar rápido (Tarefa / Compromisso / Meta) num único modal ──
@@ -7419,7 +8122,7 @@ function setPlannerQuickAddType(type) {
   form.dataset.type = type;
   const title = document.querySelector("#pqaTitle");
   if (title) title.placeholder = { task: "O que precisa ser feito?", event: "Nome do compromisso", goal: "Qual é a sua meta?" }[type] || "Título";
-  const referenceDate = plannerActiveTab === "day" ? plannerDayDate : todayIso;
+  const referenceDate = plannerActiveTab === "day" ? plannerDayDate : plannerActiveTab === "month" && activeView === "planner" ? plannerMonthSelected : todayIso;
   if (type === "task") {
     document.querySelector("#pqaTaskDue").value ||= referenceDate;
     document.querySelector("#pqaTaskTime").value ||= "09:00";
@@ -7542,11 +8245,12 @@ function closeNotesFormSheet() {
   if (backdrop) backdrop.hidden = true;
 }
 
-function openNotesFormSheet() {
+function openNotesFormSheet({ focusTitle = true } = {}) {
   document.querySelector("#noteFormWrap")?.classList.add("is-open");
   const backdrop = document.querySelector("#noteFormBackdrop");
   if (backdrop && !notesPanelMode() && window.matchMedia("(max-width: 760px)").matches) backdrop.hidden = false;
-  setTimeout(() => document.querySelector("#noteTitle")?.focus(), 60);
+  renderNoteFolderPicker();
+  if (focusTitle) setTimeout(() => document.querySelector("#noteTitle")?.focus(), 60);
 }
 
 function renderNotes() {
@@ -7675,60 +8379,42 @@ function exportNoteMarkdown(id) {
 function editNote(id) {
   const note = state.notes.find((item) => item.id === id);
   if (!note) return;
+  resetNoteForm();
   document.querySelector("#noteId").value = note.id;
-  document.querySelector("#noteTitle").value = note.title;
-  document.querySelector("#noteDescription").value = note.description;
+  document.querySelector("#noteTitle").value = note.title || "";
+  document.querySelector("#noteDescription").value = note.description || "";
   setNoteEditorContent(note);
-  document.querySelector("#noteCategory").value = note.category;
-  document.querySelector("#noteFolder").value = note.folder;
-  document.querySelector("#noteTags").value = note.tags.join(", ");
+  document.querySelector("#noteCategory").value = note.category || "";
+  document.querySelector("#noteTags").value = (note.tags || []).join(", ");
+  document.querySelector("#noteGoal").value = note.goal || "";
+  document.querySelector("#noteAttachments").value = (note.attachments || []).join(", ");
+  document.querySelector("#noteObservations").value = note.observations || "";
   setNotePriorityUI(note.priority);
   document.querySelector("#noteColor").value = note.color || "blue";
   setNoteDraftTextColor(note.textColor || "");
-  document.querySelectorAll("#noteColorPicker .note-color-dot").forEach((dot) =>
-    dot.classList.toggle("active", dot.dataset.noteColor === (note.color || "blue"))
-  );
-  document.querySelectorAll("#notePriorityPicker .note-priority-dot").forEach((d) =>
-    d.classList.toggle("active", d.dataset.priority === note.priority)
-  );
-  document.querySelector("#noteChecklist").value = (note.checklist || []).map(noteChecklistItemText).join("\n");
-  document.querySelector("#noteAttachments").value = note.attachments.join(", ");
-  document.querySelector("#noteGoal").value = note.goal;
-  document.querySelector("#noteObservations").value = note.observations;
+  setNoteFolderValue(note.folder || "");
+  noteDraftChecklist = (note.checklist || []).map((item) => ({
+    id: typeof item === "object" && item.id ? item.id : crypto.randomUUID(),
+    text: noteChecklistItemText(item),
+    done: noteChecklistItemDone(item),
+  }));
+  renderNoteChecklistBuilder();
 
-  // Mostra a checklist se a nota já tiver itens
-  const hasChecklist = note.checklist && note.checklist.length > 0;
-  document.querySelector("#noteChecklistField").hidden = !hasChecklist;
-  document.querySelector("#noteChecklistToggle").classList.toggle("active", hasChecklist);
-
-  // Abre "Mais detalhes" automaticamente se algum campo opcional já tiver valor
-  const hasExtra = note.category
-    || note.folder
-    || (note.tags && note.tags.length)
-    || note.goal
-    || (note.attachments && note.attachments.length)
-    || note.observations
-    || normalizeNoteTextColor(note.textColor)
-    || (note.color && note.color !== "blue");
-  document.querySelector(".note-more-details").open = Boolean(hasExtra);
-
-  // Deixa claro que agora é edição, não criação — antes o formulário ficava
-  // idêntico nos dois casos, sem nenhum aviso.
+  // Deixa claro que agora é edição, não criação.
   document.querySelector("#noteEditingBanner").hidden = false;
-  document.querySelector("#noteEditingTitle").textContent = note.title;
+  document.querySelector("#noteEditingTitle").textContent = note.title || "Sem título";
   document.querySelector("#noteSaveBtnLabel").textContent = "Salvar alterações";
   const formHeading = document.querySelector("#noteFormHeading");
   if (formHeading) formHeading.textContent = "Editar nota";
 
-  enableAutogrowTextareas();
   setView("notes");
   openNotesFormSheet();
 }
 
 function toggleFavorite(id) {
   state.notes = state.notes.map((note) => (note.id === id ? { ...note, favorite: !note.favorite } : note));
-  saveState();
-  renderAll();
+  renderNotes();
+  queueNotePersist();
 }
 
 // Vira uma nota em tarefa — some não tinha nenhum retorno visível na
@@ -7759,7 +8445,7 @@ function deleteNote(id) {
   state.notes = state.notes.filter((note) => note.id !== id);
   saveState();
   renderAll();
-  showToast("Anotacao excluida.");
+  showToast("Nota excluída");
 }
 
 function deleteNoteWithUndo(id) {
@@ -7810,7 +8496,10 @@ function sanitizeNoteHtml(html) {
 
   const clean = (root) => {
     [...root.childNodes].forEach((node) => {
-      if (node.nodeType === Node.TEXT_NODE) return;
+      if (node.nodeType === Node.TEXT_NODE) {
+        if (node.textContent.includes("\u200B")) node.textContent = node.textContent.replace(/\u200B/g, "");
+        return;
+      }
       if (node.nodeType !== Node.ELEMENT_NODE) {
         node.remove();
         return;
@@ -7839,6 +8528,8 @@ function sanitizeNoteHtml(html) {
       clean(node);
       // <span>/<font> sem estilo nenhum não muda nada: some, fica o texto.
       if ((node.tagName === "SPAN" || node.tagName === "FONT") && !node.attributes.length) node.replaceWith(...node.childNodes);
+      // Marca-texto sem texto (sobra de um toque no botão) não vira nada.
+      else if (node.tagName === "MARK" && !node.textContent.trim() && !node.querySelector("br")) node.remove();
     });
   };
   clean(template.content);
@@ -7892,12 +8583,332 @@ function scrubNoteEditorStyles(root) {
   });
 }
 
-// Marca-texto: amarelo da nota aberta (#fde047) e do editor de nova nota (#fde68a).
+// ══════════════════════════════════════════════════════════════════
+// Formatação das notas — um único núcleo para "Nova nota" e nota aberta.
+// O estado de cada botão vem do TEXTO onde o cursor está (não de um
+// "lembrete" do último clique): por isso um botão nunca fica aceso à toa e
+// dois botões só ficam acesos juntos quando o trecho tem as duas coisas
+// (ex.: negrito + itálico). Listas são exclusivas (marcadores OU números).
+// ══════════════════════════════════════════════════════════════════
+const NOTE_ZWSP = "​";
+
+function noteSelectionIn(editor) {
+  const sel = window.getSelection();
+  if (!editor || !sel || !sel.rangeCount) return null;
+  const range = sel.getRangeAt(0);
+  const host = range.commonAncestorContainer;
+  return host === editor || editor.contains(host) ? range : null;
+}
+
+function noteClosest(node, editor, test) {
+  let el = node && node.nodeType === Node.TEXT_NODE ? node.parentNode : node;
+  while (el && el !== editor && el.nodeType === Node.ELEMENT_NODE) {
+    if (test(el)) return el;
+    el = el.parentNode;
+  }
+  return null;
+}
+
+function noteIsHighlightEl(el) {
+  if (!el || el.nodeType !== Node.ELEMENT_NODE) return false;
+  if (el.tagName === "MARK") return true;
+  const c = noteCssRgb(el.style?.backgroundColor);
+  return Boolean(c && c.a > 0.08 && c.r > 200 && c.g > 170 && c.b < 170);
+}
+
+function noteColorHex(value) {
+  const c = noteCssRgb(value);
+  if (!c) return "";
+  return `#${[c.r, c.g, c.b].map((v) => v.toString(16).padStart(2, "0")).join("")}`;
+}
+
+const NOTE_INLINE_TESTS = {
+  bold: (el) => ["B", "STRONG"].includes(el.tagName) || /^(bold|[6-9]00)$/.test(el.style?.fontWeight || ""),
+  italic: (el) => ["I", "EM"].includes(el.tagName) || el.style?.fontStyle === "italic",
+  underline: (el) => el.tagName === "U" || /underline/.test(el.style?.textDecorationLine || el.style?.textDecoration || ""),
+  strike: (el) => ["S", "STRIKE", "DEL"].includes(el.tagName) || /line-through/.test(el.style?.textDecorationLine || el.style?.textDecoration || ""),
+};
+const NOTE_INLINE_TAGS = { bold: "b", italic: "i", underline: "u", strike: "strike" };
+
+function noteFormatState(editor) {
+  const st = { bold: false, italic: false, underline: false, strike: false, highlight: false, ul: false, ol: false, color: "" };
+  const range = noteSelectionIn(editor);
+  if (!range) return st;
+  const node = range.startContainer;
+  const query = (cmd) => { try { return document.queryCommandState(cmd); } catch { return null; } };
+  const dom = NOTE_INLINE_TESTS;
+  // Lido da árvore do texto. O estilo "pendente" (tocar em B com o cursor
+  // parado, antes de digitar) fica em notePending — o queryCommandState do
+  // Chrome confunde sublinhado com riscado e acendia os dois.
+  Object.keys(dom).forEach((key) => { st[key] = Boolean(noteClosest(node, editor, dom[key])); });
+  if (notePending && notePending.editor === editor && range.collapsed && range.startContainer === notePending.node && range.startOffset === notePending.offset) {
+    Object.assign(st, notePending.values);
+  }
+  void query;
+  st.highlight = Boolean(noteClosest(node, editor, noteIsHighlightEl));
+  const li = noteClosest(node, editor, (el) => el.tagName === "LI");
+  const listTag = li?.parentElement?.tagName;
+  st.ul = listTag === "UL";
+  st.ol = listTag === "OL";
+  const colored = noteClosest(node, editor, (el) => Boolean(el.style?.color || (el.tagName === "FONT" && el.getAttribute("color"))));
+  if (colored) st.color = noteColorHex(colored.style?.color || colored.getAttribute("color"));
+  return st;
+}
+
+function paintNoteToolbar(toolbar, editor, key) {
+  if (!toolbar) return;
+  const st = editor ? noteFormatState(editor) : null;
+  const attr = key === "neCmd" ? "data-ne-cmd" : "data-nd-cmd";
+  toolbar.querySelectorAll(`[${attr}][aria-pressed]`).forEach((button) => {
+    const on = String(Boolean(st && st[button.dataset[key]]));
+    if (button.getAttribute("aria-pressed") !== on) button.setAttribute("aria-pressed", on);
+  });
+  toolbar.querySelectorAll("[data-nd-color]").forEach((swatch) => {
+    const on = Boolean(st && st.color && st.color === String(swatch.dataset.ndColor).toLowerCase());
+    swatch.setAttribute("aria-pressed", String(on));
+    swatch.classList.toggle("is-selected", on);
+  });
+}
+
+function noteRestoreEditorSelection(editor, savedRange) {
+  // Se o editor não perdeu o foco (o mousedown da barra é bloqueado), a
+  // seleção atual vale — e preserva o estilo "pendente" do cursor (ex.:
+  // negrito desligado antes de digitar). Só restaura quando o toque tirou
+  // o foco do texto (iPhone).
+  if (document.activeElement === editor && noteSelectionIn(editor)) return;
+  editor.focus({ preventScroll: true });
+  const sel = window.getSelection();
+  if (savedRange && editor.contains(savedRange.commonAncestorContainer)) {
+    sel.removeAllRanges();
+    sel.addRange(savedRange);
+  } else if (!noteSelectionIn(editor)) {
+    const end = document.createRange();
+    end.selectNodeContents(editor);
+    end.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(end);
+  }
+}
+
+// Divide os textos nas pontas da seleção, para cada nó de texto ficar
+// inteiro dentro ou inteiro fora dela.
+function noteSplitRange(range) {
+  let { startContainer: sc, startOffset: so, endContainer: ec, endOffset: eo } = range;
+  if (ec.nodeType === Node.TEXT_NODE && eo > 0 && eo < ec.length) ec.splitText(eo);
+  if (sc.nodeType === Node.TEXT_NODE && so > 0 && so < sc.length) {
+    const rest = sc.splitText(so);
+    if (ec === sc) { ec = rest; eo = rest.length; }
+    sc = rest;
+    so = 0;
+  }
+  range.setStart(sc, so);
+  range.setEnd(ec, ec.nodeType === Node.TEXT_NODE ? Math.min(eo, ec.length) : eo);
+}
+
+function noteTextNodesIn(range, editor) {
+  const nodes = [];
+  const root = range.commonAncestorContainer.nodeType === Node.TEXT_NODE ? range.commonAncestorContainer.parentNode : range.commonAncestorContainer;
+  const walker = document.createTreeWalker(editor.contains(root) || root === editor ? root : editor, NodeFilter.SHOW_TEXT);
+  let node = walker.currentNode.nodeType === Node.TEXT_NODE ? walker.currentNode : walker.nextNode();
+  while (node) {
+    if (node.length && range.intersectsNode(node)) {
+      const startsInside = node !== range.startContainer || range.startOffset < node.length;
+      const endsInside = node !== range.endContainer || range.endOffset > 0;
+      if (startsInside && endsInside && node.textContent.replace(new RegExp(NOTE_ZWSP, "g"), "").length) nodes.push(node);
+    }
+    node = walker.nextNode();
+  }
+  return nodes;
+}
+
+function noteMergeMarks(editor) {
+  editor.querySelectorAll("mark").forEach((mark) => {
+    if (!mark.isConnected) return;
+    let next = mark.nextSibling;
+    while (next && next.nodeName === "MARK") {
+      while (next.firstChild) mark.appendChild(next.firstChild);
+      const drop = next;
+      next = next.nextSibling;
+      drop.remove();
+    }
+  });
+}
+
+// Marca-texto de verdade (<mark>), ligando e desligando:
+// - com trecho marcado: se tudo já estava marcado, desmarca; senão, marca;
+// - só com o cursor: dentro do marca-texto, sai dele (o que for digitado
+//   depois fica normal); fora, o que for digitado já sai marcado.
+function noteToggleHighlight(editor) {
+  const sel = window.getSelection();
+  const range = noteSelectionIn(editor);
+  if (!range) return;
+  if (range.collapsed) {
+    const hl = noteClosest(range.startContainer, editor, noteIsHighlightEl);
+    const zw = document.createTextNode(NOTE_ZWSP);
+    if (hl) {
+      const tailRange = document.createRange();
+      tailRange.setStart(range.startContainer, range.startOffset);
+      tailRange.setEnd(hl, hl.childNodes.length);
+      const tail = tailRange.extractContents();
+      hl.after(zw);
+      if (tail.textContent.replace(new RegExp(NOTE_ZWSP, "g"), "").length) {
+        const rest = hl.cloneNode(false);
+        rest.appendChild(tail);
+        zw.after(rest);
+      }
+      if (!hl.textContent.replace(new RegExp(NOTE_ZWSP, "g"), "").length) hl.remove();
+    } else {
+      // Respeita o que foi ligado/desligado no cursor antes do marca-texto
+      // (ex.: riscado desligado → o texto marcado não sai riscado).
+      const pending = notePending && notePending.editor === editor && notePending.node === range.startContainer && notePending.offset === range.startOffset ? notePending.values : {};
+      let at = range;
+      const offAncestors = Object.keys(pending).filter((key) => pending[key] === false)
+        .map((key) => noteClosest(range.startContainer, editor, NOTE_INLINE_TESTS[key])).filter(Boolean);
+      const outer = offAncestors.find((el) => offAncestors.every((other) => other === el || el.contains(other)));
+      if (outer) {
+        const tailRange = document.createRange();
+        tailRange.setStart(range.startContainer, range.startOffset);
+        tailRange.setEnd(outer, outer.childNodes.length);
+        const tail = tailRange.extractContents();
+        if (tail.textContent.replace(new RegExp(NOTE_ZWSP, "g"), "").length) {
+          const rest = outer.cloneNode(false);
+          rest.appendChild(tail);
+          outer.after(rest);
+        }
+        at = document.createRange();
+        at.setStartAfter(outer);
+        at.collapse(true);
+      }
+      const mark = document.createElement("mark");
+      let inner = mark;
+      Object.keys(pending).filter((key) => pending[key] === true).forEach((key) => {
+        if (noteClosest(at.startContainer, editor, NOTE_INLINE_TESTS[key])) return;
+        const tag = document.createElement(NOTE_INLINE_TAGS[key]);
+        inner.appendChild(tag);
+        inner = tag;
+      });
+      inner.appendChild(zw);
+      at.insertNode(mark);
+    }
+    notePending = null;
+    const caret = document.createRange();
+    caret.setStart(zw, 1);
+    caret.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(caret);
+    return;
+  }
+  noteSplitRange(range);
+  const texts = noteTextNodesIn(range, editor);
+  if (!texts.length) return;
+  const allOn = texts.every((text) => noteClosest(text, editor, noteIsHighlightEl));
+  if (allOn) noteUnhighlight(editor, texts);
+  else texts.forEach((text) => {
+    if (noteClosest(text, editor, noteIsHighlightEl)) return;
+    const mark = document.createElement("mark");
+    text.before(mark);
+    mark.appendChild(text);
+  });
+  noteMergeMarks(editor);
+  const after = document.createRange();
+  after.setStart(texts[0], 0);
+  after.setEnd(texts.at(-1), texts.at(-1).length);
+  sel.removeAllRanges();
+  sel.addRange(after);
+}
+
+// Tira o marca-texto só dos textos indicados (o resto do trecho continua marcado).
+function noteUnhighlight(editor, texts) {
+  const selected = new Set(texts);
+  const holders = [...new Set(texts.map((text) => noteClosest(text, editor, noteIsHighlightEl)).filter(Boolean))];
+  holders.forEach((holder) => {
+    const inner = [];
+    const walker = document.createTreeWalker(holder, NodeFilter.SHOW_TEXT);
+    let node = walker.nextNode();
+    while (node) { inner.push(node); node = walker.nextNode(); }
+    const template = holder.cloneNode(false);
+    holder.replaceWith(...holder.childNodes);
+    inner.forEach((text) => {
+      if (selected.has(text) || !text.textContent.replace(new RegExp(NOTE_ZWSP, "g"), "").length) return;
+      const wrap = template.cloneNode(false);
+      text.before(wrap);
+      wrap.appendChild(text);
+    });
+  });
+}
+
+let notePending = null;
+function noteApplyCommand(editor, cmd, value) {
+  const exec = (name, arg) => { try { return document.execCommand(name, false, arg); } catch { return false; } };
+  if (cmd === "highlight") { noteToggleHighlight(editor); return; }
+  if (cmd === "color") {
+    exec("styleWithCSS", true);
+    exec("foreColor", value);
+    exec("styleWithCSS", false);
+    return;
+  }
+  const map = { bold: "bold", italic: "italic", underline: "underline", strike: "strikeThrough", ul: "insertUnorderedList", ol: "insertOrderedList" };
+  if (!map[cmd]) return;
+  const inline = ["bold", "italic", "underline", "strike"].includes(cmd);
+  const range = noteSelectionIn(editor);
+  const caret = inline && range && range.collapsed ? { node: range.startContainer, offset: range.startOffset } : null;
+  const before = caret ? noteFormatState(editor)[cmd] : false;
+  // Tags simples (<b>, <i>, <u>, <strike>): o estado do botão é lido delas.
+  exec("styleWithCSS", false);
+  exec(map[cmd]);
+  if (caret) {
+    const after = noteSelectionIn(editor);
+    const same = notePending && notePending.editor === editor && notePending.node === caret.node && notePending.offset === caret.offset;
+    if (after && after.collapsed) {
+      notePending = { editor, node: after.startContainer, offset: after.startOffset, values: { ...(same ? notePending.values : {}), [cmd]: !before } };
+    }
+  } else {
+    notePending = null;
+  }
+}
+
+// Limpa negrito, itálico, sublinhado, riscado, cor e marca-texto do trecho
+// (ou da nota inteira, quando não há trecho marcado).
+function noteClearFormatting(editor, whole) {
+  const sel = window.getSelection();
+  if (whole) {
+    const all = document.createRange();
+    all.selectNodeContents(editor);
+    sel.removeAllRanges();
+    sel.addRange(all);
+  }
+  try { document.execCommand("styleWithCSS", false, false); document.execCommand("removeFormat"); } catch { /* sem execCommand */ }
+  const range = noteSelectionIn(editor);
+  if (range && !range.collapsed) {
+    noteSplitRange(range);
+    const texts = noteTextNodesIn(range, editor);
+    noteUnhighlight(editor, texts);
+    const inline = new Set(["B", "STRONG", "I", "EM", "U", "S", "STRIKE", "FONT", "SPAN"]);
+    texts.forEach((text) => {
+      let el = text.parentNode;
+      while (el && el !== editor && inline.has(el.tagName)) {
+        const parent = el.parentNode;
+        if ([...el.childNodes].every((child) => child.nodeType !== Node.ELEMENT_NODE || !child.textContent.trim() || texts.some((t) => child.contains(t)))) el.replaceWith(...el.childNodes);
+        el = parent;
+      }
+    });
+  }
+  if (whole) {
+    editor.querySelectorAll("b, strong, i, em, u, s, strike, mark, font").forEach((el) => el.replaceWith(...el.childNodes));
+    editor.querySelectorAll("[style]").forEach((el) => el.removeAttribute("style"));
+    const end = document.createRange();
+    end.selectNodeContents(editor);
+    end.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(end);
+  }
+  editor.normalize();
+}
+
+// Mantida pelo nome antigo: marca-texto ativo onde está o cursor?
 function noteHighlightActive() {
-  try {
-    const c = noteCssRgb(document.queryCommandValue("backColor"));
-    return Boolean(c && c.a > 0.08 && c.r > 240 && c.g > 200 && c.b < 160);
-  } catch { return false; }
+  const editor = [document.querySelector("#ndBody"), document.querySelector("#noteEditor")].find((el) => el && el === document.activeElement);
+  return editor ? noteFormatState(editor).highlight : false;
 }
 
 // Corpo formatado -> texto puro (pra description/preview/busca), com
@@ -8019,16 +9030,11 @@ function bindKeyboardViewportRepair() {
   }
 }
 
-// Salva o estado atual do título/corpo — devolve true se algo
-// realmente mudou desde o último save (evita escrever/re-renderizar à
-// toa quando não há nada novo). Extraída como sua própria função
-// porque agora é chamada de VÁRIOS lugares: autosave enquanto a
-// pessoa digita, e antes de fechar por QUALQUER caminho (botão
-// Salvar, X, toque fora do cartão, gesto de voltar do celular) — a
-// tela de nota não tem mais nenhum jeito de fechar que jogue fora o
-// que foi escrito, do mesmo jeito que o Notes do iPhone nunca pede
-// pra você "salvar" antes de sair.
-function flushNoteDetailSave() {
+// Salvamento da nota aberta: automático enquanto digita. O estado da nota
+// muda na hora (é barato); a gravação vai para o momento livre seguinte
+// (queueNotePersist) — nada de redesenhar o app inteiro a cada pausa.
+let ndSavedAt = null;
+function flushNoteDetailSave({ persist = "idle" } = {}) {
   if (!ndCurrentNoteId) return false;
   const title = document.querySelector("#ndTitle").value.trim() || "Sem título";
   const cleanHtml = sanitizeNoteHtml(document.querySelector("#ndBody").innerHTML);
@@ -8045,7 +9051,9 @@ function flushNoteDetailSave() {
       ? { ...note, title, description: plainText, descriptionHtml: cleanHtml, updatedAt: new Date().toISOString() }
       : note
   );
-  saveState();
+  ndSavedAt = new Date();
+  if (persist === "now") { notePersistQueued = false; saveState(); }
+  else queueNotePersist();
   return true;
 }
 
@@ -8067,12 +9075,33 @@ function renderNoteDetailMeta(note) {
   }
 }
 
+// "Salvando…" enquanto há alteração pendente; "Salvo" (com a hora no
+// título do selo) quando tudo já está guardado. Sem avisos flutuantes.
 function setNdStatus(mode) {
   const el = document.querySelector("#ndStatus");
   if (!el) return;
-  el.dataset.state = mode;
+  const state = mode === "saved" ? "saved" : "saving";
+  el.dataset.state = state;
   const label = el.querySelector("span");
-  if (label) label.textContent = mode === "editing" ? "Editando…" : "Salvo";
+  if (label) label.textContent = state === "saved" ? "Salvo" : "Salvando…";
+  el.title = state === "saved" && ndSavedAt ? `Salvo às ${String(ndSavedAt.getHours()).padStart(2, "0")}:${String(ndSavedAt.getMinutes()).padStart(2, "0")}` : "";
+  updateNdSaveButton();
+}
+
+function updateNdSaveButton() {
+  const button = document.querySelector("#ndSaveBtn");
+  const label = document.querySelector("#ndSaveLabel");
+  if (!button || !label) return;
+  const saved = document.querySelector("#ndStatus")?.dataset.state === "saved";
+  if (notesPanelMode()) {
+    label.textContent = saved ? "Salvo" : "Salvar agora";
+    button.classList.toggle("is-saved", saved);
+    button.setAttribute("aria-label", saved ? "Todas as alterações estão salvas" : "Salvar agora");
+  } else {
+    label.textContent = "Concluir";
+    button.classList.remove("is-saved");
+    button.setAttribute("aria-label", "Concluir e voltar para a biblioteca");
+  }
 }
 
 function updateNdCount() {
@@ -8085,23 +9114,23 @@ function updateNdCount() {
 
 function updateNdToolbarState() {
   const body = document.querySelector("#ndBody");
-  if (!body) return;
-  const sel = window.getSelection();
-  if (!sel?.rangeCount || !body.contains(sel.anchorNode)) return;
-  const map = { bold: "bold", italic: "italic", underline: "underline", strike: "strikeThrough", ul: "insertUnorderedList", ol: "insertOrderedList" };
-  document.querySelectorAll("#noteDetailToolbar [data-nd-cmd][aria-pressed]").forEach((button) => {
-    let on = false;
-    try {
-      if (button.dataset.ndCmd === "highlight") on = noteHighlightActive();
-      else on = map[button.dataset.ndCmd] ? document.queryCommandState(map[button.dataset.ndCmd]) : false;
-    } catch { on = false; }
-    button.setAttribute("aria-pressed", String(on));
-  });
+  paintNoteToolbar(document.querySelector("#noteDetailToolbar"), body && document.activeElement === body ? body : null, "ndCmd");
 }
 
 // Fora do texto, nenhum botão da barra fica "aceso".
 function resetNdToolbarState() {
-  document.querySelectorAll("#noteDetailToolbar [data-nd-cmd][aria-pressed]").forEach((button) => button.setAttribute("aria-pressed", "false"));
+  paintNoteToolbar(document.querySelector("#noteDetailToolbar"), null, "ndCmd");
+}
+
+// Painéis da barra (cor do texto e link): só um aberto por vez.
+function setNdPanel(name) {
+  const morePanel = document.querySelector("#ndMorePanel");
+  const linkForm = document.querySelector("#ndLinkForm");
+  if (morePanel) morePanel.hidden = name !== "more";
+  if (linkForm) linkForm.hidden = name !== "link";
+  document.querySelector('#noteDetailToolbar [data-nd-cmd="more"]')?.setAttribute("aria-expanded", String(name === "more"));
+  document.querySelector('#noteDetailToolbar [data-nd-cmd="link"]')?.setAttribute("aria-expanded", String(name === "link"));
+  if (name !== "link") { const input = document.querySelector("#ndLinkInput"); if (input) input.value = ""; }
 }
 
 // Fecha a nota e só então segue para outra ação. No celular a nota tem uma
@@ -8132,15 +9161,10 @@ function openNoteDetail(id) {
   ndCurrentNoteId = id;
   ndChecklistAdding = false;
   document.querySelector("#ndMenu")?.setAttribute("hidden", "");
-  document.querySelector("#ndMorePanel")?.setAttribute("hidden", "");
-  document.querySelector("#ndLinkForm")?.setAttribute("hidden", "");
   document.querySelector("#ndMenuBtn")?.setAttribute("aria-expanded", "false");
-  document.querySelectorAll('#noteDetailToolbar [data-nd-cmd="more"], #noteDetailToolbar [data-nd-cmd="link"]').forEach((button) => button.setAttribute("aria-expanded", "false"));
-  document.querySelectorAll("#noteDetailToolbar [data-nd-color]").forEach((button) => {
-    button.setAttribute("aria-pressed", "false");
-    button.classList.remove("is-selected");
-  });
+  setNdPanel(null);
   resetNdToolbarState();
+  ndSavedAt = note.updatedAt ? new Date(note.updatedAt) : null;
 
   document.querySelector("#ndTitle").value = note.title || "";
   const body = document.querySelector("#ndBody");
@@ -8164,10 +9188,21 @@ function openNoteDetail(id) {
   const favLabel = document.querySelector("#ndFavBtn span");
   if (favLabel) favLabel.textContent = note.favorite ? "Remover dos favoritos" : "Favoritar";
 
-  document.querySelector("#noteDetailModal").hidden = false;
+  const modal = document.querySelector("#noteDetailModal");
+  const wasHidden = modal.hidden;
+  modal.hidden = false;
+  modal.classList.remove("is-leaving");
   const emptyPanel = document.querySelector("#noteDetailEmpty");
   if (emptyPanel) emptyPanel.hidden = true;
   document.querySelectorAll("#notesList .bn-card").forEach((card) => card.classList.toggle("is-selected", notesPanelMode() && card.dataset.noteId === id));
+  const sheet = modal.querySelector(".bn-detail");
+  if (!prefersReducedMotion() && sheet?.animate) {
+    if (notesPanelMode()) {
+      if (switching || wasHidden) sheet.querySelectorAll(".bn-nd-hero, .bn-detail-scroll").forEach((part) => part.animate([{ opacity: 0, transform: "translateY(6px)" }, { opacity: 1, transform: "none" }], { duration: 220, easing: "cubic-bezier(.2,.9,.3,1)" }));
+    } else if (wasHidden) {
+      sheet.animate([{ opacity: 0, transform: "translateY(28px)" }, { opacity: 1, transform: "none" }], { duration: 300, easing: "cubic-bezier(.2,.9,.25,1)" });
+    }
+  }
   // No computador a nota abre no painel ao lado: sem travar a rolagem nem criar histórico.
   if (notesPanelMode()) return;
   if (switching) return;
@@ -8183,41 +9218,71 @@ function renderNoteDetailChecklist(note) {
   const section = document.querySelector("#ndChecklistSection");
   const list = document.querySelector("#ndChecklistItems");
   const summary = document.querySelector("#ndChecklistSummary");
-  const progress = document.querySelector("#ndChecklistProgress");
-  const progressBar = document.querySelector("#ndChecklistProgressBar");
-  if (!section || !list || !summary || !progress || !progressBar) return;
+  if (!section || !list || !summary) return;
   const items = note?.checklist || [];
-  const completed = items.filter(noteChecklistItemDone).length;
   section.hidden = items.length === 0 && !ndChecklistAdding;
-  section.classList.toggle("is-complete", items.length > 0 && completed === items.length);
-  summary.textContent = completed === items.length
-    ? "Tudo concluído"
-    : `${items.length - completed} ${items.length - completed === 1 ? "item pendente" : "itens pendentes"}`;
-  progress.textContent = items.length ? `${completed} de ${items.length} (${Math.round((completed / items.length) * 100)}%)` : "0 de 0";
-  progressBar.style.width = `${items.length ? Math.round((completed / items.length) * 100) : 0}%`;
+  updateNoteDetailChecklistProgress(note);
   list.innerHTML = items.map((item, index) => {
     const done = noteChecklistItemDone(item);
     const text = escapeHtml(noteChecklistItemText(item));
-    return `<div class="bn-check-row"><button type="button" class="bn-check-item${done ? " is-done" : ""}" onclick="toggleNoteChecklistItem('${escapeHtml(note.id)}', ${index})" aria-pressed="${done}">
-      <span class="bn-check-box">${done ? bdIcon("check") : ""}</span>
-      <span>${text}</span>
-    </button><button type="button" class="bn-check-del" data-nd-check-del="${index}" aria-label="Remover “${text}”">${bdIcon("x")}</button></div>`;
+    return `<div class="bn-check-row${done ? " is-done" : ""}" data-check-index="${index}">
+      <button type="button" class="bn-check-toggle" data-nd-check-toggle="${index}" aria-pressed="${done}" aria-label="${done ? "Desmarcar" : "Marcar"}: ${text}"><span class="bn-check-box">${done ? bdIcon("check") : ""}</span></button>
+      <textarea class="bn-check-text" rows="1" data-nd-check-text="${index}" maxlength="120" autocomplete="off" enterkeyhint="done" aria-label="Item da checklist">${text}</textarea>
+      <button type="button" class="bn-check-del" data-nd-check-del="${index}" aria-label="Remover “${text}”">${bdIcon("x")}</button>
+    </div>`;
   }).join("");
+  requestAnimationFrame(() => list.querySelectorAll(".bn-check-text").forEach(autosizeCheckText));
+}
+
+function updateNoteDetailChecklistProgress(note) {
+  const section = document.querySelector("#ndChecklistSection");
+  const summary = document.querySelector("#ndChecklistSummary");
+  const progress = document.querySelector("#ndChecklistProgress");
+  const progressBar = document.querySelector("#ndChecklistProgressBar");
+  const items = note?.checklist || [];
+  const completed = items.filter(noteChecklistItemDone).length;
+  const pct = items.length ? Math.round((completed / items.length) * 100) : 0;
+  section?.classList.toggle("is-complete", items.length > 0 && completed === items.length);
+  section?.classList.toggle("is-empty", items.length === 0);
+  if (summary) summary.textContent = !items.length ? "Checklist vazio" : completed === items.length ? "Tudo concluído" : `${items.length - completed} ${items.length - completed === 1 ? "item pendente" : "itens pendentes"}`;
+  if (progress) progress.textContent = items.length ? `${completed} de ${items.length} (${pct}%)` : "Sem itens ainda";
+  if (progressBar) progressBar.style.width = `${pct}%`;
 }
 
 function toggleNoteChecklistItem(noteId, index) {
   const note = state.notes.find((item) => item.id === noteId);
   if (!note || !note.checklist?.[index]) return;
   const current = note.checklist[index];
+  const done = !noteChecklistItemDone(current);
   note.checklist[index] = {
     id: typeof current === "object" && current.id ? current.id : crypto.randomUUID(),
     text: noteChecklistItemText(current),
-    done: !noteChecklistItemDone(current),
+    done,
   };
   note.updatedAt = new Date().toISOString();
-  saveState();
-  renderNoteDetailChecklist(note);
-  renderNotes();
+  // Atualiza só a linha tocada (sem recriar os campos de texto).
+  const row = document.querySelector(`#ndChecklistItems [data-check-index="${index}"]`);
+  if (row && ndCurrentNoteId === noteId) {
+    row.classList.toggle("is-done", done);
+    const toggle = row.querySelector("[data-nd-check-toggle]");
+    toggle.setAttribute("aria-pressed", String(done));
+    toggle.setAttribute("aria-label", `${done ? "Desmarcar" : "Marcar"}: ${noteChecklistItemText(current)}`);
+    toggle.querySelector(".bn-check-box").innerHTML = done ? bdIcon("check") : "";
+    if (done && !prefersReducedMotion()) toggle.querySelector(".bn-check-box")?.animate?.([{ transform: "scale(.6)" }, { transform: "scale(1.12)" }, { transform: "scale(1)" }], { duration: 260, easing: "cubic-bezier(.3,1.5,.5,1)" });
+    updateNoteDetailChecklistProgress(note);
+  } else if (ndCurrentNoteId === noteId) {
+    renderNoteDetailChecklist(note);
+  }
+  queueNotePersist();
+  scheduleNotesListRefresh();
+}
+
+// A lista de cartões é redesenhada uma vez só, depois da sequência de
+// toques (marcar vários itens seguidos não redesenha a tela a cada um).
+let notesListRefreshTimer = 0;
+function scheduleNotesListRefresh() {
+  clearTimeout(notesListRefreshTimer);
+  notesListRefreshTimer = setTimeout(() => renderNotes(), 260);
 }
 
 // Só cuida da parte visual (esconder modal, destravar scroll) — não
@@ -8230,22 +9295,35 @@ function toggleNoteChecklistItem(noteId, index) {
 // novo popstate, que chamava ela de novo, que chamava history.back()
 // de novo — um loop.
 function closeNoteDetailUI() {
-  document.querySelector("#noteDetailModal").hidden = true;
+  const modal = document.querySelector("#noteDetailModal");
+  const sheet = modal?.querySelector(".bn-detail");
+  const animateOut = modal && !modal.hidden && !notesPanelMode() && !prefersReducedMotion() && sheet?.animate;
+  if (animateOut) {
+    modal.classList.add("is-leaving");
+    const anim = sheet.animate([{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(24px)" }], { duration: 200, easing: "cubic-bezier(.4,0,1,1)", fill: "forwards" });
+    const hide = () => { if (modal.classList.contains("is-leaving")) { modal.hidden = true; modal.classList.remove("is-leaving"); } anim.cancel(); };
+    anim.finished.then(hide, hide);
+  } else if (modal) {
+    modal.hidden = true;
+  }
   unlockBackgroundScroll();
   ndCurrentNoteId = null;
   const emptyPanel = document.querySelector("#noteDetailEmpty");
   if (emptyPanel) emptyPanel.hidden = false;
 }
 
-// Fecha a nota — SEMPRE salva antes, não importa por onde a pessoa
-// saiu (botão Salvar, X, toque fora do cartão). Sem isso, fechar sem
-// ter apertado "Salvar" explicitamente jogava fora tudo que tinha
-// sido digitado — o oposto de "prático e fácil".
+// Fecha a nota — SEMPRE guarda antes, não importa por onde a pessoa saiu
+// (Concluir, voltar, toque fora). Atualiza só a lista de notas, depois que
+// a tela já fechou (antes redesenhava o app inteiro e travava um instante).
 function closeNoteDetail({ updateHistory = true } = {}) {
   if (!ndCurrentNoteId) return;
-  flushNoteDetailSave();
+  const id = ndCurrentNoteId;
+  const changed = flushNoteDetailSave();
   closeNoteDetailUI();
-  renderAll();
+  requestAnimationFrame(() => {
+    renderNotes();
+    if (changed) flashNoteCard(id);
+  });
   if (updateHistory && history.state && history.state.noteDetail) history.back();
   else if (!updateHistory) history.replaceState({ ...(history.state || {}), pnView: activeView, noteDetail: false }, "");
 }
@@ -8253,13 +9331,68 @@ function closeNoteDetail({ updateHistory = true } = {}) {
 function saveNoteDetail() {
   if (!ndCurrentNoteId) return;
   if (notesPanelMode()) {
-    flushNoteDetailSave();
-    renderNotes();
-    showToast("Nota salva.");
+    clearTimeout(ndAutosaveTimer);
+    const changed = flushNoteDetailSave({ persist: "now" });
+    setNdStatus("saved");
+    if (changed) requestAnimationFrame(() => { renderNotes(); });
+    const button = document.querySelector("#ndSaveBtn");
+    if (!prefersReducedMotion()) button?.animate?.([{ transform: "scale(1)" }, { transform: "scale(.96)" }, { transform: "scale(1)" }], { duration: 220, easing: "ease-out" });
     return;
   }
+  clearTimeout(ndAutosaveTimer);
   closeNoteDetail();
-  showToast("Nota salva.");
+}
+let ndAutosaveTimer = 0;
+
+// "Mover para pasta": lista as pastas + campo para criar uma nova.
+function openNoteFolderSheet(noteId) {
+  const note = state.notes.find((n) => n.id === noteId);
+  if (!note) return;
+  document.querySelector("#noteFolderSheet")?.remove();
+  const current = (note.folder || "").trim() || "Entrada";
+  const folders = noteFolderOptions();
+  if (!folders.includes(current)) folders.push(current);
+  const sheet = document.createElement("div");
+  sheet.id = "noteFolderSheet";
+  sheet.className = "modal-backdrop";
+  sheet.innerHTML = `<div class="modal-card planner-action-sheet bn-folder-sheet" role="dialog" aria-modal="true" aria-labelledby="noteFolderSheetTitle">
+    <div class="modal-header"><h2 id="noteFolderSheetTitle">Mover para pasta</h2><button type="button" class="icon-button" data-close aria-label="Fechar">${bdIcon("x")}</button></div>
+    <div class="modal-body planner-action-sheet-body">
+      <div class="bn-folder-sheet-list" role="radiogroup" aria-label="Pastas">${folders.map((name) => `<button type="button" role="radio" class="planner-action-option${name === current ? " is-active" : ""}" aria-checked="${name === current}" data-move-folder="${escapeHtml(name)}"><span>${bdIcon("folder")}${escapeHtml(name)}</span>${name === current ? bdIcon("check") : ""}</button>`).join("")}</div>
+      <form class="bn-folder-new is-sheet" data-folder-form>
+        <input type="text" maxlength="40" placeholder="Nova pasta" autocomplete="off" enterkeyhint="done" aria-label="Nome da nova pasta" />
+        <button type="submit" class="bd-btn bd-btn--primary">Criar e mover</button>
+      </form>
+    </div></div>`;
+  document.body.appendChild(sheet);
+  const close = () => { sheet.remove(); document.removeEventListener("keydown", onKey); repairViewportAfterOverlay(); };
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  document.addEventListener("keydown", onKey);
+  const move = (name) => {
+    const target = state.notes.find((n) => n.id === noteId);
+    if (!target) { close(); return; }
+    const clean = String(name || "").replace(/\s+/g, " ").trim().slice(0, 40);
+    if (!clean) return;
+    const existing = noteFolderOptions().find((folder) => folder.toLocaleLowerCase("pt-BR") === clean.toLocaleLowerCase("pt-BR")) || clean;
+    close();
+    if ((target.folder || "Entrada") === existing) return;
+    state.notes = state.notes.map((n) => (n.id === noteId ? { ...n, folder: existing, updatedAt: new Date().toISOString() } : n));
+    if (ndCurrentNoteId === noteId) renderNoteDetailMeta(state.notes.find((n) => n.id === noteId));
+    renderNotes();
+    queueNotePersist();
+    showToast(`Nota movida para ${existing}`);
+  };
+  sheet.addEventListener("click", (e) => {
+    if (e.target === sheet || e.target.closest("[data-close]")) { close(); return; }
+    const option = e.target.closest("[data-move-folder]");
+    if (option) move(option.dataset.moveFolder);
+  });
+  sheet.querySelector("[data-folder-form]")?.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const input = e.target.querySelector("input");
+    if (!input.value.trim()) { input.focus(); return; }
+    move(input.value);
+  });
 }
 
 // Tela de Notas: atalhos do celular, busca própria, pastas e "+ Pasta".
@@ -8278,11 +9411,8 @@ function bindNotesBoard() {
   search?.addEventListener("input", debounce(() => { notesSearchQuery = search.value; renderNotes(); }, 150));
   document.querySelector("#noteFolders")?.addEventListener("click", (event) => {
     if (event.target.closest("[data-new-folder]")) {
-      openNotesFormSheet();
-      const details = document.querySelector(".note-more-details");
-      if (details) details.open = true;
-      setTimeout(() => document.querySelector("#noteFolder")?.focus(), 80);
-      showToast("Digite o nome da nova pasta e salve a nota nela.");
+      openNotesFormSheet({ focusTitle: false });
+      openNoteFolderNew();
       return;
     }
     const chip = event.target.closest("[data-note-folder]");
@@ -8315,19 +9445,26 @@ function bindNoteDetail() {
 
   document.querySelector("#ndSaveBtn").addEventListener("click", saveNoteDetail);
 
-  // Autosave enquanto digita (debounced) — camada extra de segurança
-  // além do "salva sempre ao fechar": se o navegador travar, a aba
-  // fechar sozinha ou o celular desligar no meio da digitação, o que
-  // já foi escrito até ali não se perde. Não precisa redesenhar a
-  // lista de notas a cada save (ela fica escondida atrás do modal
-  // mesmo); só grava o estado — a lista atualiza quando a nota fecha.
-  const autosaveNoteDetail = debounce(() => { flushNoteDetailSave(); setNdStatus("saved"); }, 800);
-  const onNdInput = () => { setNdStatus("editing"); updateNdCount(); autosaveNoteDetail(); };
+  // Salvamento automático: 700 ms depois da última tecla. O selo mostra
+  // "Salvando…" na hora e "Salvo" quando a alteração foi guardada.
+  const scheduleNdAutosave = () => {
+    setNdStatus("saving");
+    clearTimeout(ndAutosaveTimer);
+    ndAutosaveTimer = setTimeout(() => {
+      flushNoteDetailSave();
+      setNdStatus("saved");
+    }, 700);
+  };
+  const onNdInput = () => { updateNdCount(); scheduleNdAutosave(); };
+  body.addEventListener("input", () => { notePending = null; });
   document.querySelector("#ndTitle").addEventListener("input", onNdInput);
+  document.querySelector("#ndTitle").addEventListener("keydown", (event) => {
+    if (event.key === "Enter") { event.preventDefault(); body.focus(); }
+  });
   body.addEventListener("input", onNdInput);
-  ["keyup", "mouseup", "touchend", "focus"].forEach((type) => body.addEventListener(type, () => setTimeout(updateNdToolbarState, 0)));
+  window.addEventListener("resize", debounce(updateNdSaveButton, 150));
 
-  // Etiquetas: prioridade troca a cada toque; pasta abre os campos extras.
+  // Etiquetas: prioridade troca a cada toque; pasta abre "Mover para pasta".
   document.querySelector("#ndChips")?.addEventListener("click", (event) => {
     const note = state.notes.find((n) => n.id === ndCurrentNoteId);
     if (!note) return;
@@ -8336,11 +9473,12 @@ function bindNoteDetail() {
       const next = order[(order.indexOf(note.priority) + 1) % order.length] || "Media";
       flushNoteDetailSave();
       state.notes = state.notes.map((n) => (n.id === note.id ? { ...n, priority: next, updatedAt: new Date().toISOString() } : n));
-      saveState();
       renderNoteDetailMeta(state.notes.find((n) => n.id === note.id));
-      showToast(`Prioridade: ${notePriorityLabel(next)}`);
+      document.querySelector("#ndChips [data-nd-prio]")?.focus({ preventScroll: true });
+      queueNotePersist();
+      scheduleNotesListRefresh();
     } else if (event.target.closest("[data-nd-folder]")) {
-      document.querySelector("#ndMoreFieldsBtn")?.click();
+      openNoteFolderSheet(note.id);
     }
   });
 
@@ -8360,7 +9498,7 @@ function bindNoteDetail() {
     document.querySelector("#ndFavBtn svg").setAttribute("fill", note?.favorite ? "currentColor" : "none");
     const favLabel = document.querySelector("#ndFavBtn span");
     if (favLabel) favLabel.textContent = note?.favorite ? "Remover dos favoritos" : "Favoritar";
-    showToast(note?.favorite ? "Nota adicionada aos favoritos." : "Nota removida dos favoritos.");
+    showToast(note?.favorite ? "Adicionada aos favoritos" : "Removida dos favoritos");
   });
 
   document.querySelector("#ndConvertTaskBtn").addEventListener("click", () => {
@@ -8369,37 +9507,22 @@ function bindNoteDetail() {
     closeNoteDetailThen(() => convertNoteToTask(id));
   });
 
-  // "Categoria, pasta e tags" abre a edição já em "Mais detalhes", com o
-  // campo de pasta em foco — antes caía no topo do formulário inteiro.
   document.querySelector("#ndMoreFieldsBtn").addEventListener("click", () => {
-    if (!ndCurrentNoteId) return;
-    const id = ndCurrentNoteId;
-    closeNoteDetailThen(() => {
-      editNote(id);
-      const details = document.querySelector(".note-more-details");
-      if (details) details.open = true;
-      setTimeout(() => {
-        const folder = document.querySelector("#noteFolder");
-        folder?.scrollIntoView({ block: "center" });
-        folder?.focus({ preventScroll: true });
-      }, 120);
-    });
+    if (ndCurrentNoteId) openNoteFolderSheet(ndCurrentNoteId);
   });
 
-  // Remover item da checklist (com desfazer).
-  document.querySelector("#ndChecklistItems")?.addEventListener("click", (event) => {
-    const del = event.target.closest("[data-nd-check-del]");
-    if (!del) return;
+  // ── Checklist da nota aberta: marcar, editar o texto, remover ──
+  const checklistList = document.querySelector("#ndChecklistItems");
+  const removeChecklistItem = (index) => {
     const note = state.notes.find((n) => n.id === ndCurrentNoteId);
-    const index = Number(del.dataset.ndCheckDel);
     if (!note || !note.checklist?.[index]) return;
     const removed = note.checklist[index];
     note.checklist = note.checklist.filter((_, i) => i !== index);
     note.updatedAt = new Date().toISOString();
-    saveState();
     renderNoteDetailChecklist(note);
-    renderNotes();
-    showToast("Item removido.", {
+    queueNotePersist();
+    scheduleNotesListRefresh();
+    showToast("Item removido", {
       actionLabel: "Desfazer",
       onAction: () => {
         const current = state.notes.find((n) => n.id === note.id);
@@ -8408,58 +9531,67 @@ function bindNoteDetail() {
         list.splice(Math.min(index, list.length), 0, removed);
         current.checklist = list;
         current.updatedAt = new Date().toISOString();
-        saveState();
         if (ndCurrentNoteId === current.id) renderNoteDetailChecklist(current);
-        renderNotes();
+        queueNotePersist();
+        scheduleNotesListRefresh();
       },
     });
+  };
+  checklistList?.addEventListener("click", (event) => {
+    const toggle = event.target.closest("[data-nd-check-toggle]");
+    if (toggle && ndCurrentNoteId) { toggleNoteChecklistItem(ndCurrentNoteId, Number(toggle.dataset.ndCheckToggle)); return; }
+    const del = event.target.closest("[data-nd-check-del]");
+    if (del) removeChecklistItem(Number(del.dataset.ndCheckDel));
+  });
+  checklistList?.addEventListener("input", (event) => {
+    const input = event.target.closest("[data-nd-check-text]");
+    const note = state.notes.find((n) => n.id === ndCurrentNoteId);
+    const index = Number(input?.dataset.ndCheckText);
+    if (!input || !note || !note.checklist?.[index]) return;
+    if (/\n/.test(input.value)) input.value = input.value.replace(/\n+/g, " ");
+    autosizeCheckText(input);
+    const text = input.value.trim();
+    if (!text) return; // vazio: decide ao sair do campo
+    const current = note.checklist[index];
+    note.checklist[index] = { id: typeof current === "object" && current.id ? current.id : crypto.randomUUID(), text, done: noteChecklistItemDone(current) };
+    note.updatedAt = new Date().toISOString();
+    setNdStatus("saving");
+    clearTimeout(ndAutosaveTimer);
+    ndAutosaveTimer = setTimeout(() => { queueNotePersist(); ndSavedAt = new Date(); setNdStatus("saved"); scheduleNotesListRefresh(); }, 600);
+  });
+  checklistList?.addEventListener("keydown", (event) => {
+    const input = event.target.closest("[data-nd-check-text]");
+    if (!input) return;
+    if (event.key === "Enter") { event.preventDefault(); document.querySelector("#ndChecklistAddInput")?.focus(); }
+    if (event.key === "Escape") { event.preventDefault(); input.blur(); }
+  });
+  checklistList?.addEventListener("focusout", (event) => {
+    const input = event.target.closest("[data-nd-check-text]");
+    const note = state.notes.find((n) => n.id === ndCurrentNoteId);
+    if (!input || !note) return;
+    const index = Number(input.dataset.ndCheckText);
+    if (!input.value.trim()) { removeChecklistItem(index); return; }
+    input.value = noteChecklistItemText(note.checklist?.[index]);
   });
 
-  // ── Formatação (negrito/itálico/destaque) ──────────────────────
-  // BUG relatado: marcar um trecho e tocar numa cor não deixava nada
-  // marcado. Causa raiz confirmada: tocar num BOTÃO fora do
-  // contenteditable dispara "mousedown" -> o navegador tira o foco
-  // do texto selecionado ANTES do "click" chegar a rodar o
-  // execCommand — ou seja, quando o comando executa, a seleção já
-  // tinha sido perdida (virou só um cursor, sem texto nenhum
-  // marcado), então "aplicar cor de fundo" não tinha em quê aplicar.
-  // Duas camadas de correção (padrão usado por editores de texto
-  // rico de verdade, não é workaround improvisado):
-  //   1) `preventDefault()` no mousedown dos botões da barra — isso
-  //      IMPEDE o navegador de tirar o foco/a seleção em primeiro
-  //      lugar, então normalmente nem precisa da camada 2.
-  //   2) Como reforço pra qualquer navegador/gesto que ainda assim
-  //      perca a seleção, guardamos o último Range válido a cada
-  //      mudança de seleção que cruza o corpo do editor, limitando o
-  //      trecho aos limites da nota antes de restaurar e formatar.
+  // ── Barra de formatação ──────────────────────────────────────
+  // Duas camadas para nunca perder a seleção ao tocar num botão:
+  // preventDefault no mousedown e, como reforço, o último trecho válido.
   let ndSavedRange = null;
   const saveNdSelection = () => {
-    const sel = window.getSelection();
-    if (!sel || !sel.rangeCount) return;
-    const range = sel.getRangeAt(0);
-    const anchorInside = sel.anchorNode === body || body.contains(sel.anchorNode);
-    const focusInside = sel.focusNode === body || body.contains(sel.focusNode);
-    if (anchorInside && focusInside) {
-      ndSavedRange = range.cloneRange();
-      return;
-    }
-    try {
-      if (!range.intersectsNode(body)) return;
-      const clipped = range.cloneRange();
-      const bodyBounds = document.createRange();
-      bodyBounds.selectNodeContents(body);
-      if (clipped.compareBoundaryPoints(Range.START_TO_START, bodyBounds) < 0) clipped.setStart(body, 0);
-      if (clipped.compareBoundaryPoints(Range.END_TO_END, bodyBounds) > 0) clipped.setEnd(body, body.childNodes.length);
-      ndSavedRange = clipped;
-    } catch { /* conserva a última seleção válida */ }
+    const range = noteSelectionIn(body);
+    if (range) ndSavedRange = range.cloneRange();
   };
-  body.addEventListener("mouseup", saveNdSelection);
-  body.addEventListener("keyup", saveNdSelection);
-  body.addEventListener("touchend", saveNdSelection);
-  document.addEventListener("selectionchange", saveNdSelection);
+  document.addEventListener("selectionchange", () => {
+    if (document.activeElement !== body) return;
+    saveNdSelection();
+    updateNdToolbarState();
+  });
   body.addEventListener("focus", () => {
     if (ndSavedRange && !body.contains(ndSavedRange.commonAncestorContainer)) ndSavedRange = null;
+    updateNdToolbarState();
   });
+  body.addEventListener("blur", () => setTimeout(() => { if (document.activeElement !== body) resetNdToolbarState(); }, 0));
 
   const toolbar = document.querySelector("#noteDetailToolbar");
   toolbar.addEventListener("mousedown", (e) => {
@@ -8469,129 +9601,84 @@ function bindNoteDetail() {
     const swatch = e.target.closest("[data-nd-color]");
     const toolBtn = e.target.closest("[data-nd-cmd]");
     if (!swatch && !toolBtn) return;
+    const cmd = toolBtn?.dataset.ndCmd;
 
-    const panelCommand = toolBtn?.dataset.ndCmd;
-    if (panelCommand === "more" || panelCommand === "link" || panelCommand === "checklist") {
-      const morePanel = document.querySelector("#ndMorePanel");
-      const linkForm = document.querySelector("#ndLinkForm");
-      if (panelCommand === "more") {
-        morePanel.hidden = !morePanel.hidden;
-        toolBtn.setAttribute("aria-expanded", String(!morePanel.hidden));
-      } else if (panelCommand === "link") {
-        linkForm.hidden = !linkForm.hidden;
-        toolBtn.setAttribute("aria-expanded", String(!linkForm.hidden));
-        if (!linkForm.hidden) setTimeout(() => document.querySelector("#ndLinkInput")?.focus(), 30);
-      } else {
-        ndChecklistAdding = true;
-        morePanel.hidden = true;
-        const note = state.notes.find((n) => n.id === ndCurrentNoteId);
-        if (note) renderNoteDetailChecklist(note);
-        setTimeout(() => document.querySelector("#ndChecklistAddInput")?.focus(), 30);
-      }
+    if (cmd === "more" || cmd === "link") {
+      const open = toolBtn.getAttribute("aria-expanded") === "true";
+      setNdPanel(open ? null : cmd);
+      if (!open && cmd === "link") setTimeout(() => document.querySelector("#ndLinkInput")?.focus(), 30);
+      return;
+    }
+    if (cmd === "checklist") {
+      setNdPanel(null);
+      ndChecklistAdding = true;
+      const note = state.notes.find((n) => n.id === ndCurrentNoteId);
+      if (note) renderNoteDetailChecklist(note);
+      const addInput = document.querySelector("#ndChecklistAddInput");
+      addInput?.scrollIntoView({ block: "nearest", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+      setTimeout(() => addInput?.focus({ preventScroll: true }), 30);
       return;
     }
 
-    const savedRange = ndSavedRange;
-    body.focus();
-    const sel = window.getSelection();
-    if (sel && savedRange && body.contains(savedRange.commonAncestorContainer)) {
-      sel.removeAllRanges();
-      sel.addRange(savedRange);
-    }
+    noteRestoreEditorSelection(body, ndSavedRange);
     const beforeHtml = body.innerHTML;
-
-    // styleWithCSS garante que backColor produza mesmo um
-    // background-color de CSS de verdade (sem isso, alguns navegadores
-    // ficam inconsistentes sobre como aplicam a cor de destaque).
-    document.execCommand("styleWithCSS", false, true);
-    if (toolBtn?.dataset.ndCmd === "clear") {
-      // Sem trecho marcado, limpa a nota inteira (com desfazer).
-      const whole = !sel?.rangeCount || sel.getRangeAt(0).collapsed;
-      if (whole) {
-        const all = document.createRange();
-        all.selectNodeContents(body);
-        sel.removeAllRanges();
-        sel.addRange(all);
-      }
-      document.execCommand("removeFormat");
-      document.execCommand("backColor", false, "transparent");
-      body.querySelectorAll("b, strong, i, em, u, s, strike, mark, font").forEach((el) => {
-        if (!whole && !sel.containsNode(el, false)) return;
-        el.replaceWith(...el.childNodes);
-      });
-      if (whole) {
-        body.querySelectorAll("[style]").forEach((el) => el.removeAttribute("style"));
-        sel.collapseToEnd();
-      }
-      toolbar.querySelectorAll("[data-nd-color]").forEach((button) => {
-        button.setAttribute("aria-pressed", "false");
-        button.classList.remove("is-selected");
-      });
+    if (cmd === "clear") {
+      const range = noteSelectionIn(body);
+      const whole = !range || range.collapsed;
+      noteClearFormatting(body, whole);
+      setNdPanel(null);
       if (whole && beforeHtml !== body.innerHTML) {
         const noteId = ndCurrentNoteId;
-        showToast("Formatação removida da nota.", {
+        showToast("Formatação removida", {
           actionLabel: "Desfazer",
           onAction: () => {
             if (ndCurrentNoteId !== noteId) return;
             body.innerHTML = sanitizeNoteHtml(beforeHtml);
             flushNoteDetailSave();
+            setNdStatus("saved");
             updateNdCount();
           },
         });
       }
     } else if (swatch) {
-      document.execCommand("foreColor", false, swatch.dataset.ndColor);
-      toolbar.querySelectorAll("[data-nd-color]").forEach((button) => {
-        const selected = button === swatch;
-        button.setAttribute("aria-pressed", String(selected));
-        button.classList.toggle("is-selected", selected);
-      });
-    } else if (toolBtn.dataset.ndCmd === "bold") {
-      document.execCommand("bold");
-    } else if (toolBtn.dataset.ndCmd === "italic") {
-      document.execCommand("italic");
-    } else if (toolBtn.dataset.ndCmd === "underline") {
-      document.execCommand("underline");
-    } else if (toolBtn.dataset.ndCmd === "strike") {
-      document.execCommand("strikeThrough");
-    } else if (toolBtn.dataset.ndCmd === "ul") {
-      document.execCommand("insertUnorderedList");
-    } else if (toolBtn.dataset.ndCmd === "ol") {
-      document.execCommand("insertOrderedList");
-    } else if (toolBtn.dataset.ndCmd === "highlight") {
-      // Liga e desliga: tocar de novo num trecho marcado tira o marca-texto.
-      document.execCommand("backColor", false, noteHighlightActive() ? "transparent" : "#fde047");
+      noteApplyCommand(body, "color", swatch.dataset.ndColor);
+    } else if (cmd) {
+      noteApplyCommand(body, cmd);
     }
     scrubNoteEditorStyles(body);
     saveNdSelection();
-    if (flushNoteDetailSave()) setNdStatus("saved");
+    if (beforeHtml !== body.innerHTML) scheduleNdAutosave();
     updateNdToolbarState();
+    requestAnimationFrame(updateNdToolbarState);
     updateNdCount();
   });
-  // Ao sair do texto (toque fora, outro campo), a barra volta ao neutro.
-  body.addEventListener("blur", () => setTimeout(() => {
-    if (document.activeElement !== body) resetNdToolbarState();
-  }, 0));
+  // Toque fora da barra fecha o painel de cor/link aberto.
+  document.addEventListener("pointerdown", (event) => {
+    if (event.target.closest("#noteDetailToolbar, #ndLinkForm")) return;
+    if (!document.querySelector("#ndMorePanel")?.hidden || !document.querySelector("#ndLinkForm")?.hidden) setNdPanel(null);
+  });
+  modal.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    if (!document.querySelector("#ndMorePanel")?.hidden || !document.querySelector("#ndLinkForm")?.hidden) {
+      event.stopPropagation();
+      setNdPanel(null);
+      body.focus({ preventScroll: true });
+    }
+  });
 
   // Link: aplica no trecho selecionado (ou insere o próprio endereço)
   document.querySelector("#ndLinkForm")?.addEventListener("submit", (event) => {
     event.preventDefault();
     let url = document.querySelector("#ndLinkInput").value.trim();
-    if (!url) return;
+    if (!url) { document.querySelector("#ndLinkInput").focus(); return; }
     if (!/^(https?:\/\/|mailto:)/i.test(url)) url = `https://${url}`;
-    body.focus();
+    noteRestoreEditorSelection(body, ndSavedRange);
     const sel = window.getSelection();
-    if (sel && ndSavedRange && body.contains(ndSavedRange.commonAncestorContainer)) {
-      sel.removeAllRanges();
-      sel.addRange(ndSavedRange);
-    }
     if (sel && sel.rangeCount && !sel.getRangeAt(0).collapsed) document.execCommand("createLink", false, url);
     else document.execCommand("insertHTML", false, `<a href="${escapeHtml(url)}">${escapeHtml(url)}</a>&nbsp;`);
-    document.querySelector("#ndLinkInput").value = "";
-    event.target.hidden = true;
-    document.querySelector('#noteDetailToolbar [data-nd-cmd="link"]')?.setAttribute("aria-expanded", "false");
+    setNdPanel(null);
     scrubNoteEditorStyles(body);
-    if (flushNoteDetailSave()) setNdStatus("saved");
+    scheduleNdAutosave();
   });
 
   // Menu "⋮" da nota
@@ -8599,6 +9686,7 @@ function bindNoteDetail() {
   const menu = document.querySelector("#ndMenu");
   menuBtn?.addEventListener("click", (event) => {
     event.stopPropagation();
+    setNdPanel(null);
     menu.hidden = !menu.hidden;
     menuBtn.setAttribute("aria-expanded", String(!menu.hidden));
   });
@@ -8616,15 +9704,23 @@ function bindNoteDetail() {
     const input = document.querySelector("#ndChecklistAddInput");
     const text = input.value.trim();
     const note = state.notes.find((n) => n.id === ndCurrentNoteId);
-    if (!text || !note) return;
+    if (!text || !note) { input.focus(); return; }
     note.checklist = [...(note.checklist || []), { id: crypto.randomUUID(), text, done: false }];
     note.updatedAt = new Date().toISOString();
-    saveState();
     input.value = "";
     renderNoteDetailChecklist(note);
-    renderNotes();
+    queueNotePersist();
+    scheduleNotesListRefresh();
     input.focus();
   });
+  // Sair do campo de novo item sem itens: o checklist vazio volta a sumir.
+  document.querySelector("#ndChecklistAddInput")?.addEventListener("blur", () => setTimeout(() => {
+    const note = state.notes.find((n) => n.id === ndCurrentNoteId);
+    const section = document.querySelector("#ndChecklistSection");
+    if (!note || (note.checklist || []).length || section?.contains(document.activeElement)) return;
+    ndChecklistAdding = false;
+    renderNoteDetailChecklist(note);
+  }, 120));
 
   // Gesto/botão físico de "voltar" do celular fecha a nota em vez de
   // sair do app — ver comentário em closeNoteDetailUI() sobre por que
@@ -8632,10 +9728,11 @@ function bindNoteDetail() {
   // de fechar pelo mesmo motivo de todo outro caminho de saída: voltar
   // pelo celular não pode jogar fora o que foi escrito.
   window.addEventListener("popstate", (event) => {
-    if (!modal.hidden) {
-      flushNoteDetailSave();
+    if (!modal.hidden && ndCurrentNoteId) {
+      const id = ndCurrentNoteId;
+      const changed = flushNoteDetailSave();
       closeNoteDetailUI();
-      renderAll();
+      requestAnimationFrame(() => { renderNotes(); if (changed) flashNoteCard(id); });
     }
     const view = event.state?.pnView;
     if (view && view !== activeView) setView(view, { fromHistory: true });
@@ -11021,10 +12118,98 @@ function finSparkline(svgSelector, values) {
   if (values.length < 2 || values.every((v) => v === values[0])) { svg.innerHTML = ""; return; }
   const min = Math.min(...values);
   const span = Math.max(...values) - min || 1;
-  const coords = values.map((v, i) => [(i / (values.length - 1)) * 200, 52 - ((v - min) / span) * 40]);
+  const coords = values.map((v, i) => [2 + (i / (values.length - 1)) * 194, 52 - ((v - min) / span) * 40]);
   const line = bdSmoothPath(coords);
   const id = `${svg.id}Fill`;
-  svg.innerHTML = `<defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#25d388" stop-opacity=".42"/><stop offset="1" stop-color="#25d388" stop-opacity="0"/></linearGradient></defs><path d="${line} L200 60 L0 60 Z" fill="url(#${id})"/><path d="${line}" fill="none" stroke="#25d388" stroke-width="1.6" stroke-linecap="round"/>`;
+  svg.innerHTML = `<defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#25d388" stop-opacity=".42"/><stop offset="1" stop-color="#25d388" stop-opacity="0"/></linearGradient></defs><path d="${line} L200 60 L0 60 Z" fill="url(#${id})"/><path d="${line}" fill="none" stroke="#25d388" stroke-width="1.8" stroke-linecap="round" vector-effect="non-scaling-stroke"/>`;
+}
+
+// "Como o mês está indo": sobra acumulada (receitas − despesas) dia a dia
+// no mês escolhido, até hoje (ou até o fim, em meses passados). Começa no
+// zero do dia 1; sobe com cada entrada e desce com cada gasto.
+function finMonthPulseSeries(monthKey) {
+  const [year, month] = monthKey.split("-").map(Number);
+  const days = new Date(year, month, 0).getDate();
+  const currentKey = todayIso.slice(0, 7);
+  const net = new Array(days + 1).fill(0);
+  let lastEntryDay = 0;
+  bdWorkspaceFinances().forEach((entry) => {
+    if (!entry.date.startsWith(monthKey)) return;
+    const day = Number(entry.date.slice(8, 10));
+    if (day >= 1 && day <= days) {
+      net[day] += bdSignedAmount(entry);
+      lastEntryDay = Math.max(lastEntryDay, day);
+    }
+  });
+  // Até hoje — ou até o último lançamento já registrado no mês (um salário
+  // agendado para o dia 22 também conta), para o fim da linha bater com o
+  // "Resultado do mês" e com os valores dos cartões.
+  const lastDay = monthKey === currentKey ? Math.max(Number(todayIso.slice(8, 10)), lastEntryDay) : monthKey < currentKey ? days : lastEntryDay;
+  if (!lastDay) return [];
+  const points = [0];
+  let running = 0;
+  for (let day = 1; day <= lastDay; day += 1) {
+    running += net[day];
+    points.push(running);
+  }
+  return points;
+}
+
+// Linha verde do cartão Receitas (mesma linguagem do Saldo no Início).
+// A bolinha final é HTML, não SVG: com preserveAspectRatio="none" um
+// círculo vira elipse, e encostado na borda do cartão ficava cortado.
+function renderFinMonthPulse(monthKey) {
+  const svg = document.querySelector("#finReceitasSpark");
+  if (!svg) return;
+  const card = svg.closest(".bf-kpi");
+  let dot = card?.querySelector(".bf-spark-dot");
+  const values = finMonthPulseSeries(monthKey);
+  const hasMovement = values.some((value) => value !== 0);
+  if (values.length < 2 || !hasMovement) {
+    svg.innerHTML = "";
+    dot?.remove();
+    card?.classList.remove("has-pulse", "is-negative");
+    svg.removeAttribute("aria-label");
+    return;
+  }
+  const W = 200;
+  const H = 60;
+  const left = 2;
+  const right = W - 12; // espaço para a bolinha final
+  const top = 12;
+  const bottom = H - 16; // folga para a bolinha (e o halo) não encostarem na borda
+  const min = Math.min(0, ...values);
+  const max = Math.max(0, ...values);
+  const span = max - min || 1;
+  const px = (i) => left + (i / (values.length - 1)) * (right - left);
+  const py = (v) => bottom - ((v - min) / span) * (bottom - top);
+  const coords = values.map((v, i) => [px(i), py(v)]);
+  const line = bdSmoothPath(coords);
+  const final = values.at(-1);
+  const negative = final < 0;
+  const color = negative ? "#ef4f6b" : "#25d388";
+  const zeroY = py(0);
+  const id = `${svg.id}Fill`;
+  svg.innerHTML = `<defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${color}" stop-opacity=".4"/><stop offset="1" stop-color="${color}" stop-opacity="0"/></linearGradient></defs>
+    ${min < 0 && max > 0 ? `<line x1="${left}" x2="${right}" y1="${zeroY.toFixed(1)}" y2="${zeroY.toFixed(1)}" stroke="currentColor" stroke-opacity=".22" stroke-dasharray="3 3" vector-effect="non-scaling-stroke"/>` : ""}
+    <path d="${line} L${right} ${H} L${left} ${H} Z" fill="url(#${id})"/>
+    <path class="bf-spark-line" d="${line}" fill="none" stroke="${color}" stroke-width="1.8" stroke-linecap="round" vector-effect="non-scaling-stroke"/>`;
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", `Sobra do mês até agora: ${formatCurrency(final)}`);
+  if (card) {
+    if (!dot) {
+      dot = document.createElement("i");
+      dot.className = "bf-spark-dot";
+      dot.setAttribute("aria-hidden", "true");
+      card.appendChild(dot);
+    }
+    dot.style.setProperty("--fx", (right / W).toFixed(4));
+    dot.style.setProperty("--fy", (py(final) / H).toFixed(4));
+    dot.style.setProperty("--dot", color);
+    dot.title = `Sobra do mês até agora: ${formatCurrency(final)}`;
+    card.classList.add("has-pulse");
+    card.classList.toggle("is-negative", negative);
+  }
 }
 
 function finLastMonths(monthKey, count) {
@@ -11042,7 +12227,7 @@ function renderFinKpis(monthKey) {
   set("#finDespesasTrend", finTrendHtml(cur.d, prevHas ? prev.d : 0, { inverse: true, prevKey }));
   set("#finSaldoTrend", finTrendHtml(cur.saldo, prevHas ? prev.saldo : 0, { prevKey }));
   const months = finLastMonths(monthKey, 6).map(finMonthTotals);
-  finSparkline("#finReceitasSpark", months.map((t) => t.r));
+  renderFinMonthPulse(monthKey);
   finSparkline("#finSaldoSpark", months.map((t) => t.saldo));
 
   // Contas compartilhadas: membros e espaços reais (api/finance-spaces)
@@ -11285,7 +12470,14 @@ function drawBalanceChart(host, range, gradientId) {
   const yMin = Math.floor(rawMin / step) * step;
   let yMax = Math.ceil(rawMax / step) * step;
   if (yMax === yMin) yMax = yMin + step;
-  const pad = { left: 62, right: 16, top: 16, bottom: 24 };
+  const ticks = [];
+  for (let value = yMin; value <= yMax + step / 2; value += step) ticks.push(value);
+  // Margem esquerda do tamanho do maior rótulo (antes era fixa e cortava
+  // "R$ -1.000.000"); direita/topo/base com folga para a bolinha do último
+  // ponto (raio 4,5 + contorno 2) nunca encostar na borda.
+  const DOT = 7;
+  const longestTick = Math.max(...ticks.map((value) => bdAxisMoney(value).length));
+  const pad = { left: Math.min(96, Math.max(48, Math.round(longestTick * 6.1) + 12)), right: DOT + 6, top: DOT + 6, bottom: 24 + DOT - 2 };
   const plotW = width - pad.left - pad.right;
   const plotH = height - pad.top - pad.bottom;
   const x = (i) => pad.left + (series.length === 1 ? plotW : (i / (series.length - 1)) * plotW);
@@ -11293,8 +12485,6 @@ function drawBalanceChart(host, range, gradientId) {
   const coords = series.map((p, i) => [x(i), y(p.value)]);
   const line = bdSmoothPath(coords);
   const area = `${line} L${coords.at(-1)[0].toFixed(1)} ${(pad.top + plotH).toFixed(1)} L${coords[0][0].toFixed(1)} ${(pad.top + plotH).toFixed(1)} Z`;
-  const ticks = [];
-  for (let value = yMin; value <= yMax + step / 2; value += step) ticks.push(value);
   const grid = ticks.map((value) => `<line x1="${pad.left}" x2="${width - pad.right}" y1="${y(value).toFixed(1)}" y2="${y(value).toFixed(1)}"/><text x="${pad.left - 8}" y="${(y(value) + 3.5).toFixed(1)}" text-anchor="end">${bdAxisMoney(value)}</text>`).join("");
   const labelCount = monthly ? Math.min(series.length, width < 420 ? 3 : 6) : (width < 420 ? 3 : 5);
   const labelIdx = [...new Set(Array.from({ length: labelCount }, (_, k) => Math.round((k / Math.max(labelCount - 1, 1)) * (series.length - 1))))];
@@ -11302,9 +12492,10 @@ function drawBalanceChart(host, range, gradientId) {
   const last = coords.at(-1);
   const tipText = formatCurrency(series.at(-1).value);
   const tipW = tipText.length * 6.6 + 18;
-  const tipX = Math.min(Math.max(last[0] - tipW + 10, pad.left), width - tipW - 4);
-  const tipY = Math.max(last[1] - 34, 2);
-  host.innerHTML = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" preserveAspectRatio="none">
+  // Etiqueta à esquerda da bolinha; acima dela quando há espaço, senão abaixo.
+  const tipX = Math.min(Math.max(last[0] - tipW - 10, pad.left), width - tipW - 4);
+  const tipY = last[1] - 34 >= 2 ? last[1] - 34 : Math.min(last[1] + 12, height - pad.bottom - 24);
+  host.innerHTML = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" preserveAspectRatio="none" overflow="visible">
     <defs><linearGradient id="${gradientId}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#22d3ee" stop-opacity=".38"/><stop offset="1" stop-color="#22d3ee" stop-opacity="0"/></linearGradient></defs>
     <g class="grid">${grid}</g>
     <path d="${area}" fill="url(#${gradientId})"/>
@@ -13602,6 +14793,7 @@ window.toggleNoteChecklistItem = toggleNoteChecklistItem;
 window.convertNoteToTask = convertNoteToTask;
 window.deleteNote = deleteNote;
 window.openNoteDetail = openNoteDetail;
+window.openNotesFormSheet = openNotesFormSheet;
 window.openFinTxActions = openFinTxActions;
 window.exportNoteMarkdown = exportNoteMarkdown;
 window.dragTask = dragTask;

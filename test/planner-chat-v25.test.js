@@ -6,6 +6,7 @@ const path = require("node:path");
 const read = (file) => fs.readFileSync(path.join(__dirname, "..", file), "utf8");
 const app = read("src/app.js");
 const css = read("src/boards.css");
+const refine = read("src/refine.css");
 const html = read("src/index.html");
 const adminCss = read("src/admin-console.css");
 
@@ -56,15 +57,15 @@ test("app sem zoom: viewport, pinça bloqueada e toque duplo no CSS", () => {
 test("nota aberta redesenhada: status, etiquetas, barra completa e contagem", () => {
   for (const id of ["ndStatus", "ndChips", "ndCount"]) assert.match(html, new RegExp(`id="${id}"`));
   assert.match(html, /data-nd-cmd="strike"/);
-  assert.match(app, /document\.execCommand\("strikeThrough"\)/);
+  assert.match(app, /strike: "strikeThrough"/);
   assert.match(app, /function renderNoteDetailMeta\(note\)/);
   assert.match(css, /\.bn-tool-row > button\[aria-pressed="true"\]/);
 });
 
-test("Foco: navegação em pílula e botão Voltar com rótulo", () => {
-  assert.match(app, /class="pf-pager" role="group"/);
-  assert.match(app, /<span>Voltar<\/span>/);
-  assert.match(css, /\.pf-pager \{/);
+test("Foco: navegação em pílula e botão de voltar etapa acessível", () => {
+  assert.match(app, /class="wf-pager" role="group"/);
+  assert.match(app, /"Voltar uma etapa"/);
+  assert.match(refine, /\.wf-pager \{/);
 });
 
 test("Foco da semana: anel, etapas tocáveis e metas com desfazer", () => {

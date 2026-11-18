@@ -22,3 +22,6 @@ Thumbs.db
 
 .vercel
 .env*
+node_modules
+qa/node_modules
+qa/shots

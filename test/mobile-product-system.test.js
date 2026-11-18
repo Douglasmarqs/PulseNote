@@ -18,8 +18,10 @@ test("controles móveis recebem toque imediato sem bloquear texto comum", () => 
   assert.doesNotMatch(css, /body\s*\{[^}]*user-select:\s*none/);
 });
 
-test("editor de nota mantém a criação limpa e organização opcional", () => {
-  assert.match(html, /class="note-details-hint"/);
+test("editor de nota mantém a criação limpa: sem 'Organizar', com pasta e checklist de verdade", () => {
+  assert.doesNotMatch(html, /<summary>Organizar/);
+  assert.match(html, /id="noteFolderPicker"[^>]*role="radiogroup"/);
+  assert.match(html, /id="noteChecklistBuilder"/);
   assert.doesNotMatch(html, /id="noteTextColorPicker"|id="noteColorPicker"/);
   assert.match(html, /id="noteTextColor" type="hidden"/);
   assert.match(html, /id="noteColor" type="hidden"/);
