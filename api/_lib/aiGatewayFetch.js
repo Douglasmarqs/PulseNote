@@ -4,6 +4,40 @@ function extractJson(text) {
   return JSON.parse(match ? match[0] : raw);
 }
 
+// A IA respondeu, mas o JSON veio quebrado (cortado no limite de tokens,
+// ou a resposta veio em texto corrido). Antes isso descartava a resposta
+// inteira e o Pulsinho caía no modo sem IA. Agora aproveitamos o "reply"
+// — ou o texto puro — e só desistimos se não houver nada legível.
+function salvageReply(text) {
+  const raw = String(text || "").trim().replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
+  if (!raw) return null;
+  const field = /"reply"\s*:\s*"((?:[^"\\]|\\.)*)/.exec(raw);
+  if (field) {
+    let value = field[1];
+    // Cortado no meio de um escape: remove a barra solta do fim.
+    if (/\\$/.test(value) && !/\\\\$/.test(value)) value = value.slice(0, -1);
+    try { value = JSON.parse(`"${value}"`); } catch { value = value.replace(/\\n/g, "\n").replace(/\\"/g, '"'); }
+    value = String(value).trim();
+    return value ? { reply: value, salvaged: true } : null;
+  }
+  // Texto corrido, sem cara de JSON: vale como resposta.
+  if (!/^[{\[]/.test(raw) && raw.length >= 2) return { reply: raw.slice(0, 2400), salvaged: true };
+  return null;
+}
+
+// Limite de requisições do AI Gateway (plano gratuito: limite por modelo).
+// Guardamos, nesta instância, até quando cada modelo pediu pausa — assim
+// a próxima pergunta já começa pelo modelo livre, em vez de gastar o tempo
+// batendo de novo no que acabou de recusar.
+const rateLimitedUntil = new Map();
+function retryAfterMs(response) {
+  const header = Number(response?.headers?.get?.("retry-after"));
+  return Number.isFinite(header) && header > 0 ? Math.min(header * 1000, 60000) : 0;
+}
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 // Credencial do AI Gateway.
 // Na Vercel, o token OIDC das Functions NÃO fica em process.env em tempo de
 // execução: ele chega em cada requisição no header "x-vercel-oidc-token"
@@ -151,14 +185,21 @@ async function requestModel({ model, token, systemPrompt, userPrompt, messages, 
       console.warn("ai_gateway_request", { label, status: response.status, durationMs: Date.now() - startedAt, model, errorType: detail.type, errorMessage: detail.message });
       const status = [401, 402, 403, 429].includes(response.status) ? response.status : 502;
       return {
-        ok: false, status, errorType: detail.type, errorMessage: detail.message,
+        ok: false, status, errorType: detail.type, errorMessage: detail.message, retryAfterMs: retryAfterMs(response),
         error: response.status === 429 ? "ai_rate_limited" : status === 502 ? "ai_gateway_failed" : status === 402 ? "ai_gateway_no_credits" : "ai_gateway_unauthorized",
       };
     }
     const body = await response.json();
     const content = body.choices?.[0]?.message?.content;
     const text = Array.isArray(content) ? content.map((part) => part?.text || "").join("") : String(content || "");
-    const parsed = extractJson(text);
+    let parsed;
+    try {
+      parsed = extractJson(text);
+    } catch {
+      parsed = salvageReply(text);
+      console.warn("ai_gateway_request", { label, status: response.status, model: body.model || model, error: "invalid_json", salvaged: Boolean(parsed), finish: body.choices?.[0]?.finish_reason || "" });
+      if (!parsed) return { ok: false, status: 502, error: "ai_bad_response" };
+    }
     console.info("ai_gateway_request", { label, status: response.status, durationMs: Date.now() - startedAt, model: body.model || model });
     return { ok: true, parsed, model: body.model || model, provider: model.split("/")[0] || "gateway" };
   } catch (error) {
@@ -178,15 +219,38 @@ async function fetchGatewayJson({ systemPrompt, userPrompt, messages, label = "a
   // de responder sem estourar o limite da Function.
   const deadline = Date.now() + (totalBudgetMs || Math.round(timeoutMs * 1.6));
   let last = { ok: false, status: 502, error: "ai_gateway_failed" };
-  for (const model of models) {
+  // Modelos em pausa por limite vão para o fim da fila (sem sair dela).
+  const now = Date.now();
+  const ordered = [...models.filter((model) => !(rateLimitedUntil.get(model) > now)), ...models.filter((model) => rateLimitedUntil.get(model) > now)];
+  const limited = [];
+  for (const model of ordered) {
     const remaining = deadline - Date.now();
     if (remaining < 2500) break;
     last = await requestModel({ model, token, systemPrompt, userPrompt, messages, label, timeoutMs: Math.min(timeoutMs, remaining), maxTokens, maxHistory });
-    if (last.ok) return last;
+    if (last.ok) {
+      rateLimitedUntil.delete(model);
+      return last;
+    }
+    if (last.status === 429) {
+      rateLimitedUntil.set(model, Date.now() + (last.retryAfterMs || 20000));
+      limited.push(model);
+    }
     // 403 por modelo (ex.: fora do plano gratuito) → tenta o próximo modelo.
     if (accountWideFailure(last)) break;
+  }
+  // Todos recusaram por limite: uma nova chance curta, se ainda houver
+  // tempo — o limite por minuto costuma liberar em poucos segundos.
+  if (!last.ok && last.status === 429 && limited.length) {
+    const wait = Math.min(last.retryAfterMs || 2500, 4000);
+    if (deadline - Date.now() > wait + 4000) {
+      await sleep(wait);
+      const model = limited[0];
+      const retry = await requestModel({ model, token, systemPrompt, userPrompt, messages, label: `${label}_retry`, timeoutMs: Math.min(timeoutMs, deadline - Date.now()), maxTokens, maxHistory });
+      if (retry.ok) { rateLimitedUntil.delete(model); return retry; }
+      last = retry;
+    }
   }
   return last;
 }
 
-module.exports = { fetchGatewayJson, gatewayCredential, gatewayCredentialSource, rememberRequestOidc, gatewayModels, normalizeMessages };
+module.exports = { fetchGatewayJson, gatewayCredential, gatewayCredentialSource, rememberRequestOidc, gatewayModels, normalizeMessages, salvageReply, _rateLimitedUntil: rateLimitedUntil };

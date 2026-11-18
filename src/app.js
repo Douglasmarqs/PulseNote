@@ -4764,16 +4764,18 @@ function bindNoteEditor() {
   const tools = document.querySelector("#noteEditorTools");
   if (!editor || !tools || editor.dataset.bound === "1") return;
   editor.dataset.bound = "1";
-  const paint = () => paintNoteToolbar(tools, document.activeElement === editor ? editor : null, "neCmd");
+  const paint = () => paintNoteToolbar(tools, noteEditorActive(editor) ? editor : null, "neCmd");
   const rememberRange = () => {
     const range = noteSelectionIn(editor);
     if (range) neSavedRange = range.cloneRange();
   };
   document.addEventListener("selectionchange", () => {
-    if (document.activeElement !== editor) return;
+    if (!noteEditorActive(editor)) return;
     rememberRange();
     paint();
   });
+  // Tocar no texto para mudar o cursor de lugar desfaz o "pendente".
+  editor.addEventListener("pointerdown", () => { if (notePending?.editor === editor) notePending = null; });
   // Mantém a seleção no editor ao tocar nos botões.
   tools.addEventListener("mousedown", (event) => { if (event.target.closest("[data-ne-cmd]")) event.preventDefault(); });
   tools.addEventListener("click", (event) => {
@@ -4796,7 +4798,7 @@ function bindNoteEditor() {
   });
   editor.addEventListener("input", () => { notePending = null; syncNoteEditorSource(); setNoteFormError(""); });
   editor.addEventListener("focus", paint);
-  editor.addEventListener("blur", () => setTimeout(paint, 0));
+  editor.addEventListener("blur", () => setTimeout(() => { if (document.activeElement !== editor && !noteSelectionIn(editor)) paint(); }, 0));
   // Colar entra como texto puro (sem estilos de sites ou de outros apps).
   editor.addEventListener("paste", (event) => {
     const text = event.clipboardData?.getData("text/plain");
@@ -8738,6 +8740,27 @@ const NOTE_INLINE_TESTS = {
 };
 const NOTE_INLINE_TAGS = { bold: "b", italic: "i", underline: "u", strike: "strike" };
 
+// Posição do cursor como "quantos caracteres desde o início do texto".
+// O iPhone às vezes descreve o MESMO ponto de outro jeito (fim do nó de
+// texto x índice no elemento pai) logo depois do toque num botão; comparar
+// por essa contagem evita que o botão "apague" antes de começar a digitar.
+function noteCaretOffset(editor, range) {
+  try {
+    const head = document.createRange();
+    head.setStart(editor, 0);
+    head.setEnd(range.startContainer, range.startOffset);
+    const fragment = head.cloneContents();
+    const breaks = fragment.querySelectorAll ? fragment.querySelectorAll("br, li, div, p").length : 0;
+    return `${head.toString().replace(new RegExp(NOTE_ZWSP, "g"), "").length}:${breaks}`;
+  } catch {
+    return "";
+  }
+}
+
+function notePendingMatches(editor, range) {
+  return Boolean(notePending && notePending.editor === editor && range && range.collapsed && notePending.offset && noteCaretOffset(editor, range) === notePending.offset);
+}
+
 function noteFormatState(editor) {
   const st = { bold: false, italic: false, underline: false, strike: false, highlight: false, ul: false, ol: false, color: "" };
   const range = noteSelectionIn(editor);
@@ -8749,9 +8772,7 @@ function noteFormatState(editor) {
   // parado, antes de digitar) fica em notePending — o queryCommandState do
   // Chrome confunde sublinhado com riscado e acendia os dois.
   Object.keys(dom).forEach((key) => { st[key] = Boolean(noteClosest(node, editor, dom[key])); });
-  if (notePending && notePending.editor === editor && range.collapsed && range.startContainer === notePending.node && range.startOffset === notePending.offset) {
-    Object.assign(st, notePending.values);
-  }
+  if (notePendingMatches(editor, range)) Object.assign(st, notePending.values);
   void query;
   st.highlight = Boolean(noteClosest(node, editor, noteIsHighlightEl));
   const li = noteClosest(node, editor, (el) => el.tagName === "LI");
@@ -8760,6 +8781,7 @@ function noteFormatState(editor) {
   st.ol = listTag === "OL";
   const colored = noteClosest(node, editor, (el) => Boolean(el.style?.color || (el.tagName === "FONT" && el.getAttribute("color"))));
   if (colored) st.color = noteColorHex(colored.style?.color || colored.getAttribute("color"));
+  if (notePendingMatches(editor, range) && "color" in notePending.values) st.color = notePending.values.color;
   return st;
 }
 
@@ -8776,6 +8798,20 @@ function paintNoteToolbar(toolbar, editor, key) {
     swatch.setAttribute("aria-pressed", String(on));
     swatch.classList.toggle("is-selected", on);
   });
+  // O botão "Aa" ganha um tracinho na cor em uso — dá para ver a cor ativa
+  // mesmo com o painel fechado, logo depois de escolher.
+  const colorBtn = toolbar.querySelector('[data-nd-cmd="more"]');
+  if (colorBtn) {
+    const color = st && st.color ? st.color : "";
+    if (color) colorBtn.style.setProperty("--cur-color", color); else colorBtn.style.removeProperty("--cur-color");
+    colorBtn.classList.toggle("has-color", Boolean(color));
+  }
+}
+
+// O editor "está em uso" quando tem o foco OU quando a seleção está nele
+// (no iPhone o foco pisca ao tocar na barra, mas a seleção continua lá).
+function noteEditorActive(editor) {
+  return Boolean(editor && (document.activeElement === editor || noteSelectionIn(editor)));
 }
 
 function noteRestoreEditorSelection(editor, savedRange) {
@@ -8868,7 +8904,7 @@ function noteToggleHighlight(editor) {
     } else {
       // Respeita o que foi ligado/desligado no cursor antes do marca-texto
       // (ex.: riscado desligado → o texto marcado não sai riscado).
-      const pending = notePending && notePending.editor === editor && notePending.node === range.startContainer && notePending.offset === range.startOffset ? notePending.values : {};
+      const pending = notePendingMatches(editor, range) ? notePending.values : {};
       let at = range;
       const offAncestors = Object.keys(pending).filter((key) => pending[key] === false)
         .map((key) => noteClosest(range.startContainer, editor, NOTE_INLINE_TESTS[key])).filter(Boolean);
@@ -8889,7 +8925,13 @@ function noteToggleHighlight(editor) {
       }
       const mark = document.createElement("mark");
       let inner = mark;
-      Object.keys(pending).filter((key) => pending[key] === true).forEach((key) => {
+      if (pending.color) {
+        const tint = document.createElement("span");
+        tint.style.color = pending.color;
+        inner.appendChild(tint);
+        inner = tint;
+      }
+      Object.keys(pending).filter((key) => pending[key] === true && NOTE_INLINE_TAGS[key]).forEach((key) => {
         if (noteClosest(at.startContainer, editor, NOTE_INLINE_TESTS[key])) return;
         const tag = document.createElement(NOTE_INLINE_TAGS[key]);
         inner.appendChild(tag);
@@ -8950,9 +8992,18 @@ function noteApplyCommand(editor, cmd, value) {
   const exec = (name, arg) => { try { return document.execCommand(name, false, arg); } catch { return false; } };
   if (cmd === "highlight") { noteToggleHighlight(editor); return; }
   if (cmd === "color") {
+    const range = noteSelectionIn(editor);
+    const caret = range && range.collapsed;
     exec("styleWithCSS", true);
     exec("foreColor", value);
     exec("styleWithCSS", false);
+    if (caret) {
+      const after = noteSelectionIn(editor);
+      const same = notePendingMatches(editor, after);
+      notePending = { editor, offset: noteCaretOffset(editor, after), values: { ...(same ? notePending.values : {}), color: noteColorHex(value) } };
+    } else {
+      notePending = null;
+    }
     return;
   }
   const map = { bold: "bold", italic: "italic", underline: "underline", strike: "strikeThrough", ul: "insertUnorderedList", ol: "insertOrderedList" };
@@ -8961,14 +9012,15 @@ function noteApplyCommand(editor, cmd, value) {
   const range = noteSelectionIn(editor);
   const caret = inline && range && range.collapsed ? { node: range.startContainer, offset: range.startOffset } : null;
   const before = caret ? noteFormatState(editor)[cmd] : false;
+  const keepPending = caret ? notePendingMatches(editor, range) : false;
   // Tags simples (<b>, <i>, <u>, <strike>): o estado do botão é lido delas.
   exec("styleWithCSS", false);
   exec(map[cmd]);
   if (caret) {
     const after = noteSelectionIn(editor);
-    const same = notePending && notePending.editor === editor && notePending.node === caret.node && notePending.offset === caret.offset;
+    const same = keepPending;
     if (after && after.collapsed) {
-      notePending = { editor, node: after.startContainer, offset: after.startOffset, values: { ...(same ? notePending.values : {}), [cmd]: !before } };
+      notePending = { editor, offset: noteCaretOffset(editor, after), values: { ...(same ? notePending.values : {}), [cmd]: !before } };
     }
   } else {
     notePending = null;
@@ -9222,7 +9274,7 @@ function updateNdCount() {
 
 function updateNdToolbarState() {
   const body = document.querySelector("#ndBody");
-  paintNoteToolbar(document.querySelector("#noteDetailToolbar"), body && document.activeElement === body ? body : null, "ndCmd");
+  paintNoteToolbar(document.querySelector("#noteDetailToolbar"), noteEditorActive(body) ? body : null, "ndCmd");
 }
 
 // Fora do texto, nenhum botão da barra fica "aceso".
@@ -9627,6 +9679,7 @@ function bindNoteDetail() {
     const removed = note.checklist[index];
     note.checklist = note.checklist.filter((_, i) => i !== index);
     note.updatedAt = new Date().toISOString();
+    if (!note.checklist.length && document.activeElement?.id !== "ndChecklistAddInput") ndChecklistAdding = false;
     renderNoteDetailChecklist(note);
     queueNotePersist();
     scheduleNotesListRefresh();
@@ -9691,15 +9744,20 @@ function bindNoteDetail() {
     if (range) ndSavedRange = range.cloneRange();
   };
   document.addEventListener("selectionchange", () => {
-    if (document.activeElement !== body) return;
+    if (!noteEditorActive(body)) return;
     saveNdSelection();
     updateNdToolbarState();
   });
+  body.addEventListener("pointerdown", () => { if (notePending?.editor === body) notePending = null; });
   body.addEventListener("focus", () => {
     if (ndSavedRange && !body.contains(ndSavedRange.commonAncestorContainer)) ndSavedRange = null;
     updateNdToolbarState();
   });
-  body.addEventListener("blur", () => setTimeout(() => { if (document.activeElement !== body) resetNdToolbarState(); }, 0));
+  body.addEventListener("blur", () => setTimeout(() => {
+    // Só apaga a barra quando o cursor saiu do texto de verdade (ex.: foi
+    // para o título) — tocar num botão da barra não conta como sair.
+    if (document.activeElement !== body && !noteSelectionIn(body)) resetNdToolbarState();
+  }, 0));
 
   const toolbar = document.querySelector("#noteDetailToolbar");
   toolbar.addEventListener("mousedown", (e) => {

@@ -494,3 +494,17 @@
 :root[data-theme="aurora"] .bd-ts, :root[data-theme="eclipse"] .bd-ts { background: color-mix(in srgb, var(--tc) 18%, var(--bd-card)) !important; border-color: color-mix(in srgb, var(--tc) 38%, transparent) !important; }
 :root[data-theme="aurora"] .bd-ts b, :root[data-theme="eclipse"] .bd-ts b { color: color-mix(in srgb, var(--tc) 55%, #fff); }
 :root[data-theme="aurora"] .bd-ts small, :root[data-theme="eclipse"] .bd-ts small { color: color-mix(in srgb, var(--tc) 40%, var(--bd-text-2)); }
+
+/* Nota aberta: texto e checklist um embaixo do outro, sempre.
+   Com "display: grid" a linha do texto era medida antes de quebrar as
+   palavras longas (overflow-wrap: anywhere) e ficava baixa demais — no
+   iPhone o texto colorido passava por cima do "Progresso do checklist". */
+.bn-detail .bn-detail-scroll { display: flex !important; flex-direction: column; align-items: stretch; gap: 16px; }
+.bn-detail .bn-detail-scroll > * { flex: none; min-width: 0; }
+.bn-detail .bn-detail-body { min-width: 0; max-width: 100%; }
+/* "Aa" com a cor em uso (aparece assim que a cor é escolhida). */
+.bn-tool-row > button[data-nd-cmd="more"] { position: relative; }
+.bn-tool-row > button[data-nd-cmd="more"].has-color::after {
+  content: ""; position: absolute; left: 50%; bottom: 4px; width: 16px; height: 3px; margin-left: -8px;
+  border-radius: 2px; background: var(--cur-color);
+}

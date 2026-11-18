@@ -185,3 +185,16 @@ test("Gastos por categoria: toque seleciona a fatia e nada vira texto copiável"
   assert.doesNotMatch(extractFunction("renderBoardsCategories"), /<title>/, "sem tooltip nativo no toque longo");
   assert.match(refine, /-webkit-user-select: none; user-select: none; -webkit-touch-callout: none;/);
 });
+
+test("Notas: texto e checklist empilhados em coluna (não se sobrepõem no iPhone)", () => {
+  assert.match(refine, /\.bn-detail \.bn-detail-scroll \{ display: flex !important; flex-direction: column;/);
+  assert.match(refine, /\.bn-detail \.bn-detail-scroll > \* \{ flex: none; min-width: 0; \}/);
+});
+
+test("Notas: botões e cor acendem no toque, pela posição do cursor (não pelo nó)", () => {
+  assert.match(app, /function noteCaretOffset\(editor, range\)/);
+  assert.match(app, /function notePendingMatches\(editor, range\)/);
+  assert.match(app, /values: \{ \.\.\.\(same \? notePending\.values : \{\}\), color: noteColorHex\(value\) \}/);
+  assert.match(app, /colorBtn\.classList\.toggle\("has-color", Boolean\(color\)\)/);
+  assert.match(app, /function noteEditorActive\(editor\)/);
+});

@@ -113,13 +113,20 @@ function listNames(items, key = "title", limit = 3) {
 // Respostas operacionais não precisam depender de um provedor externo. Além
 // de reduzir a latência do WhatsApp, este caminho mantém o Pulsinho útil em
 // períodos de 429/503 sem inventar dados ou transformar uma pergunta em ação.
-function buildLocalAssistantAnswer(question, context, forecast, { fallback = false } = {}) {
+function buildLocalAssistantAnswer(question, context, forecast, { fallback = false, reason = "", note = false } = {}) {
   const text = normalized(question);
   const finance = context.finances;
   const tasks = context.planner.pendingTasks;
   const events = context.planner.upcomingEvents;
   const goals = context.goals;
-  const prefix = fallback ? "Minha IA de conversa não respondeu agora, então usei seus dados salvos. " : "";
+  const busy = reason === "ai_rate_limited";
+  // Quando a IA falhou, a resposta pronta avisa — antes ela chegava sem
+  // explicação e parecia que o Pulsinho tinha "perdido o modo IA".
+  const prefix = fallback || note
+    ? busy
+      ? "Foram muitas perguntas seguidas e a IA pediu uns segundinhos de pausa, então respondi com seus dados salvos. "
+      : "Minha IA de conversa não respondeu agora, então usei seus dados salvos. "
+    : "";
 
   if (/(saldo|quanto tenho|como estao.*financ|resumo.*financ)/.test(text)) {
     return {
@@ -202,7 +209,7 @@ function buildLocalAssistantAnswer(question, context, forecast, { fallback = fal
     ? ` Aliás, sua próxima pendência é “${tasks[0].title}”.`
     : events[0]?.title ? ` Aliás, seu próximo compromisso é “${events[0].title}”.` : "";
   return {
-    reply: `Tô aqui! 😊 Só que a minha IA de conversa não respondeu agora — me manda de novo em alguns segundos. Enquanto isso, comandos diretos funcionam normalmente: “gastei 30 no mercado”, “me lembra de pagar a luz amanhã às 9h” ou “minhas tarefas”.${next}`,
+    reply: `Tô aqui! 😊 ${busy ? "Foram muitas perguntas seguidas e a IA pediu uma pausa curtinha" : "Só que a minha IA de conversa não respondeu agora"} — me manda de novo em alguns segundos. Enquanto isso, comandos diretos funcionam normalmente: “gastei 30 no mercado”, “me lembra de pagar a luz amanhã às 9h” ou “minhas tarefas”.${next}`,
     navigationTarget: null,
     followUps: ["Como estão minhas finanças?", "Quais tarefas estão pendentes?", "Quais compromissos vêm agora?"],
     provider: "pulse-engine",
@@ -334,8 +341,9 @@ async function askPulsinho({ state, question, workspaceId, providerPreference, h
   }
 
   const context = buildAssistantContext(safeState, forecast);
-  const local = !isActionRequest(cleanQuestion) ? buildLocalAssistantAnswer(cleanQuestion, context, forecast) : null;
-  if (local) return { ok: true, kind: "answer", forecast, actions: [], ...local };
+  const fallbackReason = brain.error || "assistant_unavailable";
+  const local = !isActionRequest(cleanQuestion) ? buildLocalAssistantAnswer(cleanQuestion, context, forecast, { reason: fallbackReason, note: !skipBrain && !limit }) : null;
+  if (local) return { ok: true, kind: "answer", forecast, actions: [], aiFallback: fallbackReason, ...local };
   // Cota de conversas com IA do dia esgotada: explica em vez de fingir erro.
   if (limit) {
     return {
@@ -345,7 +353,7 @@ async function askPulsinho({ state, question, workspaceId, providerPreference, h
       followUps: ["Quais tarefas estão pendentes?", "Como estão minhas finanças?", "Quais compromissos vêm agora?"],
     };
   }
-  return { ok: true, kind: "answer", forecast, actions: [], ...buildLocalAssistantAnswer(cleanQuestion, context, forecast, { fallback: true }) };
+  return { ok: true, kind: "answer", forecast, actions: [], aiFallback: fallbackReason, ...buildLocalAssistantAnswer(cleanQuestion, context, forecast, { fallback: true, reason: fallbackReason }) };
 }
 
 module.exports = {
