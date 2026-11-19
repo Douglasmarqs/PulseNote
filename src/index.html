@@ -96,7 +96,26 @@
       @keyframes pnSplashMorph { 0%, 100% { border-radius: 58% 42% 53% 47% / 55% 48% 52% 45%; } 50% { border-radius: 46% 54% 44% 56% / 48% 55% 45% 52%; } }
       @keyframes pnSplashBlink { 0%, 92%, 100% { transform: scaleY(1); } 96% { transform: scaleY(.1); } }
       @keyframes pnSplashSlide { 0% { transform: translateX(-150%); } 100% { transform: translateX(350%); } }
-      @media (prefers-reduced-motion: reduce) { #appLoadingOverlay * { animation: none !important; } }
+      /* Movimento reduzido (ex.: "Efeitos de animação" desligado no Windows):
+         a abertura continua viva, só que suave — entra com fade/escala, pisca
+         e o pulso bate; sem pulos, órbita nem deformação. */
+      @media (prefers-reduced-motion: reduce) {
+        #appLoadingOverlay .pulsinho-orbit, #appLoadingOverlay .pulsinho-ring + .pulsinho-ring { display: none; }
+        /* !important + seletor por id: vence as regras globais de premium.css e
+           product-system.css que zeram toda animação nesse modo. */
+        #appLoadingOverlay .pulsinho-hop { animation: pnSplashSoftIn .7s cubic-bezier(.22,1,.36,1) both !important; }
+        #appLoadingOverlay .pulsinho { animation: pnSplashBreath 3.2s ease-in-out .8s infinite !important; }
+        #appLoadingOverlay .pulsinho__eye { animation: pnSplashBlink 3.6s ease-in-out .6s infinite !important; }
+        #appLoadingOverlay .pulsinho__pulse path { animation: pnSplashBeat 2.2s ease-in-out .5s infinite !important; }
+        #appLoadingOverlay .pulsinho-ring { animation: pnSplashRingSoft 2.8s ease-out .6s infinite !important; }
+        #appLoadingOverlay .app-loading-track span { animation: pnSplashSlide 1.1s ease-in-out infinite !important; }
+        #appLoadingOverlay .app-loading-word, #appLoadingOverlay .app-loading-track { animation: pnSplashSoftIn .5s ease .3s both !important; }
+        #appLoadingOverlay.is-leaving .pulsinho-hop { animation: pnSplashSoftOut .35s ease both !important; }
+      }
+      @keyframes pnSplashSoftIn { from { opacity: 0; transform: scale(.86); filter: blur(4px); } to { opacity: 1; transform: none; filter: none; } }
+      @keyframes pnSplashSoftOut { to { opacity: 0; transform: scale(.94); filter: blur(3px); } }
+      @keyframes pnSplashBreath { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.035); } }
+      @keyframes pnSplashRingSoft { 0% { opacity: .55; transform: scale(.9); } 100% { opacity: 0; transform: scale(1.3); } }
     </style>
 
     <!-- PWA: instalação e ícone na tela inicial -->

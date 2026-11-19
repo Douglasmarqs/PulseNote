@@ -751,15 +751,19 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // Deixa a entrada do Pulsinho terminar (mesmo com os dados já em cache),
   // então ele dá um pulinho de despedida e a abertura some suavemente.
+  // Com movimento reduzido (comum no Windows com "Efeitos de animação"
+  // desligado) a abertura sumia na hora e parecia não existir no computador.
+  // Agora ela toca a versão suave (ver index.html) pelo mesmo tempo mínimo.
   const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  const minShow = reduceMotion ? 1100 : 1400;
   const shownFor = performance.now();
-  if (!reduceMotion && shownFor < 1400) await new Promise((resolve) => setTimeout(resolve, 1400 - shownFor));
+  if (shownFor < minShow) await new Promise((resolve) => setTimeout(resolve, minShow - shownFor));
   overlay.classList.add("is-leaving");
   setTimeout(() => {
     overlay.style.transition = "opacity 300ms ease";
     overlay.style.opacity = "0";
     setTimeout(() => overlay.remove(), 320);
-  }, reduceMotion ? 0 : 260);
+  }, reduceMotion ? 200 : 260);
 
   if (!currentUser) return; // já foi redirecionado para login.html
   if (!currentUser.emailVerified) return; // gate de verificação já está sendo exibido

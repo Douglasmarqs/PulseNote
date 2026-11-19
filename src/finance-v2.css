@@ -635,7 +635,6 @@ html { scrollbar-color: color-mix(in srgb, var(--bd-text, #9aa3c7) 22%, transpar
 @keyframes ndSpin { to { transform: rotate(360deg); } }
 @keyframes ndPop { 0% { transform: scale(.4); } 100% { transform: scale(1); } }
 @keyframes ndReveal { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
-@media (prefers-reduced-motion: reduce) { .bn-nd-status i::before, .bn-nd-status i::after { animation: none !important; } }
 
 /* Aviso de erro inesperado (antes: caixa vermelha com estilos inline) */
 .rt-error { position: fixed; left: 50%; bottom: 20px; z-index: 99999; display: flex; align-items: flex-start; gap: 12px; width: min(460px, calc(100vw - 24px)); padding: 12px; border: 1px solid rgba(255, 107, 129, .32); border-radius: 16px;
@@ -677,12 +676,21 @@ html { scrollbar-color: color-mix(in srgb, var(--bd-text, #9aa3c7) 22%, transpar
 /* Metas antigas: ícones nos botões pequenos */
 .goal-controls .mini-button .i, .goal-milestone-row .i { width: 14px; height: 14px; }
 
+/* Movimento reduzido (ex.: Windows com "Efeitos de animação" desligado):
+   nada se desloca nem gira, mas as coisas continuam aparecendo com fade —
+   antes tudo era cortado e o app parecia "duro" no computador. */
 @media (prefers-reduced-motion: reduce) {
-  .toast.t-toast, .toast.t-toast.is-open { transition: none !important; filter: none !important; }
-  .t-success-check { animation: none !important; opacity: 1; }
+  .toast.t-toast { transform: none !important; filter: none !important; transition: opacity 220ms ease !important; }
+  .toast.t-toast.is-open { transform: none !important; transition: opacity 260ms ease !important; }
+  .toast.t-toast .t-success-check[data-state="in"] { animation: t-check-fade 320ms ease forwards !important; }
+  .bn-nd-status[data-state="saving"] i::before { animation: ndSpin 1.2s linear infinite !important; }
+  .bn-nd-status[data-state="saved"] i::before { animation: rmFade 260ms ease both !important; }
+  .bn-nd-status[data-state="saved"] i::after { animation: rmFade 260ms ease both !important; }
   .t-success-check svg path { animation: none !important; stroke-dashoffset: 0 !important; }
-  .bf.bf-anim *, .bd-progress > i, .bf-cc-preview .bf-cc-face { animation: none !important; }
+  .bf.bf-anim .bd-card, .bf.bf-anim .bf-ccard.v2, .bf-cc-preview .bf-cc-face { animation: rmFade 320ms ease both !important; }
+  .bf.bf-anim .bf-bar i, .bd-progress > i { animation: none !important; }
   .bf-cc-face { transform: none !important; transition: none !important; }
-  .bf-tab-pill, .cat-sheet, .cat-sheet-backdrop { transition: none !important; }
-  .toast.is-open .toast-timer { animation: none; }
+  .bf-tab-pill { transition: transform 180ms ease, width 180ms ease !important; }
+  .cat-sheet { transform: none !important; filter: none !important; transition: opacity 200ms ease !important; }
 }
+@keyframes rmFade { from { opacity: 0; } to { opacity: 1; } }

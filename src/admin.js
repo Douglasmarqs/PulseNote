@@ -65,12 +65,12 @@ const INTEGRATION_BADGES = { firebase: ["F", "#f5a623"], whatsapp: ["W", "#25d36
 const SEGMENTS = [
   ["plan", "Com plano", "#16a768"],
   ["trial", "Em teste", "#f5a623"],
-  ["none", "Sem plano", "#7d88a8"],
+  ["none", "Plano gratuito", "#7d88a8"],
   ["attention", "Vencidos ou pausados", "#e5484d"],
   ["disabled", "Desativados", "#4b5679"],
 ];
 const USER_FILTERS = [
-  ["all", "Todos"], ["plan", "Com plano"], ["trial", "Em teste"], ["none", "Sem plano"],
+  ["all", "Todos"], ["plan", "Com plano"], ["trial", "Em teste"], ["none", "Plano gratuito"],
   ["attention", "Vencidos/pausados"], ["pending", "Cobrança pendente"], ["disabled", "Desativados"],
 ];
 const ROLE_INFO = {
@@ -444,12 +444,30 @@ function renderSegments() {
   legend.innerHTML = SEGMENTS.map(([key, label, color]) => `<button type="button" class="ac-legend-item" data-user-segment="${key}"><i style="--c:${color}"></i><span>${escapeHtml(label)}</span><strong>${counts[key].toLocaleString("pt-BR")}</strong><small>${total ? Math.round((counts[key] / total) * 100) : 0}%</small></button>`).join("");
 }
 
+// Ícones em SVG (traço único, mesmo desenho do app) no lugar dos símbolos
+// de texto ◆ ◉ ✦ ✧ ▣ que renderizavam diferente em cada sistema.
+const AD_GLYPHS = {
+  firebase: '<path d="M6 19.5L8.6 4.2l3.200 6"/><path d="M6 19.5l7.800-13 1.900 3.600"/><path d="M6 19.5l7 3.300 5.800-3.300-2-12.300z"/>',
+  whatsapp: '<path d="M4.500 19.500l1.100-3.700A8 8 0 1112 20a8 8 0 01-3.700-.9z"/><path d="M9.200 8.800c.3 2.600 2.300 4.600 4.900 5.200l1.100-1.300-1.700-1-1 .8a4.600 4.600 0 01-2.100-2.100l.8-1-1-1.700z"/>',
+  gemini: '<path d="M12 3c.6 4.700 4.300 8.400 9 9-4.700.6-8.400 4.300-9 9-.6-4.700-4.300-8.400-9-9 4.700-.6 8.400-4.300 9-9z"/>',
+  qstash: '<rect x="4" y="5" width="16" height="14" rx="3"/><path d="M8 10h8M8 14h5"/><circle cx="17" cy="14" r="1"/>',
+  stripe: '<rect x="3" y="6" width="18" height="12" rx="2.500"/><path d="M3 10h18M7 15h3"/>',
+  "ai-gateway": '<path d="M12 3.500l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/><path d="M18.500 15.500l.8 1.900 1.900.8-1.900.8-.8 1.900-.8-1.900-1.900-.8 1.900-.8z"/>',
+  activity: '<path d="M3 12h4l2.500-6 4 12 2.500-6H21"/>',
+  chat: '<path d="M4.500 19.500l1.100-3.700A8 8 0 1112 20a8 8 0 01-3.700-.9z"/>',
+  bell: '<path d="M6 10a6 6 0 0112 0c0 5 2 6.500 2 6.500H4S6 15 6 10"/><path d="M10.300 20a2 2 0 003.400 0"/>',
+  generic: '<circle cx="12" cy="12" r="8"/><path d="M12 8v4l2.500 2"/>',
+};
+function adGlyph(name) {
+  return `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${AD_GLYPHS[name] || AD_GLYPHS.generic}</svg>`;
+}
+
 function renderOperations(metrics) {
   $("#adOperationsSummary").innerHTML = [
-    ["✦", metrics.usersWithSavedChanges30d ?? 0, "usuários com atividade"],
-    ["◉", metrics.whatsappReceived30d ?? 0, "mensagens no WhatsApp"],
-    ["⌁", metrics.reminderDeliveriesAccepted30d ?? 0, "lembretes aceitos"],
-  ].map(([symbol, value, label]) => `<div class="ad-operation"><span aria-hidden="true">${symbol}</span><div><strong>${Number(value).toLocaleString("pt-BR")}</strong><small>${label} nos últimos 30 dias</small></div></div>`).join("");
+    ["activity", metrics.usersWithSavedChanges30d ?? 0, "usuários com atividade"],
+    ["chat", metrics.whatsappReceived30d ?? 0, "mensagens no WhatsApp"],
+    ["bell", metrics.reminderDeliveriesAccepted30d ?? 0, "lembretes aceitos"],
+  ].map(([glyph, value, label]) => `<div class="ad-operation"><span aria-hidden="true">${adGlyph(glyph)}</span><div><strong>${Number(value).toLocaleString("pt-BR")}</strong><small>${label} nos últimos 30 dias</small></div></div>`).join("");
   if ($("#adLastRefresh")) $("#adLastRefresh").textContent = `Dados das ${new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" }).format(new Date())}`;
 }
 
@@ -590,7 +608,6 @@ function closeAuditDrawer() {
 }
 
 function renderIntegrationRows(data, selector, compact = false) {
-  const symbols = { firebase: "◆", whatsapp: "◉", gemini: "✦", qstash: "▣", stripe: "$", "ai-gateway": "✧" };
   if (compact) {
     const pending = data.integrations.filter((item) => !item.configured).length;
     const summary = $("#adHealthSummary");
@@ -608,7 +625,7 @@ function renderIntegrationRows(data, selector, compact = false) {
     const detail = item.id === "qstash"
       ? `Última execução: ${readableTimestamp(item.lastRunAt)} · ${item.runStatus === "ok" ? "sem falhas" : item.runStatus === "unknown" ? "sem histórico" : item.runStatus}`
       : item.id === "whatsapp" ? `Último evento: ${readableTimestamp(item.lastEventAt)} · ${Number(item.recentFailures || 0)} falha(s) na amostra recente` : item.detail;
-    return `<div class="ad-integration"><span class="ad-integration-icon" aria-hidden="true">${symbols[item.id] || "◇"}</span><span class="ad-integration-content"><strong>${escapeHtml(item.label)}</strong><small>${escapeHtml(detail)}</small></span><span class="ad-pill ${item.configured ? "" : "is-warn"}">${item.configured ? "Configurado" : "Pendente"}</span></div>`;
+    return `<div class="ad-integration"><span class="ad-integration-icon" aria-hidden="true">${adGlyph(item.id)}</span><span class="ad-integration-content"><strong>${escapeHtml(item.label)}</strong><small>${escapeHtml(detail)}</small></span><span class="ad-pill ${item.configured ? "" : "is-warn"}">${item.configured ? "Configurado" : "Pendente"}</span></div>`;
   }).join("");
   $("#adIntegrationNote").textContent = data.note || "";
   const deliveries = Array.isArray(data.reminderDeliveries) ? data.reminderDeliveries : [];
@@ -646,7 +663,7 @@ function statusInfo(user) {
     case "expired": return ["is-danger", "Vencido"];
     case "paused": return ["is-warn", "Pausado"];
     case "cancelled": return ["is-off", "Cancelado"];
-    default: return ["is-muted", "Sem plano"];
+    default: return ["is-muted", "Plano gratuito"];
   }
 }
 
@@ -785,7 +802,7 @@ function renderUserDrawer(user, detail) {
     <div class="ac-drawer-head">${avatarHtml(user, "is-lg")}<div><h2 id="adUserDrawerTitle">${escapeHtml(user.displayName || user.email || "Usuário")}</h2><p>${escapeHtml(user.email || user.uid)}</p><div class="ac-drawer-chips"><span class="ac-status ${tone}"><i></i>${escapeHtml(label)}</span>${user.planName ? `<span class="ac-chip">${escapeHtml(user.planName)}</span>` : ""}${user.admin ? `<span class="ac-chip">Equipe</span>` : ""}</div></div></div>
     ${quick.length ? `<div class="ac-quick">${quick.map(([op, iconName, text, , disabled]) => `<button type="button" class="ac-quick-btn ${op === "remove" ? "is-danger" : ""}" data-user-op="${op}" ${disabled ? "disabled" : ""}>${icon(iconName)}<span>${escapeHtml(text)}</span></button>`).join("")}</div>` : ""}
     <section><h3>Acesso</h3><dl class="ad-detail-list">
-      <div><dt>Plano</dt><dd>${escapeHtml(user.planName || "Sem plano (segue a regra padrão)")}</dd></div>
+      <div><dt>Plano</dt><dd>${escapeHtml(user.planName || "Plano gratuito (regra padrão)")}</dd></div>
       <div><dt>Situação</dt><dd>${escapeHtml(label)}</dd></div>
       <div><dt>Válido até</dt><dd>${user.validUntil ? `${escapeHtml(readableDate(user.validUntil))}${Number.isInteger(user.daysLeft) ? ` <small>(${user.daysLeft >= 0 ? `faltam ${plural(user.daysLeft, "dia", "dias")}` : `venceu há ${plural(-user.daysLeft, "dia", "dias")}`})</small>` : ""}` : user.planId ? "Sem data de fim" : "—"}</dd></div>
       <div><dt>Origem</dt><dd>${escapeHtml(sourceLabel[entitlement?.source || user.source] || "—")}</dd></div>

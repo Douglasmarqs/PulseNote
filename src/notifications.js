@@ -35,12 +35,24 @@ function recordPushSetupStatus(code) {
 
 // Evita notificar a mesma coisa duas vezes no mesmo dia
 function alreadyNotifiedToday(uniqueId) {
+  return alreadyNotifiedFor(uniqueId, new Date().toDateString());
+}
+
+// Evita notificar de novo enquanto a "ocorrência" for a mesma (o mês, o alvo
+// da meta…). Mesma regra do servidor (api/send-reminders.js).
+function alreadyNotifiedFor(uniqueId, occurrence) {
   const key = `${NOTIFIED_KEY_PREFIX}${uniqueId}`;
-  const last = localStorage.getItem(key);
-  const today = new Date().toDateString();
-  if (last === today) return true;
-  localStorage.setItem(key, today);
+  try {
+    if (localStorage.getItem(key) === String(occurrence)) return true;
+    localStorage.setItem(key, String(occurrence));
+  } catch (_) { /* sem storage: segue, o tag do sistema evita duplicar */ }
   return false;
+}
+
+// Resumos (sem hora marcada) só entre 8h e 22h, como no servidor.
+function digestWindowOpen() {
+  const hour = new Date().getHours();
+  return hour >= 8 && hour < 22;
 }
 
 // Dispara uma notificação do sistema (ou um toast como fallback)
@@ -177,15 +189,17 @@ function checkTaskNotifications() {
       && !reminderOff(t.reminder) && t.dueDate === today && !t.dueTime
   );
 
+  if (!digestWindowOpen()) return;
   if (tasksOn && overdue.length > 0 && !alreadyNotifiedToday("tasks_overdue")) {
     fireNotification(
-      "⏰ Tarefas atrasadas",
-      overdue.length === 1
+      dueToday.length ? "Suas tarefas de hoje" : "Tarefas atrasadas",
+      (overdue.length === 1
         ? `"${overdue[0].title}" está atrasada.`
-        : `Você tem ${overdue.length} tarefas atrasadas.`,
+        : `Você tem ${overdue.length} tarefas atrasadas.`)
+        + (dueToday.length ? ` ${dueToday.length === 1 ? `"${dueToday[0].title}" vence hoje.` : `${dueToday.length} vencem hoje.`}` : ""),
       "tasks-overdue",
       "planner",
-      overdue.length === 1 ? overdue[0].id : null
+      overdue.length === 1 && !dueToday.length ? overdue[0].id : null
     );
   } else if (summaryOn && dueToday.length > 0 && !alreadyNotifiedToday("tasks_today")) {
     fireNotification(
@@ -232,11 +246,12 @@ function checkEventNotifications() {
 
 // Metas perto do prazo ou quase completas (incentivo, não cobrança)
 function checkGoalNotifications() {
-  if (!window.PulseNoteState.goals || !notificationPrefEnabled("tasks")) return;
+  if (!window.PulseNoteState.goals || !notificationPrefEnabled("tasks") || !digestWindowOpen()) return;
 
   window.PulseNoteState.goals.forEach((goal) => {
     const percent = goal.target > 0 ? (goal.current / goal.target) * 100 : 0;
-    if (percent >= 80 && percent < 100 && !alreadyNotifiedToday(`goal_${goal.id}_almost`)) {
+    // Uma vez por meta ao chegar perto do alvo (antes: todo dia).
+    if (percent >= 80 && percent < 100 && !alreadyNotifiedFor(`goal_${goal.id}_almost`, `target_${goal.target}`)) {
       fireNotification(
         "Quase lá!",
         `"${goal.title}" está ${Math.round(percent)}% completa. Falta pouco!`,
@@ -262,14 +277,16 @@ function checkFinanceNotifications() {
 
   const usedPct = Math.round((despesas / receitas) * 100);
 
-  if (usedPct >= 90 && !alreadyNotifiedToday("finance_budget_critical")) {
+  // Uma vez por mês em cada nível (antes: todo dia).
+  if (!digestWindowOpen()) return;
+  if (usedPct >= 90 && !alreadyNotifiedFor("finance_budget_critical", currentMonthKey)) {
     fireNotification(
       "Orçamento no limite",
       `Você já usou ${usedPct}% das receitas deste mês.`,
       "finance-critical",
       "finances"
     );
-  } else if (usedPct >= 70 && !alreadyNotifiedToday("finance_budget_warning")) {
+  } else if (usedPct >= 70 && usedPct < 90 && !alreadyNotifiedFor("finance_budget_warning", currentMonthKey)) {
     fireNotification(
       "Atenção ao orçamento",
       `Você já usou ${usedPct}% das receitas deste mês.`,
@@ -283,6 +300,10 @@ function checkFinanceNotifications() {
 function runAllNotificationChecks() {
   if (!notificationsAreEnabled()) return;
   if (!window.PulseNoteState) return; // app.js ainda não terminou de carregar os dados
+  // Com o push deste aparelho registrado, o servidor já entrega os mesmos
+  // avisos (com o app aberto ou fechado). Disparar aqui também fazia cada
+  // lembrete chegar duas vezes — o navegador só cobre quem não tem push.
+  if (pushNotificationsAreRegistered()) return;
   checkTaskNotifications();
   checkEventNotifications();
   checkGoalNotifications();

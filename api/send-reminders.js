@@ -14,11 +14,9 @@
 // externo: o QStash chama esta rota a cada 5 minutos. O GitHub Actions
 // fica disponível apenas como contingência manual.
 //
-// Idempotência: cada tipo de aviso tem um "cooldown" próprio — em vez de
-// só 1x por dia, uma tarefa atrasada pode lembrar de novo a cada 4h, um
-// orçamento crítico a cada 4h, uma meta quase batida a cada 12h, etc.
-// Compromissos (eventos) são a exceção: por serem pontuais, avisam só 1
-// vez (não faz sentido repetir depois que já avisou que está perto).
+// Idempotência: cada aviso sai uma única vez por "ocorrência" — resumo de
+// tarefas 1x por dia (entre 8h e 22h), orçamento 1x por mês por nível, meta
+// 1x ao chegar perto do alvo, lembretes com hora 1x por horário marcado.
 // Tudo isso fica guardado em reminderDeliveries (fora do snapshot do app) —
 // sem isso, rodar a cada 5 min mandaria a mesma notificação repetida
 // sem parar.
@@ -81,13 +79,19 @@ async function verifiedReminderWhatsAppPhone(db, uid, phone) {
 // pro MESMO usuário. 0 = avisa só uma vez e nunca mais repete (é o caso
 // de eventos: são pontuais, não faz sentido lembrar de novo depois que
 // já avisou que está perto).
+// Anti-spam (19/11/2026): antes "atrasadas" repetia a cada 4 h, "hoje" e
+// "orçamento" a cada 6 h e "meta quase lá" a cada 12 h — em push E WhatsApp.
+// Agora cada aviso tem uma "ocorrência" (dia, mês ou alvo da meta) e sai UMA
+// vez por ocorrência: resumo de tarefas 1x por dia, orçamento 1x por mês por
+// nível, meta 1x ao chegar perto do alvo. Lembretes com hora marcada
+// (tarefa/compromisso) continuam exatamente como a pessoa configurou.
 const COOLDOWN_HOURS = {
-  tasksOverdue: 4,
-  tasksToday: 6,
+  tasksOverdue: 0,
+  tasksToday: 0,
   event: 0,
-  goalAlmost: 12,
-  financeWarning: 6,
-  financeCritical: 24,
+  goalAlmost: 0,
+  financeWarning: 0,
+  financeCritical: 0,
 };
 
 function cooldownHoursFor(key) {
@@ -95,6 +99,33 @@ function cooldownHoursFor(key) {
   if (key.startsWith("event_")) return COOLDOWN_HOURS.event;
   if (key.startsWith("goal_")) return COOLDOWN_HOURS.goalAlmost;
   return COOLDOWN_HOURS[key] ?? 24;
+}
+
+// Avisos de resumo (não têm hora marcada pela pessoa) só saem entre 8h e
+// 22h no fuso dela — nada de "tarefas atrasadas" de madrugada.
+const DIGEST_START_HOUR = 8;
+const DIGEST_END_HOUR = 22;
+function isTimedReminder(key) {
+  return /^(task_|event_|goalDue_)/.test(String(key || ""));
+}
+function digestWindowOpen(now, timeZone) {
+  const { hour } = partsInTimeZone(now, timeZone);
+  return hour >= DIGEST_START_HOUR && hour < DIGEST_END_HOUR;
+}
+
+// "Atrasadas" e "para hoje" viram um único aviso de tarefas do dia.
+function bundleDailyTasks(notifications) {
+  const overdue = notifications.find((n) => n.key === "tasksOverdue");
+  const today = notifications.find((n) => n.key === "tasksToday");
+  if (!overdue || !today) return notifications;
+  const merged = {
+    ...overdue,
+    title: "Suas tarefas de hoje",
+    body: `${overdue.body} ${today.body}`,
+    plain: `${overdue.plain} Além disso, ${today.plain}`,
+    itemId: null,
+  };
+  return notifications.filter((n) => n !== today).map((n) => (n === overdue ? merged : n));
 }
 
 // Datas de tarefas e compromissos são criadas no fuso local da pessoa.
@@ -218,7 +249,8 @@ function buildNotifications(state, todayIso, now, timeZone = DEFAULT_TIME_ZONE) 
   if (overdue.length > 0) {
     results.push({
       key: "tasksOverdue",
-      title: "⏰ Tarefas atrasadas",
+      occurrence: todayIso,
+      title: "Tarefas atrasadas",
       body: overdue.length === 1 ? `"${overdue[0].title}" está atrasada.` : `Você tem ${overdue.length} tarefas atrasadas.`,
       plain: overdue.length === 1 ? `sua tarefa "${overdue[0].title}" está atrasada.` : `você tem ${overdue.length} tarefas atrasadas.`,
       tag: "tasks-overdue",
@@ -229,7 +261,8 @@ function buildNotifications(state, todayIso, now, timeZone = DEFAULT_TIME_ZONE) 
   if (dueToday.length > 0) {
     results.push({
       key: "tasksToday",
-      title: "📋 Tarefas para hoje",
+      occurrence: todayIso,
+      title: "Tarefas para hoje",
       body: dueToday.length === 1 ? `"${dueToday[0].title}" vence hoje.` : `Você tem ${dueToday.length} tarefas vencendo hoje.`,
       plain: dueToday.length === 1 ? `sua tarefa "${dueToday[0].title}" vence hoje.` : `você tem ${dueToday.length} tarefas vencendo hoje.`,
       tag: "tasks-today",
@@ -274,7 +307,7 @@ function buildNotifications(state, todayIso, now, timeZone = DEFAULT_TIME_ZONE) 
       results.push({
         key: `event_${event.id}`,
         occurrence: `${event.date}T${event.time}_${reminderMinutes}`,
-        title: "📅 Compromisso em breve",
+        title: "Compromisso em breve",
         body: `"${event.title}" às ${event.time}${event.location ? " · " + event.location : ""}`,
         plain: `seu compromisso "${event.title}" é às ${event.time}${event.location ? " (" + event.location + ")" : ""}.`,
         tag: `event-${event.id}`,
@@ -290,7 +323,8 @@ function buildNotifications(state, todayIso, now, timeZone = DEFAULT_TIME_ZONE) 
     if (percent >= 80 && percent < 100) {
       results.push({
         key: `goal_${goal.id}_almost`,
-        title: "🎯 Quase lá!",
+        occurrence: `target_${goal.target}`,
+        title: "Quase lá!",
         body: `"${goal.title}" está ${Math.round(percent)}% completa. Falta pouco!`,
         plain: `sua meta "${goal.title}" está ${Math.round(percent)}% completa. Falta pouco!`,
         tag: `goal-${goal.id}`,
@@ -310,7 +344,8 @@ function buildNotifications(state, todayIso, now, timeZone = DEFAULT_TIME_ZONE) 
     if (usedPct >= 90) {
       results.push({
         key: "financeCritical",
-        title: "💸 Orçamento no limite",
+        occurrence: currentMonthKey,
+        title: "Orçamento no limite",
         body: `Você já usou ${usedPct}% das receitas deste mês.`,
         plain: `você já usou ${usedPct}% das receitas deste mês.`,
         tag: "finance-critical",
@@ -319,7 +354,8 @@ function buildNotifications(state, todayIso, now, timeZone = DEFAULT_TIME_ZONE) 
     } else if (usedPct >= 70) {
       results.push({
         key: "financeWarning",
-        title: "💰 Atenção ao orçamento",
+        occurrence: currentMonthKey,
+        title: "Atenção ao orçamento",
         body: `Você já usou ${usedPct}% das receitas deste mês.`,
         plain: `você já usou ${usedPct}% das receitas deste mês.`,
         tag: "finance-warning",
@@ -480,7 +516,9 @@ module.exports = async (req, res) => {
       const timeZone = validTimeZone(state.timeZone);
       const todayIso = todayInTimeZone(now, timeZone);
 
-      const notifications = buildNotifications(state, todayIso, now, timeZone);
+      const windowOpen = digestWindowOpen(now, timeZone);
+      const notifications = bundleDailyTasks(buildNotifications(state, todayIso, now, timeZone)
+        .filter((n) => windowOpen || isTimedReminder(n.key)));
       if (notifications.length === 0) continue;
 
       const entitlement = await getUserEntitlements(db, uid);
@@ -570,5 +608,5 @@ module.exports = async (req, res) => {
 
 // Exportados como propriedades da function para testes determinísticos,
 // sem expor nenhuma rota adicional em produção.
-module.exports._test = { buildNotifications, todayInTimeZone, zonedDateTimeToUtc, validTimeZone, verifiedReminderWhatsAppPhone, deliverChannel, sendWhatsAppReminder, sendPush };
+module.exports._test = { buildNotifications, todayInTimeZone, zonedDateTimeToUtc, validTimeZone, verifiedReminderWhatsAppPhone, deliverChannel, sendWhatsAppReminder, sendPush, bundleDailyTasks, digestWindowOpen, isTimedReminder, cooldownHoursFor };
 
