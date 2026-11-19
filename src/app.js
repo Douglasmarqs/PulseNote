@@ -1,7 +1,7 @@
 // ============================================================
 // PulseNote — Autenticação e sincronização via Firebase
 // ============================================================
-import { auth, db } from "./firebase-init.js";
+import { auth, db, sendVerificationEmail } from "./firebase-init.js";
 import { createOnboarding, hasUserData } from "./onboarding.js";
 import { defaultNotificationPrefs, normalizeNotificationPrefs } from "./notification-prefs.js";
 import { createAutopilotUI } from "./autopilot-ui.js";
@@ -47,32 +47,28 @@ let pendingPulsinhoAction = null;
 // botão de desfazer no próprio balão da conversa.
 let pendingPulsinhoActions = [];
 const pulsinhoUndo = new Map();
+// Avisos inofensivos do navegador que não são erro do app (o mais comum:
+// "ResizeObserver loop completed with undelivered notifications", disparado
+// ao trocar de área rápido). Mostrá-los como "Algo quebrou" assustava à toa.
+const BENIGN_RUNTIME_ERRORS = /ResizeObserver loop|Script error\.?$|Load failed$|cancelad|AbortError|The user aborted/i;
 function showRuntimeErrorBanner(message) {
   if (!message || message === lastShownRuntimeError) return; // evita repetir o mesmo aviso em loop
+  if (BENIGN_RUNTIME_ERRORS.test(String(message))) return;
   lastShownRuntimeError = message;
   let banner = document.getElementById("runtimeErrorBanner");
   if (!banner) {
     banner = document.createElement("div");
     banner.id = "runtimeErrorBanner";
-    banner.style.cssText =
-      "position:fixed;left:12px;right:12px;bottom:12px;z-index:99999;background:#3a0d0d;color:#ffd9d9;" +
-      "border:1.5px solid #e5484d;border-radius:14px;padding:12px 14px;font:600 13px/1.4 -apple-system,system-ui,sans-serif;" +
-      "box-shadow:0 12px 32px rgba(0,0,0,0.4);";
+    banner.className = "rt-error";
+    banner.setAttribute("role", "alert");
     document.body.appendChild(banner);
   }
-  banner.innerHTML = "";
-  const strong = document.createElement("strong");
-  strong.textContent = "Algo quebrou nesta tela:";
-  strong.style.cssText = "display:block;margin-bottom:4px;";
-  const p = document.createElement("p");
-  p.textContent = message;
-  p.style.cssText = "margin:0 0 8px;word-break:break-word;";
-  const btn = document.createElement("button");
-  btn.type = "button";
-  btn.textContent = "Fechar";
-  btn.style.cssText = "background:#e5484d;color:#fff;border:none;border-radius:8px;padding:6px 12px;font-weight:700;";
-  btn.onclick = () => banner.remove();
-  banner.append(strong, p, btn);
+  banner.innerHTML = `<span class="rt-error-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 7v6"/><path d="M12 17v.01"/></svg></span>
+    <div class="rt-error-copy"><strong>Algo não saiu como esperado</strong><p></p><small>Se continuar, envie um print desta mensagem.</small></div>
+    <button type="button" class="rt-error-x" aria-label="Fechar aviso"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>`;
+  banner.querySelector("p").textContent = message;
+  banner.querySelector(".rt-error-x").onclick = () => banner.remove();
+  requestAnimationFrame(() => banner.classList.add("is-open"));
 }
 window.addEventListener("error", (event) => {
   showRuntimeErrorBanner(event.message || String(event.error));
@@ -147,8 +143,26 @@ function bindThemeToggle() {
   const buttons = group.querySelectorAll("[data-theme-choice]");
   function refreshActive() {
     const current = getSavedTheme();
-    buttons.forEach((b) => b.classList.toggle("active", b.dataset.themeChoice === current));
+    // role="radio" precisa de aria-checked: leitores de tela anunciavam
+    // todas as opções como desmarcadas (QA 18/11).
+    buttons.forEach((b) => {
+      const on = b.dataset.themeChoice === current;
+      b.classList.toggle("active", on);
+      b.setAttribute("aria-checked", String(on));
+      b.tabIndex = on ? 0 : -1;
+    });
   }
+  group.setAttribute("role", "radiogroup");
+  if (!group.hasAttribute("aria-label")) group.setAttribute("aria-label", "Tema");
+  group.addEventListener("keydown", (event) => {
+    if (!["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"].includes(event.key)) return;
+    event.preventDefault();
+    const list = [...buttons];
+    const index = list.indexOf(document.activeElement);
+    const next = list[(index + (event.key === "ArrowRight" || event.key === "ArrowDown" ? 1 : list.length - 1)) % list.length];
+    next.focus();
+    next.click();
+  });
   buttons.forEach((btn) => {
     btn.addEventListener("click", () => {
       setTheme(btn.dataset.themeChoice);
@@ -392,6 +406,16 @@ const appReady = new Promise((resolve) => {
     try { await user.reload(); } catch { /* segue mesmo se falhar (ex: offline) */ }
 
     currentUser = auth.currentUser || user;
+
+    // E-mail já confirmado mas o token ainda é de antes da confirmação:
+    // renova agora para as APIs (espaços compartilhados, cobrança) já
+    // receberem email_verified=true.
+    if (currentUser.emailVerified) {
+      try {
+        const claims = (await currentUser.getIdTokenResult()).claims || {};
+        if (claims.email_verified === false) await currentUser.getIdToken(true);
+      } catch { /* offline: o pulseApi renova na primeira chamada */ }
+    }
 
     // Bloqueia o acesso aos dados até o e-mail ser confirmado. Isso vale
     // tanto para quem acabou de se cadastrar quanto para quem faz login
@@ -830,9 +854,9 @@ function showVerifyEmailGate() {
   overlay.className = "verify-gate-overlay";
   overlay.innerHTML = `
     <div class="verify-gate-card">
-      <div class="verify-gate-icon">✉️</div>
+      <div class="verify-gate-icon">${bdIcon("mail")}</div>
       <h2>Confirme seu e-mail</h2>
-      <p>Enviamos um link de confirmação para <strong>${currentUser.email}</strong>.
+      <p>Enviamos um link de confirmação para <strong>${escapeHtml(currentUser.email || "")}</strong>.
       Abra o e-mail (e confira o spam) e clique no link para liberar o acesso.</p>
       <div id="verifyGateMsg" class="settings-message" hidden></div>
       <button id="verifyGateResend" class="primary-button" style="justify-content:center">Reenviar e-mail</button>
@@ -849,25 +873,55 @@ function showVerifyEmailGate() {
     el.hidden = false;
   }
 
-  let cooldown = false;
-  document.getElementById("verifyGateResend").addEventListener("click", async () => {
-    if (cooldown) return;
-    cooldown = true;
-    const btn = document.getElementById("verifyGateResend");
+  // QA 18/11: o botão ficava disponível logo após o envio automático e o
+  // Firebase respondia "muitos pedidos". Agora há uma contagem regressiva
+  // visível (60 s após cada envio; 2 min se o provedor pedir pausa), que
+  // sobrevive a recarregar a página.
+  const resendKey = `pn_verify_resend_${currentUser.uid}`;
+  const btn = document.getElementById("verifyGateResend");
+  let tick = null;
+  const readUntil = () => { try { return Number(sessionStorage.getItem(resendKey)) || 0; } catch { return 0; } };
+  const writeUntil = (ms) => { try { sessionStorage.setItem(resendKey, String(Date.now() + ms)); } catch { /* sem storage: só a memória */ } refreshResend(Date.now() + ms); };
+  function refreshResend(untilOverride) {
+    window.clearInterval(tick);
+    const until = untilOverride || readUntil();
+    const paint = () => {
+      const left = Math.ceil((until - Date.now()) / 1000);
+      if (left > 0) {
+        btn.disabled = true;
+        btn.textContent = `Reenviar em ${left}s`;
+        btn.setAttribute("aria-label", `Reenviar e-mail disponível em ${left} segundos`);
+      } else {
+        window.clearInterval(tick);
+        btn.disabled = false;
+        btn.textContent = "Reenviar e-mail";
+        btn.removeAttribute("aria-label");
+      }
+    };
+    paint();
+    if (until > Date.now()) tick = window.setInterval(paint, 1000);
+  }
+  // O e-mail acabou de ser enviado no cadastro: começa já em espera.
+  if (!readUntil()) writeUntil(60000); else refreshResend();
+
+  btn.addEventListener("click", async () => {
+    if (btn.disabled) return;
     btn.disabled = true;
     try {
-      await sendEmailVerification(currentUser);
-      showGateMsg("✅ E-mail reenviado! Verifique sua caixa de entrada.", "success");
+      await sendVerificationEmail(sendEmailVerification, currentUser);
+      showGateMsg("E-mail reenviado. Confira a caixa de entrada e o spam.", "success");
+      writeUntil(60000);
     } catch (err) {
       console.error("Erro ao reenviar verificação:", err);
+      const limited = err.code === "auth/too-many-requests";
       showGateMsg(
-        err.code === "auth/too-many-requests"
-          ? "Muitos pedidos de reenvio. Aguarde alguns minutos e tente novamente."
+        limited
+          ? "O provedor pediu uma pausa nos reenvios. O botão volta sozinho quando liberar."
           : "Não foi possível reenviar agora. Tente novamente em instantes.",
         "error"
       );
+      writeUntil(limited ? 120000 : 15000);
     }
-    setTimeout(() => { cooldown = false; btn.disabled = false; }, 30000);
   });
 
   document.getElementById("verifyGateCheck").addEventListener("click", async () => {
@@ -1512,24 +1566,38 @@ async function loadBillingSettings(force = false) {
     const current = data.subscription || {};
     const active = current.status === "active" && !current.expired;
     const trialUntil = current.trial && active && current.validUntil ? billingShortDate(current.validUntil) : "";
+    // QA 18/11: o cadastro promete "Grátis para sempre", mas quem não assinou
+    // via "Sem plano contratado" e "Nenhum plano público disponível". Sem
+    // assinatura (e sem plano vencido/pausado), a conta está no plano gratuito.
+    const onFree = !active && !current.planId && !current.expired;
     const planLabel = document.querySelector("#bdUserPlan");
-    if (planLabel) planLabel.textContent = active ? `Plano ${(data.plans || []).find((plan) => plan.id === current.planId)?.name || ""}`.trim() : "Sem plano";
+    if (planLabel) planLabel.textContent = active ? `Plano ${(data.plans || []).find((plan) => plan.id === current.planId)?.name || ""}`.trim() : onFree ? "Plano gratuito" : "Sem plano";
     const pfPlan = document.querySelector("#profilePlanChip span");
     if (pfPlan && planLabel) pfPlan.textContent = planLabel.textContent;
-    statusBadge.textContent = trialUntil ? `Teste grátis até ${trialUntil}` : active ? "Assinatura ativa" : current.expired ? (current.trial ? "Teste encerrado" : "Plano vencido") : current.planId ? "Assinatura pausada" : "Sem plano contratado";
-    statusBadge.className = `billing-status-badge ${active ? "is-active" : current.planId ? "is-warning" : ""}`;
+    statusBadge.textContent = trialUntil ? `Teste grátis até ${trialUntil}` : active ? "Assinatura ativa" : current.expired ? (current.trial ? "Teste encerrado" : "Plano vencido") : current.planId ? "Assinatura pausada" : "Plano gratuito ativo";
+    statusBadge.className = `billing-status-badge ${active || onFree ? "is-active" : current.planId ? "is-warning" : ""}`;
     const currentPlan = (data.plans || []).find((plan) => plan.id === current.planId);
     stBillingSummary = {
-      name: currentPlan ? `Plano ${currentPlan.name}` : "Sem plano",
-      status: trialUntil ? `Teste até ${trialUntil}` : active ? "Ativo" : current.expired ? "Vencido" : current.planId ? "Pausado" : "Inativo",
-      tone: active ? "on" : current.planId ? "warn" : "",
-      desc: currentPlan?.description || (active ? "Recursos do seu plano liberados." : "Escolha um plano para liberar mais recursos."),
+      name: currentPlan ? `Plano ${currentPlan.name}` : onFree ? "Plano gratuito" : "Sem plano",
+      status: trialUntil ? `Teste até ${trialUntil}` : active ? "Ativo" : current.expired ? "Vencido" : current.planId ? "Pausado" : onFree ? "Ativo" : "Inativo",
+      tone: active || onFree ? "on" : current.planId ? "warn" : "",
+      desc: currentPlan?.description || (active ? "Recursos do seu plano liberados." : onFree ? "Planner, notas, finanças, backup e o Pulsinho com uso diário limitado — sem cobrança." : "Escolha um plano para liberar mais recursos."),
     };
     renderSettingsBoard();
-    statusText.textContent = !data.configured
-      ? "Os pagamentos ainda não foram ativados pelo administrador. Seus recursos atuais continuam funcionando normalmente."
-      : active ? "Seu acesso é atualizado automaticamente após cada confirmação do provedor de pagamento."
-        : "Escolha um plano para ativar os recursos correspondentes.";
+    statusText.textContent = onFree
+      ? "Sua conta está no plano gratuito, sem cobrança e sem cartão cadastrado. Inclui Planner, Notas, Finanças, backup e o Pulsinho com um limite diário de uso da IA."
+      : !data.configured
+        ? "Os pagamentos ainda não foram ativados pelo administrador. Seus recursos atuais continuam funcionando normalmente."
+        : active ? "Seu acesso é atualizado automaticamente após cada confirmação do provedor de pagamento."
+          : "Escolha um plano para ativar os recursos correspondentes.";
+    if (!data.plans.length && onFree) {
+      grid.innerHTML = "";
+      grid.hidden = true;
+      const billingActions = document.getElementById("billingActions");
+      if (billingActions) billingActions.hidden = true;
+      return data;
+    }
+    grid.hidden = false;
     grid.innerHTML = data.plans.length ? data.plans.map((plan) => {
       const isCurrent = current.planId === plan.id;
       const disabled = isCurrent || !plan.checkoutAvailable;
@@ -2641,7 +2709,7 @@ function bindPremiumDashboard() {
       const hadActions = pendingPulsinhoActions.length || pendingPulsinhoAction;
       pendingPulsinhoAction = null;
       pendingPulsinhoActions = [];
-      if (hadActions) pulsinhoConversation.push({ role: "assistant", content: "Tudo bem, cancelei. Nada foi alterado 👍", provider: "pulse-engine" });
+      if (hadActions) pulsinhoConversation.push({ role: "assistant", content: "Tudo bem, cancelei. Nada foi alterado.", provider: "pulse-engine" });
       renderPulsinhoConversation();
     }
   });
@@ -2670,9 +2738,13 @@ function bindPremiumDashboard() {
   });
 }
 
-async function pulseApi(path, options = {}) {
+// QA 18/11 (espaço compartilhado): depois de confirmar o e-mail, o token
+// guardado ainda dizia email_verified=false por até 1 h e o servidor recusava
+// a criação. Se o servidor responder "e-mail não verificado"/"não autorizado",
+// renova o token uma vez e repete o pedido antes de desistir.
+async function pulseApi(path, options = {}, { retried = false } = {}) {
   if (!currentUser) throw new Error("unauthorized");
-  const token = await currentUser.getIdToken();
+  const token = await currentUser.getIdToken(retried);
   const response = await fetch(path, {
     ...options,
     headers: {
@@ -2682,8 +2754,30 @@ async function pulseApi(path, options = {}) {
     },
   });
   const payload = await response.json().catch(() => ({}));
+  if (!response.ok && !retried && (payload.error === "verified_email_required" || response.status === 401)) {
+    try { await currentUser.reload(); } catch { /* segue com o token renovado */ }
+    return pulseApi(path, options, { retried: true });
+  }
   if (!response.ok) throw Object.assign(new Error(payload.error || "request_failed"), { code: payload.error, status: response.status });
   return payload;
+}
+
+// Mensagens específicas para as falhas dos espaços compartilhados.
+function financeSpaceErrorMessage(error, fallback) {
+  const map = {
+    verified_email_required: "Confirme seu e-mail para criar ou entrar em espaços compartilhados. Já confirmou? Saia e entre de novo.",
+    unauthorized: "Sua sessão expirou. Entre de novo para continuar.",
+    invalid_name: "Use um nome com pelo menos 2 caracteres.",
+    invalid_invite: "Confira o e-mail do convite — ele não pode ser o seu próprio.",
+    already_member: "Essa pessoa já faz parte do espaço.",
+    member_limit: "Este espaço já tem o máximo de 12 membros.",
+    owner_required: "Só quem administra o espaço pode convidar pessoas.",
+    space_not_found: "Esse espaço não existe mais.",
+    owner_cannot_leave: "Quem administra não pode sair do próprio espaço.",
+    finance_spaces_unavailable: "O servidor não respondeu agora. Tente de novo em alguns segundos.",
+  };
+  if (!navigator.onLine) return "Você está sem internet. Conecte-se e tente de novo.";
+  return map[error?.code] || fallback;
 }
 
 function bdConfirmRows(action) {
@@ -2760,6 +2854,18 @@ function persistPulsinhoConversation() {
   }
 }
 
+// Defesa no app (o servidor já limpa): nenhum campo técnico do JSON da IA
+// — followUps, navigationTarget, actions… — aparece no texto da conversa.
+function pulsinhoCleanReply(text) {
+  let out = String(text ?? "");
+  const trimmed = out.trim();
+  if (/^\{[\s\S]*"reply"\s*:/.test(trimmed)) {
+    try { const parsed = JSON.parse(trimmed); if (typeof parsed?.reply === "string") out = parsed.reply; } catch { /* segue limpando */ }
+  }
+  out = out.replace(/(?:["']?\s*[,}]?\s*)?["']?\b(?:followUps|follow-ups|follow_ups|navigationTarget|navigation_target|actions|lookups|asks|provider)\b["']?\s*:\s*[[{"'nt0-9-][\s\S]*$/i, "");
+  return out.replace(/["'}\]\s,]+$/u, (tail) => (/[}\]]/.test(tail) ? "" : tail)).replace(/\bremindes?\b/gi, "lembretes").trim() || String(text ?? "");
+}
+
 function renderPulsinhoConversation({ loading = false, error = "" } = {}) {
   const root = document.querySelector("#pulseCommandResponse");
   if (!root) return;
@@ -2768,7 +2874,7 @@ function renderPulsinhoConversation({ loading = false, error = "" } = {}) {
   root.classList.toggle("is-loading", loading);
   const hour = new Date().getHours();
   const hello = greetingForHour(hour);
-  const introText = `${hello}, ${bdFirstName()}! Sou o Pulsinho 💜 Pode falar comigo do seu jeito: registro gastos, crio tarefas e lembretes, marco compromissos, anoto ideias — ou a gente só conversa.`;
+  const introText = `${hello}, ${bdFirstName()}! Sou o Pulsinho. Pode falar comigo do seu jeito: registro gastos, crio tarefas e lembretes, marco compromissos, anoto ideias — ou a gente só conversa.`;
   // Primeira vez que o painel aparece: o Pulsinho acena, "digita" e a
   // saudação surge palavra por palavra. Depois disso, fica estática.
   if (pulsinhoIntroState === "pending" && pulsinhoConversation.length) pulsinhoIntroState = "done";
@@ -2800,9 +2906,10 @@ function renderPulsinhoConversation({ loading = false, error = "" } = {}) {
       index >= freshFrom ? "is-new" : "",
     ].filter(Boolean).join(" ");
     const actionsHtml = Array.isArray(message.actions) && message.actions.length
-      ? `<div class="bd-msg-actions">${message.actions.map((item) => `<div class="bd-msg-action${item.undone ? " is-undone" : ""}"><span>${escapeHtml(item.summary)}</span>${item.undone ? "<em>Desfeito</em>" : item.undoKey ? `<button type="button" data-pulsinho-undo="${escapeHtml(item.undoKey)}">Desfazer</button>` : ""}</div>`).join("")}</div>`
+      ? `<div class="bd-msg-actions">${message.actions.map((item) => `<div class="bd-msg-action${item.undone ? " is-undone" : ""}"><span>${escapeHtml(toastCleanText(item.summary) || item.summary)}</span>${item.undone ? "<em>Desfeito</em>" : item.undoKey ? `<button type="button" data-pulsinho-undo="${escapeHtml(item.undoKey)}">Desfazer</button>` : ""}</div>`).join("")}</div>`
       : "";
-    return `<div class="${classes}">${escapeHtml(message.content)}${actionsHtml}${followUpHtml}</div>`;
+    const text = side === "ai" ? pulsinhoCleanReply(message.content) : message.content;
+    return `<div class="${classes}">${escapeHtml(text)}${actionsHtml}${followUpHtml}</div>`;
   }).join("");
   pulsinhoRenderedCount = pulsinhoConversation.length;
   const multi = pendingPulsinhoActions.length
@@ -3370,7 +3477,7 @@ function applyPulsinhoAction(action) {
   if (action.type.startsWith("delete_")) {
     const [removed] = list.splice(index, 1);
     return {
-      summary: `🗑️ Excluído: “${action.targetTitle || removed?.title || removed?.description || "item"}”`,
+      summary: `Excluído: “${action.targetTitle || removed?.title || removed?.description || "item"}”`,
       undo: () => { state[key].splice(Math.min(index, state[key].length), 0, removed); },
     };
   }
@@ -3424,7 +3531,7 @@ function confirmPulsinhoActions() {
   const applied = applyPulsinhoActions(actions);
   pulsinhoConversation.push({
     role: "assistant",
-    content: applied.length ? "Pronto! ✅" : "Esses itens já não existem mais — talvez tenham sido alterados. Nada foi alterado.",
+    content: applied.length ? "Pronto!" : "Esses itens já não existem mais — talvez tenham sido alterados. Nada foi alterado.",
     provider: "pulse-engine",
     actions: applied,
   });
@@ -3678,7 +3785,7 @@ function renderSharedFinanceSpaces() {
     const owner = space.role === "owner";
     const memberNames = (space.members || []).map((member) => member.name || member.email).filter(Boolean).join(", ");
     return `<article class="fin-shared-space-card${space.id === activeWorkspaceId ? " is-active" : ""}">
-      <div class="fin-shared-space-icon" aria-hidden="true">${space.type === "couple" ? "♡" : space.type === "family" ? "⌂" : "◎"}</div>
+      <div class="fin-shared-space-icon" aria-hidden="true">${bdIcon(space.type === "couple" ? "heart" : space.type === "family" ? "house" : "users")}</div>
       <div class="fin-shared-space-copy"><strong>${escapeHtml(space.name)}</strong><span>${escapeHtml(memberNames || "Somente você")} · ${space.canEdit ? "Pode editar" : "Somente leitura"}</span></div>
       <button type="button" class="fin-shared-open" data-shared-action="open" data-space-id="${escapeHtml(space.id)}">${space.id === activeWorkspaceId ? "Em uso" : "Abrir"}</button>
       ${owner ? `<form class="fin-shared-invite-form" data-space-id="${escapeHtml(space.id)}"><input type="email" name="email" autocomplete="email" placeholder="E-mail para convidar" aria-label="E-mail para convidar" required><select name="role" aria-label="Permissão"><option value="editor">Pode editar</option><option value="viewer">Somente leitura</option></select><button type="submit">Convidar</button></form>` : `<button type="button" class="fin-shared-leave" data-shared-action="leave" data-space-id="${escapeHtml(space.id)}">Sair do espaço</button>`}
@@ -3747,8 +3854,11 @@ async function createFinanceSpace(event) {
     renderFinanceWorkspaceOptions();
     renderSharedFinanceSpaces();
     if (payload.space?.id) setActiveFinanceWorkspace(payload.space.id);
-    showToast("Espaço compartilhado criado.");
-  } catch { showToast("Não foi possível criar o espaço agora."); }
+    showToast("Espaço compartilhado criado.", { tone: "success" });
+  } catch (error) {
+    console.warn("finance-space create failed", error?.code || error?.message);
+    showToast(financeSpaceErrorMessage(error, "Não foi possível criar o espaço agora. Tente de novo em alguns segundos."), { tone: "warn" });
+  }
   finally { if (submit) submit.disabled = false; }
 }
 
@@ -3765,7 +3875,7 @@ async function inviteToFinanceSpace(event) {
     form.reset();
     showToast("Convite criado. Ele aparecerá na conta desse e-mail.");
   } catch (error) {
-    showToast(error.code === "already_member" ? "Essa pessoa já participa do espaço." : "Não foi possível criar o convite.");
+    showToast(financeSpaceErrorMessage(error, "Não foi possível criar o convite agora."), { tone: "warn" });
   } finally { if (submit) submit.disabled = false; }
 }
 
@@ -3789,7 +3899,7 @@ async function handleSharedSpaceAction(event) {
       renderAll();
       showToast("Você saiu do espaço compartilhado.");
     }
-  } catch { showToast("Não foi possível concluir essa ação."); }
+  } catch (error) { showToast(financeSpaceErrorMessage(error, "Não foi possível concluir essa ação."), { tone: "warn" }); }
   finally { button.disabled = false; }
 }
 
@@ -3925,8 +4035,21 @@ function toggleCreditCardForm(open) {
     document.querySelector("#finCardDueDay").value = "10";
     return;
   }
+  renderFinCardPreview();
   requestAnimationFrame(() => document.querySelector("#finCardName")?.focus());
 }
+
+// Prévia ao vivo do cartão no formulário (nome, final e bandeira).
+function renderFinCardPreview() {
+  const root = document.querySelector("#finCardPreview");
+  if (!root) return;
+  const card = { name: valueOf("#finCardName").trim() || "Seu cartão", last4: valueOf("#finCardLast4").replace(/\D/g, "").slice(-4), network: valueOf("#finCardNetwork") };
+  root.innerHTML = finCardArtHtml(card, { size: "lg" });
+}
+["#finCardName", "#finCardLast4", "#finCardNetwork"].forEach((sel) => {
+  document.addEventListener("input", (event) => { if (event.target.matches?.(sel)) renderFinCardPreview(); });
+  document.addEventListener("change", (event) => { if (event.target.matches?.(sel)) renderFinCardPreview(); });
+});
 
 function saveCreditCard(event) {
   event.preventDefault();
@@ -3941,14 +4064,16 @@ function saveCreditCard(event) {
     return;
   }
   state.creditCards ||= [];
+  const network = valueOf("#finCardNetwork") || "";
   state.creditCards.push({
-    id: crypto.randomUUID(), name, last4, limit, closingDay, dueDay,
+    id: crypto.randomUUID(), name, last4, limit, closingDay, dueDay, ...(network ? { network } : {}),
     workspaceId: activeWorkspaceId, invoices: [], archived: false,
     createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
   });
   saveState();
   toggleCreditCardForm(false);
   renderFinances();
+  showToast(`Cartão ${name} adicionado.`, { tone: "success" });
   lastForecastFetchAt = 0;
   refreshDashboardForecast(true);
 }
@@ -4168,27 +4293,27 @@ function searchEverything(query) {
 
   (state.notes || []).forEach((n) => {
     if (`${n.title} ${n.description}`.toLowerCase().includes(q)) {
-      results.push({ type: "notes", icon: "📝", title: n.title, sub: "Nota", id: n.id });
+      results.push({ type: "notes", icon: bdIcon("note"), title: n.title, sub: "Nota", id: n.id });
     }
   });
   (state.tasks || []).forEach((t) => {
     if (t.title.toLowerCase().includes(q)) {
-      results.push({ type: "tasks", icon: "✅", title: t.title, sub: `Tarefa · ${t.status}`, id: t.id });
+      results.push({ type: "tasks", icon: bdIcon("task-check"), title: t.title, sub: `Tarefa · ${t.status}`, id: t.id });
     }
   });
   (state.events || []).forEach((e) => {
     if (`${e.title} ${e.location || ""}`.toLowerCase().includes(q)) {
-      results.push({ type: "calendar", icon: "📅", title: e.title, sub: `Agenda · ${formatDate(e.date)}`, id: e.id });
+      results.push({ type: "calendar", icon: bdIcon("calendar"), title: e.title, sub: `Agenda · ${formatDate(e.date)}`, id: e.id });
     }
   });
   (state.finances || []).forEach((f) => {
     if ((f.description || "").toLowerCase().includes(q)) {
-      results.push({ type: "finances", icon: "💰", title: f.description, sub: `Financas · ${formatCurrency(f.amount)}`, id: f.id });
+      results.push({ type: "finances", icon: bdIcon("wallet"), title: f.description, sub: `Finanças · ${formatCurrency(f.amount)}`, id: f.id });
     }
   });
   (state.goals || []).forEach((g) => {
     if (g.title.toLowerCase().includes(q)) {
-      results.push({ type: "goals", icon: "🎯", title: g.title, sub: "Meta", id: g.id });
+      results.push({ type: "goals", icon: bdIcon("target"), title: g.title, sub: "Meta", id: g.id });
     }
   });
 
@@ -4329,7 +4454,11 @@ function setView(view, { fromHistory = false } = {}) {
   // cortando em "R$ 2.6..." em vez de mostrar o valor inteiro. Ao entrar
   // de fato na aba (aqui, com o card já visível e com largura real), a
   // gente reexecuta o autofit pra medir e ajustar certo.
-  if (view === "finances") fitCurrencyValues("finReceitas", "finDespesas", "finSaldo");
+  if (view === "finances") {
+    fitCurrencyValues("finReceitas", "finDespesas", "finSaldo");
+    requestAnimationFrame(finMoveTabIndicator);
+    if (previousView !== view) finPlayEntrance();
+  }
   if (view === "dashboard") fitCurrencyValues("summaryFinSaldo", "dashFinReceitas", "dashFinDespesas", "dashFinSaldo");
   if (view === "autopilot" || view === "dashboard") autopilotUi.show();
   if (previousView !== view) {
@@ -4546,7 +4675,7 @@ function saveEvent(event) {
       return Math.abs((eh * 60 + em) - newMinutes) < 30;
     });
     if (conflict) {
-      if (!confirm(`⚠️ Você já tem "${conflict.title}" às ${conflict.time} nesse dia, bem perto desse horário. Adicionar mesmo assim?`)) return;
+      if (!confirm(`Você já tem "${conflict.title}" às ${conflict.time} nesse dia, bem perto desse horário. Adicionar mesmo assim?`)) return;
     }
   }
 
@@ -4589,11 +4718,32 @@ function addGoalMilestone(id, event) {
   if (!title || !title.trim()) return;
   const goal = state.goals.find((g) => g.id === id);
   if (!goal) return;
-  if (!goal.milestones) goal.milestones = [];
-  goal.milestones.push({ id: crypto.randomUUID(), title: title.trim(), done: false });
+  addNamedGoalMilestone(goal, title.trim());
   saveState();
   renderGoals();
   renderPlannerGoalsStrip();
+}
+
+// QA 18/11: nomear a primeira etapa de uma meta numérica (ex.: 1/3) trocava
+// tudo por uma lista nova de 1 etapa e o progresso ia a 0/1. Agora as etapas
+// numéricas viram etapas "Etapa N" (as já concluídas continuam marcadas) e o
+// nome digitado preenche a próxima etapa pendente — o progresso é mantido.
+function addNamedGoalMilestone(goal, title) {
+  if (!goal.milestones) goal.milestones = [];
+  if (!goal.milestones.length) {
+    const total = Math.max(0, Math.round(Number(goal.target) || 0));
+    const done = Math.min(total, Math.max(0, Math.round(Number(goal.current) || 0)));
+    if (total > 1 || done > 0) {
+      goal.milestones = Array.from({ length: total }, (_, index) => ({
+        id: crypto.randomUUID(), title: `Etapa ${index + 1}`, done: index < done, placeholder: true,
+      }));
+    }
+  }
+  const slot = goal.milestones.find((m) => m.placeholder && !m.done) || null;
+  if (slot) { slot.title = title; delete slot.placeholder; }
+  else goal.milestones.push({ id: crypto.randomUUID(), title, done: false });
+  syncGoalFromMilestones(goal);
+  return Boolean(slot);
 }
 
 // Com etapas nomeadas, o contador da meta acompanha as etapas marcadas
@@ -6062,21 +6212,24 @@ function renderBoardsDashboard() {
   const trendEl = document.querySelector("#bdBalanceTrend");
   if (trendEl) trendEl.innerHTML = prevHasData && prevBalance ? bdTrendHtml(((saldo - prevBalance) / Math.abs(prevBalance)) * 100) : "Saldo do mês até hoje";
 
-  // Gastos: meta (soma dos limites por categoria) ou variação contra o mês anterior
-  const goalTotal = (state.finGoals || []).filter((g) => (g.workspaceId || "personal") === activeWorkspaceId).reduce((s, g) => s + (Number(g.limit) || 0), 0);
+  // Gastos: limites por categoria comparam SÓ o que foi gasto nessas
+  // categorias (QA 18/11: R$ 26 numa categoria limitada a R$ 100 aparecia
+  // como "96% da meta" porque o total do mês era dividido pelo limite).
+  const { limits: goalTotal, spent: limitedSpent, count: limitedCount } = finLimitedSpend(monthKey, activeWorkspaceId);
   const spendNote = document.querySelector("#bdSpendNote");
   const spendProgress = document.querySelector("#bdSpendProgress");
   const spendBar = document.querySelector("#bdSpendBar");
   if (goalTotal > 0) {
-    const pct = Math.round((despesas / goalTotal) * 100);
-    spendNote.textContent = `${pct}% da meta (${formatCurrency(goalTotal)})`;
+    const pct = Math.round((limitedSpent / goalTotal) * 100);
+    spendNote.textContent = `${pct}% dos limites · ${formatCurrency(limitedSpent)} de ${formatCurrency(goalTotal)}`;
+    spendNote.title = `Gasto nas ${limitedCount} categoria${limitedCount === 1 ? "" : "s"} com limite definido. O total do mês (${formatCurrency(despesas)}) inclui todas as categorias.`;
     spendProgress.hidden = false;
     spendBar.style.width = `${Math.min(100, pct)}%`;
     spendBar.className = pct > 100 ? "over" : pct >= 85 ? "warn" : "";
   } else {
     const prevSpend = entries.filter((f) => f.date.startsWith(prevMonthKey) && f.type === "despesa").reduce((s, f) => s + (Number(f.amount) || 0), 0);
     spendProgress.hidden = true;
-    spendNote.innerHTML = prevSpend ? bdTrendHtml(((despesas - prevSpend) / prevSpend) * 100, { inverse: true }) : "Defina metas de gasto em Finanças";
+    spendNote.innerHTML = prevSpend ? bdTrendHtml(((despesas - prevSpend) / prevSpend) * 100, { inverse: true }) : "Defina limites por categoria em Finanças";
   }
 
   const prevIncome = entries.filter((f) => f.date.startsWith(prevMonthKey) && f.type === "receita").reduce((s, f) => s + (Number(f.amount) || 0), 0);
@@ -6875,7 +7028,7 @@ function renderDashFinance() {
             .map((f) => {
               const cat = findCategory(f.category);
               const isReceita = f.type === "receita";
-              return `<div class="connector-row"><span style="font-size:0.88rem;font-weight:600;display:inline-flex;align-items:center;gap:5px">${isReceita ? icon("trendingUp", 13) : cat.label.split(" ")[0]} ${escapeHtml(f.description)}</span><span style="font-weight:800;color:${isReceita ? "var(--green)" : "var(--red)"}">${isReceita ? "+" : "-"}${formatCurrency(f.amount)}</span></div>`;
+              return `<div class="connector-row"><span style="font-size:0.88rem;font-weight:600;display:inline-flex;align-items:center;gap:5px">${isReceita ? icon("trendingUp", 13) : bdIcon(finCategoryIconAny(f.category, f.type))} ${escapeHtml(f.description)}</span><span style="font-weight:800;color:${isReceita ? "var(--green)" : "var(--red)"}">${isReceita ? "+" : "-"}${formatCurrency(f.amount)}</span></div>`;
             })
             .join("")
         : emptyStateCompactHtml({ iconName: "calendar", text: "Nada lançado este mês ainda." })
@@ -7802,10 +7955,10 @@ function submitGoalMilestoneForm(id, event) {
   if (!title) return false;
   const goal = state.goals.find((g) => g.id === id);
   if (!goal) return false;
-  if (!goal.milestones) goal.milestones = [];
-  goal.milestones.push({ id: crypto.randomUUID(), title, done: false });
-  syncGoalFromMilestones(goal);
+  const hadNoNames = !(goal.milestones || []).length && ((Number(goal.target) || 0) > 1 || (Number(goal.current) || 0) > 0);
+  addNamedGoalMilestone(goal, title);
   saveState();
+  if (hadNoNames) showToast(`Etapas nomeadas. Seu progresso (${goal.current}/${goal.target}) foi mantido.`, { tone: "success" });
   renderPlannerGoalsStrip();
   renderGoals();
   const freshInput = document.querySelector(`[data-goal-id="${id}"] .gm-add input, [data-goal-id="${id}"] .planner-inline-add-form input`);
@@ -10403,9 +10556,9 @@ function renderGoals() {
         ? `<div class="goal-milestones">
             ${milestones.map((m) => `
               <div class="goal-milestone-row">
-                <button class="goal-milestone-check ${m.done ? "done" : ""}" onclick="toggleGoalMilestone('${goal.id}','${m.id}', event)">${m.done ? "✓" : ""}</button>
+                <button class="goal-milestone-check ${m.done ? "done" : ""}" onclick="toggleGoalMilestone('${goal.id}','${m.id}', event)">${m.done ? bdIcon("check") : ""}</button>
                 <span class="${m.done ? "done" : ""}">${escapeHtml(m.title)}</span>
-                <button class="mini-button" onclick="deleteGoalMilestone('${goal.id}','${m.id}', event)" style="padding:0;width:20px;height:20px;margin-left:auto">✕</button>
+                <button class="mini-button" onclick="deleteGoalMilestone('${goal.id}','${m.id}', event)" style="padding:0;width:20px;height:20px;margin-left:auto" aria-label="Remover marco">${bdIcon("x")}</button>
               </div>`).join("")}
           </div>`
         : "";
@@ -10413,7 +10566,7 @@ function renderGoals() {
         <article class="goal-card" data-goal-id="${goal.id}" style="${isComplete ? "border-color:var(--green);background:var(--green-soft);" : ""}">
           <div>
             <h2>${escapeHtml(goal.title)}</h2>
-            <div class="task-meta">${goal.current}/${goal.target} etapas ${isComplete ? "🎉" : ""}${milestones.length ? ` · ${msDone}/${milestones.length} marcos` : ""}</div>
+            <div class="task-meta">${goal.current}/${goal.target} etapas${isComplete ? " · concluída" : ""}${milestones.length ? ` · ${msDone}/${milestones.length} marcos` : ""}</div>
           </div>
           <div class="progress-track"><div style="width:${percent}%;background:${isComplete ? "var(--green)" : "linear-gradient(90deg,var(--accent),var(--purple))"}"></div></div>
           ${milestonesHtml}
@@ -10421,13 +10574,13 @@ function renderGoals() {
             <button class="mini-button" onclick="changeGoal('${goal.id}', -1)">−</button>
             <span class="pill" style="${isComplete ? "background:var(--green);color:#fff;border-color:var(--green);" : ""}">${percent}%</span>
             <button class="mini-button" onclick="changeGoal('${goal.id}', 1)">+</button>
-            <button class="mini-button" onclick="addGoalMilestone('${goal.id}', event)" title="Adicionar marco">🚩</button>
-            <button class="mini-button" onclick="deleteGoal('${goal.id}')" style="margin-left:auto">🗑️</button>
+            <button class="mini-button" onclick="addGoalMilestone('${goal.id}', event)" title="Adicionar marco" aria-label="Adicionar marco">${bdIcon("flag")}</button>
+            <button class="mini-button" onclick="deleteGoal('${goal.id}')" style="margin-left:auto" aria-label="Excluir meta">${bdIcon("trash")}</button>
           </div>
         </article>
       `;
     },
-    elements.globalSearch.value.trim() ? "Nenhuma meta encontrada para essa busca." : "Nenhuma meta criada. Defina seu foco! 🎯"
+    elements.globalSearch.value.trim() ? "Nenhuma meta encontrada para essa busca." : "Nenhuma meta criada. Defina seu foco."
   );
   renderAchievements();
 }
@@ -10517,9 +10670,51 @@ function debounce(fn, delay) {
 
 // options.actionLabel/onAction: botão no aviso (ex.: "Desfazer"), que
 // fica um pouco mais na tela para dar tempo de tocar.
+// Toast v2 — "Toast open/close" + "Success check" do transitions.dev.
+// O tom (sucesso, alerta, informação, exclusão) vem de options.tone ou é
+// deduzido da mensagem; emojis no começo das mensagens antigas são
+// removidos — o ícone animado faz esse papel com o desenho do app.
+const TOAST_EMOJI_TONE = [
+  [/^(⚠️|⚠|🚨|❌|⛔)/u, "warn"],
+  [/^(🗑️|🗑|🔓|🔌)/u, "delete"],
+  [/^(✅|🎉|✨|✓|✔️|✏️|📊|📄|🔒|🔁|🚀|💜|👍|🔔)/u, "success"],
+];
+function toastTone(message, explicit) {
+  if (explicit) return explicit;
+  const text = String(message || "").trim();
+  for (const [re, tone] of TOAST_EMOJI_TONE) if (re.test(text)) return tone;
+  if (/\b(n[ãa]o foi poss[ií]vel|erro|falhou|inv[aá]lid|informe|escolha|preencha|digite|fechado\. reabra|ultrapassad|aten[cç][ãa]o)/i.test(text)) return "warn";
+  if (/\b(exclu[ií]d|removid|apagad|desvinculad|cancelad)/i.test(text)) return "delete";
+  if (/\b(salv|criad|atualizad|registrad|conclu[ií]d|pront|lançad|guardad|baixad|gerad|ativad|copiad|enviad|confirmad|restaurad|reabert)/i.test(text)) return "success";
+  return "info";
+}
+function toastCleanText(message) {
+  return String(message ?? "")
+    .replace(/^(?:[\p{Extended_Pictographic}☀-➿️‍✓✔]+\s*)+/u, "")
+    .replace(/\s*(?:[\p{Extended_Pictographic}️‍]+)\s*$/u, "")
+    .trim();
+}
+
 function showToast(message, options = {}) {
   const textEl = document.getElementById("toastText") || elements.toast;
-  textEl.textContent = message;
+  const tone = toastTone(message, options.tone);
+  textEl.textContent = toastCleanText(message) || String(message ?? "");
+  const toastEl = elements.toast;
+  const wasOpen = toastEl.classList.contains("show");
+  toastEl.dataset.tone = tone;
+  // Re-dispara o "Success check": volta ao estado "out" e, no próximo
+  // frame, entra de novo (fade + rotate + blur + bob + traço).
+  toastEl.querySelectorAll(".toast-glyph").forEach((glyph) => {
+    glyph.dataset.state = "out";
+    glyph.hidden = glyph.dataset.glyph !== tone;
+  });
+  const glyph = toastEl.querySelector(`.toast-glyph[data-glyph="${tone}"]`);
+  requestAnimationFrame(() => requestAnimationFrame(() => { if (glyph) glyph.dataset.state = "in"; }));
+  if (wasOpen) {
+    toastEl.classList.remove("is-bump");
+    void toastEl.offsetWidth;
+    toastEl.classList.add("is-bump");
+  }
   let action = elements.toast.querySelector(".toast-action");
   if (options.actionLabel && typeof options.onAction === "function") {
     if (!action) {
@@ -10532,7 +10727,7 @@ function showToast(message, options = {}) {
     action.hidden = false;
     action.onclick = () => {
       action.hidden = true;
-      elements.toast.classList.remove("show", "has-action");
+      elements.toast.classList.remove("show", "is-open", "has-action");
       options.onAction();
     };
     elements.toast.classList.add("has-action");
@@ -10540,9 +10735,21 @@ function showToast(message, options = {}) {
     if (action) action.hidden = true;
     elements.toast.classList.remove("has-action");
   }
-  elements.toast.classList.add("show");
+  const duration = options.duration || (options.actionLabel ? 5000 : tone === "warn" ? 3600 : 2600);
+  toastEl.style.setProperty("--toast-life", `${duration}ms`);
+  const timer = toastEl.querySelector(".toast-timer");
+  if (timer) { timer.style.animation = "none"; void timer.offsetWidth; timer.style.animation = ""; }
+  toastEl.classList.add("show", "is-open");
   window.clearTimeout(showToast.timer);
-  showToast.timer = window.setTimeout(() => elements.toast.classList.remove("show", "has-action"), options.actionLabel ? 5000 : 2200);
+  showToast.timer = window.setTimeout(() => toastEl.classList.remove("show", "is-open", "has-action", "is-bump"), duration);
+  if (!toastEl.dataset.bound) {
+    toastEl.dataset.bound = "1";
+    toastEl.addEventListener("click", (event) => {
+      if (event.target.closest(".toast-action")) return;
+      window.clearTimeout(showToast.timer);
+      toastEl.classList.remove("show", "is-open", "has-action", "is-bump");
+    });
+  }
 }
 window.PulseNoteShowToast = showToast; // ponte para notifications.js (script externo ao módulo)
 
@@ -10606,11 +10813,10 @@ function getCarryOverBalance(monthKey, workspaceId = activeWorkspaceId) {
 }
 
 // Registra o fechamento do mês ativo com um snapshot completo do período
-function closeMonth(monthKey, { silent = false } = {}) {
+function closeMonth(monthKey, { silent = false, confirmed = false } = {}) {
   if (!requireFinanceWorkspaceEdit()) return;
   if (!state.monthClosures) state.monthClosures = [];
-  if (isMonthClosed(monthKey)) { showToast("✓ Mês já fechado."); return; }
-
+  if (isMonthClosed(monthKey)) { showToast("Mês já fechado.", { tone: "info" }); return; }
   const entries = (state.finances || []).filter((f) => f.date.startsWith(monthKey) && (f.workspaceId || "personal") === activeWorkspaceId);
   const receitas = entries.filter((f) => f.type === "receita").reduce((s, f) => s + f.amount, 0);
   const despesas = entries.filter((f) => f.type === "despesa").reduce((s, f) => s + f.amount, 0);
@@ -10631,7 +10837,21 @@ function closeMonth(monthKey, { silent = false } = {}) {
     ? `Saldo do mês: ${formatCurrency(saldoProprio)}\nSaldo acumulado (com o mês anterior): ${formatCurrency(saldoFinal)}`
     : `Saldo: ${formatCurrency(saldoProprio)}`;
 
-  if (!silent && !confirm(`Fechar ${finMonthLabel(monthKey)}?\nReceitas: ${formatCurrency(receitas)}\nDespesas: ${formatCurrency(despesas)}\n${detalheSaldo}\n\nEsse saldo será somado automaticamente ao mês seguinte. Depois de fechar, não será possível adicionar ou editar lançamentos neste mês sem reabri-lo.`)) return;
+  // QA 18/11: o confirm() nativo passava despercebido (alguns navegadores e
+  // automações o aceitam sozinho). Agora o fechamento manual abre o painel do
+  // app com o resumo, e avisa quando o mês ainda está em andamento.
+  if (!silent && !confirmed) {
+    const current = monthKey >= todayIso.slice(0, 7);
+    finActionSheet({
+      title: `Fechar ${finMonthLabel(monthKey)}?`,
+      sub: `${current ? "O mês ainda está em andamento. " : ""}Saldo final de ${formatCurrency(saldoFinal)} (receitas ${formatCurrency(receitas)}, despesas ${formatCurrency(despesas)}) passa para o mês seguinte. Novos lançamentos ficam bloqueados até você reabrir.`,
+      actions: [
+        { label: current ? "Fechar mesmo assim" : "Fechar mês", icon: "lock", run: () => closeMonth(monthKey, { confirmed: true }) },
+        { label: "Cancelar", icon: "x", run: () => {} },
+      ],
+    });
+    return;
+  }
 
   state.monthClosures.push({
     monthKey,
@@ -10668,7 +10888,7 @@ function showMonthCloseRecap(monthKey, receitas, despesas, saldoFinal) {
   overlay.innerHTML = `
     <div class="modal-card month-close-recap">
       <div class="modal-header">
-        <h2>${finMonthLabel(monthKey)} fechado 🔒</h2>
+        <h2>${finMonthLabel(monthKey)} fechado ${bdIcon("lock")}</h2>
         <button class="icon-button" id="closeMonthRecap">${icon("x", 18)}</button>
       </div>
       <div class="modal-body month-close-recap-body">
@@ -11074,7 +11294,7 @@ function exportMonthReport(monthKey) {
   const byCat = {};
   entries.filter((f) => f.type === "despesa").forEach((f) => {
     const cat = findCategory(f.category);
-    if (!byCat[f.category]) byCat[f.category] = { label: cat.label.replace(/^\S+\s*/, ""), icon: cat.label.split(" ")[0], color: cat.color, total: 0, count: 0 };
+    if (!byCat[f.category]) byCat[f.category] = { label: cat.label.replace(/^\S+\s*/, ""), color: cat.color, total: 0, count: 0 };
     byCat[f.category].total += f.amount;
     byCat[f.category].count++;
   });
@@ -11177,7 +11397,7 @@ function exportMonthReport(monthKey) {
   .cat-list{display:grid;gap:8px}
   .cat-row{display:flex;align-items:center;gap:8px}
   .cat-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
-  .cat-name{flex:1;font-size:0.82rem;font-weight:600}
+  .cat-name{flex:1;font-size:0.82rem;font-weight:600;display:flex;align-items:center;gap:8px}.cat-dot{width:9px;height:9px;border-radius:3px;flex:none}
   .cat-pct{font-size:0.75rem;color:#8a9bb0;width:38px;text-align:right;flex-shrink:0}
   .cat-val{font-size:0.82rem;font-weight:700;color:#ff3b30;width:78px;text-align:right;flex-shrink:0}
   /* Tabela de lançamentos: o wrapper (.tbl-scroll) rola na horizontal em
@@ -11239,7 +11459,7 @@ function exportMonthReport(monthKey) {
   <!-- CABEÇALHO -->
   <div class="rpt-header">
     <div class="rpt-brand">
-      <div class="rpt-brand-mark">⚡</div>
+      <div class="rpt-brand-mark"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2.5-6 4 12 2.5-6H21"/></svg></div>
       <div>
         <div class="rpt-brand-name">PulseNote</div>
         <div class="rpt-brand-sub">Relatório Financeiro Mensal</div>
@@ -11249,7 +11469,7 @@ function exportMonthReport(monthKey) {
       <div class="rpt-month">${label}</div>
       <div class="rpt-meta">
         Titular <strong>${escapeHtml(userName)}</strong><br>
-        ${isClosed ? "✓ Mês fechado" : "Em aberto"} · Gerado em ${geradoEm}
+        ${isClosed ? "Mês fechado" : "Em aberto"} · Gerado em ${geradoEm}
       </div>
     </div>
   </div>
@@ -11303,7 +11523,7 @@ function exportMonthReport(monthKey) {
           const barPct = Math.min(100, Math.round(c.total / despesas * 100));
           return `<div class="cat-row">
             <span class="cat-dot" style="background:${c.color}"></span>
-            <span class="cat-name">${c.icon} ${escapeHtml(c.label)}</span>
+            <span class="cat-name"><i class="cat-dot" style="background:${c.color}"></i>${escapeHtml(c.label)}</span>
             <span class="cat-pct">${pct}%</span>
             <div style="flex:1;min-width:60px"><div class="bar-wrap"><div class="bar-fill" style="width:${barPct}%;background:${c.color}"></div></div></div>
             <span class="cat-val">${formatCurrency(c.total)}</span>
@@ -11736,7 +11956,7 @@ function bindAiQuickEntry() {
     wrap.hidden = false;
     blob.classList.toggle("is-thinking", mode === "thinking");
     blob.classList.toggle("is-done", mode === "done");
-    text.textContent = mode === "done" ? "Prontinho! ✓" : "Pulsinho tá com a IA nisso...";
+    text.textContent = mode === "done" ? "Prontinho!" : "Pulsinho tá com a IA nisso...";
     if (mode === "done") setTimeout(hideAiQuickMascot, 1100);
   }
 
@@ -12233,13 +12453,22 @@ function finDescriptionIconName(description, type) {
   return "";
 }
 
-// Categoria personalizada: usa o emoji escolhido pela pessoa ao criá-la.
-function finCustomCategoryEmoji(catId) {
+// Categoria personalizada: ícone SVG escolhido ao criá-la (campo `icon`) ou,
+// nas categorias antigas que só têm emoji no rótulo, o SVG equivalente.
+// A interface nunca exibe o emoji em si.
+function finCustomCategoryIcon(catId) {
   if (!catId || FIN_CATEGORY_ICONS[catId]) return "";
   const custom = (state.customCategories || []).find((c) => c && c.id === catId);
-  const label = String(custom?.label || "").trim();
-  const first = label.split(/\s+/)[0] || "";
-  return /\p{Extended_Pictographic}/u.test(first) ? first : "";
+  if (!custom) return "";
+  if (custom.icon) return custom.icon;
+  const first = String(custom.label || "").trim().split(/\s+/)[0] || "";
+  if (!/\p{Extended_Pictographic}/u.test(first)) return "tag";
+  return FIN_EMOJI_SVG[first] || FIN_EMOJI_SVG[first.replace(/️/g, "")] || "tag";
+}
+
+// Nome de ícone SVG para qualquer categoria (fixa ou personalizada).
+function finCategoryIconAny(catId, type) {
+  return finCategoryIconName(catId) || finCustomCategoryIcon(catId) || (type === "receita" ? "wallet" : "dots-circle");
 }
 
 function finTxIcon(entry) {
@@ -12253,19 +12482,11 @@ function finTxIcon(entry) {
 function finTxIconHtml(entry) {
   const byText = finDescriptionIconName(entry.description, entry.type);
   if (byText) return bdIcon(byText);
-  const byCat = finCategoryIconName(entry.category);
-  if (byCat) return bdIcon(byCat);
-  const emoji = finCustomCategoryEmoji(entry.category);
-  if (emoji) return `<span class="fin-emoji-ico" aria-hidden="true">${escapeHtml(emoji)}</span>`;
-  return bdIcon(entry.type === "receita" ? "wallet" : "dots-circle");
+  return bdIcon(finCategoryIconAny(entry.category, entry.type));
 }
 
 function finCategoryIconHtml(catId) {
-  const byCat = finCategoryIconName(catId);
-  if (byCat) return bdIcon(byCat);
-  const emoji = finCustomCategoryEmoji(catId);
-  if (emoji) return `<span class="fin-emoji-ico" aria-hidden="true">${escapeHtml(emoji)}</span>`;
-  return bdIcon("dots-circle");
+  return bdIcon(finCategoryIconAny(catId));
 }
 
 function finTrendHtml(current, previous, { inverse = false, prevKey } = {}) {
@@ -12410,14 +12631,27 @@ function renderFinKpis(monthKey) {
   set("#finSharedKpiAvatars", `${[...people.values()].slice(0, 3).map((name) => `<span class="bf-av" title="${escapeHtml(name)}">${escapeHtml(bdInitials(name))}</span>`).join("")}<button type="button" class="bf-av bf-av--add" data-fin-shared-add aria-label="Criar ou abrir espaço compartilhado">${bdIcon("plus")}</button>`);
 }
 
+// Soma dos limites por categoria e do que foi gasto SÓ nessas categorias.
+// Um limite de categoria nunca vira orçamento global do mês.
+function finLimitedSpend(monthKey, workspaceId = activeWorkspaceId) {
+  const goals = (state.finGoals || []).filter((g) => (g.workspaceId || "personal") === workspaceId && Number(g.limit) > 0);
+  const ids = new Set(goals.map((g) => g.categoryId));
+  const limits = goals.reduce((s, g) => s + (Number(g.limit) || 0), 0);
+  const spent = (state.finances || [])
+    .filter((f) => f.type === "despesa" && f.date?.startsWith(monthKey) && (f.workspaceId || "personal") === workspaceId && ids.has(f.category))
+    .reduce((s, f) => s + (Number(f.amount) || 0), 0);
+  return { limits, spent, count: ids.size };
+}
+
 function renderFinBudget(monthKey, receitas, despesas, saldo) {
-  const limits = (state.finGoals || []).filter((g) => (g.workspaceId || "personal") === activeWorkspaceId).reduce((s, g) => s + (Number(g.limit) || 0), 0);
+  const { limits, spent: limitedSpent } = finLimitedSpend(monthKey, activeWorkspaceId);
   const base = limits > 0 ? limits : receitas;
-  const pct = base > 0 ? Math.round((despesas / base) * 100) : 0;
+  const used = limits > 0 ? limitedSpent : despesas;
+  const pct = base > 0 ? Math.round((used / base) * 100) : 0;
   const set = (sel, text) => { const el = document.querySelector(sel); if (el) el.textContent = text; };
   set("#finBudgetTitle", `Uso do orçamento (${finMonthShort(monthKey)})`);
-  document.querySelector("#finBudgetTitle")?.insertAdjacentHTML("beforeend", ` <span class="bd-info" title="Despesas do mês comparadas ao total dos limites por categoria (ou às receitas, se não houver limites)">${bdIcon("info")}</span>`);
-  set("#finBudgetText", base > 0 ? `${formatCurrency(despesas)} de ${formatCurrency(base)}` : `${formatCurrency(despesas)} gastos`);
+  document.querySelector("#finBudgetTitle")?.insertAdjacentHTML("beforeend", ` <span class="bd-info" title="Gastos nas categorias com limite comparados à soma desses limites (ou todas as despesas comparadas às receitas, se não houver limites)">${bdIcon("info")}</span>`);
+  set("#finBudgetText", base > 0 ? `${formatCurrency(used)} de ${formatCurrency(base)}${limits > 0 ? " nas categorias com limite" : ""}` : `${formatCurrency(despesas)} gastos`);
   set("#finBudgetPct", base > 0 ? `${pct}%` : "—");
   const bar = document.querySelector("#finProgressBar");
   if (bar) {
@@ -12425,14 +12659,14 @@ function renderFinBudget(monthKey, receitas, despesas, saldo) {
     bar.style.background = "";
     bar.className = pct > 100 ? "over" : pct >= 85 ? "warn" : "";
   }
-  set("#finUsedLabel", limits > 0 ? `${pct}% do limite mensal usado` : `${pct}% das receitas usadas`);
+  set("#finUsedLabel", limits > 0 ? `${pct}% dos limites por categoria` : `${pct}% das receitas usadas`);
   const note = document.querySelector("#finMoodRow");
   let headline; let message; let tone;
   if (saldo < 0) { tone = "bad"; headline = "Saldo negativo"; message = "Saldo negativo neste mês. Vale rever as despesas."; }
   else if (!base) { tone = "neutral"; headline = "Sem orçamento definido"; message = "Defina limites por categoria em Controle para acompanhar aqui."; }
-  else if (pct > 100) { tone = "bad"; headline = "Acima do orçamento"; message = `Você gastou ${pct}% ${limits > 0 ? "do seu limite mensal" : "das receitas do mês"}.`; }
-  else if (pct >= 85) { tone = "warn"; headline = "Perto do limite"; message = `Você já usou ${pct}% ${limits > 0 ? "do seu limite mensal" : "das receitas do mês"}.`; }
-  else { tone = "good"; headline = "Dentro do orçamento"; message = `Você gastou ${pct}% ${limits > 0 ? "do seu limite mensal" : "das receitas do mês"}.`; }
+  else if (pct > 100) { tone = "bad"; headline = "Acima do orçamento"; message = `Você gastou ${pct}% ${limits > 0 ? "dos limites por categoria" : "das receitas do mês"}.`; }
+  else if (pct >= 85) { tone = "warn"; headline = "Perto do limite"; message = `Você já usou ${pct}% ${limits > 0 ? "dos limites por categoria" : "das receitas do mês"}.`; }
+  else { tone = "good"; headline = "Dentro do orçamento"; message = `Você gastou ${pct}% ${limits > 0 ? "dos limites por categoria" : "das receitas do mês"}.`; }
   set("#finBudgetHeadline", headline);
   set("#finMoodText", message);
   if (note) note.dataset.tone = tone;
@@ -12714,6 +12948,40 @@ function renderFinChart6m() {
   el.innerHTML = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}"><g class="grid">${grid}</g>${bars}</svg>`;
 }
 
+// "Tabs sliding" (transitions.dev): uma pílula única desliza até a aba
+// ativa em vez do sublinhado que pulava de uma aba para outra.
+function finMoveTabIndicator() {
+  const tabs = document.querySelector(".bf-tabs");
+  const active = tabs?.querySelector(".fin-tab-btn.active");
+  if (!tabs || !active) return;
+  let pill = tabs.querySelector(".bf-tab-pill");
+  if (!pill) {
+    pill = document.createElement("span");
+    pill.className = "bf-tab-pill";
+    pill.setAttribute("aria-hidden", "true");
+    tabs.prepend(pill);
+    tabs.classList.add("has-pill");
+  }
+  const box = tabs.getBoundingClientRect();
+  const rect = active.getBoundingClientRect();
+  if (!rect.width) return;
+  pill.style.setProperty("--x", `${rect.left - box.left + tabs.scrollLeft - tabs.clientLeft}px`);
+  pill.style.setProperty("--w", `${rect.width}px`);
+}
+window.addEventListener("resize", () => finMoveTabIndicator());
+
+// Entrada encenada (barras crescem, cartões sobem em cascata) só quando a
+// pessoa troca de aba ou abre Finanças — nunca a cada salvamento.
+function finPlayEntrance() {
+  const board = document.querySelector(".bf");
+  if (!board) return;
+  board.classList.remove("bf-anim");
+  void board.offsetWidth;
+  board.classList.add("bf-anim");
+  window.clearTimeout(finPlayEntrance.timer);
+  finPlayEntrance.timer = window.setTimeout(() => board.classList.remove("bf-anim"), 1400);
+}
+
 function setFinBoardTab(target) {
   document.querySelectorAll(".fin-tab-btn").forEach((t) => {
     const active = t.dataset.finTab === target;
@@ -12723,6 +12991,8 @@ function setFinBoardTab(target) {
   document.querySelectorAll(".fin-tab-panel").forEach((p) => { p.hidden = p.dataset.finPanel !== target; });
   const board = document.querySelector(".bf");
   if (board) board.dataset.tab = target;
+  finMoveTabIndicator();
+  finPlayEntrance();
   const slot = document.querySelector(`[data-sim-slot="${target}"]`);
   const sim = document.querySelector("#finSimulatorCard");
   if (slot && sim && sim.parentElement !== slot) slot.appendChild(sim);
@@ -12872,6 +13142,51 @@ function bindFinanceBoard() {
   receiptInput?.addEventListener("change", () => { handleFinReceipt(receiptInput.files?.[0]); receiptInput.value = ""; });
 }
 
+// Barra de escopo (QA 18/11): com categoria ou busca ativas, os cartões de
+// Receitas/Despesas/Saldo mostram só esse recorte, enquanto o calendário
+// segue com os totais gerais. A barra fica acima dos indicadores em todas as
+// abas, cada cartão ganha o selo "Filtrado" e o calendário "Totais gerais".
+function renderFinScope(query) {
+  const bar = document.querySelector("#finScopeBar");
+  const parts = [];
+  if (finCategoryDrilldown) parts.push({ label: "Categoria", value: finCatName(finCategoryDrilldown), clear: "category" });
+  if (query) parts.push({ label: "Busca", value: `“${query}”`, clear: "search" });
+  const kpiFiltered = parts.length > 0;
+  if (finSelectedDay) parts.push({ label: "Dia", value: plannerShortDate(finSelectedDay), clear: "day", listOnly: true });
+  document.querySelectorAll("#finKpis .bf-kpi--in, #finKpis .bf-kpi--out, #finKpis .bf-kpi--bal").forEach((card) => {
+    card.classList.toggle("is-scoped", kpiFiltered);
+    let tag = card.querySelector(".bf-kpi-scope");
+    if (kpiFiltered && !tag) {
+      tag = document.createElement("span");
+      tag.className = "bf-kpi-scope";
+      tag.textContent = "Filtrado";
+      card.querySelector(".bf-kpi-body > span")?.after(tag);
+    } else if (!kpiFiltered) tag?.remove();
+  });
+  const calTag = document.querySelector("#finCalScopeTag");
+  if (calTag) calTag.hidden = !parts.length;
+  if (!bar) return;
+  bar.hidden = !parts.length;
+  if (!parts.length) { bar.innerHTML = ""; return; }
+  const note = kpiFiltered
+    ? "Receitas, despesas e saldo abaixo mostram só este recorte. O calendário continua com os totais gerais."
+    : "O dia filtra só a lista de lançamentos. Os indicadores mostram o mês inteiro.";
+  bar.innerHTML = `<span class="bf-scope-ico">${bdIcon("sliders")}</span>
+    <div class="bf-scope-chips">${parts.map((p) => `<span class="bf-scope-chip${p.listOnly ? " is-soft" : ""}"><em>${escapeHtml(p.label)}</em><strong>${escapeHtml(p.value)}</strong><button type="button" data-fin-scope-clear="${p.clear}" aria-label="Remover filtro ${escapeHtml(p.label)}">${bdIcon("x")}</button></span>`).join("")}</div>
+    <p class="bf-scope-note">${note}</p>
+    <button type="button" class="bf-scope-reset" data-fin-scope-clear="all">Limpar tudo</button>`;
+}
+
+document.addEventListener("click", (event) => {
+  const button = event.target.closest?.("[data-fin-scope-clear]");
+  if (!button) return;
+  const what = button.dataset.finScopeClear;
+  if (what === "category" || what === "all") finCategoryDrilldown = null;
+  if (what === "day" || what === "all") finSelectedDay = null;
+  if ((what === "search" || what === "all") && elements.globalSearch) elements.globalSearch.value = "";
+  renderFinances();
+});
+
 function renderFinances() {
   if (!document.querySelector("#financesView")) return;
   if (!state.finances) state.finances = [];
@@ -12932,6 +13247,7 @@ function renderFinances() {
       : "";
   }
   void usedPct;
+  renderFinScope(query);
   renderFinBudget(monthKey, receitas, despesas, saldo);
 
   const byCat = renderFinCategoryBars(entries, despesas, monthKey);
@@ -13084,8 +13400,11 @@ function syncCategoryTrigger() {
   const cat = findCategory(select.value);
   const iconEl = trigger.querySelector("#expenseCategoryTriggerIcon");
   const labelEl = trigger.querySelector("#expenseCategoryTriggerLabel");
-  if (iconEl) iconEl.textContent = cat.label.split(" ")[0];
-  if (labelEl) labelEl.textContent = cat.label.replace(/^\S+\s*/, "");
+  if (iconEl) {
+    iconEl.innerHTML = bdIcon(finCategoryIconAny(select.value));
+    iconEl.style.setProperty("--cat-color", cat.color || "var(--bd-primary)");
+  }
+  if (labelEl) labelEl.textContent = finCatName(select.value);
 }
 
 // Remove acentos e caixa para permitir busca "solta" (ex.: "cafe" encontra
@@ -13136,28 +13455,22 @@ function openCategoryPicker() {
 
   const modal = document.createElement("div");
   modal.id = "categoryPickerModal";
-  modal.style.cssText = `position:fixed;inset:0;z-index:600;background:rgba(0,0,0,0.45);
-    backdrop-filter:blur(6px);display:grid;place-items:center;padding:20px`;
+  modal.className = "cat-sheet-backdrop";
 
   modal.innerHTML = `
-    <div style="background:var(--surface);border-radius:24px;padding:22px;width:100%;max-width:380px;
-      box-shadow:0 20px 60px rgba(0,0,0,0.25);animation:fadeUp 200ms ease;
-      max-height:85dvh;display:flex;flex-direction:column">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-shrink:0">
+    <div class="cat-sheet t-modal" role="dialog" aria-modal="true" aria-labelledby="catSheetTitle">
+      <div class="cat-sheet-head">
         <div>
-          <h2 style="font-size:1.1rem;font-weight:800;color:var(--text)">${type === "receita" ? "De onde veio" : "Categoria"}</h2>
-          <p style="font-size:0.78rem;color:var(--muted);margin-top:2px">Busque, escolha ou crie a categoria exata que você quer</p>
+          <h2 id="catSheetTitle">${type === "receita" ? "De onde veio" : "Categoria"}</h2>
+          <p>Busque, escolha ou crie a categoria exata que você quer</p>
         </div>
-        <button id="closeCategoryPicker" style="width:30px;height:30px;border-radius:10px;
-          background:var(--surface2);border:none;font-size:1rem;cursor:pointer;color:var(--text2);flex-shrink:0">✕</button>
+        <button id="closeCategoryPicker" class="cat-sheet-close" type="button" aria-label="Fechar">${bdIcon("x")}</button>
       </div>
-
-      <input id="categoryPickerSearch" placeholder="Buscar ou digitar uma categoria nova..." autocomplete="off" maxlength="24"
-        style="width:100%;min-height:46px;border:1.5px solid var(--line);border-radius:14px;
-        padding:8px 14px;background:var(--surface2);color:var(--text);font-size:0.92rem;font:inherit;
-        margin-bottom:12px;flex-shrink:0"/>
-
-      <div id="categoryPickerList" style="display:grid;gap:6px;overflow-y:auto;padding-right:2px"></div>
+      <label class="cat-sheet-search">
+        ${bdIcon("search")}
+        <input id="categoryPickerSearch" placeholder="Buscar ou digitar uma categoria nova..." autocomplete="off" maxlength="24" aria-label="Buscar categoria"/>
+      </label>
+      <div id="categoryPickerList" class="cat-sheet-list" role="listbox" aria-label="Categorias"></div>
     </div>
   `;
 
@@ -13189,15 +13502,14 @@ function openCategoryPicker() {
     function rowHtml(cat) {
       const isSelected = cat.id === currentId;
       const isCustom = cat.id.startsWith("custom_");
-      const cleanLabel = cat.label.replace(/^\S+\s*/, "");
-      const emoji = cat.label.split(" ")[0];
+      const cleanLabel = finCatName(cat.id);
       return `
-        <div class="cat-picker-row${isSelected ? " is-selected" : ""}" data-cat-id="${escapeHtml(cat.id)}"
+        <div class="cat-picker-row${isSelected ? " is-selected" : ""}" data-cat-id="${escapeHtml(cat.id)}" role="option" aria-selected="${isSelected}" tabindex="0"
           style="--cat-color:${cat.color}">
-          <span class="cat-picker-icon">${emoji}</span>
+          <span class="cat-picker-icon">${bdIcon(finCategoryIconAny(cat.id, type))}</span>
           <span class="cat-picker-label">${escapeHtml(cleanLabel)}</span>
-          ${isSelected ? `<span class="cat-picker-check">✓</span>` : ""}
-          ${isCustom ? `<button type="button" class="cat-picker-delete" data-del-id="${escapeHtml(cat.id)}" title="Excluir categoria">🗑️</button>` : ""}
+          ${isSelected ? `<span class="cat-picker-check">${bdIcon("check")}</span>` : ""}
+          ${isCustom ? `<button type="button" class="cat-picker-delete" data-del-id="${escapeHtml(cat.id)}" title="Excluir categoria" aria-label="Excluir categoria ${escapeHtml(cleanLabel)}">${bdIcon("trash")}</button>` : ""}
         </div>`;
     }
 
@@ -13226,7 +13538,7 @@ function openCategoryPicker() {
       const sectionsHtml = [];
       if (mostUsed.length) {
         sectionsHtml.push(`<div class="cat-picker-section">
-          <p class="cat-picker-section-title" style="display:flex;align-items:center;gap:5px">${icon("star", 12)}Mais usadas</p>
+          <p class="cat-picker-section-title">${bdIcon("star")}Mais usadas</p>
           ${mostUsed.map(rowHtml).join("")}
         </div>`);
       }
@@ -13242,12 +13554,9 @@ function openCategoryPicker() {
     const emptyHtml = filtered.length ? "" : `<div style="padding:6px 2px">${emptyStateCompactHtml({ iconName: "inbox", text: "Nenhuma categoria encontrada." })}</div>`;
 
     const createHtml = (query || "").trim() && !hasExactMatch ? `
-      <button type="button" id="categoryPickerCreate" data-name="${escapeHtml(query.trim())}"
-        style="display:flex;align-items:center;gap:10px;padding:12px;border-radius:14px;cursor:pointer;
-        border:1.5px dashed var(--accent);background:var(--accent-soft);color:var(--accent);
-        font-weight:700;font-size:0.88rem;margin-top:2px;width:100%;text-align:left;font-family:inherit">
-        <span style="font-size:1.1rem;flex-shrink:0">➕</span>
-        <span>Criar categoria "${escapeHtml(query.trim())}"</span>
+      <button type="button" id="categoryPickerCreate" class="cat-sheet-create" data-name="${escapeHtml(query.trim())}">
+        <span class="cat-sheet-create-ico">${bdIcon("plus")}</span>
+        <span>Criar categoria “${escapeHtml(query.trim())}”</span>
       </button>` : "";
 
     listEl.innerHTML = bodyHtml + emptyHtml + createHtml;
@@ -13256,6 +13565,9 @@ function openCategoryPicker() {
       row.addEventListener("click", (e) => {
         if (e.target.closest(".cat-picker-delete")) return;
         selectCategory(row.dataset.catId);
+      });
+      row.addEventListener("keydown", (e) => {
+        if ((e.key === "Enter" || e.key === " ") && !e.target.closest(".cat-picker-delete")) { e.preventDefault(); selectCategory(row.dataset.catId); }
       });
     });
     listEl.querySelectorAll(".cat-picker-delete").forEach((btn) => {
@@ -13287,109 +13599,84 @@ function openCategoryPicker() {
 
   modal.querySelector("#closeCategoryPicker").addEventListener("click", closePicker);
   modal.addEventListener("click", (e) => { if (e.target === modal) closePicker(); });
+  modal.addEventListener("keydown", (e) => { if (e.key === "Escape") closePicker(); });
+  requestAnimationFrame(() => modal.classList.add("is-open"));
 }
 
-// Catálogo de ícones do "Nova categoria", organizado em grupos temáticos
-// (em vez de uma lista única de emojis soltos) — assim dá pra oferecer
-// muito mais opções sem virar bagunça: a pessoa navega por abas curtas
-// (Casa, Alimentação, Transporte...) em vez de rolar uma parede de emoji,
-// ou digita no campo de busca e encontra o ícone certo na hora.
-// Cada ícone carrega um nome pesquisável (em português, sem acento na hora
-// da comparação) — é o que permite a busca por texto funcionar de verdade.
+// v2 Finanças: catálogo de ícones em SVG (traço único, mesmo desenho do
+// resto do app) — no lugar da parede de emojis. Cada ícone guarda um
+// "token" (o emoji antigo) só para manter o formato do rótulo salvo
+// ("<token> Nome"), que o servidor e o WhatsApp já sabem ler; a interface
+// nunca mais mostra o emoji, sempre o SVG.
 const NEW_CATEGORY_ICON_GROUPS = [
-  { key: "casa", label: "🏠 Casa", icons: [
-    ["🏠","casa"], ["💡","luz energia"], ["🚿","chuveiro água"], ["🔑","chave aluguel"],
-    ["🛋️","sofá móveis"], ["🧹","limpeza faxina"], ["🪴","planta jardim"], ["📺","tv televisão"],
-    ["🧺","lavanderia roupa"], ["🛏️","cama quarto"], ["🔥","gás fogão"], ["🧯","manutenção reforma"],
-    ["🪑","cadeira mobília"], ["🚪","porta condomínio"],
+  { key: "casa", label: "Casa", icons: [
+    ["home", "casa moradia aluguel", "🏠"], ["bolt", "luz energia", "💡"], ["droplet", "água chuveiro", "🚿"],
+    ["flame", "gás fogão", "🔥"], ["key", "chave aluguel imóvel", "🔑"], ["building", "condomínio prédio", "🏢"],
+    ["wrench", "manutenção reforma conserto", "🔧"], ["leaf", "planta jardim limpeza", "🪴"], ["paint", "decoração pintura", "🎨"],
   ]},
-  { key: "alimentacao", label: "🍔 Alimentação", icons: [
-    ["🍔","lanche hambúrguer"], ["🛒","mercado supermercado"], ["🍕","pizza"], ["☕","café"],
-    ["🍷","vinho bebida"], ["🍺","cerveja bar"], ["🍰","doce sobremesa"], ["🥗","salada saudável"],
-    ["🍣","sushi japonês"], ["🥪","sanduíche"], ["🍜","macarrão comida"], ["🍳","comida caseira ovo"],
-    ["🧃","suco bebida"], ["🍽️","restaurante refeição"],
+  { key: "alimentacao", label: "Alimentação", icons: [
+    ["cart", "mercado supermercado feira", "🛒"], ["fork", "restaurante refeição almoço", "🍽️"], ["coffee", "café padaria", "☕"],
+    ["bag", "delivery ifood lanche", "🍔"],
   ]},
-  { key: "transporte", label: "🚗 Transporte", icons: [
-    ["🚗","carro"], ["⛽","combustível gasolina"], ["🚕","táxi"], ["🚌","ônibus"],
-    ["🚲","bicicleta"], ["🛵","moto"], ["🅿️","estacionamento"], ["🚆","trem"],
-    ["🚉","metrô estação"], ["🛣️","estrada pedágio"], ["🚙","carro suv"], ["🔧","manutenção mecânico"],
+  { key: "transporte", label: "Transporte", icons: [
+    ["car", "carro uber táxi estacionamento", "🚗"], ["fuel", "combustível gasolina posto", "⛽"], ["bus", "ônibus metrô trem", "🚌"],
+    ["bike", "bicicleta moto patinete", "🚲"], ["plane", "viagem avião passagem", "✈️"],
   ]},
-  { key: "saude", label: "💊 Saúde", icons: [
-    ["💊","remédio farmácia"], ["🏋️","academia treino"], ["🧘","yoga bem-estar"], ["💅","estética beleza"],
-    ["🦷","dentista"], ["👓","óculos"], ["🩺","médico consulta"], ["🧴","cuidados higiene"],
-    ["🧠","psicólogo terapia"], ["😷","saúde remédio"], ["🩹","farmácia curativo"], ["🏥","hospital plano"],
+  { key: "saude", label: "Saúde e cuidado", icons: [
+    ["pill", "remédio farmácia", "💊"], ["heart", "médico consulta saúde plano", "🩺"], ["tooth", "dentista", "🦷"],
+    ["dumbbell", "academia treino esporte", "🏋️"], ["scissors", "beleza cabelo estética", "💅"],
   ]},
-  { key: "lazer", label: "🎬 Lazer", icons: [
-    ["🎬","cinema filme"], ["🎮","jogo videogame"], ["🎉","festa evento"], ["🎵","música show"],
-    ["📷","fotografia hobby"], ["⚽","esporte futebol"], ["🎲","jogo tabuleiro"], ["🎨","arte hobby"],
-    ["🎤","show karaokê"], ["🍿","cinema pipoca"], ["🎳","boliche lazer"], ["🎯","hobby diversão"],
+  { key: "lazer", label: "Lazer", icons: [
+    ["film", "cinema filme streaming", "🎬"], ["music", "música show spotify", "🎵"], ["gamepad", "jogo videogame", "🎮"],
+    ["ticket", "ingresso evento teatro", "🎟️"], ["balloon", "festa aniversário", "🎉"], ["camera", "fotografia hobby", "📷"],
+    ["globe", "turismo passeio internacional", "🌍"],
   ]},
-  { key: "educacao", label: "🎓 Educação", icons: [
-    ["🎓","faculdade formatura"], ["📚","livros estudo"], ["✏️","material escolar"], ["🖊️","caneta escrita"],
-    ["🏫","escola curso"], ["🧑‍🏫","aula professor"], ["💻","curso online"], ["📖","leitura livro"],
-    ["🧮","matemática cálculo"], ["🔬","ciência laboratório"],
+  { key: "estudo", label: "Estudo e trabalho", icons: [
+    ["graduation", "faculdade curso escola", "🎓"], ["book", "livros leitura", "📚"], ["briefcase", "trabalho escritório", "💼"],
+    ["laptop", "computador notebook home office", "💻"], ["phone", "celular telefone", "📱"], ["wifi", "internet wifi", "📶"],
+    ["tv", "tv streaming assinatura", "📺"], ["cloud", "nuvem armazenamento", "☁️"],
   ]},
-  { key: "trabalho", label: "💼 Trabalho", icons: [
-    ["💼","trabalho emprego"], ["💻","computador notebook"], ["📈","investimento gráfico"], ["📊","relatório análise"],
-    ["🗂️","documentos arquivo"], ["📎","escritório material"], ["🧑‍💻","home office"], ["🖨️","impressora"],
-    ["📅","agenda reunião"], ["✉️","email correspondência"],
+  { key: "compras", label: "Compras e pessoas", icons: [
+    ["shirt", "roupa calçado moda", "👕"], ["gem", "joia acessório luxo", "💎"], ["gift", "presente", "🎁"],
+    ["family", "família filhos", "👨‍👩‍👧"], ["baby", "bebê criança", "👶"], ["paw", "pet cachorro gato ração", "🐾"],
+    ["hand-heart", "doação caridade dízimo", "🎗️"], ["box", "compras pacote clube", "📦"],
   ]},
-  { key: "compras", label: "🛍️ Compras", icons: [
-    ["👗","roupa vestido"], ["👟","tênis calçado"], ["💍","joia presente"], ["🛍️","compras loja"],
-    ["📱","celular eletrônico"], ["🧸","brinquedo"], ["👜","bolsa acessório"], ["🕶️","óculos acessório"],
-    ["👔","roupa social"], ["🎒","mochila"], ["🛋️","móveis decoração"], ["🧴","cosmético beleza"],
+  { key: "financas", label: "Dinheiro", icons: [
+    ["piggy", "poupança reserva guardar", "💰"], ["bank", "banco empréstimo", "🏦"], ["card", "cartão crédito fatura", "💳"],
+    ["receipt", "boleto conta imposto taxa", "🧾"], ["umbrella", "seguro proteção", "🛡️"], ["coin", "moeda dinheiro pix", "🪙"],
+    ["trend-up", "investimento ações rendimento", "📈"], ["tag", "venda etiqueta", "🏷️"], ["trophy", "prêmio bônus", "🏆"],
+    ["repeat", "assinatura recorrente", "🔁"],
   ]},
-  { key: "tecnologia", label: "💻 Tecnologia", icons: [
-    ["💻","notebook computador"], ["📱","celular smartphone"], ["🖥️","monitor desktop"], ["🎧","fone áudio"],
-    ["⌨️","teclado periférico"], ["🖱️","mouse periférico"], ["🔌","carregador cabo"], ["📷","câmera equipamento"],
-    ["🕹️","controle videogame"], ["📡","internet wifi"],
-  ]},
-  { key: "pets", label: "🐾 Pets", icons: [
-    ["🐾","pet animal"], ["🐶","cachorro"], ["🐱","gato"], ["🦴","ração petisco"],
-    ["🐠","peixe aquário"], ["🐦","pássaro"], ["🏥","veterinário"], ["🛁","banho tosa"],
-  ]},
-  { key: "familia", label: "👶 Família", icons: [
-    ["👶","bebê filho"], ["👨‍👩‍👧","família"], ["🍼","mamadeira bebê"], ["🧸","brinquedo criança"],
-    ["🎠","criança lazer"], ["🧑‍🍼","cuidados bebê"], ["🏫","escola filho"], ["👵","idoso avó"],
-  ]},
-  { key: "presentes", label: "🎁 Presentes", icons: [
-    ["🎁","presente"], ["🎂","aniversário bolo"], ["💐","flores"], ["🎈","festa balão"],
-    ["🎊","comemoração"], ["💝","presente carinho"], ["🎉","celebração"],
-  ]},
-  { key: "financas", label: "💰 Finanças", icons: [
-    ["💰","dinheiro poupança"], ["🏦","banco"], ["🧾","conta boleto"], ["🛡️","seguro proteção"],
-    ["💳","cartão crédito"], ["📉","gasto queda"], ["🎗️","doação"], ["🪙","moeda economia"],
-    ["📑","imposto documento"], ["💸","gasto dinheiro"],
-  ]},
-  { key: "investimentos", label: "📈 Investimentos", icons: [
-    ["📈","investimento alta"], ["📊","ações gráfico"], ["🏦","renda fixa banco"], ["🪙","criptomoeda moeda"],
-    ["💹","bolsa mercado"], ["🏠","imóvel patrimônio"], ["💎","patrimônio valor"],
-  ]},
-  { key: "contas", label: "🧾 Contas", icons: [
-    ["🧾","boleto conta"], ["💡","luz energia"], ["🚿","água"], ["📶","internet telefone"],
-    ["📄","documento cobrança"], ["🏢","condomínio"], ["🔥","gás"],
-  ]},
-  { key: "assinaturas", label: "🔁 Assinaturas", icons: [
-    ["🔁","assinatura recorrente"], ["📺","streaming vídeo"], ["🎵","streaming música"], ["📰","jornal revista"],
-    ["☁️","nuvem armazenamento"], ["🎮","assinatura jogos"], ["📦","clube assinatura"],
-  ]},
-  { key: "viagem", label: "✈️ Viagem", icons: [
-    ["✈️","viagem avião"], ["🧳","mala bagagem"], ["🗺️","turismo mapa"], ["🏖️","praia férias"],
-    ["🏨","hotel hospedagem"], ["🚢","cruzeiro navio"], ["🏔️","montanha trilha"], ["🗽","turismo passeio"],
-    ["🚀","aventura viagem"], ["🌍","mundo internacional"],
-  ]},
-  { key: "outros", label: "📦 Outros", icons: [
-    ["📦","outros geral"], ["🔧","manutenção reparo"], ["❓","diverso"], ["⭐","favorito especial"],
-    ["🔖","etiqueta marcador"], ["✨","especial diverso"], ["🧩","diverso variado"], ["📌","importante fixo"],
+  { key: "outros", label: "Outros", icons: [
+    ["star", "favorito especial", "⭐"], ["sparkle", "especial diverso", "✨"], ["flag", "importante marcador", "📌"],
+    ["target", "meta objetivo", "🎯"], ["dots-circle", "outros geral", "❓"],
   ]},
 ];
 
-// Achata o catálogo acima numa lista única de { emoji, name, groupKey } —
-// usada pela busca, que precisa procurar em todos os grupos de uma vez
-// (a pessoa não deveria ter que adivinhar em qual aba está o ícone certo).
+// Lista única { svg, name, token } usada pela busca (procura em todos os grupos).
 const NEW_CATEGORY_ICON_FLAT = NEW_CATEGORY_ICON_GROUPS.flatMap((g) =>
-  g.icons.map(([emoji, name]) => ({ emoji, name, groupKey: g.key }))
+  g.icons.map(([svg, name, token]) => ({ svg, name, token, groupKey: g.key }))
 );
+
+// Emojis de categorias personalizadas antigas → ícone SVG equivalente.
+const FIN_EMOJI_SVG = {
+  "🏠":"home","💡":"bolt","🚿":"droplet","🔑":"key","🛋️":"home","🧹":"leaf","🪴":"leaf","📺":"tv","🧺":"shirt","🛏️":"home","🔥":"flame","🧯":"wrench","🪑":"home","🚪":"building",
+  "🍔":"bag","🛒":"cart","🍕":"fork","☕":"coffee","🍷":"fork","🍺":"fork","🍰":"coffee","🥗":"fork","🍣":"fork","🥪":"fork","🍜":"fork","🍳":"fork","🧃":"coffee","🍽️":"fork",
+  "🚗":"car","⛽":"fuel","🚕":"car","🚌":"bus","🚲":"bike","🛵":"bike","🅿️":"car","🚆":"bus","🚉":"bus","🛣️":"car","🚙":"car","🔧":"wrench",
+  "💊":"pill","🏋️":"dumbbell","🧘":"heart","💅":"scissors","🦷":"tooth","👓":"heart","🩺":"heart","🧴":"scissors","🧠":"heart","😷":"pill","🩹":"pill","🏥":"heart",
+  "🎬":"film","🎮":"gamepad","🎉":"balloon","🎵":"music","📷":"camera","⚽":"dumbbell","🎲":"gamepad","🎨":"paint","🎤":"music","🍿":"film","🎳":"ticket","🎯":"target","🎟️":"ticket",
+  "🎓":"graduation","📚":"book","✏️":"book","🖊️":"book","🏫":"graduation","🧑‍🏫":"graduation","💻":"laptop","📖":"book","🧮":"book","🔬":"graduation",
+  "💼":"briefcase","📈":"trend-up","📊":"trend-up","🗂️":"folder","📎":"briefcase","🧑‍💻":"laptop","🖨️":"laptop","📅":"calendar",
+  "👗":"shirt","👟":"shirt","💍":"gem","🛍️":"bag","📱":"phone","🧸":"gift","👜":"bag","🕶️":"shirt","👔":"shirt","🎒":"bag","👕":"shirt",
+  "🖥️":"laptop","🎧":"music","⌨️":"laptop","🖱️":"laptop","🔌":"bolt","🕹️":"gamepad","📡":"wifi","📶":"wifi",
+  "🐾":"paw","🐶":"paw","🐱":"paw","🦴":"paw","🐠":"paw","🐦":"paw","🛁":"paw",
+  "👶":"baby","👨‍👩‍👧":"family","🍼":"baby","🎠":"baby","🧑‍🍼":"baby","👵":"family",
+  "🎁":"gift","🎂":"balloon","💐":"gift","🎈":"balloon","🎊":"balloon","💝":"gift",
+  "💰":"piggy","🏦":"bank","🧾":"receipt","🛡️":"umbrella","💳":"card","📉":"trend-up","🎗️":"hand-heart","🪙":"coin","📑":"receipt","💸":"coin",
+  "💹":"trend-up","💎":"gem","📄":"receipt","🏢":"building","🔁":"repeat","📰":"book","☁️":"cloud","📦":"box",
+  "✈️":"plane","🧳":"plane","🗺️":"globe","🏖️":"sun","🏨":"building","🚢":"globe","🏔️":"globe","🗽":"globe","🚀":"plane","🌍":"globe",
+  "❓":"dots-circle","⭐":"star","🔖":"tag","✨":"sparkle","🧩":"box","📌":"flag","🏷️":"tag","🏆":"trophy","🤝":"hand-heart","💵":"coin",
+};
 
 const NEW_CATEGORY_COLOR_OPTIONS = [
   "#8b5cf6","#5ac8fa","#ffd60a","#ff6b6b","#ff3b30","#ff375f","#ff2d55","#ff6482",
@@ -13413,7 +13700,7 @@ function openNewCategoryPrompt(prefillName) {
   modal.innerHTML = `
     <div class="modal-card new-category-card">
       <div class="modal-header new-category-header">
-        <button class="icon-button" id="closeNewCategory" aria-label="Fechar">✕</button>
+        <button class="icon-button" id="closeNewCategory" aria-label="Fechar">${bdIcon("x")}</button>
       </div>
       <div class="modal-body new-category-body">
         <div class="new-category-intro">
@@ -13424,7 +13711,7 @@ function openNewCategoryPrompt(prefillName) {
           <p class="new-category-hint">
             Crie exatamente a categoria que você precisa, com o nome, ícone e cor que fizerem sentido pra você.
           </p>
-          <span class="new-category-badge">ℹ️ Vai valer apenas para ${isReceita ? "receitas" : "despesas"}</span>
+          <span class="new-category-badge">${bdIcon("info")}Vai valer apenas para ${isReceita ? "receitas" : "despesas"}</span>
         </div>
 
         <label class="new-category-field">
@@ -13465,7 +13752,7 @@ function openNewCategoryPrompt(prefillName) {
         <div id="newCategoryError" class="new-category-error"></div>
 
         <button id="saveNewCategory" class="primary-button new-category-save">
-          <span class="new-category-save-icon" aria-hidden="true">＋</span>
+          <span class="new-category-save-icon" aria-hidden="true">${bdIcon("plus")}</span>
           <span class="new-category-save-label">Criar categoria</span>
         </button>
       </div>
@@ -13474,7 +13761,8 @@ function openNewCategoryPrompt(prefillName) {
 
   document.body.appendChild(modal);
 
-  let selectedEmoji = groups[0].icons[0][0];
+  let selectedSvg = groups[0].icons[0][0];
+  let selectedEmoji = groups[0].icons[0][2];
   let selectedColor = colorOptions[0];
   let searchQuery = "";
 
@@ -13491,7 +13779,7 @@ function openNewCategoryPrompt(prefillName) {
   // Preview em tempo real: reflete nome, ícone e cor conforme a pessoa
   // escolhe, pra ela ver exatamente como a categoria vai ficar antes de criar.
   function updatePreview() {
-    previewIconEl.textContent = selectedEmoji;
+    previewIconEl.innerHTML = bdIcon(selectedSvg);
     previewIconEl.style.background = `${selectedColor}22`;
     previewIconEl.style.color = selectedColor;
     const name = nameInput?.value.trim();
@@ -13513,7 +13801,7 @@ function openNewCategoryPrompt(prefillName) {
       const q = normalizeForSearch(searchQuery);
       const matches = NEW_CATEGORY_ICON_FLAT.filter((it) => normalizeForSearch(it.name).includes(q));
       sections = matches.length
-        ? [{ label: "🔎 Resultados", icons: matches.map((it) => [it.emoji, it.name]) }]
+        ? [{ label: "Resultados", icons: matches.map((it) => [it.svg, it.name, it.token]) }]
         : [];
     } else {
       sections = groups;
@@ -13524,10 +13812,10 @@ function openNewCategoryPrompt(prefillName) {
 
     emojiPickerEl.innerHTML = sections.map((section) => `
       <div class="new-category-icon-section">
-        <p class="new-category-icon-section-title">${section.label}</p>
+        <p class="new-category-icon-section-title">${escapeHtml(section.label)}</p>
         <div class="new-category-emoji-grid">
-          ${section.icons.map(([emoji, name]) => `
-            <button type="button" class="cat-emoji-btn${emoji === selectedEmoji ? " active" : ""}" data-emoji="${emoji}" title="${escapeHtml(name)}" aria-label="${escapeHtml(name)}">${emoji}</button>
+          ${section.icons.map(([svg, name, token]) => `
+            <button type="button" class="cat-emoji-btn cat-svg-btn${svg === selectedSvg ? " active" : ""}" data-svg="${svg}" data-emoji="${token}" title="${escapeHtml(name)}" aria-label="${escapeHtml(name)}" aria-pressed="${svg === selectedSvg}">${bdIcon(svg)}</button>
           `).join("")}
         </div>
       </div>
@@ -13536,6 +13824,8 @@ function openNewCategoryPrompt(prefillName) {
     emojiPickerEl.querySelectorAll(".cat-emoji-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
         selectedEmoji = btn.dataset.emoji;
+        selectedSvg = btn.dataset.svg;
+        emojiPickerEl.querySelectorAll(".cat-emoji-btn").forEach((b) => b.setAttribute("aria-pressed", String(b === btn)));
         emojiPickerEl.querySelectorAll(".cat-emoji-btn").forEach((b) => b.classList.remove("active"));
         btn.classList.add("active");
         updatePreview();
@@ -13620,6 +13910,7 @@ function openNewCategoryPrompt(prefillName) {
     state.customCategories.push({
       id,
       label: `${selectedEmoji} ${name}`,
+      icon: selectedSvg,
       color: selectedColor,
       type: activeType,
     });
@@ -13627,7 +13918,7 @@ function openNewCategoryPrompt(prefillName) {
 
     populateCategorySelect(id, activeType);
     modal.remove();
-    showToast(`✅ Categoria "${name}" criada!`);
+    showToast(`Categoria “${name}” criada.`, { tone: "success" });
   });
 }
 
@@ -14053,14 +14344,127 @@ function openFinAccountActions(id) {
 }
 
 // ---------- Cartões ----------
+// v2: cada cartão vira uma miniatura de cartão de verdade — gradiente do
+// emissor, chip EMV, símbolo de aproximação e a bandeira desenhada em SVG
+// (no lugar das antigas pílulas "nu"/"VISA" em texto).
+const FIN_CARD_ISSUERS = [
+  [/nubank|\bnu\b|roxinho/, "nu", "Nubank", ["9b2cf0", "5b0fb0", "33076e"]],
+  [/itau|personnalite/, "itau", "Itaú", ["ff8a1f", "ec7000", "a84c00"]],
+  [/\binter\b|banco inter/, "inter", "Inter", ["ff9d3c", "ff7a00", "d14d00"]],
+  [/\bc6\b|c6 ?bank|carbon/, "c6", "C6 Bank", ["3a3a3f", "1c1c20", "0b0b0d"]],
+  [/santander/, "santander", "Santander", ["ff3b3b", "ec0000", "9b0000"]],
+  [/bradesco|next\b/, "bradesco", "Bradesco", ["e1194b", "cc092f", "80001b"]],
+  [/banco do brasil|\bbb\b|ourocard/, "bb", "Banco do Brasil", ["1f5fd1", "0038a8", "00226b"]],
+  [/caixa/, "caixa", "Caixa", ["1a7fd1", "005ca9", "003a6b"]],
+  [/\bxp\b|xp investimentos/, "xp", "XP", ["2b2b2b", "151515", "000"]],
+  [/btg/, "btg", "BTG", ["17345f", "0b1f3a", "050f1e"]],
+  [/picpay/, "picpay", "PicPay", ["2be08a", "11c76f", "078a4b"]],
+  [/mercado ?pago/, "mp", "Mercado Pago", ["2cc5ff", "00a5e6", "0063b0"]],
+  [/neon/, "neon", "Neon", ["26f0ff", "00b8e6", "0067c7"]],
+  [/\bwill\b|will bank/, "will", "Will Bank", ["ffe14d", "ffcc00", "d9a400"]],
+  [/sicredi|sicoob/, "coop", "Cooperativa", ["5cc23a", "3fa110", "236a05"]],
+  [/porto/, "porto", "Porto", ["2f7dd6", "1458a8", "0a3366"]],
+];
+const FIN_CARD_FALLBACK_TONES = [
+  ["7c6cff", "5b4dff", "2c1fb8"], ["25c7d9", "118fb4", "0b5779"], ["f2557a", "c42d5d", "7a143a"],
+  ["2fd08b", "16a26a", "0b6040"], ["ffad42", "f07f1a", "a14d06"], ["4b5875", "2c3448", "141a28"],
+];
+
 function finCardBrand(card) {
-  const name = finNormalize(card.name);
-  if (/nubank|\bnu\b/.test(name)) return { cls: "nu", label: "nu" };
-  if (/visa/.test(name)) return { cls: "visa", label: "VISA" };
-  if (/master/.test(name)) return { cls: "master", label: "" };
-  if (/amex|american/.test(name)) return { cls: "amex", label: "AMEX" };
-  if (/\belo\b/.test(name)) return { cls: "elo", label: "elo" };
-  return { cls: "generic", label: bdInitials(card.name || "C") };
+  const name = finNormalize(`${card.name || ""} ${card.institution || ""}`);
+  const issuer = FIN_CARD_ISSUERS.find(([re]) => re.test(name));
+  let network = card.network || "";
+  if (!network) {
+    if (/visa/.test(name)) network = "visa";
+    else if (/master|mc\b/.test(name)) network = "master";
+    else if (/amex|american/.test(name)) network = "amex";
+    else if (/\belo\b/.test(name)) network = "elo";
+    else if (/hiper/.test(name)) network = "hiper";
+    else if (issuer && ["nu", "inter", "c6", "xp", "btg", "neon", "mp", "picpay"].includes(issuer[1])) network = "master";
+    else if (issuer) network = "visa";
+  }
+  let tones;
+  if (issuer) tones = issuer[3];
+  else {
+    const seed = [...String(card.name || "C")].reduce((s, ch) => s + ch.charCodeAt(0), 0);
+    tones = FIN_CARD_FALLBACK_TONES[seed % FIN_CARD_FALLBACK_TONES.length];
+  }
+  return {
+    cls: issuer ? issuer[1] : "generic",
+    issuer: issuer ? issuer[2] : (card.name || "Cartão"),
+    network,
+    tones,
+    light: issuer?.[1] === "will",
+  };
+}
+
+// Bandeiras desenhadas em SVG (proporções aproximadas das marcas).
+function finCardNetworkSvg(network) {
+  switch (network) {
+    case "master":
+      return `<svg class="cc-net cc-net--master" viewBox="0 0 38 24" role="img" aria-label="Mastercard"><circle cx="14" cy="12" r="9" fill="rgb(235,0,27)"/><circle cx="24" cy="12" r="9" fill="rgb(247,158,27)"/><path d="M19 4.6a9 9 0 010 14.8 9 9 0 010-14.8z" fill="rgb(255,95,0)"/></svg>`;
+    case "visa":
+      return `<svg class="cc-net cc-net--visa" viewBox="0 0 50 16" role="img" aria-label="Visa"><text x="25" y="14" text-anchor="middle" fill="currentColor" font-family="Arial Black, Arial, sans-serif" font-size="16.5" font-weight="900" font-style="italic" letter-spacing="-.4">VISA</text></svg>`;
+    case "elo":
+      return `<svg class="cc-net cc-net--elo" viewBox="0 0 40 18" role="img" aria-label="Elo"><circle cx="8" cy="9" r="7" fill="none" stroke="rgb(255,203,5)" stroke-width="2.6" stroke-dasharray="14.6 29.4" transform="rotate(-150 8 9)"/><circle cx="8" cy="9" r="7" fill="none" stroke="rgb(0,164,224)" stroke-width="2.6" stroke-dasharray="14.6 29.4" transform="rotate(-30 8 9)"/><circle cx="8" cy="9" r="7" fill="none" stroke="rgb(239,65,35)" stroke-width="2.6" stroke-dasharray="14.6 29.4" transform="rotate(90 8 9)"/><text x="18" y="13.2" fill="currentColor" font-family="inherit" font-size="12" font-weight="800">elo</text></svg>`;
+    case "amex":
+      return `<svg class="cc-net cc-net--amex" viewBox="0 0 40 18" role="img" aria-label="American Express"><rect width="40" height="18" rx="3" fill="rgb(46,119,188)"/><text x="20" y="12.6" text-anchor="middle" fill="rgb(255,255,255)" font-family="inherit" font-size="8.6" font-weight="900" letter-spacing=".6">AMEX</text></svg>`;
+    case "hiper":
+      return `<svg class="cc-net cc-net--hiper" viewBox="0 0 46 16" role="img" aria-label="Hipercard"><rect width="46" height="16" rx="3" fill="rgb(179,19,27)"/><text x="23" y="11.3" text-anchor="middle" fill="rgb(255,255,255)" font-family="inherit" font-size="8" font-weight="800" font-style="italic">Hipercard</text></svg>`;
+    default:
+      return `<svg class="cc-net cc-net--other" viewBox="0 0 24 24" role="img" aria-label="Cartão" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="6" width="18" height="12" rx="2.5"/><path d="M3 10h18"/></svg>`;
+  }
+}
+
+const FIN_CARD_CHIP_SVG = `<svg class="cc-chip" viewBox="0 0 30 22" aria-hidden="true"><defs><linearGradient id="ccChipG" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="rgb(251,231,168)"/><stop offset=".45" stop-color="rgb(217,178,90)"/><stop offset="1" stop-color="rgb(169,124,42)"/></linearGradient></defs><rect x=".5" y=".5" width="29" height="21" rx="4.5" fill="url(#ccChipG)" stroke="rgba(0,0,0,.18)"/><path d="M10 .5v6.500M20 .5v6.500M10 21.5V15M20 21.5V15M.5 7.500h9.500v7H.5M29.500 7.500H20v7h9.500M10 11h10" fill="none" stroke="rgba(90,60,10,.45)" stroke-width=".9"/></svg>`;
+
+// Miniatura do cartão. size: "sm" (lista) | "lg" (prévia do formulário).
+function finCardArtHtml(card, { size = "sm" } = {}) {
+  const brand = finCardBrand(card);
+  const [a, b, c] = brand.tones.map((hex) => "#" + hex);
+  const issuer = escapeHtml(brand.issuer);
+  const last4 = escapeHtml(card.last4 || "");
+  return `<span class="bf-cc-art is-${size} is-${brand.cls}${brand.light ? " is-light" : ""} t-tilt" style="--cc-a:${a};--cc-b:${b};--cc-c:${c}" aria-hidden="true">
+    <span class="bf-cc-face t-tilt-card">
+      <span class="bf-cc-sheen"></span>
+      ${size === "lg" ? `<span class="bf-cc-issuer">${issuer}</span>` : ""}
+      ${FIN_CARD_CHIP_SVG}
+      <svg class="cc-wave i" aria-hidden="true"><use href="#i-contactless"/></svg>
+      ${size === "lg" ? `<span class="bf-cc-number">•••• •••• •••• ${last4 || "0000"}</span>` : last4 ? `<span class="bf-cc-last">${last4}</span>` : ""}
+      ${finCardNetworkSvg(brand.network)}
+      <span class="t-tilt-glare"></span>
+    </span>
+  </span>`;
+}
+
+// "3D tilt" do transitions.dev nas miniaturas: o cartão inclina em direção
+// ao ponteiro com brilho que segue o cursor e volta suave ao sair.
+function bindFinCardTilt(root) {
+  if (!root || root.dataset.tiltBound || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+  root.dataset.tiltBound = "1";
+  const MAX = 14;
+  root.addEventListener("pointermove", (event) => {
+    const host = event.target.closest?.(".t-tilt");
+    if (!host) return;
+    const face = host.querySelector(".t-tilt-card");
+    const r = host.getBoundingClientRect();
+    const px = (event.clientX - r.left) / r.width;
+    const py = (event.clientY - r.top) / r.height;
+    host.style.setProperty("--tilt-rx", `${((0.5 - py) * MAX).toFixed(2)}deg`);
+    host.style.setProperty("--tilt-ry", `${((px - 0.5) * MAX).toFixed(2)}deg`);
+    host.style.setProperty("--tilt-gx", `${(px * 100).toFixed(1)}%`);
+    host.style.setProperty("--tilt-gy", `${(py * 100).toFixed(1)}%`);
+    host.classList.add("is-hover");
+    face?.classList.add("is-tilting");
+  });
+  root.addEventListener("pointerout", (event) => {
+    const host = event.target.closest?.(".t-tilt");
+    if (!host || host.contains(event.relatedTarget)) return;
+    host.style.setProperty("--tilt-rx", "0deg");
+    host.style.setProperty("--tilt-ry", "0deg");
+    host.classList.remove("is-hover");
+    host.querySelector(".t-tilt-card")?.classList.remove("is-tilting");
+  });
 }
 
 function finCardInvoiceInfo(card) {
@@ -14079,17 +14483,20 @@ function renderCreditCards() {
     root.innerHTML = `<div class="bf-empty">${bdIcon("card")}<strong>Nenhum cartão cadastrado</strong><span>Adicione um cartão para acompanhar faturas e parcelas.</span></div>`;
     return;
   }
-  root.innerHTML = cards.map((card) => {
-    const brand = finCardBrand(card);
-    const { next } = finCardInvoiceInfo(card);
+  root.innerHTML = cards.map((card, index) => {
+    const { next, committed, limit, usage } = finCardInvoiceInfo(card);
     const overdue = next && next.dueDate < todayIso;
     const due = next ? `${overdue ? "Venceu em" : "Vence em"} ${finDayMonth(next.dueDate)}` : `Vence dia ${card.dueDay}`;
-    return `<button type="button" class="bf-ccard" data-card-id="${escapeHtml(card.id)}">
-      <span class="bf-brand is-${brand.cls}" aria-hidden="true">${escapeHtml(brand.label)}</span>
-      <span class="bf-row-copy"><strong>${escapeHtml(card.name)}${card.last4 ? ` <em>• Final ${escapeHtml(card.last4)}</em>` : ""}</strong><small>Fatura atual</small></span>
+    const tone = usage >= 90 ? "is-red" : usage >= 70 ? "is-amber" : "is-violet";
+    const available = Math.max(0, limit - committed);
+    return `<button type="button" class="bf-ccard v2" data-card-id="${escapeHtml(card.id)}" style="--i:${index}" aria-label="${escapeHtml(`${card.name}${card.last4 ? `, final ${card.last4}` : ""}. Fatura atual ${formatCurrency(next ? next.amount : 0)}, ${due}. ${usage}% do limite usado.`)}">
+      ${finCardArtHtml(card)}
+      <span class="bf-row-copy"><strong>${escapeHtml(card.name)}${card.last4 ? ` <em>•• ${escapeHtml(card.last4)}</em>` : ""}</strong><small>Fatura atual</small></span>
       <span class="bf-ccard-val"><b>${formatCurrency(next ? next.amount : 0)}</b><small${overdue ? ' class="is-late"' : ""}>${due}</small></span>
+      ${limit > 0 ? `<span class="bf-ccard-usage"><span class="bf-bar ${tone}" style="--pct:${Math.min(100, usage)}"><i style="width:${Math.min(100, usage)}%"></i></span><small><span>${usage}% do limite</span><span>Disponível ${formatCurrency(available)}</span></small></span>` : ""}
     </button>`;
   }).join("");
+  bindFinCardTilt(root);
 }
 
 function openFinCardActions(cardId) {
@@ -14560,6 +14967,14 @@ function setFinAutoSection(key = "") {
   finAutoOpen = key;
   const board = document.querySelector("#finAutoBoard");
   if (board) board.dataset.open = key;
+  // O botão flutuante muda de ação conforme a seção: o nome acessível
+  // acompanha (antes ficava sempre "Nova recorrência").
+  const fab = document.querySelector("#finAutoFab");
+  if (fab) {
+    const label = { rules: "Nova regra", sched: "Agendar conta", suggest: "Revisar sugestões" }[key] || "Nova recorrência";
+    fab.setAttribute("aria-label", label);
+    fab.title = label;
+  }
   if (key) requestAnimationFrame(() => document.querySelector(`[data-auto-sec="${key}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" }));
 }
 
@@ -14775,9 +15190,9 @@ function openRecurrentActionMenu(anchorBtn, id) {
   const menu = document.createElement("div");
   menu.className = "fin-recur-menu";
   menu.innerHTML = `
-    <button type="button" data-action="apply">▶ Lançar agora</button>
-    <button type="button" data-action="toggleSkip">${skipped ? "↩ Reativar neste mês" : "⏭ Pular este mês"}</button>
-    <button type="button" data-action="delete" class="danger">✕ Excluir recorrência</button>
+    <button type="button" data-action="apply">${bdIcon("play")}<span>Lançar agora</span></button>
+    <button type="button" data-action="toggleSkip">${skipped ? `${bdIcon("undo")}<span>Reativar neste mês</span>` : `${bdIcon("arrow-right")}<span>Pular este mês</span>`}</button>
+    <button type="button" data-action="delete" class="danger">${bdIcon("trash")}<span>Excluir recorrência</span></button>
   `;
   document.body.appendChild(menu);
 

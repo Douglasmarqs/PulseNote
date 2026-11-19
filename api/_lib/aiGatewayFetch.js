@@ -8,6 +8,27 @@ function extractJson(text) {
 // ou a resposta veio em texto corrido). Antes isso descartava a resposta
 // inteira e o Pulsinho caía no modo sem IA. Agora aproveitamos o "reply"
 // — ou o texto puro — e só desistimos se não houver nada legível.
+// QA 18/11: respostas apareciam com restos do JSON estruturado, como
+// `navigationTarget":"planner"}` ou `Follow-ups":[...]`. Remove qualquer
+// campo técnico colado ao texto que vai para a pessoa.
+const TECH_FIELDS = "followUps|follow-ups|follow_ups|navigationTarget|navigation_target|actions|lookups|asks|kind|provider|reply";
+function stripStructuredArtifacts(text) {
+  let out = String(text ?? "");
+  // Se o próprio texto é um JSON com "reply", usa só o reply.
+  const trimmed = out.trim();
+  if (/^\{[\s\S]*"reply"\s*:/.test(trimmed)) {
+    try { const parsed = JSON.parse(trimmed); if (typeof parsed?.reply === "string") out = parsed.reply; } catch { /* segue limpando */ }
+  }
+  // Corta a partir do primeiro campo técnico (com ou sem aspas/vírgula antes).
+  const cut = new RegExp(`(?:["']?\\s*[,}]?\\s*)?["']?\\b(?:${TECH_FIELDS})\\b["']?\\s*:\\s*[\\[{"'nt0-9-][\\s\\S]*$`, "i");
+  out = out.replace(cut, "");
+  return out
+    .replace(/["'}\]\s,]+$/u, (tail) => (/[}\]]/.test(tail) ? "" : tail))
+    .replace(/\bremindes?\b/gi, "lembretes")
+    .replace(/\\n/g, "\n")
+    .trim();
+}
+
 function salvageReply(text) {
   const raw = String(text || "").trim().replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
   if (!raw) return null;
@@ -17,11 +38,12 @@ function salvageReply(text) {
     // Cortado no meio de um escape: remove a barra solta do fim.
     if (/\\$/.test(value) && !/\\\\$/.test(value)) value = value.slice(0, -1);
     try { value = JSON.parse(`"${value}"`); } catch { value = value.replace(/\\n/g, "\n").replace(/\\"/g, '"'); }
-    value = String(value).trim();
+    value = stripStructuredArtifacts(String(value).trim());
     return value ? { reply: value, salvaged: true } : null;
   }
-  // Texto corrido, sem cara de JSON: vale como resposta.
-  if (!/^[{\[]/.test(raw) && raw.length >= 2) return { reply: raw.slice(0, 2400), salvaged: true };
+  // Texto corrido, sem cara de JSON: vale como resposta (sem restos de campos).
+  const plainText = stripStructuredArtifacts(raw);
+  if (!/^[{\[]/.test(plainText) && plainText.length >= 2) return { reply: plainText.slice(0, 2400), salvaged: true };
   return null;
 }
 
@@ -253,4 +275,4 @@ async function fetchGatewayJson({ systemPrompt, userPrompt, messages, label = "a
   return last;
 }
 
-module.exports = { fetchGatewayJson, gatewayCredential, gatewayCredentialSource, rememberRequestOidc, gatewayModels, normalizeMessages, salvageReply, _rateLimitedUntil: rateLimitedUntil };
+module.exports = { fetchGatewayJson, gatewayCredential, gatewayCredentialSource, rememberRequestOidc, gatewayModels, normalizeMessages, salvageReply, stripStructuredArtifacts, _rateLimitedUntil: rateLimitedUntil };

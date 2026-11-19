@@ -100,7 +100,7 @@
     </style>
 
     <!-- PWA: instalação e ícone na tela inicial -->
-    <link rel="manifest" href="manifest.json?v=20260922" />
+    <link rel="manifest" href="manifest.json?v=20261119" />
     <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png" />
     <link rel="shortcut icon" href="favicon.ico" />
@@ -115,7 +115,7 @@
     <link rel="dns-prefetch" href="https://www.gstatic.com" />
 
     <!-- iOS: ícone e comportamento de app instalado -->
-    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=20260922" />
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=20261119" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="PulseNote" />
@@ -137,6 +137,8 @@
     <link rel="stylesheet" href="/src/boards.css?v=16" />
     <!-- Refinos de novembro/2026: Pulsinho em balão, Planner, Notas e Finanças. -->
     <link rel="stylesheet" href="/src/refine.css?v=1" />
+    <!-- Finanças v2: cartões, barras, toast, escopo de filtros e scrollbars -->
+    <link rel="stylesheet" href="/src/finance-v2.css?v=1" />
   </head>
   <body class="bd">
     <!-- Tela de abertura já no HTML: aparece na primeira pintura, antes de
@@ -272,6 +274,20 @@
         <symbol id="i-smartphone" viewBox="0 0 24 24"><rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M11 18.5h2"/></symbol>
         <symbol id="i-share-ios" viewBox="0 0 24 24"><path d="M12 15V3.5"/><path d="M8 7.5l4-4 4 4"/><path d="M8.5 10.5H7a2 2 0 00-2 2V19a2 2 0 002 2h10a2 2 0 002-2v-6.5a2 2 0 00-2-2h-1.5"/></symbol>
         <symbol id="i-umbrella" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0118 0z"/><path d="M12 12v6.500a2 2 0 01-4 0"/></symbol>
+        <!-- v2 Finanças: ícones extras do seletor de categorias (no lugar dos emojis) -->
+        <symbol id="i-music" viewBox="0 0 24 24"><path d="M9 18V5.500l11-2V16"/><circle cx="6.500" cy="18" r="2.500"/><circle cx="17.500" cy="16" r="2.500"/></symbol>
+        <symbol id="i-film" viewBox="0 0 24 24"><rect x="3.500" y="4.500" width="17" height="15" rx="2.500"/><path d="M7.500 4.500v15M16.500 4.500v15M3.500 9.500h4M3.500 14.500h4M16.500 9.500h4M16.500 14.500h4"/></symbol>
+        <symbol id="i-bike" viewBox="0 0 24 24"><circle cx="5.500" cy="16.500" r="3.500"/><circle cx="18.500" cy="16.500" r="3.500"/><path d="M5.500 16.500l4-7h6l3 7M9.500 9.500L8 6.500H6M12.500 16.500l3-7M14 6.500h2.500"/></symbol>
+        <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.500"/><path d="M3.500 12h17M12 3.500c2.300 2.400 3.500 5.200 3.500 8.500s-1.200 6.100-3.500 8.500c-2.300-2.400-3.500-5.200-3.500-8.500S9.700 5.900 12 3.500z"/></symbol>
+        <symbol id="i-leaf" viewBox="0 0 24 24"><path d="M5 19c0-8 5-13 14-14-.5 9-5.500 14-13.500 14z"/><path d="M5 19l7-7"/></symbol>
+        <symbol id="i-baby" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.500"/><path d="M9.300 11h.01M14.700 11h.01M9.500 15c1.400 1.100 3.600 1.100 5 0M12 3.500c-1 1.200-.6 2.600.8 2.800"/></symbol>
+        <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M11 12l8.500-8.500M16 7l2.500 2.500M18.500 4.500L20.500 6.500"/></symbol>
+        <symbol id="i-tooth" viewBox="0 0 24 24"><path d="M12 6c-1.600-1.600-5.500-2.300-6.800.4-1.200 2.500.3 5 .8 7.100.6 2.500.7 6.500 2.500 6.500 1.700 0 1.500-4.500 3.500-4.500s1.800 4.500 3.500 4.500c1.800 0 1.900-4 2.500-6.500.5-2.100 2-4.600.8-7.100C17.500 3.700 13.600 4.400 12 6z"/></symbol>
+        <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M7 18.500h10.500a4 4 0 00.6-7.950A6 6 0 006.300 10.300 4.100 4.100 0 007 18.500z"/></symbol>
+        <symbol id="i-box" viewBox="0 0 24 24"><path d="M3.500 7.500L12 3.500l8.500 4v9L12 20.500l-8.500-4z"/><path d="M3.500 7.500L12 11.500l8.500-4M12 11.500v9M7.800 5.500l8.500 4"/></symbol>
+        <symbol id="i-gem" viewBox="0 0 24 24"><path d="M6.500 4h11l3.500 5-9 11L3 9z"/><path d="M3 9h18M9.500 4L8 9l4 11 4-11-1.500-5"/></symbol>
+        <symbol id="i-paint" viewBox="0 0 24 24"><path d="M12 3.500a8.500 8.500 0 100 17c1.300 0 1.900-.9 1.500-2-.5-1.200.3-2.500 1.600-2.500H17a3.500 3.500 0 003.500-3.500c0-5-3.800-9-8.500-9z"/><circle cx="7.500" cy="11.500" r="1"/><circle cx="10" cy="7.500" r="1"/><circle cx="15" cy="7.500" r="1"/></symbol>
+        <symbol id="i-contactless" viewBox="0 0 24 24"><path d="M8.500 8.500a5 5 0 010 7M12 6a8.500 8.500 0 010 12M15.500 3.500a12 12 0 010 17"/></symbol>
       </defs>
     </svg>
     <div class="bd-shell">
@@ -343,7 +359,7 @@
           <div class="modal-card" style="max-width:520px">
             <div class="modal-header">
               <h2>Busca global</h2>
-              <button class="icon-button" id="closeGlobalPalette">✕</button>
+              <button class="icon-button" id="closeGlobalPalette" aria-label="Fechar"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button>
             </div>
             <div class="modal-body" style="display:grid;gap:12px">
               <input id="globalPaletteInput" type="text" placeholder="Buscar em notas, tarefas, agenda e finanças..." autocomplete="off" class="field-input" />
@@ -482,10 +498,10 @@
                 <button type="button" class="bd-chat-jump" id="bdChatJump" hidden aria-label="Ir para a mensagem mais recente"><svg class="i"><use href="#i-chev-down"/></svg></button>
               </div>
               <div class="bd-chat-suggest" id="bdChatSuggest" role="group" aria-label="Sugestões para começar" hidden>
-                <button type="button" data-chat-suggest="Gastei 30 no mercado">💸 Gastei 30 no mercado</button>
-                <button type="button" data-chat-suggest="O que tenho para hoje?">📅 O que tenho para hoje?</button>
+                <button type="button" data-chat-suggest="Gastei 30 no mercado"><svg class="i" aria-hidden="true"><use href="#i-cart"/></svg>Gastei 30 no mercado</button>
+                <button type="button" data-chat-suggest="O que tenho para hoje?"><svg class="i" aria-hidden="true"><use href="#i-calendar"/></svg>O que tenho para hoje?</button>
                 <button type="button" data-chat-suggest="Me lembra de pagar a luz amanhã às 9h">⏰ Lembrete amanhã às 9h</button>
-                <button type="button" data-chat-suggest="Como estão meus gastos este mês?">📊 Meus gastos do mês</button>
+                <button type="button" data-chat-suggest="Como estão meus gastos este mês?"><svg class="i" aria-hidden="true"><use href="#i-bars"/></svg>Meus gastos do mês</button>
               </div>
               <form id="pulseCommandForm" class="bd-chat-form">
                 <div class="bd-composer">
@@ -523,7 +539,7 @@
           </section>
 
           <section class="autopilot-entry" aria-labelledby="autopilotEntryTitle">
-            <span class="autopilot-entry-icon" aria-hidden="true">✦</span>
+            <span class="autopilot-entry-icon" aria-hidden="true"><svg class="i" aria-hidden="true"><use href="#i-sparkle"/></svg></span>
             <div class="autopilot-entry-copy">
               <span class="autopilot-eyebrow">Pulse Autopilot</span>
               <h2 id="autopilotEntryTitle">Próxima ação, sem adivinhação</h2>
@@ -787,7 +803,7 @@
                 <p class="pulse-kicker">Projeção financeira</p>
                 <h2 id="pulseForecastDetailTitle">Como seu mês pode terminar</h2>
               </div>
-              <button type="button" id="pulseForecastDetailClose" class="icon-button" aria-label="Fechar detalhes">✕</button>
+              <button type="button" id="pulseForecastDetailClose" class="icon-button" aria-label="Fechar detalhes"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button>
             </div>
             <div class="modal-body pulse-forecast-detail-body">
               <p id="pulseForecastDetailDescription" class="pulse-forecast-detail-copy">Uma leitura dos saldos e compromissos que já estão registrados.</p>
@@ -817,7 +833,7 @@
           <div class="modal-card pqa-card" style="max-width:420px">
             <div class="modal-header">
               <h2>Adicionar ao planner</h2>
-              <button class="icon-button" id="closePlannerQuickAdd">✕</button>
+              <button class="icon-button" id="closePlannerQuickAdd" aria-label="Fechar"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button>
             </div>
             <div class="modal-body" style="display:grid;gap:14px">
               <div class="segmented" id="plannerQuickAddType">
@@ -1020,7 +1036,7 @@
             <div class="modal-card bp-goals-modal" role="dialog" aria-modal="true" aria-labelledby="plannerGoalsTitle">
               <div class="modal-header">
                 <h2 id="plannerGoalsTitle">Metas</h2>
-                <button type="button" class="icon-button" id="plannerGoalsClose" aria-label="Fechar">✕</button>
+                <button type="button" class="icon-button" id="plannerGoalsClose" aria-label="Fechar"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button>
               </div>
               <div class="modal-body">
                 <button type="button" class="bd-btn bd-btn--primary" id="plannerNewGoalBtn"><svg class="i"><use href="#i-plus"/></svg>Nova meta</button>
@@ -1254,6 +1270,10 @@
               </div>
             </div>
 
+            <!-- Escopo ativo: mostra, acima dos indicadores e em todas as abas,
+                 qual recorte está valendo (categoria/busca/dia). -->
+            <div class="bf-scope" id="finScopeBar" role="status" aria-live="polite" hidden></div>
+
             <!-- Resumo do mês -->
             <div class="bf-kpis" id="finKpis">
               <article class="bd-card bf-kpi bf-kpi--in">
@@ -1332,7 +1352,7 @@
                     <div class="bf-field"><span>Categoria <i>*</i></span>
                       <div class="bf-catpick">
                         <button type="button" id="expenseCategoryTrigger" class="bf-input bf-cat-trigger fin-cat-trigger" aria-haspopup="true">
-                          <span id="expenseCategoryTriggerIcon" class="fin-cat-trigger-icon">🍔</span>
+                          <span id="expenseCategoryTriggerIcon" class="fin-cat-trigger-icon"><svg class="i" aria-hidden="true"><use href="#i-fork"/></svg></span>
                           <span id="expenseCategoryTriggerLabel" class="fin-cat-trigger-label">Selecione uma categoria</span>
                           <svg class="i bf-chev"><use href="#i-chev-down"/></svg>
                         </button>
@@ -1356,6 +1376,7 @@
                   <header class="bf-cal-head">
                     <button type="button" class="bd-icon-btn" data-fin-cal="-1" aria-label="Mês anterior"><svg class="i"><use href="#i-chev-left"/></svg></button>
                     <h3 id="finCalMonthLabel">Mês</h3>
+                    <span class="bf-scope-tag" id="finCalScopeTag" title="O calendário sempre mostra todos os lançamentos do mês" hidden>Totais gerais</span>
                     <button type="button" class="bd-icon-btn" data-fin-cal="1" aria-label="Próximo mês"><svg class="i"><use href="#i-chev-right"/></svg></button>
                   </header>
                   <div class="bf-cal-week" aria-hidden="true"><span>D</span><span>S</span><span>T</span><span>Q</span><span>Q</span><span>S</span><span>S</span></div>
@@ -1418,7 +1439,7 @@
                   <div id="finChart6m" class="bf-cmp-chart fin-chart6m"></div>
                 </section>
                 <section class="bd-card bf-budget" id="finBudgetCard">
-                  <header class="bd-card-head"><h3 id="finBudgetTitle">Uso do orçamento <span class="bd-info" title="Despesas do mês comparadas ao total dos limites por categoria (ou às receitas, se não houver limites)"><svg class="i"><use href="#i-info"/></svg></span></h3></header>
+                  <header class="bd-card-head"><h3 id="finBudgetTitle">Uso do orçamento <span class="bd-info" title="Gastos nas categorias com limite comparados à soma desses limites (ou todas as despesas comparadas às receitas, se não houver limites)"><svg class="i"><use href="#i-info"/></svg></span></h3></header>
                   <div class="bf-budget-top"><span id="finBudgetText">R$ 0,00</span><b id="finBudgetPct">0%</b></div>
                   <div class="bf-bar"><i id="finProgressBar" style="width:0%"></i></div>
                   <span id="finUsedLabel" class="sr-only">0% das receitas usadas</span>
@@ -1484,8 +1505,10 @@
                   <div class="bf-pop" id="finCardFormWrap" hidden>
                     <form id="finCardForm" class="bf-pop-card">
                       <h4 class="bf-pop-title">Novo cartão</h4>
+                      <div class="bf-cc-preview" id="finCardPreview" aria-hidden="true"></div>
                       <label>Nome<input id="finCardName" maxlength="40" placeholder="Ex.: Nubank" required /></label>
                       <label>Final<input id="finCardLast4" inputmode="numeric" maxlength="4" pattern="[0-9]{0,4}" placeholder="1234" /></label>
+                      <label>Bandeira<select id="finCardNetwork"><option value="">Detectar pelo nome</option><option value="visa">Visa</option><option value="master">Mastercard</option><option value="elo">Elo</option><option value="amex">American Express</option><option value="hiper">Hipercard</option><option value="other">Outra</option></select></label>
                       <label>Limite<input id="finCardLimit" inputmode="decimal" placeholder="0,00" required /></label>
                       <label>Fecha dia<input id="finCardClosingDay" type="number" min="1" max="31" value="1" required /></label>
                       <label>Vence dia<input id="finCardDueDay" type="number" min="1" max="31" value="10" required /></label>
@@ -1985,11 +2008,26 @@
     </nav>
 
     <!-- Toast -->
-    <div id="toast" class="toast" role="status" aria-live="polite">
-      <div class="toast-mascot" aria-hidden="true">
-        <div class="pulsinho__eyes"><span class="pulsinho__eye"></span><span class="pulsinho__eye"></span></div>
-      </div>
+    <!-- Toast v2: transitions.dev "Toast open/close" (sobe com fade, blur e
+         escala) + "Success check" no ícone (traço desenhado com rotação/blur). -->
+    <div id="toast" class="toast t-toast" role="status" aria-live="polite" data-tone="success">
+      <span class="toast-icon" aria-hidden="true">
+        <span class="toast-icon-glow"></span>
+        <span class="t-success-check toast-glyph" data-state="out" data-glyph="success">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 12.5l4 4 9-9"/></svg>
+        </span>
+        <span class="t-success-check toast-glyph" data-state="out" data-glyph="warn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6.5v7"/><path d="M12 17.6v.01"/></svg>
+        </span>
+        <span class="t-success-check toast-glyph" data-state="out" data-glyph="info">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 11v6"/><path d="M12 7.2v.01"/></svg>
+        </span>
+        <span class="t-success-check toast-glyph" data-state="out" data-glyph="delete">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7.5h14"/><path d="M9.5 7.5V5.5h5v2M7 7.5l.8 11h8.4l.8-11"/></svg>
+        </span>
+      </span>
       <span class="toast-text" id="toastText"></span>
+      <i class="toast-timer" aria-hidden="true"></i>
     </div>
 
     <!-- Datalists -->
@@ -2006,7 +2044,7 @@
       <div class="modal-card">
         <div class="modal-header">
           <h2 id="finGoalsModalTitle">Limite por categoria</h2>
-          <button class="icon-button" id="finCloseGoalsModal" aria-label="Fechar">✕</button>
+          <button class="icon-button" id="finCloseGoalsModal" aria-label="Fechar"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button>
         </div>
         <div class="modal-body" style="display:grid;gap:12px">
           <label class="field">
@@ -2111,7 +2149,7 @@
       <div class="modal-card">
         <div class="modal-header">
           <h2>Novo lançamento recorrente</h2>
-          <button class="icon-button" id="finCloseRecurModal">✕</button>
+          <button class="icon-button" id="finCloseRecurModal" aria-label="Fechar"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button>
         </div>
         <div class="modal-body" style="display:grid;gap:12px">
           <label class="field">
@@ -2166,7 +2204,7 @@
     <script src="/src/recurring-detector.js?v=1"></script>
     <script src="/src/card-installments.js?v=1"></script>
     <script src="/src/notifications.js?v=36" defer></script>
-    <script type="module" src="/src/app.js?v=54"></script>
+    <script type="module" src="/src/app.js?v=55"></script>
     <script type="module" src="/src/push-notifications.js?v=35"></script>
     <!-- Configuração inicial (primeiro acesso) — ver src/onboarding.js -->
   <div id="onboardingRoot" class="bdo" role="dialog" aria-modal="true" aria-labelledby="bdoTitle" hidden></div>

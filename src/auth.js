@@ -1,6 +1,6 @@
 // auth.js — Autenticação PulseNote via Firebase
 
-import { auth, googleProvider } from "./firebase-init.js";
+import { auth, googleProvider, sendVerificationEmail } from "./firebase-init.js";
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -268,7 +268,7 @@ if (registerForm) {
       // Envia o e-mail de confirmação. Se isso falhar (ex: rede instável),
       // a tela de verificação dentro do app tem um botão "Reenviar e-mail",
       // então não bloqueamos o cadastro por causa disso.
-      try { await sendEmailVerification(credential.user); }
+      try { await sendVerificationEmail(sendEmailVerification, credential.user); }
       catch (verifyErr) { console.error("Erro ao enviar verificação:", verifyErr); }
       // Cadastro OK → vai para o app (que vai exigir a confirmação do e-mail)
       finishSignIn();
