@@ -109,7 +109,7 @@ async function requestNotificationPermission() {
       return false;
     }
     localStorage.removeItem("pn_push_setup_status");
-    (window.PulseNoteShowToast || console.log)("🔔 Notificações ativadas neste aparelho!");
+    (window.PulseNoteShowToast || console.log)("Notificações ativadas neste aparelho.");
     runAllNotificationChecks(); // checa imediatamente após ativar
     return true;
   }
@@ -189,7 +189,7 @@ function checkTaskNotifications() {
     );
   } else if (summaryOn && dueToday.length > 0 && !alreadyNotifiedToday("tasks_today")) {
     fireNotification(
-      "📋 Tarefas para hoje",
+      "Tarefas para hoje",
       dueToday.length === 1
         ? `"${dueToday[0].title}" vence hoje.`
         : `Você tem ${dueToday.length} tarefas vencendo hoje.`,
@@ -219,7 +219,7 @@ function checkEventNotifications() {
       const notifyKey = `event_${event.id}`;
       if (!alreadyNotifiedToday(notifyKey)) {
         fireNotification(
-          "📅 Compromisso em breve",
+          "Compromisso em breve",
           `"${event.title}" às ${event.time}${event.location ? " · " + event.location : ""}`,
           `event-${event.id}`,
           "planner",
@@ -238,7 +238,7 @@ function checkGoalNotifications() {
     const percent = goal.target > 0 ? (goal.current / goal.target) * 100 : 0;
     if (percent >= 80 && percent < 100 && !alreadyNotifiedToday(`goal_${goal.id}_almost`)) {
       fireNotification(
-        "🎯 Quase lá!",
+        "Quase lá!",
         `"${goal.title}" está ${Math.round(percent)}% completa. Falta pouco!`,
         `goal-${goal.id}`,
         "planner",
@@ -264,14 +264,14 @@ function checkFinanceNotifications() {
 
   if (usedPct >= 90 && !alreadyNotifiedToday("finance_budget_critical")) {
     fireNotification(
-      "💸 Orçamento no limite",
+      "Orçamento no limite",
       `Você já usou ${usedPct}% das receitas deste mês.`,
       "finance-critical",
       "finances"
     );
   } else if (usedPct >= 70 && !alreadyNotifiedToday("finance_budget_warning")) {
     fireNotification(
-      "💰 Atenção ao orçamento",
+      "Atenção ao orçamento",
       `Você já usou ${usedPct}% das receitas deste mês.`,
       "finance-warning",
       "finances"

@@ -22,6 +22,18 @@ const { findBestMatches } = require("./parseCommandIntent");
 const { guessSpecificCategoryId } = require("./localTextFallback");
 const { learnedCategoryId } = require("./financeCategories");
 
+// Categorias amplas que podem ser refinadas pelo que está escrito na
+// descrição (ex.: "alimentação" + "Mercado" → Mercado).
+const BROAD_TO_SPECIFIC = {
+  alimentacao: ["mercado"],
+  transporte: ["combustivel"],
+  saude: ["academia", "beleza"],
+  contas: ["assinaturas", "moradia"],
+  lazer: ["eventos", "viagem", "assinaturas"],
+  outros: ["mercado", "alimentacao", "transporte", "combustivel", "saude", "contas", "moradia", "assinaturas", "pet", "educacao", "beleza", "academia", "roupas", "tecnologia"],
+};
+const BROAD_CATEGORY_IDS = new Set(Object.keys(BROAD_TO_SPECIFIC));
+
 const ACTION_TYPES = [
   "add_transaction", "add_task", "add_event", "add_note", "add_goal",
   "update_goal", "complete_task", "edit_transaction",
@@ -206,6 +218,13 @@ function normalizeAction(raw, ctx) {
     // Depois das regras, vale como a pessoa já categorizou essa descrição.
     const learned = rule ? "" : learnedCategoryId(state, description, kind, { categories });
     let categoryId = rule ? rule.categoryId : learned || (valid.some((c) => c.id === raw.categoryId) ? raw.categoryId : "");
+    // QA 18/11: "Gastei R$ 30 no mercado. Registre como alimentação" virava
+    // Restaurante/Delivery (id "alimentacao"). O estabelecimento/objeto
+    // explícito na descrição vence a categoria ampla escolhida pela IA.
+    if (categoryId && !rule && !learned && BROAD_CATEGORY_IDS.has(categoryId)) {
+      const specific = guessSpecificCategoryId(description, kind, categories);
+      if (specific && specific !== categoryId && (BROAD_TO_SPECIFIC[categoryId] || []).includes(specific)) categoryId = specific;
+    }
     if (!categoryId) categoryId = guessSpecificCategoryId(`${description} ${ctx.rawMessage || ""}`, kind, categories) || "";
     const lowConfidence = !rule && !learned && (!categoryId || raw.categoryConfidence === "baixa");
     if (!categoryId) categoryId = kind === "receita" ? "outros_receita" : "outros";
@@ -229,7 +248,7 @@ function normalizeAction(raw, ctx) {
       action: {
         type, risk: "auto", record, lowConfidence,
         categoryAlternatives: alternatives,
-        summary: `${kind === "receita" ? "💰 Receita" : "💸 Gasto"} de ${money(amount)} — ${record.description} (${categoryLabel(categories, categoryId)}), ${formatWhen(date, "", today)}`,
+        summary: `${kind === "receita" ? "Receita" : "Gasto"} de ${money(amount)} — ${record.description} (${categoryLabel(categories, categoryId)}), ${formatWhen(date, "", today)}`,
       },
     };
   }

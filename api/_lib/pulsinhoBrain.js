@@ -16,7 +16,7 @@
 //     regras fixas antes de qualquer gravação.
 // ============================================================
 
-const { fetchGatewayJson } = require("./aiGatewayFetch");
+const { fetchGatewayJson, stripStructuredArtifacts } = require("./aiGatewayFetch");
 const { fetchGeminiJson, fetchGeminiGrounded, geminiAllowedForPersonalText, GEMINI_MODEL } = require("./geminiFetch");
 const { buildFinanceForecast } = require("./financeForecast");
 const { normalizeActions, ACTION_TYPES, formatWhen, money, addDays } = require("./pulsinhoActions");
@@ -550,7 +550,7 @@ function isPureQuestion(message) {
 }
 
 function normalizeBrainOutput(parsed, ctx) {
-  const reply = String(parsed?.reply || "").replace(/\s+\n/g, "\n").trim().slice(0, 1800);
+  const reply = stripStructuredArtifacts(String(parsed?.reply || "")).replace(/\s+\n/g, "\n").trim().slice(0, 1800);
   const { actions, asks } = normalizeActions(parsed?.actions, ctx);
   if (isPureQuestion(ctx.rawMessage)) for (const action of actions) action.risk = "confirm";
   const followUps = asArray(parsed?.followUps).map((f) => String(f || "").trim().slice(0, 90)).filter(Boolean).slice(0, 3);

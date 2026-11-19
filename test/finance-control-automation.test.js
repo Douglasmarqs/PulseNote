@@ -68,8 +68,9 @@ test("regras preenchem tipo e categoria e contam execuções ao registrar", () =
 });
 
 test("fechamento automático fecha o mês anterior sem pedir confirmação", () => {
-  assert.match(app, /function closeMonth\(monthKey, \{ silent = false \} = \{\}\)/);
-  assert.match(app, /if \(!silent && !confirm\(`Fechar/);
+  assert.match(app, /function closeMonth\(monthKey, \{ silent = false, confirmed = false \} = \{\}\)/);
+  // Fechamento manual pede confirmação no painel do app (não no confirm() nativo).
+  assert.match(app, /if \(!silent && !confirmed\) \{\s*const current = monthKey >= todayIso\.slice\(0, 7\);\s*finActionSheet\(/);
   assert.match(app, /autoCloseFinMonths\(\);/);
   assert.match(app, /closeMonth\(previous, \{ silent: true \}\)/);
 });

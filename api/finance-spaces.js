@@ -204,7 +204,7 @@ module.exports = async (req, res) => {
     if (code.startsWith("auth/")) return res.status(401).json({ error: "unauthorized" });
     const known = new Set(["invite_not_found", "invite_forbidden", "space_not_found", "space_read_only", "space_conflict", "finance_space_too_large"]);
     if (known.has(code)) return res.status(code === "invite_forbidden" || code === "space_read_only" ? 403 : code === "space_conflict" ? 409 : code === "finance_space_too_large" ? 413 : 404).json({ error: code });
-    console.error("finance_spaces_failed", { code });
+    console.error("finance_spaces_failed", { code, action: req.body?.action || req.method, message: String(error?.message || "").slice(0, 300) });
     return res.status(500).json({ error: "finance_spaces_unavailable" });
   }
 };

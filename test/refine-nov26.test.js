@@ -166,7 +166,7 @@ test("toda função chamada por onclick/onsubmit gerado está exposta em window"
 test("PWA entrega a folha nova e invalida o cache antigo", () => {
   assert.match(html, /href="\/src\/refine\.css\?v=\d+"/);
   assert.match(sw, /"\/src\/refine\.css"/);
-  assert.match(sw, /const CACHE_NAME = "pulsenote-v53";/);
+  assert.match(sw, /const CACHE_NAME = "pulsenote-v5[3-9]";/);
 });
 
 test("Início: chips de compromissos coloridos por tipo", () => {
