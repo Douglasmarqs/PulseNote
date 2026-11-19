@@ -15,7 +15,10 @@ test("abertura: Pulsinho animado já no HTML (antes de qualquer CSS externo)", (
   for (const name of ["pnSplashEnter", "pnSplashLeave", "pnSplashRing", "pnSplashBeat", "pnSplashLook"]) {
     assert.match(html, new RegExp(`@keyframes ${name}`), name);
   }
-  assert.match(html, /prefers-reduced-motion: reduce\) \{ #appLoadingOverlay \* \{ animation: none !important; \} \}/);
+  // Movimento reduzido: abertura suave (fade/escala), não desligada.
+  assert.match(html, /prefers-reduced-motion: reduce\) \{\s*#appLoadingOverlay \.pulsinho-orbit/);
+  assert.match(html, /@keyframes pnSplashSoftIn/);
+  assert.match(app, /const minShow = reduceMotion \? 1100 : 1400;/);
   assert.match(app, /overlay\.classList\.add\("is-leaving"\)/);
 });
 

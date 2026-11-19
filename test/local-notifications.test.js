@@ -8,7 +8,7 @@ const source = fs.readFileSync(path.join(__dirname, "../src/notifications.js"), 
 const appSource = fs.readFileSync(path.join(__dirname, "../src/app.js"), "utf8");
 const dueAt = new Date("2026-09-10T09:00:00").getTime();
 
-function loadNotifications({ permission = "granted", notificationSupported = true, now = dueAt, state, localToday, pushResult = true } = {}) {
+function loadNotifications({ permission = "granted", notificationSupported = true, now = dueAt, state, localToday, localHour, pushResult = true } = {}) {
   const shown = [];
   const stored = new Map();
   let pushRegistrations = 0;
@@ -19,6 +19,9 @@ function loadNotifications({ permission = "granted", notificationSupported = tru
     getFullYear() { return localToday ? Number(localToday.slice(0, 4)) : super.getFullYear(); }
     getMonth() { return localToday ? Number(localToday.slice(5, 7)) - 1 : super.getMonth(); }
     getDate() { return localToday ? Number(localToday.slice(8, 10)) : super.getDate(); }
+    // Hora local fixa: o resultado não depende do fuso de quem roda os testes
+    // (a Vercel compila em UTC). Sem localHour, usa 12h (dentro da janela).
+    getHours() { return localHour ?? (localToday ? 12 : super.getHours()); }
   }
   class NotificationStub {
     static permission = permission;
@@ -146,6 +149,7 @@ test("resumo de tarefas usa o dia local, não a data UTC", async () => {
   const app = loadNotifications({
     now: new Date("2026-09-11T00:30:00Z").getTime(),
     localToday: "2026-09-10",
+    localHour: 21,
     state: {
       tasks: [{ id: "t1", title: "Hoje", status: "Pendente", dueDate: "2026-09-10", dueTime: "" }],
       events: [], goals: [], finances: [],
@@ -155,4 +159,37 @@ test("resumo de tarefas usa o dia local, não a data UTC", async () => {
   app.window.runAllNotificationChecks();
   await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual(app.shown.map((item) => item.tag), ["tasks-today"]);
+});
+
+test("anti-spam: resumos ficam quietos de madrugada e metas/orçamento não repetem", async () => {
+  const state = {
+    tasks: [{ id: "t1", title: "Hoje", status: "Pendente", dueDate: "2026-09-10", dueTime: "" }],
+    events: [],
+    goals: [{ id: "g1", title: "Ler", current: 9, target: 10 }],
+    finances: [{ type: "receita", amount: 100, date: "2026-09-01" }, { type: "despesa", amount: 80, date: "2026-09-02" }],
+  };
+  const night = loadNotifications({ localToday: "2026-09-10", localHour: 23, state });
+  night.stored.set("pn_notifications_enabled", "1");
+  night.window.runAllNotificationChecks();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(night.shown, [], "nada entre 22h e 8h");
+
+  const day = loadNotifications({ localToday: "2026-09-10", localHour: 10, state });
+  day.stored.set("pn_notifications_enabled", "1");
+  day.window.runAllNotificationChecks();
+  day.window.runAllNotificationChecks();
+  await new Promise((resolve) => setImmediate(resolve));
+  const tags = day.shown.map((item) => item.tag).sort();
+  assert.deepEqual(tags, ["finance-warning", "goal-g1", "tasks-today"], "cada aviso uma única vez");
+});
+
+test("anti-spam: com push registrado, o navegador não duplica os avisos do servidor", async () => {
+  const app = loadNotifications({
+    localToday: "2026-09-10",
+    state: { tasks: [{ id: "t1", title: "Hoje", status: "Pendente", dueDate: "2026-09-10", dueTime: "" }], events: [], goals: [], finances: [], fcmTokens: ["tok"] },
+  });
+  app.stored.set("pn_notifications_enabled", "1");
+  app.window.runAllNotificationChecks();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(app.shown, []);
 });

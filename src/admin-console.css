@@ -634,3 +634,11 @@ html:has(.ac-modal:not([hidden])), html:has(.ad-user-drawer.is-open), html:has(.
 }
 /* v26: painel sem zoom (pinça e toque duplo) */
 html, body { touch-action: manipulation; }
+
+/* Barra "Base de usuários": mesmo acabamento das barras do app (trilho
+   suave, brilho superior e segmentos com leve gradiente). */
+.ac-segbar { height: 12px; gap: 2px; padding: 2px; background: color-mix(in srgb, var(--bd-text, #e8ecff) 7%, transparent); box-shadow: 0 1px 1.5px rgba(0, 0, 0, .2) inset; }
+.ac-segbar span { position: relative; border-radius: 999px; background: linear-gradient(90deg, color-mix(in srgb, var(--c) 82%, #000), var(--c)); box-shadow: 0 0 10px -3px var(--c); }
+.ac-segbar span::before { content: ""; position: absolute; inset: 0 0 50% 0; border-radius: inherit; background: linear-gradient(180deg, rgba(255, 255, 255, .3), rgba(255, 255, 255, 0)); }
+.ad-integration-icon svg, .ad-operation > span svg { display: block; }
+.ad-operation > span { display: grid; place-items: center; }
