@@ -128,7 +128,8 @@ test("Notas: salvar não redesenha o app inteiro nem trava", () => {
   assert.doesNotMatch(close, /renderAll\(\)/);
   assert.match(app, /function queueNotePersist\(\)/);
   assert.match(app, /window\.addEventListener\("pagehide", flushNotePersist\);/);
-  assert.match(app, /label\.textContent = state === "saved" \? "Salvo" : "Salvando…";/);
+  // Selo com quatro estados (Editando / Salvando… / Salvo / Salvo no aparelho).
+  assert.match(app, /label\.textContent = ND_STATUS_LABELS\[state\];/);
   assert.doesNotMatch(app, /Anotacao (criada|atualizada|excluida)/);
 });
 

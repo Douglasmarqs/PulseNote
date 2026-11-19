@@ -613,10 +613,32 @@ html { scrollbar-color: color-mix(in srgb, var(--bd-text, #9aa3c7) 22%, transpar
   position: absolute;
   inset: 0;
   border-radius: 50%;
-  border: 2px solid color-mix(in srgb, var(--bd-amber) 30%, transparent);
-  border-top-color: var(--bd-amber);
-  animation: ndSpin .8s linear infinite;
 }
+/* Largura estável: o selo não "empurra" nada quando o texto troca. */
+.bn-nd-status > span { display: inline-block; min-width: 4.6em; }
+.bn-nd-status > span.is-swap { animation: ndTextSwap 260ms var(--ease-smooth-out) both; }
+@keyframes ndTextSwap { from { opacity: 0; filter: blur(3px); transform: translateY(2px); } to { opacity: 1; filter: none; transform: none; } }
+
+/* Editando: ponto calmo, sem girar (antes piscava "Salvando…" a cada tecla). */
+.bn-nd-status[data-state="editing"] { color: var(--bd-text-2); }
+.bn-nd-status[data-state="editing"] i::before { inset: 4px; background: var(--bd-primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--bd-primary) 22%, transparent); animation: ndBreath 1.6s ease-in-out infinite; }
+@keyframes ndBreath { 50% { transform: scale(.75); opacity: .7; } }
+
+/* Salvando: anel girando — só enquanto a gravação está de fato em curso. */
+.bn-nd-status[data-state="saving"] i::before { border: 2px solid color-mix(in srgb, var(--bd-amber) 30%, transparent); border-top-color: var(--bd-amber); animation: ndSpin .8s linear infinite; }
+
+/* Salvo no aparelho (sem internet/rede lenta): âmbar com check. */
+.bn-nd-status[data-state="local"] { border-color: color-mix(in srgb, var(--bd-amber) 35%, var(--bd-line)); background: color-mix(in srgb, var(--bd-amber) 10%, transparent); color: var(--bd-text); }
+.bn-nd-status[data-state="local"] i::before { border: 0; background: var(--bd-amber); }
+.bn-nd-status[data-state="local"] i::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4.3 8.3l2.4 2.4 5-5' fill='none' stroke='%23000' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 100% no-repeat;
+          mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4.3 8.3l2.4 2.4 5-5' fill='none' stroke='%23000' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 100% no-repeat;
+}
+#ndSaveBtn { min-width: 9.5em; justify-content: center; }
 .bn-nd-status[data-state="saved"] { border-color: color-mix(in srgb, var(--bd-green) 35%, var(--bd-line)); background: color-mix(in srgb, var(--bd-green) 10%, transparent); color: var(--bd-text); }
 .bn-nd-status[data-state="saved"] i::before {
   border: 0;
@@ -652,6 +674,12 @@ html { scrollbar-color: color-mix(in srgb, var(--bd-text, #9aa3c7) 22%, transpar
 .rt-error-x svg { width: 14px; height: 14px; }
 @media (max-width: 820px) { .rt-error { bottom: calc(var(--nav-height, 64px) + 14px + env(safe-area-inset-bottom, 0px)); } }
 
+/* Formulário de lançamento: a borda acompanha o tipo escolhido — verde em
+   Receita (já existia) e vermelha em Despesa, com a mesma intensidade. */
+#financesView .bf-form.fin-form-card { transition: border-color .3s var(--ease-smooth-out), box-shadow .3s var(--ease-smooth-out); }
+#financesView .bf-form.fin-form-card:not(.is-receita) { border-color: color-mix(in srgb, var(--bd-red) 42%, var(--bd-line)); }
+#financesView .bf-form.fin-form-card.is-receita { border-color: var(--bd-green-line); }
+
 /* Ícones SVG que entraram no lugar de emojis no resto do app */
 .palette-result-icon { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; background: color-mix(in srgb, var(--bd-primary, #6d5dfc) 14%, transparent); color: var(--bd-primary-ink, #8b7bff); }
 .palette-result-icon .i { width: 15px; height: 15px; }
@@ -684,6 +712,8 @@ html { scrollbar-color: color-mix(in srgb, var(--bd-text, #9aa3c7) 22%, transpar
   .toast.t-toast.is-open { transform: none !important; transition: opacity 260ms ease !important; }
   .toast.t-toast .t-success-check[data-state="in"] { animation: t-check-fade 320ms ease forwards !important; }
   .bn-nd-status[data-state="saving"] i::before { animation: ndSpin 1.2s linear infinite !important; }
+  .bn-nd-status[data-state="editing"] i::before { animation: none !important; }
+  .bn-nd-status > span.is-swap { animation: rmFade 200ms ease both !important; }
   .bn-nd-status[data-state="saved"] i::before { animation: rmFade 260ms ease both !important; }
   .bn-nd-status[data-state="saved"] i::after { animation: rmFade 260ms ease both !important; }
   .t-success-check svg path { animation: none !important; stroke-dashoffset: 0 !important; }

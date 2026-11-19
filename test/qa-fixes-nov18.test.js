@@ -117,6 +117,21 @@ test("Resto do app: sem emojis na interface e aviso de erro sem alarme falso", (
   assert.match(css, /\.bn-nd-status\[data-state="saved"\] i::after/);
 });
 
+test("Notas: selo estável enquanto digita e 'Salvo' só com a nuvem confirmando", () => {
+  const status = fn("setNdStatus");
+  assert.match(status, /if \(el\.dataset\.state === state\) return;/, "não repinta a cada tecla");
+  assert.match(app, /const ND_STATUS_LABELS = \{ editing: "Editando", saving: "Salvando…", saved: "Salvo", local: "Salvo no aparelho" \}/);
+  assert.match(app, /window\.addEventListener\("pulsenote:synced"/);
+  assert.match(app, /window\.dispatchEvent\(new CustomEvent\("pulsenote:synced", \{ detail: \{ ok: true/);
+  assert.match(app, /Math\.min\(900, 5000 - \(now - ndFirstPendingAt\)\)/, "pausa de 0,9 s ou no máximo 5 s");
+  assert.match(app, /renderAllUnlessEditingNote\(\); \/\/ re-renderiza/, "não redesenha durante a edição");
+});
+
+test("Finanças: formulário com borda vermelha em Despesa e verde em Receita", () => {
+  assert.match(css, /#financesView \.bf-form\.fin-form-card:not\(\.is-receita\) \{ border-color: color-mix\(in srgb, var\(--bd-red\)/);
+  assert.match(css, /#financesView \.bf-form\.fin-form-card\.is-receita \{ border-color: var\(--bd-green-line\); \}/);
+});
+
 test("Finanças v2: todo ícone novo usado existe como símbolo", () => {
   const symbols = new Set([...html.matchAll(/<symbol id="i-([a-z0-9-]+)"/g)].map((m) => m[1]));
   const catalog = app.slice(app.indexOf("const NEW_CATEGORY_ICON_GROUPS = ["), app.indexOf("const NEW_CATEGORY_ICON_FLAT"));
