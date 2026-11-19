@@ -288,6 +288,7 @@ async function performSyncToServer() {
     console.error("Não foi possível sincronizar: os dados excedem o limite seguro do documento do Firestore.");
     const key = getStorageKey();
     if (key) localStorage.setItem(key, JSON.stringify(state));
+    window.dispatchEvent(new CustomEvent("pulsenote:synced", { detail: { ok: false, tooLarge: true } }));
     return;
   }
 
@@ -321,10 +322,14 @@ async function performSyncToServer() {
     if (key) localStorage.setItem(key, JSON.stringify(state));
     _syncRetries = 0; // reset ao ter sucesso
     if (Object.keys(dirtyBases).length) scheduleSyncToServer();
+    // Avisa quem mostra estado de salvamento (selo da nota aberta) que a
+    // nuvem confirmou — "Salvo" passa a significar salvo de verdade.
+    window.dispatchEvent(new CustomEvent("pulsenote:synced", { detail: { ok: true, pending: Object.keys(dirtyBases).length > 0 } }));
   } catch (err) {
     console.error("Erro ao salvar no Firestore:", err);
     const key = getStorageKey();
     if (key) localStorage.setItem(key, JSON.stringify(state)); // nunca perde o dado localmente
+    window.dispatchEvent(new CustomEvent("pulsenote:synced", { detail: { ok: false, offline: !navigator.onLine } }));
     if (!navigator.onLine) return;
     // Retry com backoff exponencial (máx 3 tentativas, 2s/4s/8s)
     if (_syncRetries < 3) {
@@ -495,7 +500,7 @@ const appReady = new Promise((resolve) => {
         if (firstSnapshotForUser && state.preferredWorkspace && state.preferredWorkspace !== "personal") {
           setActiveFinanceWorkspace(state.preferredWorkspace);
         }
-        renderAll(); // re-renderiza com os dados confirmados do servidor
+        renderAllUnlessEditingNote(); // re-renderiza com os dados confirmados do servidor
         if (onboardingReady) getOnboarding()?.sync();
         autopilotUi.invalidate();
         if (firstSnapshotForUser && Object.keys(dirtyBases).length) scheduleSyncToServer();
@@ -510,6 +515,28 @@ const appReady = new Promise((resolve) => {
     );
   });
 });
+
+// Cada gravação volta do servidor (onSnapshot) e redesenhava o app inteiro
+// — no meio da digitação isso causava travadinhas e atrapalhava cliques na
+// barra de formatação. Com a nota aberta em foco, o redesenho espera a
+// pessoa fazer uma pausa (ou sair da nota). O editor nunca é reescrito por
+// ele, então nada se perde; só a lista em volta atualiza depois.
+let deferredRenderTimer = 0;
+function noteEditorHasFocus() {
+  const active = document.activeElement;
+  return Boolean(active && ndCurrentNoteId && active.closest?.("#noteDetailModal"));
+}
+function renderAllUnlessEditingNote() {
+  clearTimeout(deferredRenderTimer);
+  if (!noteEditorHasFocus()) { renderAll(); return; }
+  const retry = () => {
+    if (noteEditorHasFocus() && Date.now() - lastNoteKeyAt < 2500) deferredRenderTimer = setTimeout(retry, 1200);
+    else renderAll();
+  };
+  deferredRenderTimer = setTimeout(retry, 1200);
+}
+let lastNoteKeyAt = 0;
+document.addEventListener("input", (event) => { if (event.target.closest?.("#noteDetailModal")) lastNoteKeyAt = Date.now(); }, true);
 
 const statusList = ["Pendente", "Em andamento", "Concluida", "Cancelada"];
 const viewTitles = {
@@ -9392,24 +9419,57 @@ function renderNoteDetailMeta(note) {
   }
 }
 
-// "Salvando…" enquanto há alteração pendente; "Salvo" (com a hora no
-// título do selo) quando tudo já está guardado. Sem avisos flutuantes.
+// Selo de salvamento da nota aberta (19/11/2026). Antes trocava para
+// "Salvando…" a cada tecla e dizia "Salvo" só porque a pessoa parou de
+// digitar. Agora:
+//   editing → "Editando"     (há alteração ainda não enviada; não pisca)
+//   saving  → "Salvando…"    (a gravação começou)
+//   saved   → "Salvo"        (a nuvem confirmou — evento pulsenote:synced)
+//   local   → "Salvo no aparelho" (sem internet/sem sessão; sobe depois)
+// O texto troca com fade ("Text states swap", transitions.dev).
+const ND_STATUS_LABELS = { editing: "Editando", saving: "Salvando…", saved: "Salvo", local: "Salvo no aparelho" };
 function setNdStatus(mode) {
   const el = document.querySelector("#ndStatus");
   if (!el) return;
-  const state = mode === "saved" ? "saved" : "saving";
+  const state = ND_STATUS_LABELS[mode] ? mode : "saving";
+  if (el.dataset.state === state) return; // nada muda: sem repintar a cada tecla
   el.dataset.state = state;
   const label = el.querySelector("span");
-  if (label) label.textContent = state === "saved" ? "Salvo" : "Salvando…";
-  el.title = state === "saved" && ndSavedAt ? `Salvo às ${String(ndSavedAt.getHours()).padStart(2, "0")}:${String(ndSavedAt.getMinutes()).padStart(2, "0")}` : "";
+  if (label) {
+    label.textContent = ND_STATUS_LABELS[state];
+    label.classList.remove("is-swap");
+    void label.offsetWidth;
+    label.classList.add("is-swap");
+  }
+  const time = ndSavedAt ? `${String(ndSavedAt.getHours()).padStart(2, "0")}:${String(ndSavedAt.getMinutes()).padStart(2, "0")}` : "";
+  el.title = state === "saved" && time ? `Salvo na nuvem às ${time}`
+    : state === "local" ? "Guardado neste aparelho. Sobe para a nuvem assim que a conexão voltar."
+    : state === "editing" ? "Alterações serão salvas automaticamente" : "";
   updateNdSaveButton();
 }
+function ndStatusIsSaved() {
+  const s = document.querySelector("#ndStatus")?.dataset.state;
+  return s === "saved" || s === "local";
+}
+
+// Resposta da sincronização: só marca "Salvo" se a nota estava salvando e
+// nenhuma tecla nova chegou no meio do caminho.
+let ndAwaitingSync = false;
+let ndSyncFallbackTimer = 0;
+window.addEventListener("pulsenote:synced", (event) => {
+  const current = document.querySelector("#ndStatus")?.dataset.state;
+  if (!ndAwaitingSync || !["saving", "local"].includes(current)) return;
+  if (!event.detail?.ok && current === "local") return; // segue aguardando a próxima tentativa
+  ndAwaitingSync = !event.detail?.ok;
+  clearTimeout(ndSyncFallbackTimer);
+  setNdStatus(event.detail?.ok ? "saved" : "local");
+});
 
 function updateNdSaveButton() {
   const button = document.querySelector("#ndSaveBtn");
   const label = document.querySelector("#ndSaveLabel");
   if (!button || !label) return;
-  const saved = document.querySelector("#ndStatus")?.dataset.state === "saved";
+  const saved = ndStatusIsSaved();
   if (notesPanelMode()) {
     label.textContent = saved ? "Salvo" : "Salvar agora";
     button.classList.toggle("is-saved", saved);
@@ -9650,7 +9710,14 @@ function saveNoteDetail() {
   if (notesPanelMode()) {
     clearTimeout(ndAutosaveTimer);
     const changed = flushNoteDetailSave({ persist: "now" });
-    setNdStatus("saved");
+    if (changed && currentUser?.emailVerified && navigator.onLine) {
+      ndAwaitingSync = true;
+      setNdStatus("saving");
+      clearTimeout(syncTimer);
+      syncToServer(); // "Salvar agora" envia na hora, sem esperar o agendamento
+    } else {
+      setNdStatus(changed ? "local" : "saved");
+    }
     if (changed) requestAnimationFrame(() => { renderNotes(); });
     const button = document.querySelector("#ndSaveBtn");
     if (!prefersReducedMotion()) button?.animate?.([{ transform: "scale(1)" }, { transform: "scale(.96)" }, { transform: "scale(1)" }], { duration: 220, easing: "ease-out" });
@@ -9762,16 +9829,38 @@ function bindNoteDetail() {
 
   document.querySelector("#ndSaveBtn").addEventListener("click", saveNoteDetail);
 
-  // Salvamento automático: 700 ms depois da última tecla. O selo mostra
-  // "Salvando…" na hora e "Salvo" quando a alteração foi guardada.
-  const scheduleNdAutosave = () => {
-    setNdStatus("saving");
+  // Salvamento automático: grava 900 ms depois da última tecla OU, em
+  // digitação contínua, no máximo a cada 5 s — o texto nunca fica muito
+  // tempo só na tela. O selo fica em "Editando" (estável, sem piscar) e só
+  // mostra "Salvo" quando a nuvem confirma.
+  let ndFirstPendingAt = 0;
+  const commitNdAutosave = () => {
     clearTimeout(ndAutosaveTimer);
-    ndAutosaveTimer = setTimeout(() => {
-      flushNoteDetailSave();
-      setNdStatus("saved");
-    }, 700);
+    ndFirstPendingAt = 0;
+    const changed = flushNoteDetailSave({ persist: "now" });
+    if (!changed) { setNdStatus(ndStatusIsSaved() ? document.querySelector("#ndStatus").dataset.state : "saved"); return; }
+    if (!currentUser || !currentUser.emailVerified) { setNdStatus("local"); return; }
+    ndAwaitingSync = true; // offline: fica "Salvo no aparelho" e vira "Salvo" quando a conexão voltar
+    if (!navigator.onLine) { setNdStatus("local"); return; }
+    setNdStatus("saving");
+    clearTimeout(ndSyncFallbackTimer);
+    // Rede lenta: o texto já está guardado no aparelho; avisa isso em vez
+    // de deixar "Salvando…" parado. A nuvem confirma depois.
+    ndSyncFallbackTimer = setTimeout(() => {
+      if (ndAwaitingSync && document.querySelector("#ndStatus")?.dataset.state === "saving") setNdStatus("local");
+    }, 8000);
   };
+  const scheduleNdAutosave = () => {
+    ndAwaitingSync = false;
+    setNdStatus("editing");
+    const now = Date.now();
+    if (!ndFirstPendingAt) ndFirstPendingAt = now;
+    clearTimeout(ndAutosaveTimer);
+    const wait = Math.max(0, Math.min(900, 5000 - (now - ndFirstPendingAt)));
+    ndAutosaveTimer = setTimeout(commitNdAutosave, wait);
+  };
+  // Saiu do texto (foi para a barra, o título ou outra área): grava já.
+  body.addEventListener("blur", () => { if (document.querySelector("#ndStatus")?.dataset.state === "editing") setTimeout(() => { if (document.activeElement !== body) commitNdAutosave(); }, 0); });
   const onNdInput = () => { updateNdCount(); scheduleNdAutosave(); };
   body.addEventListener("input", () => { notePending = null; });
   document.querySelector("#ndTitle").addEventListener("input", onNdInput);
@@ -9873,9 +9962,16 @@ function bindNoteDetail() {
     const current = note.checklist[index];
     note.checklist[index] = { id: typeof current === "object" && current.id ? current.id : crypto.randomUUID(), text, done: noteChecklistItemDone(current) };
     note.updatedAt = new Date().toISOString();
-    setNdStatus("saving");
+    setNdStatus("editing");
     clearTimeout(ndAutosaveTimer);
-    ndAutosaveTimer = setTimeout(() => { queueNotePersist(); ndSavedAt = new Date(); setNdStatus("saved"); scheduleNotesListRefresh(); }, 600);
+    ndAutosaveTimer = setTimeout(() => {
+      notePersistQueued = false;
+      saveState();
+      ndSavedAt = new Date();
+      if (!currentUser || !currentUser.emailVerified || !navigator.onLine) setNdStatus("local");
+      else { ndAwaitingSync = true; setNdStatus("saving"); }
+      scheduleNotesListRefresh();
+    }, 900);
   });
   checklistList?.addEventListener("keydown", (event) => {
     const input = event.target.closest("[data-nd-check-text]");
