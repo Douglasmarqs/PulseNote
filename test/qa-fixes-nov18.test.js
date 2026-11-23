@@ -137,6 +137,31 @@ test("Notas: como no iPhone — nada grava durante a edição; salva ao sair ou 
   assert.match(app, /renderAllUnlessEditingNote\(\); \/\/ re-renderiza/, "não redesenha durante a edição");
 });
 
+test("Notas (iPhone): formatar com o cursor parado não quebra quando o execCommand dispara 'input'", () => {
+  const body = fn("noteApplyCommand");
+  for (const cmd of ["bold", "italic", "color"]) {
+    const run = new Function("cmd", `
+      let notePending = null;
+      const editor = {};
+      const range = { collapsed: true, startContainer: {}, startOffset: 3 };
+      const noteSelectionIn = () => range;
+      const noteFormatState = () => ({ bold: false, italic: false });
+      const noteCaretOffset = () => 3;
+      const noteColorHex = (v) => v;
+      const notePendingMatches = (ed, r) => Boolean(notePending && notePending.editor === ed && r && r.collapsed);
+      const noteToggleHighlight = () => {};
+      // Simula o Safari: o execCommand dispara "input", que zera notePending.
+      const document = { execCommand: () => { notePending = null; return true; } };
+      ${body}
+      notePending = { editor, offset: 3, values: { italic: true } };
+      noteApplyCommand(editor, cmd, "#ff375f");
+      return notePending;`);
+    let result;
+    assert.doesNotThrow(() => { result = run(cmd); }, `${cmd} não pode lançar TypeError`);
+    assert.equal(result.values.italic, true, `${cmd}: mantém o estilo pendente anterior`);
+  }
+});
+
 test("Notas: salvar ao sair grava texto, formatação e checklist (simulação)", () => {
   const body = fn("flushNoteDetailSave");
   const make = new Function("ctx", `

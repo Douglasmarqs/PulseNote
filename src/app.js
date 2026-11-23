@@ -9391,16 +9391,20 @@ let notePending = null;
 function noteApplyCommand(editor, cmd, value) {
   const exec = (name, arg) => { try { return document.execCommand(name, false, arg); } catch { return false; } };
   if (cmd === "highlight") { noteToggleHighlight(editor); return; }
+  // iPhone (Safari): execCommand dispara "input" no meio da operação, e o
+  // listener de input zera notePending. Por isso os estilos pendentes são
+  // copiados ANTES do comando (antes: "null is not an object (evaluating
+  // 'notePending.values')" ao tocar em Negrito/Cor com o cursor parado).
   if (cmd === "color") {
     const range = noteSelectionIn(editor);
     const caret = range && range.collapsed;
+    const prevValues = caret && notePendingMatches(editor, range) ? { ...(notePending?.values || {}) } : {};
     exec("styleWithCSS", true);
     exec("foreColor", value);
     exec("styleWithCSS", false);
     if (caret) {
       const after = noteSelectionIn(editor);
-      const same = notePendingMatches(editor, after);
-      notePending = { editor, offset: noteCaretOffset(editor, after), values: { ...(same ? notePending.values : {}), color: noteColorHex(value) } };
+      if (after) notePending = { editor, offset: noteCaretOffset(editor, after), values: { ...prevValues, color: noteColorHex(value) } };
     } else {
       notePending = null;
     }
@@ -9412,15 +9416,15 @@ function noteApplyCommand(editor, cmd, value) {
   const range = noteSelectionIn(editor);
   const caret = inline && range && range.collapsed ? { node: range.startContainer, offset: range.startOffset } : null;
   const before = caret ? noteFormatState(editor)[cmd] : false;
-  const keepPending = caret ? notePendingMatches(editor, range) : false;
+  // Cópia feita antes do execCommand (ver comentário acima sobre o iPhone).
+  const prevValues = caret && notePendingMatches(editor, range) ? { ...(notePending?.values || {}) } : {};
   // Tags simples (<b>, <i>, <u>, <strike>): o estado do botão é lido delas.
   exec("styleWithCSS", false);
   exec(map[cmd]);
   if (caret) {
     const after = noteSelectionIn(editor);
-    const same = keepPending;
     if (after && after.collapsed) {
-      notePending = { editor, offset: noteCaretOffset(editor, after), values: { ...(same ? notePending.values : {}), [cmd]: !before } };
+      notePending = { editor, offset: noteCaretOffset(editor, after), values: { ...prevValues, [cmd]: !before } };
     }
   } else {
     notePending = null;
