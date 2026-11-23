@@ -197,7 +197,8 @@ test("Notas: texto e checklist empilhados em coluna (não se sobrepõem no iPhon
 test("Notas: botões e cor acendem no toque, pela posição do cursor (não pelo nó)", () => {
   assert.match(app, /function noteCaretOffset\(editor, range\)/);
   assert.match(app, /function notePendingMatches\(editor, range\)/);
-  assert.match(app, /values: \{ \.\.\.\(same \? notePending\.values : \{\}\), color: noteColorHex\(value\) \}/);
+  // Estilos pendentes copiados antes do execCommand (iPhone zera notePending no "input").
+  assert.match(app, /values: \{ \.\.\.prevValues, color: noteColorHex\(value\) \}/);
   assert.match(app, /colorBtn\.classList\.toggle\("has-color", Boolean\(color\)\)/);
   assert.match(app, /function noteEditorActive\(editor\)/);
 });
