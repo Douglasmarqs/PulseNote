@@ -4882,8 +4882,17 @@ function flushNotePersist() {
   notePersistQueued = false;
   saveState();
 }
-window.addEventListener("pagehide", flushNotePersist);
-document.addEventListener("visibilitychange", () => { if (document.hidden) flushNotePersist(); });
+// Nota aberta com alterações não salvas: grava antes de a página sumir
+// (fechar aba, recarregar, app do celular indo para o fundo). saveState
+// guarda no aparelho na hora e deixa a ida para a nuvem pendente, que
+// conclui na próxima abertura se não der tempo agora.
+function flushOpenNoteOnLeave() {
+  try { if (ndCurrentNoteId && ndDirty) flushNoteDetailSave({ persist: "now" }); } catch { /* segue para o resto */ }
+  flushNotePersist();
+}
+window.addEventListener("pagehide", flushOpenNoteOnLeave);
+window.addEventListener("beforeunload", flushOpenNoteOnLeave);
+document.addEventListener("visibilitychange", () => { if (document.hidden) flushOpenNoteOnLeave(); });
 
 function saveTask(event) {
   event.preventDefault();
@@ -9581,12 +9590,17 @@ function bindKeyboardViewportRepair() {
   }
 }
 
-// Salvamento da nota aberta: automático enquanto digita. O estado da nota
-// muda na hora (é barato); a gravação vai para o momento livre seguinte
-// (queueNotePersist) — nada de redesenhar o app inteiro a cada pausa.
+// Salvamento da nota aberta — como no app Notas do iPhone (23/11/2026):
+// enquanto a pessoa digita, formata ou seleciona, NADA é gravado (gravar
+// no meio da edição gerava erros de seleção e de cursor). A nota é salva
+// ao sair dela (voltar, trocar de nota, ir para outra área), no botão
+// Salvar e, por segurança, quando a aba fecha ou o app vai para o fundo.
 let ndSavedAt = null;
+let ndDirty = false;
 function flushNoteDetailSave({ persist = "idle" } = {}) {
   if (!ndCurrentNoteId) return false;
+  const wasDirty = ndDirty;
+  ndDirty = false;
   const title = document.querySelector("#ndTitle").value.trim() || "Sem título";
   const cleanHtml = sanitizeNoteHtml(document.querySelector("#ndBody").innerHTML);
   const plainText = noteHtmlToPlainText(cleanHtml);
@@ -9594,6 +9608,12 @@ function flushNoteDetailSave({ persist = "idle" } = {}) {
   const existing = state.notes.find((n) => n.id === ndCurrentNoteId);
   if (!existing) return false;
   if (existing.title === title && existing.description === plainText && (existing.descriptionHtml || "") === cleanHtml) {
+    // Texto igual, mas o checklist (que muda o estado direto) foi editado.
+    if (wasDirty) {
+      ndSavedAt = new Date();
+      if (persist === "now") { notePersistQueued = false; saveState(); } else queueNotePersist();
+      return true;
+    }
     return false;
   }
 
@@ -9626,15 +9646,13 @@ function renderNoteDetailMeta(note) {
   }
 }
 
-// Selo de salvamento da nota aberta (19/11/2026). Antes trocava para
-// "Salvando…" a cada tecla e dizia "Salvo" só porque a pessoa parou de
-// digitar. Agora:
-//   editing → "Editando"     (há alteração ainda não enviada; não pisca)
+// Selo de salvamento da nota aberta:
+//   editing → "Não salvo"    (há alterações; salvam ao sair ou em Salvar)
 //   saving  → "Salvando…"    (a gravação começou)
 //   saved   → "Salvo"        (a nuvem confirmou — evento pulsenote:synced)
 //   local   → "Salvo no aparelho" (sem internet/sem sessão; sobe depois)
 // O texto troca com fade ("Text states swap", transitions.dev).
-const ND_STATUS_LABELS = { editing: "Editando", saving: "Salvando…", saved: "Salvo", local: "Salvo no aparelho" };
+const ND_STATUS_LABELS = { editing: "Não salvo", saving: "Salvando…", saved: "Salvo", local: "Salvo no aparelho" };
 function setNdStatus(mode) {
   const el = document.querySelector("#ndStatus");
   if (!el) return;
@@ -9651,7 +9669,7 @@ function setNdStatus(mode) {
   const time = ndSavedAt ? `${String(ndSavedAt.getHours()).padStart(2, "0")}:${String(ndSavedAt.getMinutes()).padStart(2, "0")}` : "";
   el.title = state === "saved" && time ? `Salvo na nuvem às ${time}`
     : state === "local" ? "Guardado neste aparelho. Sobe para a nuvem assim que a conexão voltar."
-    : state === "editing" ? "Alterações serão salvas automaticamente" : "";
+    : state === "editing" ? "As alterações são salvas quando você sai da nota ou toca em Salvar" : "";
   updateNdSaveButton();
 }
 function ndStatusIsSaved() {
@@ -9678,9 +9696,9 @@ function updateNdSaveButton() {
   if (!button || !label) return;
   const saved = ndStatusIsSaved();
   if (notesPanelMode()) {
-    label.textContent = saved ? "Salvo" : "Salvar agora";
+    label.textContent = saved ? "Salvo" : "Salvar";
     button.classList.toggle("is-saved", saved);
-    button.setAttribute("aria-label", saved ? "Todas as alterações estão salvas" : "Salvar agora");
+    button.setAttribute("aria-label", saved ? "Todas as alterações estão salvas" : "Salvar alterações da nota");
   } else {
     label.textContent = "Concluir";
     button.classList.remove("is-saved");
@@ -9740,7 +9758,11 @@ function closeNoteDetailThen(next) {
 function openNoteDetail(id) {
   const note = state.notes.find((item) => item.id === id);
   if (!note) return;
-  if (ndCurrentNoteId && ndCurrentNoteId !== id) flushNoteDetailSave();
+  if (ndCurrentNoteId && ndCurrentNoteId !== id && flushNoteDetailSave()) {
+    const savedId = ndCurrentNoteId;
+    // A nota anterior foi salva agora: atualiza o cartão dela na lista.
+    setTimeout(() => { renderNotes(); flashNoteCard(savedId); }, 0);
+  }
   const switching = Boolean(ndCurrentNoteId);
   ndCurrentNoteId = id;
   ndChecklistAdding = false;
@@ -10036,39 +10058,15 @@ function bindNoteDetail() {
 
   document.querySelector("#ndSaveBtn").addEventListener("click", saveNoteDetail);
 
-  // Salvamento automático: grava 900 ms depois da última tecla OU, em
-  // digitação contínua, no máximo a cada 5 s — o texto nunca fica muito
-  // tempo só na tela. O selo fica em "Editando" (estável, sem piscar) e só
-  // mostra "Salvo" quando a nuvem confirma.
-  let ndFirstPendingAt = 0;
-  const commitNdAutosave = () => {
-    clearTimeout(ndAutosaveTimer);
-    ndFirstPendingAt = 0;
-    const changed = flushNoteDetailSave({ persist: "now" });
-    if (!changed) { setNdStatus(ndStatusIsSaved() ? document.querySelector("#ndStatus").dataset.state : "saved"); return; }
-    if (!currentUser || !currentUser.emailVerified) { setNdStatus("local"); return; }
-    ndAwaitingSync = true; // offline: fica "Salvo no aparelho" e vira "Salvo" quando a conexão voltar
-    if (!navigator.onLine) { setNdStatus("local"); return; }
-    setNdStatus("saving");
-    clearTimeout(ndSyncFallbackTimer);
-    // Rede lenta: o texto já está guardado no aparelho; avisa isso em vez
-    // de deixar "Salvando…" parado. A nuvem confirma depois.
-    ndSyncFallbackTimer = setTimeout(() => {
-      if (ndAwaitingSync && document.querySelector("#ndStatus")?.dataset.state === "saving") setNdStatus("local");
-    }, 8000);
-  };
-  const scheduleNdAutosave = () => {
+  // Sem salvamento automático durante a edição: digitar, formatar ou
+  // selecionar só marca a nota como "Não salvo". Nada de timer, de gravar
+  // no meio da digitação nem de mexer no estado do app enquanto se escreve.
+  const markNdDirty = () => {
     ndAwaitingSync = false;
-    setNdStatus("editing");
-    const now = Date.now();
-    if (!ndFirstPendingAt) ndFirstPendingAt = now;
-    clearTimeout(ndAutosaveTimer);
-    const wait = Math.max(0, Math.min(900, 5000 - (now - ndFirstPendingAt)));
-    ndAutosaveTimer = setTimeout(commitNdAutosave, wait);
+    ndDirty = true;
+    setNdStatus("editing"); // retorna na hora se já estiver "Não salvo"
   };
-  // Saiu do texto (foi para a barra, o título ou outra área): grava já.
-  body.addEventListener("blur", () => { if (document.querySelector("#ndStatus")?.dataset.state === "editing") setTimeout(() => { if (document.activeElement !== body) commitNdAutosave(); }, 0); });
-  const onNdInput = () => { updateNdCount(); scheduleNdAutosave(); };
+  const onNdInput = () => { updateNdCount(); markNdDirty(); };
   body.addEventListener("input", () => { notePending = null; });
   document.querySelector("#ndTitle").addEventListener("input", onNdInput);
   document.querySelector("#ndTitle").addEventListener("keydown", (event) => {
@@ -10169,16 +10167,7 @@ function bindNoteDetail() {
     const current = note.checklist[index];
     note.checklist[index] = { id: typeof current === "object" && current.id ? current.id : crypto.randomUUID(), text, done: noteChecklistItemDone(current) };
     note.updatedAt = new Date().toISOString();
-    setNdStatus("editing");
-    clearTimeout(ndAutosaveTimer);
-    ndAutosaveTimer = setTimeout(() => {
-      notePersistQueued = false;
-      saveState();
-      ndSavedAt = new Date();
-      if (!currentUser || !currentUser.emailVerified || !navigator.onLine) setNdStatus("local");
-      else { ndAwaitingSync = true; setNdStatus("saving"); }
-      scheduleNotesListRefresh();
-    }, 900);
+    markNdDirty(); // salva junto com a nota, ao sair ou em Salvar
   });
   checklistList?.addEventListener("keydown", (event) => {
     const input = event.target.closest("[data-nd-check-text]");
@@ -10260,8 +10249,7 @@ function bindNoteDetail() {
           onAction: () => {
             if (ndCurrentNoteId !== noteId) return;
             body.innerHTML = sanitizeNoteHtml(beforeHtml);
-            flushNoteDetailSave();
-            setNdStatus("saved");
+            markNdDirty();
             updateNdCount();
           },
         });
@@ -10273,7 +10261,7 @@ function bindNoteDetail() {
     }
     scrubNoteEditorStyles(body);
     saveNdSelection();
-    if (beforeHtml !== body.innerHTML) scheduleNdAutosave();
+    if (beforeHtml !== body.innerHTML) markNdDirty();
     updateNdToolbarState();
     requestAnimationFrame(updateNdToolbarState);
     updateNdCount();
@@ -10304,7 +10292,7 @@ function bindNoteDetail() {
     else document.execCommand("insertHTML", false, `<a href="${escapeHtml(url)}">${escapeHtml(url)}</a>&nbsp;`);
     setNdPanel(null);
     scrubNoteEditorStyles(body);
-    scheduleNdAutosave();
+    markNdDirty();
   });
 
   // Menu "⋮" da nota

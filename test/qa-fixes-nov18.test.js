@@ -117,14 +117,47 @@ test("Resto do app: sem emojis na interface e aviso de erro sem alarme falso", (
   assert.match(css, /\.bn-nd-status\[data-state="saved"\] i::after/);
 });
 
-test("Notas: selo estável enquanto digita e 'Salvo' só com a nuvem confirmando", () => {
+test("Notas: como no iPhone — nada grava durante a edição; salva ao sair ou em Salvar", () => {
   const status = fn("setNdStatus");
   assert.match(status, /if \(el\.dataset\.state === state\) return;/, "não repinta a cada tecla");
-  assert.match(app, /const ND_STATUS_LABELS = \{ editing: "Editando", saving: "Salvando…", saved: "Salvo", local: "Salvo no aparelho" \}/);
+  assert.match(app, /const ND_STATUS_LABELS = \{ editing: "Não salvo", saving: "Salvando…", saved: "Salvo", local: "Salvo no aparelho" \}/);
+  // Sem timer de salvamento automático: digitar/formatar só marca "Não salvo".
+  assert.doesNotMatch(app, /scheduleNdAutosave|commitNdAutosave|ndFirstPendingAt/);
+  const bind = fn("bindNoteDetail");
+  assert.match(bind, /const onNdInput = \(\) => \{ updateNdCount\(\); markNdDirty\(\); \};/);
+  assert.match(bind, /if \(beforeHtml !== body\.innerHTML\) markNdDirty\(\);/, "formatação não grava na hora");
+  // Salva ao sair: fechar, trocar de nota e antes de a página sumir.
+  assert.match(fn("closeNoteDetail"), /flushNoteDetailSave\(\)/);
+  assert.match(fn("openNoteDetail"), /if \(ndCurrentNoteId && ndCurrentNoteId !== id && flushNoteDetailSave\(\)\) \{/);
+  assert.match(app, /window\.addEventListener\("pagehide", flushOpenNoteOnLeave\);/);
+  assert.match(app, /document\.addEventListener\("visibilitychange", \(\) => \{ if \(document\.hidden\) flushOpenNoteOnLeave\(\); \}\);/);
+  // Checklist editado sem mudar o texto também é salvo.
+  assert.match(fn("flushNoteDetailSave"), /if \(wasDirty\) \{/);
   assert.match(app, /window\.addEventListener\("pulsenote:synced"/);
-  assert.match(app, /window\.dispatchEvent\(new CustomEvent\("pulsenote:synced", \{ detail: \{ ok: true/);
-  assert.match(app, /Math\.min\(900, 5000 - \(now - ndFirstPendingAt\)\)/, "pausa de 0,9 s ou no máximo 5 s");
   assert.match(app, /renderAllUnlessEditingNote\(\); \/\/ re-renderiza/, "não redesenha durante a edição");
+});
+
+test("Notas: salvar ao sair grava texto, formatação e checklist (simulação)", () => {
+  const body = fn("flushNoteDetailSave");
+  const make = new Function("ctx", `
+    let { state, ndCurrentNoteId, ndDirty, ndSavedAt, notePersistQueued } = ctx;
+    const document = ctx.document; const sanitizeNoteHtml = (h) => h; const noteHtmlToPlainText = (h) => h.replace(/<[^>]+>/g, "");
+    const saveState = () => { ctx.saved++; }; const queueNotePersist = () => { ctx.queued++; };
+    ${body}
+    return { run: (opts) => { ctx.ndDirty = ndDirty; const r = flushNoteDetailSave(opts); ctx.state = state; return r; }, setDirty: (v) => { ndDirty = v; } };`);
+  const ctx = {
+    state: { notes: [{ id: "n1", title: "A", description: "x", descriptionHtml: "x", checklist: [] }] },
+    ndCurrentNoteId: "n1", ndDirty: false, ndSavedAt: null, notePersistQueued: false, saved: 0, queued: 0,
+    document: { querySelector: (sel) => (sel === "#ndTitle" ? { value: "A" } : { innerHTML: "<b>x</b>" }) },
+  };
+  const api = make(ctx);
+  assert.equal(api.run({ persist: "now" }), true, "texto formatado diferente → salva");
+  assert.equal(ctx.saved, 1);
+  ctx.document.querySelector = (sel) => (sel === "#ndTitle" ? { value: "A" } : { innerHTML: "<b>x</b>" });
+  assert.equal(api.run(), false, "nada mudou e nada pendente → não grava");
+  api.setDirty(true); // ex.: item do checklist editado
+  assert.equal(api.run(), true, "checklist pendente → grava mesmo com o texto igual");
+  assert.equal(ctx.queued, 1);
 });
 
 test("Finanças: formulário com borda vermelha em Despesa e verde em Receita", () => {

@@ -127,8 +127,10 @@ test("Notas: salvar não redesenha o app inteiro nem trava", () => {
   const close = extractFunction("closeNoteDetail");
   assert.doesNotMatch(close, /renderAll\(\)/);
   assert.match(app, /function queueNotePersist\(\)/);
-  assert.match(app, /window\.addEventListener\("pagehide", flushNotePersist\);/);
-  // Selo com quatro estados (Editando / Salvando… / Salvo / Salvo no aparelho).
+  // Ao sair da página grava a nota aberta (se houver alterações) e o pendente.
+  assert.match(app, /window\.addEventListener\("pagehide", flushOpenNoteOnLeave\);/);
+  assert.match(app, /function flushOpenNoteOnLeave\(\) \{[\s\S]*?flushNotePersist\(\);/);
+  // Selo com quatro estados (Não salvo / Salvando… / Salvo / Salvo no aparelho).
   assert.match(app, /label\.textContent = ND_STATUS_LABELS\[state\];/);
   assert.doesNotMatch(app, /Anotacao (criada|atualizada|excluida)/);
 });
