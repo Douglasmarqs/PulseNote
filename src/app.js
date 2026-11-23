@@ -1155,9 +1155,176 @@ function pfPlanLabel() {
   return text && text !== "—" ? text : "Seu plano";
 }
 
+// Perfil v3: identidade com anel de nível, mês em números (comparado ao
+// anterior), mapa de atividade, conquistas compactas e atalhos de conta.
+function pfxMonthKey(offset = 0) {
+  const [y, m] = todayIso.slice(0, 7).split("-").map(Number);
+  const d = new Date(y, m - 1 + offset, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function pfxDelta(current, previous, { money = false, inverse = false } = {}) {
+  if (!previous && !current) return { text: "", tone: "" };
+  if (!previous) return { text: "novo este mês", tone: "up" };
+  const diff = current - previous;
+  if (!diff) return { text: "igual ao mês passado", tone: "" };
+  const good = inverse ? diff < 0 : diff > 0;
+  const label = money ? formatCurrency(Math.abs(diff)) : Math.abs(diff).toLocaleString("pt-BR");
+  return { text: `${diff > 0 ? "+" : "−"}${label} vs mês passado`, tone: good ? "up" : "down" };
+}
+
+// Dias com algo feito no app: tarefa concluída, nota criada/editada ou
+// lançamento registrado. É o que alimenta o mapa de atividade.
+function pfxActivityByDay() {
+  const map = new Map();
+  const bump = (iso) => { if (iso && /^\d{4}-\d{2}-\d{2}/.test(iso)) { const k = iso.slice(0, 10); map.set(k, (map.get(k) || 0) + 1); } };
+  (state.tasks || []).forEach((t) => bump(t.completedAt));
+  (state.notes || []).forEach((n) => { bump(n.createdAt); if (n.updatedAt && n.updatedAt.slice(0, 10) !== String(n.createdAt || "").slice(0, 10)) bump(n.updatedAt); });
+  (state.finances || []).forEach((f) => bump(f.createdAt || ""));
+  return map;
+}
+
+function pfxBestStreak() {
+  const days = [...new Set((state.tasks || []).map((t) => t.completedAt).filter(Boolean))].sort();
+  let best = 0;
+  let run = 0;
+  let prev = null;
+  days.forEach((day) => {
+    const time = new Date(`${day}T12:00:00`).getTime();
+    run = prev !== null && Math.round((time - prev) / 86400000) === 1 ? run + 1 : 1;
+    best = Math.max(best, run);
+    prev = time;
+  });
+  return best;
+}
+
+function pfxRenderHeatmap() {
+  const root = document.querySelector("#profileHeatmap");
+  if (!root) return;
+  const activity = pfxActivityByDay();
+  // Quantas semanas cabem na largura disponível (entre 12 e 20): no celular
+  // o mapa cabe inteiro, sem rolagem lateral.
+  const wrapEl = root.closest(".pfx-heat-wrap");
+  const cs = wrapEl ? getComputedStyle(wrapEl) : null;
+  const cell = parseFloat(cs?.getPropertyValue("--cell")) || 15;
+  const gap = parseFloat(cs?.getPropertyValue("--gap")) || 4;
+  const labelsW = (wrapEl?.querySelector(".pfx-heat-days")?.offsetWidth || 28) + 10;
+  const fit = wrapEl && wrapEl.clientWidth ? Math.floor((wrapEl.clientWidth - labelsW + gap) / (cell + gap)) : 20;
+  const weeks = Math.max(12, Math.min(20, fit));
+  const today = new Date(`${todayIso}T12:00:00`);
+  const mondayOffset = (today.getDay() + 6) % 7; // 0 = segunda
+  const start = new Date(today);
+  start.setDate(today.getDate() - mondayOffset - (weeks - 1) * 7);
+  const level = (n) => (n <= 0 ? 0 : n === 1 ? 1 : n <= 3 ? 2 : n <= 6 ? 3 : 4);
+  let activeDays = 0;
+  const cells = [];
+  for (let i = 0; i < weeks * 7; i += 1) {
+    const day = new Date(start);
+    day.setDate(start.getDate() + i);
+    const iso = toLocalIso(day);
+    const future = iso > todayIso;
+    const count = future ? 0 : activity.get(iso) || 0;
+    if (count) activeDays += 1;
+    const label = `${safeFormatDate(day, { day: "numeric", month: "short" }, iso)}: ${count ? `${count} ${count === 1 ? "atividade" : "atividades"}` : "sem atividade"}`;
+    cells.push(`<i class="l${level(count)}${future ? " is-future" : ""}${iso === todayIso ? " is-today" : ""}" style="--d:${i}" title="${escapeHtml(label)}"></i>`);
+  }
+  root.innerHTML = cells.join("");
+  root.setAttribute("aria-label", `Atividade das últimas ${weeks} semanas: ${activeDays} dias ativos`);
+  // Em telas estreitas o mapa rola: abre já mostrando a semana atual.
+  const wrap = root.closest(".pfx-heat-wrap");
+  if (wrap) requestAnimationFrame(() => { wrap.scrollLeft = wrap.scrollWidth; });
+  const summary = document.querySelector("#profileActivitySummary");
+  if (summary) summary.textContent = `${activeDays} ${activeDays === 1 ? "dia ativo" : "dias ativos"} em ${weeks} semanas`;
+}
+
+function pfxAccountRows() {
+  const root = document.querySelector("#profileAccountRows");
+  if (!root) return;
+  const notifOn = Boolean(window.notificationsAreEnabled?.());
+  const notifSupported = "Notification" in window;
+  const wa = state.whatsappLinkedPhone ? `Conectado · +${state.whatsappLinkedPhone}` : "Não conectado";
+  const isAdmin = document.getElementById("adminAccessCard")?.hidden === false;
+  const rows = [
+    { icon: "crown", title: "Plano", sub: pfPlanLabel(), action: `data-pfx-go="settings:plano"`, cta: bdIcon("chev-right") },
+    {
+      icon: "bell",
+      title: "Notificações",
+      sub: notifOn ? "Ativas neste aparelho" : notifSupported ? "Desativadas neste aparelho" : "Não suportadas neste navegador",
+      tone: notifOn ? "on" : "",
+      action: notifOn || !notifSupported ? `data-pfx-go="settings:notificacoes"` : "data-pfx-notify",
+      cta: notifOn || !notifSupported ? bdIcon("chev-right") : `<span class="pfx-row-btn">Ativar</span>`,
+    },
+    { icon: "whatsapp", title: "WhatsApp", sub: wa, tone: state.whatsappLinkedPhone ? "on" : "", action: `data-pfx-go="settings:integracoes"`, cta: state.whatsappLinkedPhone ? bdIcon("chev-right") : `<span class="pfx-row-btn">Conectar</span>` },
+    { icon: "shield", title: "Segurança e dados", sub: "Senha, sessões e exclusão da conta", action: `data-pfx-go="settings:seguranca"`, cta: bdIcon("chev-right") },
+    { icon: "arrow-down", title: "Backup", sub: "Baixar uma cópia dos seus dados", action: "data-pfx-backup", cta: `<span class="pfx-row-btn">Baixar</span>` },
+  ];
+  if (isAdmin) rows.push({ icon: "sliders", title: "Administração", sub: "Painel do PulseNote", action: "data-pfx-admin", cta: bdIcon("external") });
+  root.innerHTML = rows.map((row) => `<button type="button" class="pfx-row${row.tone ? ` is-${row.tone}` : ""}" ${row.action}>
+      <span class="pfx-row-ico">${bdIcon(row.icon)}</span>
+      <span class="pfx-row-copy"><strong>${escapeHtml(row.title)}</strong><small>${escapeHtml(row.sub)}</small></span>
+      <span class="pfx-row-cta">${row.cta}</span>
+    </button>`).join("");
+}
+
+function pfxSyncThemeSeg() {
+  const current = typeof getSavedTheme === "function" ? getSavedTheme() : "system";
+  document.querySelectorAll("#profileThemeSeg [data-pfx-theme]").forEach((button) => {
+    const on = button.dataset.pfxTheme === current;
+    button.classList.toggle("is-active", on);
+    button.setAttribute("aria-checked", String(on));
+  });
+}
+
+function bindProfileV3() {
+  const view = document.querySelector("#profileView");
+  if (!view || view.dataset.bound) return;
+  view.dataset.bound = "1";
+  view.addEventListener("click", (event) => {
+    const go = event.target.closest("[data-pfx-go]");
+    if (go) {
+      const [target, section] = go.dataset.pfxGo.split(":");
+      setView(target);
+      if (target === "settings" && section) setTimeout(() => openSettingsSection(section), 0);
+      return;
+    }
+    if (event.target.closest("[data-pfx-photo]")) return document.getElementById("settingsPhotoInput")?.click();
+    if (event.target.closest("[data-pfx-notify]")) {
+      Promise.resolve(window.requestNotificationPermission?.()).finally(() => pfxAccountRows());
+      return;
+    }
+    if (event.target.closest("[data-pfx-backup]")) return document.getElementById("settingsExportBackup")?.click();
+    if (event.target.closest("[data-pfx-admin]")) return window.location.assign("/admin");
+    if (event.target.closest("[data-pfx-logout]")) return document.getElementById("dropdownLogout")?.click();
+    const theme = event.target.closest("[data-pfx-theme]");
+    if (theme) {
+      // Reaproveita o seletor de tema de Configurações (mantém os dois em sincronia).
+      document.querySelector(`#themeToggle [data-theme-choice="${theme.dataset.pfxTheme}"]`)?.click();
+      pfxSyncThemeSeg();
+      return;
+    }
+    const toggle = event.target.closest("#profileAchToggle");
+    if (toggle) {
+      const all = document.querySelector("#profileAchAll");
+      const open = toggle.getAttribute("aria-expanded") !== "true";
+      toggle.setAttribute("aria-expanded", String(open));
+      toggle.querySelector("span").textContent = open ? "Recolher conquistas" : "Ver todas as conquistas";
+      if (all) all.hidden = !open;
+    }
+  });
+  view.querySelector(".pfx-theme-seg")?.addEventListener("keydown", (event) => {
+    if (!["ArrowRight", "ArrowLeft"].includes(event.key)) return;
+    const list = [...view.querySelectorAll("[data-pfx-theme]")];
+    const index = list.indexOf(document.activeElement);
+    const next = list[(index + (event.key === "ArrowRight" ? 1 : list.length - 1)) % list.length];
+    next?.focus();
+    next?.click();
+  });
+}
+
 function renderProfile() {
   const nameEl = document.querySelector("#profileNameLabel");
   if (!nameEl) return;
+  bindProfileV3();
 
   const user = getUser();
   nameEl.textContent = user?.name || "Usuário";
@@ -1168,12 +1335,14 @@ function renderProfile() {
   const avatarEl = document.querySelector("#profileAvatarPreview");
   if (avatarEl) avatarEl.innerHTML = photoURL ? `<img src="${escapeHtml(photoURL)}" alt="Foto de perfil"/>` : escapeHtml(bdInitials(user?.name || "U"));
 
+  // Nível: anel em volta da foto + barra compacta.
   const { level, levelProgress, xpIntoLevel, xpPerLevel, score } = calculateXpStats();
   const streak = calculateStreak();
   document.querySelector("#profileLevelLabel").textContent = `Nível ${level}`;
   document.querySelector("#profileLevelBadge").textContent = level;
   document.querySelector("#profileLevelBar").style.width = `${levelProgress}%`;
-  document.querySelector("#profileLevelXpLabel").textContent = `${xpIntoLevel}/${xpPerLevel} XP para o próximo nível · ${score} XP no total`;
+  document.querySelector("#profileLevelRing")?.style.setProperty("--p", levelProgress);
+  document.querySelector("#profileLevelXpLabel").textContent = `${xpIntoLevel}/${xpPerLevel} XP · ${score.toLocaleString("pt-BR")} XP no total`;
   const nextEl = document.querySelector("#profileLevelNext");
   if (nextEl) nextEl.textContent = `Faltam ${xpPerLevel - xpIntoLevel} XP para o nível ${level + 1}`;
 
@@ -1181,21 +1350,84 @@ function renderProfile() {
   if (planChip) planChip.textContent = pfPlanLabel();
   const streakChip = document.querySelector("#profileStreakChip span");
   if (streakChip) streakChip.textContent = streak === 1 ? "1 dia seguido" : `${streak} dias seguidos`;
+  const since = currentUser?.metadata?.creationTime ? new Date(currentUser.metadata.creationTime) : null;
+  const sinceChip = document.querySelector("#profileSinceChip");
+  if (sinceChip) {
+    sinceChip.hidden = !since || Number.isNaN(since.getTime());
+    if (!sinceChip.hidden) sinceChip.querySelector("span").textContent = `Desde ${safeFormatDate(since, { month: "short", year: "numeric" }, "")}`;
+  }
 
+  // Seu mês em números (comparado ao mês anterior).
+  const thisMonth = pfxMonthKey(0);
+  const lastMonth = pfxMonthKey(-1);
+  const monthTitle = document.querySelector("#profileMonthTitle");
+  if (monthTitle) monthTitle.textContent = `Seu mês · ${finMonthLabel(thisMonth)}`;
+  const doneIn = (key) => (state.tasks || []).filter((t) => t.status === "Concluida" && String(t.completedAt || "").startsWith(key)).length;
+  const notesIn = (key) => (state.notes || []).filter((n) => String(n.createdAt || "").startsWith(key)).length;
+  const balanceIn = (key) => (state.finances || [])
+    .filter((f) => (f.workspaceId || "personal") === "personal" && String(f.date || "").startsWith(key))
+    .reduce((sum, f) => sum + (f.type === "receita" ? 1 : -1) * (Number(f.amount) || 0), 0);
+  const goalsDone = (state.goals || []).filter((g) => g.current >= g.target).length;
+  const setDelta = (id, delta) => {
+    const el = document.querySelector(id);
+    if (!el) return;
+    el.textContent = delta.text;
+    el.dataset.tone = delta.tone;
+  };
+  const tasksNow = doneIn(thisMonth);
+  const notesNow = notesIn(thisMonth);
+  const balanceNow = balanceIn(thisMonth);
+  document.querySelector("#profileStatTasks").textContent = tasksNow.toLocaleString("pt-BR");
+  setDelta("#profileDeltaTasks", pfxDelta(tasksNow, doneIn(lastMonth)));
+  document.querySelector("#profileStatGoals").textContent = goalsDone.toLocaleString("pt-BR");
+  setDelta("#profileDeltaGoals", { text: `de ${(state.goals || []).length} ${(state.goals || []).length === 1 ? "meta" : "metas"}`, tone: "" });
+  document.querySelector("#profileStatNotes").textContent = notesNow.toLocaleString("pt-BR");
+  setDelta("#profileDeltaNotes", pfxDelta(notesNow, notesIn(lastMonth)));
+  const balanceEl = document.querySelector("#profileStatBalance");
+  if (balanceEl) {
+    balanceEl.textContent = formatCurrency(balanceNow);
+    balanceEl.dataset.tone = balanceNow < 0 ? "down" : balanceNow > 0 ? "up" : "";
+  }
+  setDelta("#profileDeltaBalance", pfxDelta(balanceNow, balanceIn(lastMonth), { money: true }));
+
+  // Atividade
   document.querySelector("#profileStatStreak").textContent = streak;
-  document.querySelector("#profileStatTasks").textContent = state.tasks.filter((t) => t.status === "Concluida").length;
-  document.querySelector("#profileStatGoals").textContent = state.goals.filter((g) => g.current >= g.target).length;
-  document.querySelector("#profileStatNotes").textContent = state.notes.filter((n) => n.favorite).length;
+  const best = document.querySelector("#profileBestStreak");
+  if (best) best.textContent = Math.max(streak, pfxBestStreak());
+  pfxRenderHeatmap();
 
+  // Conquistas compactas
   const achievements = getAchievementsList();
   const unlockedCount = achievements.filter((a) => a.unlocked).length;
   document.querySelector("#profileAchievementCount").textContent = `${unlockedCount}/${achievements.length}`;
   const sub = document.querySelector("#profileAchievementSub");
   if (sub) sub.textContent = unlockedCount === achievements.length
     ? "Você desbloqueou todas as conquistas. Incrível!"
-    : `${unlockedCount} de ${achievements.length} desbloqueadas — continue assim.`;
+    : `${unlockedCount} de ${achievements.length} ganhas — faltam ${achievements.length - unlockedCount}.`;
   const achBar = document.querySelector("#profileAchievementBar");
   if (achBar) achBar.style.width = `${Math.round((unlockedCount / Math.max(1, achievements.length)) * 100)}%`;
+  const medals = document.querySelector("#profileMedals");
+  if (medals) medals.innerHTML = achievements.map((a) => `<span class="pfx-medal${a.unlocked ? " is-on" : ""}" title="${escapeHtml(`${a.title} — ${a.unlocked ? "ganha" : a.detail}`)}">${pfAchIcon(a.iconName)}</span>`).join("");
+
+  const nextCard = document.querySelector("#profileNextAchievement");
+  if (nextCard) {
+    const upcoming = achievements
+      .filter((a) => !a.unlocked)
+      .map((a) => ({ ...a, ratio: (Number(a.current) || 0) / (Number(a.target) || 1) }))
+      .sort((x, y) => y.ratio - x.ratio)
+      .slice(0, 2);
+    nextCard.innerHTML = upcoming.length
+      ? `<p class="pfx-next-title">Mais perto de sair</p>${upcoming.map((a) => {
+          const target = Number(a.target) || 1;
+          const current = Math.min(target, Number(a.current) || 0);
+          return `<div class="pfx-next-row">
+            <span class="pfx-next-ico">${pfAchIcon(a.iconName)}</span>
+            <div class="pfx-next-copy"><strong>${escapeHtml(a.title)}</strong><small>${escapeHtml(a.detail)} · ${current}/${target}</small>
+              <div class="pf-bar pfx-next-bar"><div style="width:${Math.round((current / target) * 100)}%"></div></div></div>
+          </div>`;
+        }).join("")}`
+      : `<p class="pfx-next-title">${bdIcon("crown")} Coleção completa — continue no ritmo para subir de nível.</p>`;
+  }
 
   const visible = achievements.filter((a) => pfAchFilter === "all" || (pfAchFilter === "unlocked" ? a.unlocked : !a.unlocked));
   const grid = document.querySelector("#profileAchievements");
@@ -1203,20 +1435,14 @@ function renderProfile() {
     ? visible.map((a) => {
         const target = Number(a.target) || 1;
         const current = Math.min(target, Number(a.current) || 0);
-        const pct = Math.round((current / target) * 100);
-        return `
-      <article class="pf-badge ${a.unlocked ? "is-unlocked" : "is-locked"}">
-        <div class="pf-badge-ico">${pfAchIcon(a.iconName)}${a.unlocked ? "" : `<i class="pf-badge-lock">${bdIcon("lock")}</i>`}</div>
-        <strong>${escapeHtml(a.title)}</strong>
-        <span>${escapeHtml(a.detail)}</span>
-        ${a.unlocked
-          ? `<em class="pf-badge-done">${bdIcon("check")}Desbloqueada</em>`
-          : `<div class="pf-badge-prog"><div class="pf-bar pf-bar--mini"><div style="width:${pct}%"></div></div><small>${current}/${target}</small></div>`}
-      </article>`;
+        return `<div class="pfx-ach-item${a.unlocked ? " is-on" : ""}">
+          <span class="pfx-ach-ico">${pfAchIcon(a.iconName)}</span>
+          <span class="pfx-ach-copy"><strong>${escapeHtml(a.title)}</strong><small>${escapeHtml(a.detail)}</small></span>
+          <span class="pfx-ach-state">${a.unlocked ? bdIcon("check") : `${current}/${target}`}</span>
+        </div>`;
       }).join("")
-    : `<p class="pf-empty">${pfAchFilter === "unlocked" ? "Nenhuma conquista desbloqueada ainda — conclua sua primeira tarefa para começar." : "Nada pendente por aqui. Você conquistou tudo!"}</p>`;
-
-  grid.closest(".pf-ach")?.querySelectorAll("[data-pf-filter]").forEach((btn) => {
+    : `<p class="pfx-empty">${pfAchFilter === "unlocked" ? "Nenhuma conquista ainda — conclua sua primeira tarefa para começar." : "Nada pendente por aqui. Você conquistou tudo!"}</p>`;
+  document.querySelectorAll("#profileAchAll [data-pf-filter]").forEach((btn) => {
     const on = btn.dataset.pfFilter === pfAchFilter;
     btn.classList.toggle("is-active", on);
     btn.setAttribute("aria-selected", on ? "true" : "false");
@@ -1226,29 +1452,8 @@ function renderProfile() {
     }
   });
 
-  const nextCard = document.querySelector("#profileNextAchievement");
-  if (nextCard) {
-    const next = achievements
-      .filter((a) => !a.unlocked)
-      .map((a) => ({ ...a, ratio: (Number(a.current) || 0) / (Number(a.target) || 1) }))
-      .sort((x, y) => y.ratio - x.ratio)[0];
-    if (next) {
-      const target = Number(next.target) || 1;
-      const current = Math.min(target, Number(next.current) || 0);
-      nextCard.innerHTML = `
-        <header class="pf-card-head"><div><h3>${bdIcon("flag")}Próxima conquista</h3><p>A que está mais perto de sair.</p></div></header>
-        <div class="pf-next-body">
-          <span class="pf-next-ico">${pfAchIcon(next.iconName)}</span>
-          <div class="pf-next-copy"><strong>${escapeHtml(next.title)}</strong><span>${escapeHtml(next.detail)}</span></div>
-        </div>
-        <div class="pf-bar"><div style="width:${Math.round((current / target) * 100)}%"></div></div>
-        <p class="pf-level-meta">${current} de ${target} · faltam ${target - current}</p>`;
-    } else {
-      nextCard.innerHTML = `
-        <header class="pf-card-head"><div><h3>${bdIcon("crown")}Coleção completa</h3><p>Todas as conquistas foram desbloqueadas.</p></div></header>
-        <div class="pf-next-body"><span class="pf-next-ico is-done">${bdIcon("trophy")}</span><div class="pf-next-copy"><strong>Lenda do PulseNote</strong><span>Continue no ritmo para subir de nível.</span></div></div>`;
-    }
-  }
+  pfxAccountRows();
+  pfxSyncThemeSeg();
 }
 
 function renderSettings() {
@@ -4490,6 +4695,8 @@ function setView(view, { fromHistory = false } = {}) {
     requestAnimationFrame(finMoveTabIndicator);
     if (previousView !== view) finPlayEntrance();
   }
+  // Perfil: o mapa de atividade precisa da largura real (a tela estava oculta).
+  if (view === "profile") requestAnimationFrame(pfxRenderHeatmap);
   if (view === "dashboard") fitCurrencyValues("summaryFinSaldo", "dashFinReceitas", "dashFinDespesas", "dashFinSaldo");
   if (view === "autopilot" || view === "dashboard") autopilotUi.show();
   if (previousView !== view) {

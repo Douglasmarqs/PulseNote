@@ -158,6 +158,8 @@
     <link rel="stylesheet" href="/src/refine.css?v=1" />
     <!-- Finanças v2: cartões, barras, toast, escopo de filtros e scrollbars -->
     <link rel="stylesheet" href="/src/finance-v2.css?v=1" />
+    <!-- Perfil v3 -->
+    <link rel="stylesheet" href="/src/profile-v3.css?v=1" />
   </head>
   <body class="bd">
     <!-- Tela de abertura já no HTML: aparece na primeira pintura, antes de
@@ -1633,87 +1635,103 @@
              Configurações — o botão de câmera aqui só aciona o mesmo
              input de arquivo que já existe lá. -->
         <section id="profileView" class="view">
-          <div class="pf">
-            <article class="bd-card pf-hero">
-              <div class="pf-id">
-                <div class="pf-avatar-wrap">
-                  <div class="pf-avatar" id="profileAvatarPreview">U</div>
-                  <button class="pf-avatar-edit" type="button" onclick="document.getElementById('settingsPhotoInput').click()" title="Trocar foto" aria-label="Trocar foto"><svg class="i"><use href="#i-camera"/></svg></button>
-                </div>
-                <div class="pf-id-copy">
-                  <h2 id="profileNameLabel">Usuário</h2>
-                  <p id="profileEmailLabel"></p>
-                  <div class="pf-chips">
-                    <span class="pf-chip pf-chip--plan" id="profilePlanChip"><svg class="i"><use href="#i-crown"/></svg><span>Seu plano</span></span>
-                    <span class="pf-chip" id="profileStreakChip"><svg class="i"><use href="#i-flame"/></svg><span>0 dias seguidos</span></span>
-                  </div>
-                </div>
-                <div class="pf-actions">
-                  <button class="bd-btn bd-btn--primary" type="button" onclick="setView('settings')"><svg class="i"><use href="#i-pencil"/></svg>Editar perfil</button>
-                  <button class="bd-btn pf-btn-icon" type="button" onclick="setView('settings')" aria-label="Configurações" title="Configurações"><svg class="i"><use href="#i-gear"/></svg></button>
+          <!-- Perfil v3 (23/11/2026): identidade com anel de nível, o mês em
+               números, atividade, conquistas compactas e atalhos de conta.
+               Classe própria (.pfx) — ".pf" também é o cartão de foco do Planner. -->
+          <div class="pfx">
+            <article class="bd-card pfx-hero">
+              <div class="pfx-avatar-ring" id="profileLevelRing" style="--p:0">
+                <svg viewBox="0 0 120 120" aria-hidden="true">
+                  <defs><linearGradient id="pfxRingGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7c6cff"/><stop offset="1" stop-color="#22d3ee"/></linearGradient></defs>
+                  <circle class="pfx-ring-track" cx="60" cy="60" r="55"/>
+                  <circle class="pfx-ring-bar" cx="60" cy="60" r="55" pathLength="100"/>
+                </svg>
+                <div class="pfx-avatar" id="profileAvatarPreview">U</div>
+                <span class="pfx-level-pill" title="Seu nível no PulseNote">Nv <b id="profileLevelBadge">1</b></span>
+                <button class="pfx-avatar-edit" type="button" data-pfx-photo title="Trocar foto" aria-label="Trocar foto"><svg class="i"><use href="#i-camera"/></svg></button>
+              </div>
+              <div class="pfx-id">
+                <h2 id="profileNameLabel">Usuário</h2>
+                <p id="profileEmailLabel"></p>
+                <div class="pfx-chips">
+                  <span class="pfx-chip is-plan" id="profilePlanChip"><svg class="i"><use href="#i-crown"/></svg><span>Seu plano</span></span>
+                  <span class="pfx-chip is-streak" id="profileStreakChip"><svg class="i"><use href="#i-flame"/></svg><span>0 dias seguidos</span></span>
+                  <span class="pfx-chip" id="profileSinceChip" hidden><svg class="i"><use href="#i-calendar"/></svg><span></span></span>
                 </div>
               </div>
-
-              <div class="pf-level">
-                <div class="pf-level-top">
-                  <span class="pf-level-badge" id="profileLevelBadge">1</span>
-                  <div class="pf-level-copy">
-                    <span class="pf-eyebrow">Progresso</span>
-                    <h3 id="profileLevelLabel">Nível 1</h3>
-                  </div>
-                  <span class="pf-level-next" id="profileLevelNext">150 XP para o nível 2</span>
+              <div class="pfx-level">
+                <div class="pfx-level-head">
+                  <strong id="profileLevelLabel">Nível 1</strong>
+                  <span class="pfx-info" tabindex="0" aria-label="Como ganhar XP: concluir uma tarefa vale 25 XP e cada passo de meta vale 10 XP. Cada nível pede 150 XP.">
+                    <svg class="i" aria-hidden="true"><use href="#i-info"/></svg>
+                    <span class="pfx-tip" role="tooltip"><b>Como ganhar XP</b>Tarefa concluída <em>+25 XP</em><br>Passo de meta <em>+10 XP</em><br><small>Cada nível pede 150 XP.</small></span>
+                  </span>
                 </div>
-                <div class="pf-bar" role="progressbar" aria-label="Progresso do nível"><div id="profileLevelBar" style="width:0%"></div></div>
-                <p class="pf-level-meta" id="profileLevelXpLabel">0/150 XP para o próximo nível</p>
+                <div class="pf-bar pfx-level-bar" role="progressbar" aria-label="Progresso do nível"><div id="profileLevelBar" style="width:0%"></div></div>
+                <p id="profileLevelXpLabel">0/150 XP</p>
+                <p class="pfx-level-next" id="profileLevelNext">150 XP para o nível 2</p>
+              </div>
+              <div class="pfx-hero-actions">
+                <button class="bd-btn bd-btn--primary" type="button" data-pfx-go="settings:conta"><svg class="i"><use href="#i-pencil"/></svg>Editar perfil</button>
               </div>
             </article>
 
-            <div class="pf-stats">
-              <div class="bd-card pf-stat">
-                <span class="pf-stat-ico tone-orange"><svg class="i"><use href="#i-flame"/></svg></span>
-                <div><strong id="profileStatStreak">0</strong><span>Sequência (dias)</span></div>
-              </div>
-              <div class="bd-card pf-stat">
-                <span class="pf-stat-ico tone-violet"><svg class="i"><use href="#i-check-circle"/></svg></span>
-                <div><strong id="profileStatTasks">0</strong><span>Tarefas concluídas</span></div>
-              </div>
-              <div class="bd-card pf-stat">
-                <span class="pf-stat-ico tone-green"><svg class="i"><use href="#i-target"/></svg></span>
-                <div><strong id="profileStatGoals">0</strong><span>Metas batidas</span></div>
-              </div>
-              <div class="bd-card pf-stat">
-                <span class="pf-stat-ico tone-amber"><svg class="i"><use href="#i-star"/></svg></span>
-                <div><strong id="profileStatNotes">0</strong><span>Notas favoritas</span></div>
-              </div>
-            </div>
-
-            <div class="pf-grid">
-              <article class="bd-card pf-ach">
-                <header class="pf-card-head">
-                  <div>
-                    <h3><svg class="i"><use href="#i-trophy"/></svg>Conquistas <span class="pf-count" id="profileAchievementCount">0/12</span></h3>
-                    <p id="profileAchievementSub">Complete desafios para desbloquear medalhas.</p>
+            <div class="pfx-grid">
+              <div class="pfx-main">
+                <article class="bd-card pfx-card pfx-month">
+                  <header class="pfx-head"><h3><svg class="i"><use href="#i-calendar"/></svg><span id="profileMonthTitle">Seu mês</span></h3><span class="pfx-head-note">comparado ao mês anterior</span></header>
+                  <div class="pfx-tiles">
+                    <button type="button" class="pfx-tile tone-violet" data-pfx-go="planner"><span class="pfx-tile-ico"><svg class="i"><use href="#i-task-check"/></svg></span><strong id="profileStatTasks">0</strong><span>Tarefas concluídas</span><small class="pfx-delta" id="profileDeltaTasks"></small></button>
+                    <button type="button" class="pfx-tile tone-green" data-pfx-go="planner"><span class="pfx-tile-ico"><svg class="i"><use href="#i-target"/></svg></span><strong id="profileStatGoals">0</strong><span>Metas batidas</span><small class="pfx-delta" id="profileDeltaGoals"></small></button>
+                    <button type="button" class="pfx-tile tone-amber" data-pfx-go="notes"><span class="pfx-tile-ico"><svg class="i"><use href="#i-note"/></svg></span><strong id="profileStatNotes">0</strong><span>Notas criadas</span><small class="pfx-delta" id="profileDeltaNotes"></small></button>
+                    <button type="button" class="pfx-tile tone-cyan" data-pfx-go="finances"><span class="pfx-tile-ico"><svg class="i"><use href="#i-wallet"/></svg></span><strong id="profileStatBalance">R$ 0</strong><span>Saldo do mês</span><small class="pfx-delta" id="profileDeltaBalance"></small></button>
                   </div>
-                  <div class="pf-seg" role="tablist" aria-label="Filtrar conquistas">
-                    <button type="button" class="is-active" data-pf-filter="all" role="tab" aria-selected="true">Todas</button>
-                    <button type="button" data-pf-filter="unlocked" role="tab" aria-selected="false">Desbloqueadas</button>
-                    <button type="button" data-pf-filter="locked" role="tab" aria-selected="false">A conquistar</button>
-                  </div>
-                </header>
-                <div class="pf-bar pf-bar--thin"><div id="profileAchievementBar" style="width:0%"></div></div>
-                <div id="profileAchievements" class="pf-badges"></div>
-              </article>
+                </article>
 
-              <aside class="pf-side">
-                <article class="bd-card pf-next" id="profileNextAchievement"></article>
-                <article class="bd-card pf-xp">
-                  <header class="pf-card-head"><div><h3><svg class="i"><use href="#i-sparkle"/></svg>Como ganhar XP</h3><p>Cada nível pede 150 XP.</p></div></header>
-                  <ul class="pf-xp-list">
-                    <li><span class="pf-xp-ico tone-violet"><svg class="i"><use href="#i-task-check"/></svg></span><span>Concluir uma tarefa</span><b>+25 XP</b></li>
-                    <li><span class="pf-xp-ico tone-green"><svg class="i"><use href="#i-target"/></svg></span><span>Avançar um passo de meta</span><b>+10 XP</b></li>
-                    <li><span class="pf-xp-ico tone-orange"><svg class="i"><use href="#i-flame"/></svg></span><span>Manter a sequência diária</span><b>Conquistas</b></li>
-                  </ul>
-                  <button class="bd-btn pf-xp-cta" type="button" onclick="setView('planner')"><svg class="i"><use href="#i-calendar"/></svg>Ir para o Planner</button>
+                <article class="bd-card pfx-card pfx-activity">
+                  <header class="pfx-head"><h3><svg class="i"><use href="#i-pulse-line"/></svg>Atividade</h3><span class="pfx-head-note" id="profileActivitySummary"></span></header>
+                  <div class="pfx-heat-wrap">
+                    <div class="pfx-heat-days" aria-hidden="true"><span>Seg</span><span></span><span>Qua</span><span></span><span>Sex</span><span></span><span>Dom</span></div>
+                    <div class="pfx-heat" id="profileHeatmap" role="img" aria-label="Atividade das últimas 20 semanas"></div>
+                  </div>
+                  <footer class="pfx-heat-foot">
+                    <div class="pfx-heat-stats"><span><svg class="i"><use href="#i-flame"/></svg>Sequência atual <b id="profileStatStreak">0</b></span><span><svg class="i"><use href="#i-trophy"/></svg>Melhor sequência <b id="profileBestStreak">0</b></span></div>
+                    <div class="pfx-heat-legend" aria-hidden="true">Menos<i class="l0"></i><i class="l1"></i><i class="l2"></i><i class="l3"></i><i class="l4"></i>Mais</div>
+                  </footer>
+                </article>
+              </div>
+
+              <aside class="pfx-side">
+                <article class="bd-card pfx-card pfx-ach">
+                  <header class="pfx-head"><h3><svg class="i"><use href="#i-trophy"/></svg>Conquistas <span class="pfx-count" id="profileAchievementCount">0/12</span></h3></header>
+                  <p class="pfx-sub" id="profileAchievementSub">Complete desafios para desbloquear medalhas.</p>
+                  <div class="pf-bar pfx-ach-bar"><div id="profileAchievementBar" style="width:0%"></div></div>
+                  <div class="pfx-medals" id="profileMedals"></div>
+                  <div id="profileNextAchievement" class="pfx-next"></div>
+                  <button type="button" class="pfx-more" id="profileAchToggle" aria-expanded="false" aria-controls="profileAchAll"><span>Ver todas as conquistas</span><svg class="i"><use href="#i-chev-down"/></svg></button>
+                  <div class="pfx-ach-all" id="profileAchAll" hidden>
+                    <div class="pf-seg pfx-seg" role="tablist" aria-label="Filtrar conquistas">
+                      <button type="button" class="is-active" data-pf-filter="all" role="tab" aria-selected="true">Todas</button>
+                      <button type="button" data-pf-filter="unlocked" role="tab" aria-selected="false">Ganhas</button>
+                      <button type="button" data-pf-filter="locked" role="tab" aria-selected="false">A conquistar</button>
+                    </div>
+                    <div id="profileAchievements" class="pfx-ach-list"></div>
+                  </div>
+                </article>
+
+                <article class="bd-card pfx-card pfx-account">
+                  <header class="pfx-head"><h3><svg class="i"><use href="#i-user"/></svg>Conta e preferências</h3></header>
+                  <div class="pfx-rows" id="profileAccountRows"></div>
+                  <div class="pfx-theme" role="radiogroup" aria-label="Tema">
+                    <span class="pfx-theme-label">Tema</span>
+                    <div class="pfx-theme-seg" id="profileThemeSeg">
+                      <button type="button" role="radio" data-pfx-theme="light" aria-label="Claro" title="Claro"><svg class="i"><use href="#i-sun"/></svg></button>
+                      <button type="button" role="radio" data-pfx-theme="aurora" aria-label="Escuro" title="Escuro"><svg class="i" viewBox="0 0 24 24"><path d="M20 14.500A8 8 0 019.500 4 8 8 0 1020 14.500z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></button>
+                      <button type="button" role="radio" data-pfx-theme="eclipse" aria-label="Eclipse" title="Eclipse"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 4a8 8 0 010 16z" fill="currentColor"/></svg></button>
+                      <button type="button" role="radio" data-pfx-theme="system" aria-label="Automático" title="Automático"><svg class="i" viewBox="0 0 24 24"><rect x="3.500" y="4.500" width="17" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M9 20h6M12 16.500V20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+                    </div>
+                  </div>
+                  <button type="button" class="pfx-logout" data-pfx-logout><svg class="i"><use href="#i-arrow-left"/></svg>Sair da conta</button>
                 </article>
               </aside>
             </div>
