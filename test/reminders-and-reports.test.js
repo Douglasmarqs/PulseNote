@@ -51,7 +51,8 @@ test("gera um PDF válido para o relatório do WhatsApp", () => {
   });
 
   assert.ok(pdf.subarray(0, 8).toString("ascii").startsWith("%PDF-1."));
-  assert.ok(pdf.toString("latin1").includes("PULSENOTE - RELATORIO FINANCEIRO"));
+  assert.ok(pdf.toString("latin1").includes("(Setembro de 2026)"));
+  assert.ok(pdf.toString("latin1").includes("/WinAnsiEncoding"));
   assert.ok(pdf.toString("latin1").includes("xref"));
 });
 

@@ -322,7 +322,13 @@ function parseDeterministicIntent(text, todayIso, categories = [], { deferCompou
     .replace(new RegExp(`\\b(?:${MONTH_NAMES.join("|")})\\b`, "g"), " ")
     .replace(/\s+/g, " ").trim();
   const hasSearchSubject = /^quanto (?:gastei|recebi)\s+(?:com|em|de|no|na)\s+\S/.test(questionWithoutPeriod);
-  const asksForReport = /\b(relatorio|pdf|arquivo)\b/.test(command)
+  // "faz um PDF da minha lista de compras" / "transforma essa nota em PDF"
+  // não é o relatório financeiro: vai para o Pulsinho montar o documento.
+  const financeWords = /\b(relatorio|financ\w*|gasto\w*|despesa\w*|receitas?|saldo|extrato|lancamento\w*|dinheiro|contas do mes|mes passado|este mes|esse mes|neste mes|nesse mes)\b/.test(command)
+    || MONTH_NAMES.some((name) => new RegExp(`\\b${name}\\b`).test(command));
+  const otherDocument = /\b(nota|notas|anotac\w*|lista|texto|tarefa|tarefas|documento|roteiro|curriculo|carta|receita de|resumo da|isso|isto|essa|esse|essas|esses|conversa|mensagem|ideias?|planejamento|cronograma)\b/.test(command);
+  const pdfForOtherThing = /\b(pdf|arquivo)\b/.test(command) && otherDocument && !financeWords;
+  const asksForReport = (/\b(relatorio|pdf|arquivo)\b/.test(command) && !pdfForOtherThing)
     || (/^quanto (gastei|recebi)\b/.test(command) && hasReportPeriod && !hasSearchSubject);
   if (asksForReport) {
     return {
