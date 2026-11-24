@@ -54,7 +54,18 @@
   letter-spacing: -.02em;
   box-shadow: 0 0 0 3px var(--bd-card), 0 18px 34px -16px rgba(91, 79, 245, .7);
 }
-.pfx-avatar img { display: block; width: 100%; height: 100%; max-width: none; object-fit: cover; object-position: center 30%; border-radius: 50%; }
+/* A foto ocupa o círculo inteiro qualquer que seja o formato (retrato,
+   paisagem): posição absoluta + cover. Antes, numa foto vertical o
+   height:100% não valia dentro do grid e a imagem virava uma elipse alta,
+   deixando o fundo roxo aparecer nas laterais. */
+.pfx-avatar:has(img) { background: var(--bd-card-2); }
+/* Mesmo problema nos avatares pequenos (topo, barra lateral, Configurações,
+   menu): a foto vertical saía do tamanho e ficava cortada só embaixo. */
+.bd-avatar:has(> img), .user-avatar-btn:has(> img), .st-avatar:has(> img), .avatar-circle:has(> img), .user-dropdown-header > div:has(> img) { position: relative; overflow: hidden; }
+.bd-avatar > img, .user-avatar-btn > img, .st-avatar > img, .avatar-circle > img, .user-dropdown-header > div > img {
+  position: absolute; inset: 0; display: block; width: 100% !important; height: 100% !important; max-width: none; object-fit: cover; object-position: center 25%; border-radius: inherit !important;
+}
+.pfx-avatar img { position: absolute; inset: 0; display: block; width: 100%; height: 100%; max-width: none; max-height: none; object-fit: cover; object-position: center 25%; border-radius: 0; }
 .pfx-level-pill {
   position: absolute;
   z-index: 2;
@@ -76,8 +87,8 @@
   position: absolute;
   z-index: 3;
   /* Fica sobre o anel a 45° (canto inferior direito), sem cobrir o rosto. */
-  right: 2px;
-  bottom: 2px;
+  right: -4px;
+  bottom: 0;
   display: grid;
   place-items: center;
   width: 34px;
