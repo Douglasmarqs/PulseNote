@@ -1201,16 +1201,23 @@ function pfxBestStreak() {
 function pfxRenderHeatmap() {
   const root = document.querySelector("#profileHeatmap");
   if (!root) return;
-  const activity = pfxActivityByDay();
-  // Quantas semanas cabem na largura disponível (entre 12 e 20): no celular
-  // o mapa cabe inteiro, sem rolagem lateral.
   const wrapEl = root.closest(".pfx-heat-wrap");
-  const cs = wrapEl ? getComputedStyle(wrapEl) : null;
-  const cell = parseFloat(cs?.getPropertyValue("--cell")) || 15;
-  const gap = parseFloat(cs?.getPropertyValue("--gap")) || 4;
-  const labelsW = (wrapEl?.querySelector(".pfx-heat-days")?.offsetWidth || 28) + 10;
-  const fit = wrapEl && wrapEl.clientWidth ? Math.floor((wrapEl.clientWidth - labelsW + gap) / (cell + gap)) : 20;
-  const weeks = Math.max(12, Math.min(20, fit));
+  // Tela de perfil escondida (largura 0): desenha quando ela aparecer.
+  if (!wrapEl || !wrapEl.clientWidth) return;
+  pfxWatchHeatmap(wrapEl);
+  const activity = pfxActivityByDay();
+  // Quantas semanas cabem (12 a 20) e de que tamanho fica cada célula para o
+  // mapa ocupar a largura exata do cartão — sem rolagem nem célula cortada.
+  const cs = getComputedStyle(wrapEl);
+  const gap = parseFloat(cs.getPropertyValue("--gap")) || 4;
+  const innerW = wrapEl.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0);
+  const labelsW = (wrapEl.querySelector(".pfx-heat-days")?.offsetWidth || 28) + (parseFloat(cs.columnGap) || 10);
+  const avail = Math.max(120, innerW - labelsW);
+  const weeks = Math.max(12, Math.min(20, Math.floor((avail + gap) / (13 + gap))));
+  const cell = Math.max(9, Math.min(20, Math.floor((avail - gap * (weeks - 1)) / weeks)));
+  wrapEl.style.setProperty("--cell", `${cell}px`);
+  wrapEl.dataset.weeks = String(weeks);
+  wrapEl.dataset.width = String(wrapEl.clientWidth);
   const today = new Date(`${todayIso}T12:00:00`);
   const mondayOffset = (today.getDay() + 6) % 7; // 0 = segunda
   const start = new Date(today);
@@ -1230,11 +1237,24 @@ function pfxRenderHeatmap() {
   }
   root.innerHTML = cells.join("");
   root.setAttribute("aria-label", `Atividade das últimas ${weeks} semanas: ${activeDays} dias ativos`);
-  // Em telas estreitas o mapa rola: abre já mostrando a semana atual.
-  const wrap = root.closest(".pfx-heat-wrap");
-  if (wrap) requestAnimationFrame(() => { wrap.scrollLeft = wrap.scrollWidth; });
   const summary = document.querySelector("#profileActivitySummary");
   if (summary) summary.textContent = `${activeDays} ${activeDays === 1 ? "dia ativo" : "dias ativos"} em ${weeks} semanas`;
+}
+
+// Redesenha o mapa quando a largura do cartão muda (girar o celular,
+// redimensionar a janela do app instalado, abrir a tela de perfil).
+let pfxHeatObserver = null;
+let pfxHeatTimer = 0;
+function pfxWatchHeatmap(wrapEl) {
+  if (pfxHeatObserver || typeof ResizeObserver !== "function") return;
+  pfxHeatObserver = new ResizeObserver(() => {
+    clearTimeout(pfxHeatTimer);
+    pfxHeatTimer = setTimeout(() => {
+      const width = wrapEl.clientWidth;
+      if (width && String(width) !== wrapEl.dataset.width) pfxRenderHeatmap();
+    }, 120);
+  });
+  pfxHeatObserver.observe(wrapEl);
 }
 
 function pfxAccountRows() {
@@ -11570,368 +11590,419 @@ function zipFiles(filesObj) {
 }
 
 // ── Ponto de entrada do botão Exportar ───────────────────────
+// Relatório mensal em HTML pensado para "Salvar como PDF": A4, tipografia
+// limpa, KPIs com comparação ao mês anterior, leitura rápida ("Destaques"),
+// gráficos em SVG e tabelas que não quebram no meio entre páginas.
 function exportMonthReport(monthKey) {
-  const entries = (state.finances || []).filter((f) => f.date.startsWith(monthKey) && (f.workspaceId || "personal") === activeWorkspaceId)
+  const inWs = (f) => (f.workspaceId || "personal") === activeWorkspaceId;
+  const entries = (state.finances || []).filter((f) => f.date.startsWith(monthKey) && inWs(f))
     .sort((a, b) => a.date.localeCompare(b.date));
   if (!entries.length) {
     showToast("Nenhum lançamento no período para exportar.");
     return;
   }
 
+  const esc = escapeHtml;
+  const money = (v) => formatCurrency(v);
   const label    = finMonthLabel(monthKey);
   const isClosed = isMonthClosed(monthKey);
-  const userName = (getUser()?.name || "Usuário").split(" ").slice(0, 2).join(" ");
-  const geradoEm = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "long", year: "numeric" }).format(new Date());
+  const ownerName = (getUser()?.name || "Usuário").split(" ").slice(0, 2).join(" ");
+  const geradoEm = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date());
 
-  const receitas = entries.filter((f) => f.type === "receita").reduce((s, f) => s + f.amount, 0);
-  const despesas = entries.filter((f) => f.type === "despesa").reduce((s, f) => s + f.amount, 0);
+  const sum = (list, type) => list.filter((f) => f.type === type).reduce((s, f) => s + Number(f.amount || 0), 0);
+  const receitas = sum(entries, "receita");
+  const despesas = sum(entries, "despesa");
   const saldo    = receitas - despesas;
-  const savings  = receitas > 0 ? ((saldo / receitas) * 100).toFixed(1) : "0";
-  const usedPct  = receitas > 0 ? Math.min(100, Math.round((despesas / receitas) * 100)) : 0;
+  const savingsPct = receitas > 0 ? (saldo / receitas) * 100 : 0;
+  const usedPct  = receitas > 0 ? Math.min(100, Math.round((despesas / receitas) * 100)) : (despesas > 0 ? 100 : 0);
 
-  // Agrupamento por categoria (despesas)
+  // Histórico de 6 meses (gráfico) — o 5º item é o mês anterior.
+  const months6 = [];
+  const [ay, am] = monthKey.split("-").map(Number);
+  for (let i = 5; i >= 0; i -= 1) {
+    const d = new Date(ay, am - 1 - i, 1);
+    const mk = toLocalIso(d).slice(0, 7);
+    const me = (state.finances || []).filter((f) => f.date.startsWith(mk) && inWs(f));
+    months6.push({ mk, lbl: safeFormatDate(d, { month: "short" }, "-").replace(".", ""), r: sum(me, "receita"), d: sum(me, "despesa") });
+  }
+  const prev = months6[4];
+  const hasPrev = prev.r > 0 || prev.d > 0;
+  const delta = (now, before, goodWhenUp) => {
+    if (!hasPrev || !before) return "";
+    const pct = ((now - before) / Math.abs(before)) * 100;
+    if (Math.abs(pct) < 0.5) return `<span class="kpi-delta">igual ao mês anterior</span>`;
+    const up = pct > 0;
+    const good = goodWhenUp ? up : !up;
+    return `<span class="kpi-delta ${good ? "is-good" : "is-bad"}">${up ? "▲" : "▼"} ${Math.abs(pct).toFixed(0)}% vs ${esc(prev.lbl)}</span>`;
+  };
+
+  // Despesas por categoria
   const byCat = {};
   entries.filter((f) => f.type === "despesa").forEach((f) => {
     const cat = findCategory(f.category);
-    if (!byCat[f.category]) byCat[f.category] = { label: cat.label.replace(/^\S+\s*/, ""), color: cat.color, total: 0, count: 0 };
-    byCat[f.category].total += f.amount;
-    byCat[f.category].count++;
+    if (!byCat[f.category]) byCat[f.category] = { id: f.category, label: finCatName(f.category), color: cat.color || "#8a9bb0", total: 0, count: 0 };
+    byCat[f.category].total += Number(f.amount || 0);
+    byCat[f.category].count += 1;
   });
   const catList = Object.values(byCat).sort((a, b) => b.total - a.total);
+  const topTx = entries.filter((f) => f.type === "despesa").sort((a, b) => b.amount - a.amount).slice(0, 5);
 
-  // Top 5 maiores transações
-  const topTx = [...entries].sort((a, b) => b.amount - a.amount).slice(0, 5);
-
-  // Histórico 6 meses (para o gráfico de barras SVG)
-  const months6 = [];
-  const [ay, am] = monthKey.split("-").map(Number);
-  for (let i = 5; i >= 0; i--) {
-    const d = new Date(ay, am - 1 - i, 1);
-    const mk = toLocalIso(d).slice(0, 7);
-    const me = (state.finances || []).filter((f) => f.date.startsWith(mk) && (f.workspaceId || "personal") === activeWorkspaceId);
-    const mr = me.filter((f) => f.type === "receita").reduce((s, f) => s + f.amount, 0);
-    const md = me.filter((f) => f.type === "despesa").reduce((s, f) => s + f.amount, 0);
-    const lbl = safeFormatDate(d, { month: "short" }, "-");
-    months6.push({ mk, lbl, r: mr, d: md });
+  // Destaques (leitura rápida do mês)
+  const now = new Date();
+  const daysInMonth = new Date(ay, am, 0).getDate();
+  const isCurrent = ay === now.getFullYear() && am === now.getMonth() + 1;
+  const daysElapsed = isCurrent ? Math.max(1, now.getDate()) : daysInMonth;
+  const dailyAvg = despesas / daysElapsed;
+  const byDay = {};
+  entries.filter((f) => f.type === "despesa").forEach((f) => { byDay[f.date] = (byDay[f.date] || 0) + Number(f.amount || 0); });
+  const peakDay = Object.entries(byDay).sort((a, b) => b[1] - a[1])[0];
+  const insights = [];
+  if (catList[0] && despesas > 0) insights.push({ t: "Maior categoria", v: catList[0].label, s: `${money(catList[0].total)} · ${((catList[0].total / despesas) * 100).toFixed(0)}% das despesas` });
+  if (despesas > 0) insights.push({ t: "Gasto médio por dia", v: money(dailyAvg), s: isCurrent ? `em ${daysElapsed} dias até hoje` : `em ${daysInMonth} dias` });
+  if (peakDay) insights.push({ t: "Dia de maior gasto", v: formatDate(peakDay[0]), s: money(peakDay[1]) });
+  if (hasPrev && prev.d > 0) {
+    const diff = despesas - prev.d;
+    insights.push({ t: "Despesas vs mês anterior", v: `${diff > 0 ? "+" : diff < 0 ? "−" : ""}${money(Math.abs(diff))}`, s: diff > 0 ? "gastou mais que no mês anterior" : diff < 0 ? "gastou menos que no mês anterior" : "mesmo valor do mês anterior", tone: diff > 0 ? "bad" : "good" });
+  } else {
+    insights.push({ t: "Lançamentos", v: String(entries.length), s: `${entries.filter((f) => f.type === "receita").length} receitas · ${entries.filter((f) => f.type === "despesa").length} despesas` });
   }
+
+  // Gráfico de 6 meses: barras agrupadas com linhas de grade.
   const maxVal = Math.max(...months6.flatMap((m) => [m.r, m.d]), 1);
-
-  // SVG do gráfico de barras
-  const barW = 28; const gap = 4; const gW = barW * 2 + gap; const pH = 120; const pPad = 16;
-  const svgBars = months6.map((m, i) => {
-    const x     = pPad + i * (gW + 14);
-    const rH    = Math.max(3, (m.r / maxVal) * pH);
-    const dH    = Math.max(3, (m.d / maxVal) * pH);
-    const isAct = m.mk === monthKey;
-    return `<rect x="${x}" y="${pH + pPad - rH}" width="${barW}" height="${rH}" rx="3" fill="${isAct ? "#34c759" : "#d1fae5"}"/>
-      <rect x="${x + barW + gap}" y="${pH + pPad - dH}" width="${barW}" height="${dH}" rx="3" fill="${isAct ? "#ff3b30" : "#fee2e2"}"/>
-      <text x="${x + barW}" y="${pH + pPad + 14}" text-anchor="middle" font-size="9" fill="#8a9bb0">${m.lbl}</text>`;
+  // Escala "redonda" em 4 faixas (ex.: 2,5 mil · 5 mil · 7,5 mil · 10 mil).
+  const niceMax = (() => {
+    const raw = maxVal / 4;
+    const p = 10 ** Math.floor(Math.log10(raw));
+    return [1, 2, 2.5, 5, 10].find((m) => m * p >= raw) * p * 4;
+  })();
+  const cW = 560; const cH = 190; const left = 54; const top = 12; const bottom = 26;
+  const plotH = cH - top - bottom; const plotW = cW - left - 8;
+  const slot = plotW / months6.length; const bw = Math.min(26, slot * 0.28);
+  const y = (v) => top + plotH - (v / niceMax) * plotH;
+  const short = (v) => (v >= 1000 ? `${(v / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} mil` : Math.round(v).toLocaleString("pt-BR"));
+  const grid = [0, 0.25, 0.5, 0.75, 1].map((k) => {
+    const gy = y(niceMax * k);
+    return `<line x1="${left}" x2="${cW - 8}" y1="${gy}" y2="${gy}" stroke="#e7e9f2" stroke-width="1"${k ? ' stroke-dasharray="3 4"' : ""}/>
+      <text x="${left - 8}" y="${gy + 3}" text-anchor="end" font-size="9" fill="#8b90a7">${short(niceMax * k)}</text>`;
   }).join("");
-  const chartSvg = `<svg viewBox="0 0 ${pPad*2 + months6.length*(gW+14)} ${pH+pPad+20}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto">${svgBars}</svg>`;
+  const bars = months6.map((m, i) => {
+    const cx = left + slot * i + slot / 2;
+    const act = m.mk === monthKey;
+    const rH = Math.max(m.r ? 2 : 0, y(0) - y(m.r));
+    const dH = Math.max(m.d ? 2 : 0, y(0) - y(m.d));
+    return `${act ? `<rect x="${cx - slot / 2 + 4}" y="${top}" width="${slot - 8}" height="${plotH}" rx="8" fill="#f3f1ff"/>` : ""}
+      <rect x="${cx - bw - 2}" y="${y(0) - rH}" width="${bw}" height="${rH}" rx="4" fill="${act ? "#10b981" : "#a7e8cf"}"/>
+      <rect x="${cx + 2}" y="${y(0) - dH}" width="${bw}" height="${dH}" rx="4" fill="${act ? "#f43f5e" : "#fbc2cd"}"/>
+      <text x="${cx}" y="${cH - 8}" text-anchor="middle" font-size="10" font-weight="${act ? 700 : 500}" fill="${act ? "#4338ca" : "#8b90a7"}">${esc(m.lbl)}</text>`;
+  }).join("");
+  const svgNs = ["http:", "", "www.w3.org", "2000", "svg"].join("/");
+  const chartSvg = `<svg viewBox="0 0 ${cW} ${cH}" xmlns="${svgNs}" role="img" aria-label="Receitas e despesas dos últimos 6 meses">${grid}${bars}</svg>`;
 
-  // Donut SVG (categorias)
+  // Rosca de categorias (com respiro entre fatias).
   let donutSvg = "";
   if (catList.length && despesas > 0) {
-    const cx = 70; const cy = 70; const r = 55; const iR = 35;
-    let angle = -Math.PI / 2;
-    const segments = catList.slice(0, 6).map((c) => {
-      const slice = (c.total / despesas) * Math.PI * 2;
-      const x1 = cx + r * Math.cos(angle); const y1 = cy + r * Math.sin(angle);
-      const x2 = cx + r * Math.cos(angle + slice); const y2 = cy + r * Math.sin(angle + slice);
-      const xi1 = cx + iR * Math.cos(angle + slice); const yi1 = cy + iR * Math.sin(angle + slice);
-      const xi2 = cx + iR * Math.cos(angle); const yi2 = cy + iR * Math.sin(angle);
-      const large = slice > Math.PI ? 1 : 0;
-      const path = `M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2} L ${xi1} ${yi1} A ${iR} ${iR} 0 ${large} 0 ${xi2} ${yi2} Z`;
-      angle += slice;
-      return `<path d="${path}" fill="${c.color}"/>`;
+    const R = 62; const C = 2 * Math.PI * R;
+    let acc = 0;
+    const segs = catList.slice(0, 7).map((c) => {
+      const len = (c.total / despesas) * C;
+      const seg = `<circle r="${R}" cx="80" cy="80" fill="none" stroke="${c.color}" stroke-width="20" stroke-dasharray="${Math.max(0, len - 2)} ${C}" stroke-dashoffset="${-acc}" transform="rotate(-90 80 80)"/>`;
+      acc += len;
+      return seg;
     }).join("");
-    donutSvg = `<svg viewBox="0 0 140 140" xmlns="http://www.w3.org/2000/svg" style="width:140px;height:140px">${segments}<text x="70" y="66" text-anchor="middle" font-size="10" fill="#8a9bb0">Total</text><text x="70" y="80" text-anchor="middle" font-size="12" font-weight="700" fill="#1a1f2e">${formatCurrency(despesas).replace("R$","")}</text></svg>`;
+    const rest = catList.slice(7).reduce((s, c) => s + c.total, 0);
+    const restSeg = rest > 0 ? `<circle r="${R}" cx="80" cy="80" fill="none" stroke="#cbd0e0" stroke-width="20" stroke-dasharray="${Math.max(0, (rest / despesas) * C - 2)} ${C}" stroke-dashoffset="${-acc}" transform="rotate(-90 80 80)"/>` : "";
+    donutSvg = `<svg viewBox="0 0 160 160" xmlns="${svgNs}" role="img" aria-label="Despesas por categoria">
+      <circle r="${R}" cx="80" cy="80" fill="none" stroke="#f1f2f8" stroke-width="20"/>${segs}${restSeg}
+      <text x="80" y="74" text-anchor="middle" font-size="9.5" fill="#8b90a7" letter-spacing=".06em">DESPESAS</text>
+      <text x="80" y="92" text-anchor="middle" font-size="14" font-weight="800" fill="#141729">${esc(money(despesas))}</text></svg>`;
   }
 
-  // Recorrentes do usuário para a seção de assinaturas
-  const recurrents = (state.finRecurrents || []).filter((r) => r.type === "despesa" && (r.workspaceId || "personal") === activeWorkspaceId);
-
-  // Metas e quanto foi usado
-  const goals = (state.finGoals || []).filter((g) => (g.workspaceId || "personal") === activeWorkspaceId).map((g) => {
-    const cat = findCategory(g.categoryId);
+  const recurrents = (state.finRecurrents || []).filter((r) => r.type === "despesa" && inWs(r));
+  const recurTotal = recurrents.reduce((s, r) => s + Number(r.amount || 0), 0);
+  const goals = (state.finGoals || []).filter(inWs).map((g) => {
     const spent = byCat[g.categoryId]?.total || 0;
-    const pct = g.limit > 0 ? Math.min(150, Math.round((spent / g.limit) * 100)) : 0;
-    return { ...g, cat, spent, pct };
+    const pct = g.limit > 0 ? Math.round((spent / g.limit) * 100) : 0;
+    return { ...g, name: finCatName(g.categoryId), color: findCategory(g.categoryId).color || "#6c5ce7", spent, pct };
   });
+
+  const txRow = (f) => {
+    const isRec = f.type === "receita";
+    const cat = findCategory(f.category);
+    return `<tr>
+      <td class="c-date">${esc(formatDate(f.date))}</td>
+      <td class="c-desc">${esc(f.description || "Sem descrição")}</td>
+      <td class="c-cat"><span class="dot" style="background:${esc(cat.color || "#8a9bb0")}"></span>${esc(finCatName(f.category))}</td>
+      <td class="c-val ${isRec ? "is-in" : "is-out"}">${isRec ? "+" : "−"} ${esc(money(f.amount))}</td>
+    </tr>`;
+  };
+
+  const logo = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2.5-6 4 12 2.5-6H21"/></svg>`;
 
   const htmlContent = `<!doctype html>
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8"/>
-<title>Relatório PulseNote — ${label}</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>PulseNote · Relatório financeiro · ${esc(label)}</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif;background:#fff;color:#1a1f2e;font-size:13px;line-height:1.5}
-  .page{max-width:900px;margin:0 auto;padding:40px 40px 60px}
-  /* Header */
-  .rpt-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px;padding-bottom:20px;border-bottom:3px solid #6c5ce7}
-  .rpt-brand{display:flex;align-items:center;gap:12px}
-  .rpt-brand-mark{width:44px;height:44px;border-radius:12px;background:linear-gradient(145deg,#6c5ce7,#af52de);display:grid;place-items:center;font-size:1.4rem}
-  .rpt-brand-name{font-size:1.2rem;font-weight:800;color:#1a1f2e}
-  .rpt-brand-sub{font-size:0.72rem;color:#8a9bb0;font-weight:600;text-transform:uppercase;letter-spacing:.05em}
-  .rpt-header-right{text-align:right}
-  .rpt-month{font-size:1.4rem;font-weight:800;color:#6c5ce7}
-  .rpt-meta{font-size:0.72rem;color:#8a9bb0;line-height:1.8}
-  /* Secção */
-  .section{margin-bottom:28px}
-  .section-title{font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#8a9bb0;margin-bottom:12px}
-  /* Resumo: 4 cards */
-  .summary-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:28px}
-  .summary-card{border:1.5px solid #e8ecf2;border-radius:14px;padding:14px 16px}
-  .summary-card .lbl{font-size:0.7rem;text-transform:uppercase;letter-spacing:.06em;font-weight:700;color:#8a9bb0;margin-bottom:4px}
-  .summary-card .val{font-size:1.35rem;font-weight:800;letter-spacing:-0.03em}
-  .green{color:#34c759}.red{color:#ff3b30}.blue{color:#6c5ce7}
-  /* Barra */
-  .bar-wrap{background:#f0f4f8;border-radius:999px;height:8px;overflow:hidden;margin:4px 0}
-  .bar-fill{height:100%;border-radius:inherit;transition:width .3s}
-  /* Gráfico 6 meses */
-  .chart-section{display:grid;grid-template-columns:1fr auto;gap:24px;align-items:center;margin-bottom:28px;border:1.5px solid #e8ecf2;border-radius:16px;padding:20px}
+  :root{--ink:#141729;--ink-2:#4a5068;--ink-3:#8b90a7;--line:#e7e9f2;--soft:#f6f7fb;--brand:#5b4ff5;--in:#059669;--out:#e11d48}
+  html{background:#eceef5}
+  body{font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI Variable','Segoe UI',Roboto,sans-serif;color:var(--ink);font-size:12.5px;line-height:1.5;-webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums}
+  .sheet{max-width:860px;margin:24px auto 48px;background:#fff;border-radius:18px;box-shadow:0 24px 60px -30px rgba(20,23,41,.35);overflow:hidden}
+  /* Barra de ações (só na tela) */
+  .actions{position:sticky;top:0;z-index:5;display:flex;justify-content:center;gap:8px;padding:12px;background:rgba(236,238,245,.86);backdrop-filter:blur(10px)}
+  .actions button{font:inherit;font-weight:600;font-size:13px;border:0;border-radius:999px;padding:9px 18px;cursor:pointer}
+  .btn-primary{background:var(--brand);color:#fff;box-shadow:0 8px 18px -10px rgba(91,79,245,.9)}
+  .btn-ghost{background:#fff;color:var(--ink-2);box-shadow:inset 0 0 0 1px var(--line)}
+  /* Capa */
+  .cover{position:relative;padding:32px 40px 28px;color:#fff;background:radial-gradient(120% 140% at 100% 0%,#22d3ee33 0%,transparent 45%),linear-gradient(135deg,#1b1840 0%,#2b2470 55%,#4c35c9 100%)}
+  .cover-top{display:flex;justify-content:space-between;align-items:center;gap:16px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:15px;letter-spacing:-.01em}
+  .brand-mark{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:linear-gradient(145deg,#7c6cff,#c07dff);box-shadow:0 6px 16px -6px rgba(124,108,255,.9)}
+  .status{font-size:11px;font-weight:600;padding:5px 11px;border-radius:999px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.22)}
+  .status.is-closed{background:rgba(16,185,129,.2);border-color:rgba(16,185,129,.45)}
+  .cover h1{margin-top:26px;font-size:30px;line-height:1.1;font-weight:800;letter-spacing:-.03em}
+  .cover h1::first-letter{text-transform:uppercase}
+  .cover p{margin-top:6px;font-size:12.5px;color:rgba(255,255,255,.72)}
+  .cover-meter{margin-top:22px;display:grid;gap:7px}
+  .cover-meter .row{display:flex;justify-content:space-between;gap:12px;font-size:11.5px;color:rgba(255,255,255,.78)}
+  .cover-meter .row b{color:#fff}
+  .meter{height:8px;border-radius:999px;background:rgba(255,255,255,.14);overflow:hidden}
+  .meter i{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,#34d399,#22d3ee)}
+  .meter.is-warn i{background:linear-gradient(90deg,#fbbf24,#fb7185)}
+  /* KPIs */
+  .kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;padding:22px 40px 6px}
+  .kpi{border:1px solid var(--line);border-radius:14px;padding:13px 14px;background:#fff;min-width:0}
+  .kpi-lbl{display:flex;align-items:center;gap:7px;font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3)}
+  .kpi-lbl i{width:8px;height:8px;border-radius:3px}
+  .kpi-lbl.is-in i{background:var(--in)}.kpi-lbl.is-out i{background:var(--out)}.kpi-lbl.is-brand i{background:var(--brand)}
+  .kpi-lbl.is-in,.kpi-lbl.is-out,.kpi-lbl.is-brand{color:var(--ink-3)}
+  .kpi-val{margin-top:6px;font-size:19px;font-weight:800;letter-spacing:-.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .kpi-delta{display:block;margin-top:3px;font-size:10.5px;font-weight:600;color:var(--ink-3)}
+  .kpi-delta.is-good{color:var(--in)}.kpi-delta.is-bad{color:var(--out)}
+  .is-in{color:var(--in)}.is-out{color:var(--out)}.is-brand{color:var(--brand)}
+  /* Seções */
+  section{padding:22px 40px 4px;break-inside:avoid}
+  section.flow{break-inside:auto}
+  .sec-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:12px;break-after:avoid}
+  h2{font-size:14px;font-weight:750;letter-spacing:-.01em}
+  .sec-head span{font-size:11px;color:var(--ink-3)}
+  .card{border:1px solid var(--line);border-radius:16px;padding:16px 18px;background:#fff}
+  /* Destaques */
+  .insights{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+  .insight{border-radius:14px;padding:12px 14px;background:var(--soft);min-width:0}
+  .insight small{display:block;font-size:10.5px;font-weight:600;color:var(--ink-3);text-transform:uppercase;letter-spacing:.05em}
+  .insight strong{display:block;margin-top:5px;font-size:14px;font-weight:750;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .insight span{display:block;margin-top:2px;font-size:11px;color:var(--ink-2)}
+  .insight.is-bad strong{color:var(--out)}.insight.is-good strong{color:var(--in)}
+  /* Gráfico */
+  .chart svg{display:block;width:100%;height:auto}
+  .legend{display:flex;flex-wrap:wrap;gap:16px;margin-top:8px;font-size:11px;color:var(--ink-2)}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .legend i{width:10px;height:10px;border-radius:3px}
   /* Categorias */
-  .cat-section{display:grid;grid-template-columns:140px 1fr;gap:20px;align-items:center;margin-bottom:28px;border:1.5px solid #e8ecf2;border-radius:16px;padding:20px}
-  .cat-list{display:grid;gap:8px}
-  .cat-row{display:flex;align-items:center;gap:8px}
-  .cat-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
-  .cat-name{flex:1;font-size:0.82rem;font-weight:600;display:flex;align-items:center;gap:8px}.cat-dot{width:9px;height:9px;border-radius:3px;flex:none}
-  .cat-pct{font-size:0.75rem;color:#8a9bb0;width:38px;text-align:right;flex-shrink:0}
-  .cat-val{font-size:0.82rem;font-weight:700;color:#ff3b30;width:78px;text-align:right;flex-shrink:0}
-  /* Tabela de lançamentos: o wrapper (.tbl-scroll) rola na horizontal em
-     telas estreitas em vez de deixar a tabela espremer/cortar conteúdo —
-     min-width garante que colunas não fiquem ilegíveis nem quebrem linha
-     no meio de um valor, mas a descrição trunca com "..." se for longa. */
-  .tbl-scroll{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
-  table{width:100%;min-width:520px;border-collapse:collapse;font-size:0.8rem}
-  thead tr{background:#f0f4f8}
-  th{padding:8px 10px;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#8a9bb0;white-space:nowrap}
-  td{padding:9px 10px;border-top:1px solid #f0f4f8}
-  td:nth-child(2){max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  td:last-child, th:last-child{white-space:nowrap}
-  .badge{display:inline-block;border-radius:999px;padding:2px 8px;font-size:0.68rem;font-weight:700;white-space:nowrap}
-  .badge-r{background:#e5f9ec;color:#34c759}
-  .badge-d{background:#ffeeed;color:#ff3b30}
-  /* Metas */
-  .goal-row{margin-bottom:10px}
-  .goal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;gap:10px}
-  .goal-name{font-size:0.82rem;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .goal-val{font-size:0.78rem;color:#8a9bb0;white-space:nowrap;flex-shrink:0}
-  .goal-val.over{color:#ff3b30;font-weight:700}
+  .cats{display:grid;grid-template-columns:170px minmax(0,1fr);gap:22px;align-items:center}
+  .cats svg{width:170px;height:170px;display:block}
+  .cat-row{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(60px,1fr) 44px 92px;align-items:center;gap:12px;padding:7px 0;border-bottom:1px solid var(--soft)}
+  .cat-row:last-child{border-bottom:0}
+  .cat-name{display:flex;align-items:center;gap:8px;font-weight:600;min-width:0}
+  .cat-name b{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cat-name small{font-weight:500;color:var(--ink-3);font-size:10.5px;white-space:nowrap}
+  .dot{display:inline-block;width:9px;height:9px;border-radius:3px;flex:none;margin-right:7px;vertical-align:middle}
+  .cat-name .dot{margin:0}
+  .bar{display:block;height:6px;border-radius:999px;background:var(--soft);overflow:hidden}
+  .bar i{display:block;height:100%;border-radius:inherit}
+  .cat-pct{text-align:right;color:var(--ink-3);font-size:11.5px}
+  .cat-val{text-align:right;font-weight:700}
+  /* Limites */
+  .goal{display:grid;gap:6px;padding:8px 0}
+  .goal + .goal{border-top:1px solid var(--soft)}
+  .goal-top{display:flex;justify-content:space-between;gap:12px;font-size:12px}
+  .goal-top b{font-weight:600}
+  .goal-top span{color:var(--ink-3);white-space:nowrap}
+  .goal-top span.over{color:var(--out);font-weight:700}
+  /* Tabelas */
+  table{width:100%;border-collapse:separate;border-spacing:0;font-size:12px}
+  thead{display:table-header-group}
+  th{padding:9px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-3);background:var(--soft)}
+  th:first-child{border-radius:10px 0 0 10px}th:last-child{border-radius:0 10px 10px 0;text-align:right}
+  td{padding:9px 12px;border-bottom:1px solid var(--soft);vertical-align:middle}
+  tr{break-inside:avoid}
+  tbody tr:last-child td{border-bottom:0}
+  .c-date{white-space:nowrap;color:var(--ink-2);width:92px}
+  .c-desc{font-weight:600;max-width:290px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .c-cat{white-space:nowrap;color:var(--ink-2)}
+  .c-val{text-align:right;font-weight:700;white-space:nowrap}
+  tfoot td{padding-top:12px;font-weight:700;border-top:1.5px solid var(--line);border-bottom:0}
   /* Recorrentes */
-  .recur-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
-  .recur-card{border:1.5px solid #e8ecf2;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:4px;min-width:0}
-  .recur-card strong{font-size:0.88rem;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .recur-card span{font-size:0.72rem;color:#8a9bb0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .recur-card .rv{font-size:1rem;font-weight:800;color:#ff3b30}
-  /* Footer */
-  .rpt-footer{margin-top:36px;padding-top:16px;border-top:1px solid #e8ecf2;display:flex;justify-content:space-between;align-items:center;font-size:0.7rem;color:#8a9bb0;flex-wrap:wrap;gap:8px}
-
-  /* ---- Responsivo: relatório aberto/impresso a partir do celular ---- */
-  @media (max-width: 680px) {
-    .page{padding:24px 16px 40px}
-    .rpt-header{flex-direction:column;gap:14px}
-    .rpt-header-right{text-align:left}
-    .summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
-    .chart-section{grid-template-columns:1fr}
-    .cat-section{grid-template-columns:1fr}
-    .recur-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
-    td:nth-child(2){max-width:140px}
+  .recur{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+  .recur div{border:1px solid var(--line);border-radius:12px;padding:11px 13px;min-width:0}
+  .recur strong{display:block;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .recur span{display:block;font-size:11px;color:var(--ink-3)}
+  .recur em{display:block;margin-top:4px;font-style:normal;font-weight:750;color:var(--out)}
+  /* Rodapé */
+  .foot{margin-top:24px;padding:16px 40px 26px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;font-size:10.5px;color:var(--ink-3);border-top:1px solid var(--line)}
+  .foot b{color:var(--ink-2)}
+  @media (max-width:720px){
+    .sheet{margin:0;border-radius:0}
+    .cover,.kpis,section,.foot{padding-left:18px;padding-right:18px}
+    .kpis,.insights{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .cats{grid-template-columns:1fr;justify-items:center}
+    .cats > div{width:100%}
+    .cats > div:first-child{display:grid;place-items:center}
+    .cat-row{grid-template-columns:minmax(0,1fr) 40px 86px}
+    .cat-row .bar{display:none}
+    .recur{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .c-cat{display:none}
+    .c-desc{max-width:150px}
   }
-  @media (max-width: 420px) {
-    .summary-grid{grid-template-columns:1fr}
-    .recur-grid{grid-template-columns:1fr}
-  }
-  /* Print */
+  @page{size:A4;margin:12mm 11mm 14mm}
+  @page{@bottom-right{content:"Página " counter(page) " de " counter(pages);font-size:9px;color:#8b90a7}}
   @media print{
-    body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
-    .page{padding:20px 24px 40px}
-    .summary-grid{grid-template-columns:repeat(4,1fr)}
+    html{background:#fff}
+    body{-webkit-print-color-adjust:exact;print-color-adjust:exact;font-size:11.5px}
+    .actions{display:none}
+    .sheet{margin:0;max-width:none;border-radius:0;box-shadow:none;overflow:visible}
+    .cover{border-radius:14px}
+    .kpis,section,.foot{padding-left:2px;padding-right:2px}
+    .kpis,.insights{grid-template-columns:repeat(4,minmax(0,1fr))}
+    .cats{grid-template-columns:170px minmax(0,1fr);justify-items:stretch}
+    .cat-row{grid-template-columns:minmax(0,1.3fr) minmax(60px,1fr) 44px 92px}
+    .cat-row .bar{display:block}
+    .c-cat{display:table-cell}
+    .c-desc{max-width:290px}
   }
-  @page{margin:15mm;size:A4}
 </style>
 </head>
 <body>
-<div class="page">
+<div class="actions">
+  <button class="btn-primary" type="button" onclick="window.print()">Salvar como PDF</button>
+  <button class="btn-ghost" type="button" onclick="window.close()">Fechar</button>
+</div>
+<main class="sheet">
+  <header class="cover">
+    <div class="cover-top">
+      <div class="brand"><span class="brand-mark">${logo}</span>PulseNote</div>
+      <span class="status${isClosed ? " is-closed" : ""}">${isClosed ? "Mês fechado" : "Mês em aberto"}</span>
+    </div>
+    <h1>${esc(label)}</h1>
+    <p>Relatório financeiro de ${esc(ownerName)} · ${entries.length} ${entries.length === 1 ? "lançamento" : "lançamentos"}</p>
+    <div class="cover-meter">
+      <div class="row"><span>Da renda do mês, você usou <b>${usedPct}%</b></span><span>${esc(money(despesas))} de ${esc(money(receitas))}</span></div>
+      <div class="meter${usedPct >= 90 ? " is-warn" : ""}"><i style="width:${usedPct}%"></i></div>
+    </div>
+  </header>
 
-  <!-- CABEÇALHO -->
-  <div class="rpt-header">
-    <div class="rpt-brand">
-      <div class="rpt-brand-mark"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2.5-6 4 12 2.5-6H21"/></svg></div>
-      <div>
-        <div class="rpt-brand-name">PulseNote</div>
-        <div class="rpt-brand-sub">Relatório Financeiro Mensal</div>
-      </div>
-    </div>
-    <div class="rpt-header-right">
-      <div class="rpt-month">${label}</div>
-      <div class="rpt-meta">
-        Titular <strong>${escapeHtml(userName)}</strong><br>
-        ${isClosed ? "Mês fechado" : "Em aberto"} · Gerado em ${geradoEm}
-      </div>
-    </div>
+  <div class="kpis">
+    <div class="kpi"><div class="kpi-lbl is-in"><i></i>Receitas</div><div class="kpi-val is-in">${esc(money(receitas))}</div>${delta(receitas, prev.r, true)}</div>
+    <div class="kpi"><div class="kpi-lbl is-out"><i></i>Despesas</div><div class="kpi-val is-out">${esc(money(despesas))}</div>${delta(despesas, prev.d, false)}</div>
+    <div class="kpi"><div class="kpi-lbl is-brand"><i></i>Saldo</div><div class="kpi-val ${saldo >= 0 ? "" : "is-out"}">${esc(money(saldo))}</div>${hasPrev ? `<span class="kpi-delta">${esc(prev.lbl)}: ${esc(money(prev.r - prev.d))}</span>` : ""}</div>
+    <div class="kpi"><div class="kpi-lbl is-brand"><i></i>Poupança</div><div class="kpi-val ${savingsPct >= 0 ? "is-brand" : "is-out"}">${savingsPct.toFixed(1).replace(".", ",")}%</div><span class="kpi-delta">da renda guardada</span></div>
   </div>
 
-  <!-- RESUMO: 4 CARDS -->
-  <div class="summary-grid">
-    <div class="summary-card">
-      <div class="lbl">Saldo do mês</div>
-      <div class="val ${saldo >= 0 ? "green" : "red"}">${formatCurrency(saldo)}</div>
+  <section>
+    <div class="sec-head"><h2>Destaques do mês</h2></div>
+    <div class="insights">
+      ${insights.slice(0, 4).map((it) => `<div class="insight${it.tone ? ` is-${it.tone}` : ""}"><small>${esc(it.t)}</small><strong>${esc(it.v)}</strong><span>${esc(it.s)}</span></div>`).join("")}
     </div>
-    <div class="summary-card">
-      <div class="lbl">Receitas</div>
-      <div class="val green">${formatCurrency(receitas)}</div>
-    </div>
-    <div class="summary-card">
-      <div class="lbl">Despesas</div>
-      <div class="val red">${formatCurrency(despesas)}</div>
-    </div>
-    <div class="summary-card">
-      <div class="lbl">Taxa de poupança</div>
-      <div class="val blue">${savings}%</div>
-    </div>
-  </div>
+  </section>
 
-  <!-- GRÁFICO 6 MESES -->
-  <div class="section">
-    <div class="section-title">Receitas × Despesas — Últimos 6 meses</div>
-    <div class="chart-section">
-      <div style="flex:1">${chartSvg}</div>
-      <div style="display:grid;gap:8px">
-        <div style="display:flex;align-items:center;gap:6px;font-size:0.78rem">
-          <span style="width:12px;height:12px;border-radius:3px;background:#34c759;display:inline-block"></span> Receitas
-        </div>
-        <div style="display:flex;align-items:center;gap:6px;font-size:0.78rem">
-          <span style="width:12px;height:12px;border-radius:3px;background:#ff3b30;display:inline-block"></span> Despesas
-        </div>
-        <div style="margin-top:8px;font-size:0.72rem;color:#8a9bb0">Mês atual destacado</div>
-      </div>
+  <section>
+    <div class="sec-head"><h2>Receitas e despesas</h2><span>últimos 6 meses</span></div>
+    <div class="card chart">${chartSvg}
+      <div class="legend"><span><i style="background:#10b981"></i>Receitas</span><span><i style="background:#f43f5e"></i>Despesas</span><span><i style="background:#f3f1ff;box-shadow:inset 0 0 0 1px #d9d4ff"></i>Mês do relatório</span></div>
     </div>
-  </div>
+  </section>
 
-  <!-- DISTRIBUIÇÃO POR CATEGORIA -->
   ${catList.length ? `
-  <div class="section">
-    <div class="section-title">Para onde foi o dinheiro — R$ ${formatCurrency(despesas).replace("R$ ","")} em despesas</div>
-    <div class="cat-section">
+  <section>
+    <div class="sec-head"><h2>Para onde foi o dinheiro</h2><span>${catList.length} ${catList.length === 1 ? "categoria" : "categorias"}</span></div>
+    <div class="card cats">
       <div>${donutSvg}</div>
-      <div class="cat-list">
-        ${catList.slice(0, 8).map((c) => {
-          const pct = despesas > 0 ? ((c.total / despesas) * 100).toFixed(1) : 0;
-          const barPct = Math.min(100, Math.round(c.total / despesas * 100));
+      <div>
+        ${catList.slice(0, 10).map((c) => {
+          const pct = despesas > 0 ? (c.total / despesas) * 100 : 0;
           return `<div class="cat-row">
-            <span class="cat-dot" style="background:${c.color}"></span>
-            <span class="cat-name"><i class="cat-dot" style="background:${c.color}"></i>${escapeHtml(c.label)}</span>
-            <span class="cat-pct">${pct}%</span>
-            <div style="flex:1;min-width:60px"><div class="bar-wrap"><div class="bar-fill" style="width:${barPct}%;background:${c.color}"></div></div></div>
-            <span class="cat-val">${formatCurrency(c.total)}</span>
+            <span class="cat-name"><span class="dot" style="background:${esc(c.color)}"></span><b>${esc(c.label)}</b><small>${c.count}×</small></span>
+            <span class="bar"><i style="width:${Math.max(2, Math.round(pct))}%;background:${esc(c.color)}"></i></span>
+            <span class="cat-pct">${pct.toFixed(0)}%</span>
+            <span class="cat-val">${esc(money(c.total))}</span>
           </div>`;
         }).join("")}
       </div>
     </div>
-  </div>` : ""}
+  </section>` : ""}
 
-  <!-- METAS POR CATEGORIA -->
   ${goals.length ? `
-  <div class="section">
-    <div class="section-title">Metas de gasto por categoria</div>
-    <div style="border:1.5px solid #e8ecf2;border-radius:16px;padding:20px">
+  <section>
+    <div class="sec-head"><h2>Limites por categoria</h2><span>${goals.filter((g) => g.pct > 100).length} acima do limite</span></div>
+    <div class="card">
       ${goals.map((g) => {
-        const barColor = g.pct > 100 ? "#ff3b30" : g.pct > 80 ? "#8b5cf6" : "#34c759";
-        return `<div class="goal-row">
-          <div class="goal-header">
-            <span class="goal-name">${escapeHtml(g.cat.label)}</span>
-            <span class="goal-val ${g.pct > 100 ? "over" : ""}">${formatCurrency(g.spent)} / ${formatCurrency(g.limit)} (${g.pct}%)</span>
-          </div>
-          <div class="bar-wrap"><div class="bar-fill" style="width:${Math.min(100,g.pct)}%;background:${barColor}"></div></div>
+        const color = g.pct > 100 ? "#e11d48" : g.pct > 80 ? "#f59e0b" : "#10b981";
+        return `<div class="goal">
+          <div class="goal-top"><b><span class="dot" style="background:${esc(g.color)}"></span>${esc(g.name)}</b><span class="${g.pct > 100 ? "over" : ""}">${esc(money(g.spent))} de ${esc(money(g.limit))} · ${g.pct}%</span></div>
+          <div class="bar"><i style="width:${Math.min(100, g.pct)}%;background:${color}"></i></div>
         </div>`;
       }).join("")}
     </div>
-  </div>` : ""}
+  </section>` : ""}
 
-  <!-- TOP TRANSAÇÕES -->
-  <div class="section">
-    <div class="section-title">Maiores transações do mês</div>
-    <div style="border:1.5px solid #e8ecf2;border-radius:16px;overflow:hidden">
-      <div class="tbl-scroll">
-      <table>
-        <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Tipo</th><th style="text-align:right">Valor</th></tr></thead>
-        <tbody>
-          ${topTx.map((f) => {
-            const cat = findCategory(f.category);
-            const isRec = f.type === "receita";
-            return `<tr>
-              <td>${formatDate(f.date)}</td>
-              <td style="font-weight:600">${escapeHtml(f.description || "")}</td>
-              <td>${escapeHtml(cat.label)}</td>
-              <td><span class="badge ${isRec ? "badge-r" : "badge-d"}">${isRec ? "Receita" : "Despesa"}</span></td>
-              <td style="text-align:right;font-weight:700;color:${isRec ? "#34c759" : "#ff3b30"}">${isRec ? "+" : "-"}${formatCurrency(f.amount)}</td>
-            </tr>`;
-          }).join("")}
-        </tbody>
-      </table>
-      </div>
-    </div>
-  </div>
+  ${topTx.length ? `
+  <section>
+    <div class="sec-head"><h2>Maiores despesas</h2><span>top ${topTx.length}</span></div>
+    <div class="card"><table>
+      <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Valor</th></tr></thead>
+      <tbody>${topTx.map(txRow).join("")}</tbody>
+    </table></div>
+  </section>` : ""}
 
-  <!-- TODOS OS LANÇAMENTOS -->
-  <div class="section">
-    <div class="section-title">Todos os lançamentos (${entries.length})</div>
-    <div style="border:1.5px solid #e8ecf2;border-radius:16px;overflow:hidden">
-      <div class="tbl-scroll">
-      <table>
-        <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Tipo</th><th style="text-align:right">Valor</th></tr></thead>
-        <tbody>
-          ${entries.map((f) => {
-            const cat = findCategory(f.category);
-            const isRec = f.type === "receita";
-            return `<tr>
-              <td>${formatDate(f.date)}</td>
-              <td>${escapeHtml(f.description || "")}</td>
-              <td>${cat.label.replace(/^\S+\s*/, "")}</td>
-              <td><span class="badge ${isRec ? "badge-r" : "badge-d"}">${isRec ? "R" : "D"}</span></td>
-              <td style="text-align:right;font-weight:700;color:${isRec ? "#34c759" : "#ff3b30"}">${isRec ? "+" : "-"}${formatCurrency(f.amount)}</td>
-            </tr>`;
-          }).join("")}
-        </tbody>
-      </table>
-      </div>
-    </div>
-  </div>
+  <section class="flow">
+    <div class="sec-head"><h2>Todos os lançamentos</h2><span>${entries.length} no mês</span></div>
+    <div class="card"><table>
+      <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Valor</th></tr></thead>
+      <tbody>${entries.map(txRow).join("")}</tbody>
+      <tfoot><tr><td colspan="3">Saldo do mês</td><td class="c-val ${saldo >= 0 ? "is-in" : "is-out"}">${esc(money(saldo))}</td></tr></tfoot>
+    </table></div>
+  </section>
 
-  <!-- RECORRENTES -->
   ${recurrents.length ? `
-  <div class="section">
-    <div class="section-title">Lançamentos recorrentes cadastrados</div>
-    <div class="recur-grid">
-      ${recurrents.map((r) => {
-        const cat = findCategory(r.categoryId);
-        return `<div class="recur-card">
-          <strong>${escapeHtml(r.description)}</strong>
-          <span>${escapeHtml(cat.label)} · Dia ${r.day}</span>
-          <span class="rv">-${formatCurrency(r.amount)}/mês</span>
-        </div>`;
-      }).join("")}
+  <section>
+    <div class="sec-head"><h2>Contas recorrentes</h2><span>${esc(money(recurTotal))} por mês</span></div>
+    <div class="recur">
+      ${recurrents.map((r) => `<div><strong>${esc(r.description || "Recorrente")}</strong><span>${esc(finCatName(r.categoryId))} · todo dia ${esc(String(r.day || "-"))}</span><em>${esc(money(r.amount))}</em></div>`).join("")}
     </div>
-  </div>` : ""}
+  </section>` : ""}
 
-  <!-- FOOTER -->
-  <div class="rpt-footer">
-    <span>PulseNote · pulsenote.app</span>
-    <span>Gerado em ${geradoEm}</span>
-  </div>
-
-</div>
-<script>window.onload = () => window.print();</script>
+  <footer class="foot">
+    <span><b>PulseNote</b> · Relatório gerado em ${esc(geradoEm)}</span>
+    <span>${activeWorkspaceId === "personal" ? "Espaço pessoal" : "Espaço compartilhado"} · ${esc(label)}</span>
+  </footer>
+</main>
+<script>
+  // Abre a janela de impressão já com a página pronta. O botão
+  // "Salvar como PDF" repete a ação.
+  window.addEventListener("load", function () { setTimeout(function () { window.print(); }, 300); });
+</script>
 </body>
 </html>`;
 
   const blob = new Blob([htmlContent], { type: "text/html" });
   const url  = URL.createObjectURL(blob);
-  window.open(url, "_blank");
-  setTimeout(() => URL.revokeObjectURL(url), 30000);
-  showToast("📄 Relatório gerado! Use Ctrl+P / salvar como PDF.");
+  const win = window.open(url, "_blank");
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  if (!win) {
+    // Pop-up bloqueado (comum no app instalado e no iPhone): baixa o arquivo.
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `PulseNote-relatorio-${monthKey}.html`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    showToast("Relatório baixado. Abra o arquivo e toque em Salvar como PDF.");
+    return;
+  }
+  showToast("Relatório aberto. Escolha “Salvar como PDF” na janela de impressão.");
 }
 
 // ============================================================

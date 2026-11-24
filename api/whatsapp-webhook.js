@@ -62,7 +62,7 @@ const { createAiQuota, aiQuotaNotice } = require("./_lib/aiQuota");
 const { rememberRequestOidc } = require("./_lib/aiGatewayFetch");
 const { parseTransactionImage, parseNoteImage, transcribeAudio } = require("./_lib/parseTransactionAI");
 const { parseTextIntent, parseDeterministicIntent, findBestMatch, findBestMatches } = require("./_lib/parseCommandIntent");
-const { buildPdfReportBuffer } = require("./_lib/buildPdfReport");
+const { buildPdfReportBuffer, buildTextPdfBuffer } = require("./_lib/buildPdfReport");
 const { getRuntimeConfig, assertFeatureEnabled } = require("./_lib/adminConfig");
 const { getUserEntitlements } = require("./_lib/admin");
 const { listAutopilotSuggestions, executeAutopilotSuggestion } = require("./_lib/autopilotService");
@@ -1539,7 +1539,68 @@ async function replyWithSmallTalk(fb, uid, phone, small, rawText) {
 // Conversa livre + ações: usado quando a mensagem não é um comando
 // determinístico. Retorna false quando a IA está indisponível, para o
 // webhook cair no classificador antigo (nada se perde).
-async function handleBrainMessage({ fb, uid, phone, rawText, history, categories, lastFinanceEntry, fromAudio }) {
+// ── Arquivos em PDF enviados na conversa ─────────────────────────
+// Sobe o PDF para a Meta e envia como documento. Retorna true se chegou.
+async function deliverPdf(phone, buffer, filename, caption) {
+  const mediaId = await uploadWhatsAppMedia(buffer, filename, "application/pdf");
+  if (!mediaId) {
+    await sendWhatsAppMessage(phone, "Não consegui gerar o arquivo agora 😕 Tenta de novo em instantes.");
+    return false;
+  }
+  try {
+    await sendWhatsAppDocument(phone, mediaId, filename, caption);
+    return true;
+  } catch (error) {
+    console.error("whatsapp_pdf_delivery_failed", { code: error?.message || "unknown" });
+    await sendWhatsAppMessage(phone, "Consegui gerar o PDF, mas não consegui enviá-lo pelo WhatsApp agora. Peça de novo em instantes.");
+    return false;
+  }
+}
+
+async function sendMonthlyPdfReport({ fb, uid, phone, month, year, categories, pdfReportsEnabled, summary = null }) {
+  if (!pdfReportsEnabled) {
+    await sendWhatsAppMessage(phone, "A geração de PDF não está disponível no seu plano. Posso mostrar o relatório completo aqui na conversa.");
+    return false;
+  }
+  const report = summary || await buildMonthlyReport(fb, uid, month, year);
+  if (!report.hasEntries) {
+    await sendWhatsAppMessage(phone, `📊 Não encontrei nenhum lançamento em ${report.monthName} pra exportar.`);
+    return false;
+  }
+  const monthKey = `${year}-${String(month).padStart(2, "0")}`;
+  const pdfEntries = report.entries.map((f) => ({
+    date: f.date,
+    description: f.description || "",
+    categoryLabel: categoryNameForWhatsApp(categories.find((c) => c.id === f.category)?.label, f.category || "Outros"),
+    type: f.type === "receita" ? "receita" : "despesa",
+    amount: Number(f.amount) || 0,
+  }));
+  const buffer = buildPdfReportBuffer({ monthLabel: report.monthName, isClosed: false, entries: pdfEntries });
+  return deliverPdf(phone, buffer, `PulseNote-relatorio-${monthKey}.pdf`, `📄 Relatório de ${report.monthName}`);
+}
+
+function pdfFileName(title) {
+  const slug = String(title || "documento").normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48) || "documento";
+  return `PulseNote-${slug}.pdf`;
+}
+
+async function sendBrainFiles({ fb, uid, phone, files, categories, pdfReportsEnabled }) {
+  for (const file of Array.isArray(files) ? files.slice(0, 1) : []) {
+    if (file.kind === "finance_report") {
+      await sendMonthlyPdfReport({ fb, uid, phone, month: file.month, year: file.year, categories, pdfReportsEnabled });
+    } else if (file.kind === "document") {
+      if (!pdfReportsEnabled) {
+        await sendWhatsAppMessage(phone, `A geração de PDF não está disponível no seu plano, então segue o conteúdo aqui mesmo:\n\n*${file.title}*\n${file.content}`.slice(0, 4000));
+        continue;
+      }
+      const buffer = buildTextPdfBuffer({ title: file.title, content: file.content });
+      await deliverPdf(phone, buffer, pdfFileName(file.title), `📄 ${file.title}`);
+    }
+  }
+}
+
+async function handleBrainMessage({ fb, uid, phone, rawText, history, categories, lastFinanceEntry, fromAudio, pdfReportsEnabled = false }) {
   const store = messageContext.getStore();
   const state = await loadUserState(fb, uid);
   const quota = createAiQuota({ db: fb.firestore(), uid, actor: store?.userActor || {} });
@@ -1611,6 +1672,9 @@ async function handleBrainMessage({ fb, uid, phone, rawText, history, categories
   } else {
     await sendWhatsAppMessage(phone, text || "Pode deixar!");
   }
+  if (brain.files?.length) {
+    await sendBrainFiles({ fb, uid, phone, files: brain.files, categories, pdfReportsEnabled });
+  }
   return true;
 }
 
@@ -1674,6 +1738,10 @@ Pode falar comigo do seu jeito, como numa conversa normal — não precisa decor
 "anota: ideia do app de receitas" — salvo exatamente como você escreveu
 "qual a senha do wifi que anotei?" — respondo com base nas suas notas
 📷 foto com legenda "nota" — transcrevo e salvo com sua confirmação
+
+📄 *PDF na hora*
+"transforma minha nota da viagem em PDF" · "faz um PDF com essa lista" — te mando o arquivo aqui
+(imagens e planilhas eu ainda não gero — te mostro em texto ou em PDF)
 
 🎯 *Metas*
 "criar meta de juntar 5000 pra viagem" · "guardei mais 200 pra viagem"
@@ -2154,7 +2222,7 @@ module.exports = async (req, res) => {
       if (aiEnabled && !keepFixed && !isPurchaseQuestion) {
         brainAttempted = true;
         const handled = await handleBrainMessage({
-          fb, uid, phone: fromPhone, rawText, history, categories, lastFinanceEntry, fromAudio: Boolean(message.wasAudio),
+          fb, uid, phone: fromPhone, rawText, history, categories, lastFinanceEntry, fromAudio: Boolean(message.wasAudio), pdfReportsEnabled,
         });
         if (handled) return respondOk();
       }
@@ -2203,36 +2271,7 @@ module.exports = async (req, res) => {
         const summary = await buildMonthlyReport(fb, uid, result.report.month, result.report.year);
 
         if (result.report.format === "arquivo") {
-          if (!pdfReportsEnabled) {
-            await sendWhatsAppMessage(fromPhone, "A geração de PDF não está disponível no seu plano. Posso mostrar o relatório completo aqui na conversa.");
-            return respondOk();
-          }
-          if (!summary.hasEntries) {
-            await sendWhatsAppMessage(fromPhone, `📊 Não encontrei nenhum lançamento em ${summary.monthName} pra exportar.`);
-            return respondOk();
-          }
-          const monthKey = `${result.report.year}-${String(result.report.month).padStart(2, "0")}`;
-          const pdfEntries = summary.entries.map((f) => ({
-            date: f.date,
-            description: f.description || "",
-            categoryLabel: categoryNameForWhatsApp(categories.find((c) => c.id === f.category)?.label, f.category || "Outros"),
-            type: f.type === "receita" ? "receita" : "despesa",
-            amount: Number(f.amount) || 0,
-          }));
-          const buffer = buildPdfReportBuffer({ monthLabel: summary.monthName, isClosed: false, entries: pdfEntries });
-          const mediaId = await uploadWhatsAppMedia(
-            buffer, `relatorio-${monthKey}.pdf`, "application/pdf"
-          );
-          if (!mediaId) {
-            await sendWhatsAppMessage(fromPhone, "Não consegui gerar o arquivo agora 😕 Tenta de novo em instantes.");
-            return respondOk();
-          }
-          try {
-            await sendWhatsAppDocument(fromPhone, mediaId, `relatorio-${monthKey}.pdf`, `📄 Relatório de ${summary.monthName}`);
-          } catch (error) {
-            console.error("whatsapp_pdf_delivery_failed", { code: error?.message || "unknown" });
-            await sendWhatsAppMessage(fromPhone, "Consegui gerar o PDF, mas não consegui enviá-lo pelo WhatsApp agora. Peça o relatório novamente em instantes.");
-          }
+          await sendMonthlyPdfReport({ fb, uid, phone: fromPhone, month: result.report.month, year: result.report.year, categories, pdfReportsEnabled, summary });
           return respondOk();
         }
 

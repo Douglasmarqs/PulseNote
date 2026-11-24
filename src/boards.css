@@ -2875,11 +2875,16 @@ html.is-maintenance body { overflow: hidden; }
 .bd-cats-empty-ring .i { width: 22px; height: 22px; }
 .bd-cats-empty strong { font-size: 14px; color: var(--bd-text); }
 .bd-cats-empty small { max-width: 260px; font-size: 12.5px; color: var(--bd-text-2); }
-/* O gráfico de evolução acompanha a altura do cartão vizinho. */
+/* O gráfico de evolução acompanha a altura do cartão vizinho — mas SEM
+   influenciar essa altura. Antes o SVG desenhado empurrava o cartão, o
+   ResizeObserver redesenhava maior, e no app instalado (outra janela) o
+   ciclo não parava: o gráfico crescia sem fim. Agora o SVG fica absoluto
+   (não conta no layout), o gráfico só preenche o espaço e tem teto. */
 .bd-evo { display: flex; flex-direction: column; }
-.bd-evo .bd-evo-chart { flex: 1; min-height: 196px; }
+.bd-evo .bd-evo-chart { position: relative; flex: 1 1 0; min-height: 196px; max-height: 340px; contain: size; }
+.bd-evo .bd-evo-chart > svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 @media (max-width: 760px) {
-  .bd-evo .bd-evo-chart { flex: none; min-height: 0; }
+  .bd-evo .bd-evo-chart { flex: none; min-height: 0; height: 172px; max-height: none; }
   .bd-res-hero-value { font-size: 26px; }
   .bd-donut { width: 184px; }
 }
