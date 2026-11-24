@@ -103,7 +103,10 @@
   transition: transform .25s var(--pfx-ease), filter .2s;
 }
 .pfx-avatar-edit:hover { transform: scale(1.08); filter: brightness(1.1); }
-.pfx-avatar-edit .i { width: 15px; height: 15px; }
+/* Ícone sempre no centro exato do botão: neutraliza estilos globais de
+   button/svg (padding, margin, line-height, tamanho herdado). */
+#profileView .pfx-avatar-edit { display: flex !important; align-items: center; justify-content: center; padding: 0 !important; margin: 0; line-height: 0; min-width: 0; min-height: 0; box-sizing: border-box; }
+#profileView .pfx-avatar-edit .i { display: block; flex: none; width: 16px !important; height: 16px !important; margin: 0 !important; position: static; transform: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
 .pfx-id { grid-area: id; display: grid; gap: 4px; min-width: 0; }
 .pfx-id h2 { margin: 0; overflow: hidden; font-size: 26px; font-weight: 750; letter-spacing: -.02em; color: var(--bd-text); text-overflow: ellipsis; white-space: nowrap; }
