@@ -123,7 +123,10 @@ test("perfil: mapa de atividade se ajusta à largura e a foto não fica coberta"
   assert.match(app, /wrapEl\.style\.setProperty\("--cell", `\$\{cell\}px`\)/);
   const css = read("src/profile-v3.css");
   assert.match(css, /\.pfx-heat-wrap \{[^}]*overflow: hidden/);
-  assert.match(css, /\.pfx-avatar img \{[^}]*object-fit: cover/);
+  assert.match(css, /\.pfx-avatar img \{[^}]*position: absolute; inset: 0;[^}]*object-fit: cover/);
+  // Foto vertical não pode virar elipse nem deixar o fundo roxo aparecer.
+  assert.match(css, /\.pfx-avatar:has\(img\) \{ background: var\(--bd-card-2\); \}/);
+  assert.match(css, /\.bd-avatar > img, \.user-avatar-btn > img[^{]*\{[^}]*position: absolute; inset: 0;/);
 });
 
 test("Início: gráfico de evolução não entra em ciclo de crescimento no app instalado", () => {

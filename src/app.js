@@ -1213,8 +1213,10 @@ function pfxRenderHeatmap() {
   const innerW = wrapEl.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0);
   const labelsW = (wrapEl.querySelector(".pfx-heat-days")?.offsetWidth || 28) + (parseFloat(cs.columnGap) || 10);
   const avail = Math.max(120, innerW - labelsW);
-  const weeks = Math.max(12, Math.min(20, Math.floor((avail + gap) / (13 + gap))));
-  const cell = Math.max(9, Math.min(20, Math.floor((avail - gap * (weeks - 1)) / weeks)));
+  // Tela larga: até 26 semanas (6 meses) com células maiores, para o mapa
+  // preencher o cartão sem ficar com buracos enormes entre as colunas.
+  const weeks = Math.max(12, Math.min(26, Math.floor((avail + gap) / (13 + gap))));
+  const cell = Math.max(9, Math.min(24, Math.floor((avail - gap * (weeks - 1)) / weeks)));
   wrapEl.style.setProperty("--cell", `${cell}px`);
   wrapEl.dataset.weeks = String(weeks);
   wrapEl.dataset.width = String(wrapEl.clientWidth);
