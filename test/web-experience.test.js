@@ -100,9 +100,24 @@ test("preferência de movimento do app vence o 'reduzir movimento' do sistema qu
 
 test("navegador: colunas do Início batem, Notas com mesma altura e Finanças proporcional", () => {
   const css = read("src/web.css");
-  assert.match(css, /\.bd-kpis, \.bd-row--charts, \.bd-row--lists \{ grid-template-columns: minmax\(0, 1\.45fr\) minmax\(0, 1fr\); \}/);
+  assert.match(css, /\.bd-kpis, \.bd-row--charts, \.bd-row--lists \{ grid-template-columns: minmax\(0, 1\.35fr\) minmax\(0, 1fr\); \}/);
   assert.match(css, /\.bn-grid:has\(#noteDetailModal:not\(\[hidden\]\)\)/);
   assert.match(css, /height: max\(600px, calc\(100dvh - 118px\)\)/);
   assert.match(css, /#financesView \.bf-launch \{ grid-template-columns: minmax\(0, 1\.22fr\) minmax\(300px, \.92fr\) minmax\(0, 1\.12fr\); align-items: stretch; \}/);
   assert.match(css, /\.bd-main > \.view \{ margin-inline: 0 !important; \}/);
+});
+
+test("Pulsinho no Início: coluna proporcional, alinhada aos cartões e com sugestões", () => {
+  const css = read("src/web.css");
+  const js = read("src/web-motion.js");
+  const app = read("src/app.js");
+  const html = read("src/index.html");
+  assert.match(css, /\.bd-dash \{ grid-template-columns: minmax\(0, 1fr\) clamp\(360px, 22vw, 420px\); \}/);
+  assert.match(css, /margin-top: var\(--pn-chat-top, 52px\)/);
+  assert.match(js, /--pn-chat-h/);
+  // sugestões aparecem no computador até a primeira mensagem
+  assert.match(app, /box\.hidden = !\(isPulsinhoConvo\(\) \|\| docked\)/);
+  // sem emoji nas sugestões
+  const suggest = html.slice(html.indexOf('id="bdChatSuggest"'), html.indexOf('id="pulseCommandForm"'));
+  assert.doesNotMatch(suggest, /\p{Extended_Pictographic}/u);
 });

@@ -3460,7 +3460,10 @@ function updatePulsinhoSuggestions() {
   const box = document.querySelector("#bdChatSuggest");
   if (!box) return;
   const hasUserMessage = pulsinhoConversation.some((item) => item.role === "user");
-  box.hidden = !isPulsinhoConvo() || hasUserMessage || Boolean(document.querySelector("#pulseCommandInput")?.value.trim());
+  // No computador a conversa fica sempre aberta ao lado do Início: as
+  // sugestões preenchem o espaço até a primeira mensagem da pessoa.
+  const docked = window.matchMedia("(min-width: 761px)").matches;
+  box.hidden = !(isPulsinhoConvo() || docked) || hasUserMessage || Boolean(document.querySelector("#pulseCommandInput")?.value.trim());
 }
 
 // Recorte (clip-path) que mostra só a área `rect` dentro do cartão `box`.

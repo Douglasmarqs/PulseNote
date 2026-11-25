@@ -574,6 +574,22 @@
       card.style.transform = `perspective(900px) rotateX(${(-y * 6).toFixed(2)}deg) rotateY(${(x * 7).toFixed(2)}deg) translateY(-4px)`;
     }, { passive: true });
 
+    // ── Pulsinho no Início: mesma altura dos blocos ao lado ─────
+    // Começa na linha dos cartões de resumo e termina com o último bloco.
+    const dash = doc.querySelector("#dashboardView .bd-dash");
+    const dashMain = dash?.querySelector(".bd-dash-main");
+    const dashKpis = dash?.querySelector(".bd-kpis");
+    if (dash && dashMain && dashKpis && typeof ResizeObserver === "function") {
+      const fitChat = () => {
+        if (!dashMain.offsetHeight) return;
+        const top = dashKpis.offsetTop - dashMain.offsetTop;
+        dash.style.setProperty("--pn-chat-top", `${Math.max(0, top)}px`);
+        dash.style.setProperty("--pn-chat-h", `${Math.max(0, dashMain.offsetHeight - top)}px`);
+      };
+      new ResizeObserver(fitChat).observe(dashMain);
+      fitChat();
+    }
+
     // ── Configurações → Aparência → Movimento ───────────────────
     const themeGroup = doc.getElementById("themeToggle");
     if (themeGroup && !doc.getElementById("pnMotionSeg")) {

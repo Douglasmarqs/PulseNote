@@ -450,8 +450,45 @@
 @media (min-width: 1181px) {
   /* Início: as três faixas (resumo, gráficos, listas) com a mesma divisão,
      então as colunas batem de cima a baixo. */
-  .bd-kpis, .bd-row--charts, .bd-row--lists { grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); }
+  .bd-kpis, .bd-row--charts, .bd-row--lists { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); }
   .bd-row--lists > *, .bd-row--charts > *, .bd-kpis > * { height: 100%; }
+
+  /* Pulsinho no Início: coluna proporcional à tela, começa na altura dos
+     cartões de resumo e termina junto com o último bloco (altura medida
+     em web-motion.js), sem um vão vazio enorme dentro. */
+  .bd-dash { grid-template-columns: minmax(0, 1fr) clamp(360px, 22vw, 420px); }
+  .bd-dash > .bd-chat {
+    margin-top: var(--pn-chat-top, 52px);
+    height: var(--pn-chat-h, calc(100dvh - 160px));
+    max-height: calc(100dvh - 160px);
+    min-height: 440px;
+    top: 96px;
+    padding: 0;
+  }
+  .bd-dash > .bd-chat .bd-chat-stage { flex: 1; min-height: 0; }
+  /* Sugestões em grade 2×2, logo acima do campo de mensagem */
+  .bd-dash > .bd-chat .bd-chat-suggest {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;
+    padding: 4px 14px 10px; overflow: visible;
+  }
+  .bd-dash > .bd-chat .bd-chat-suggest[hidden] { display: none; }
+  .bd-dash > .bd-chat .bd-chat-suggest::before {
+    content: "Experimente pedir"; grid-column: 1 / -1;
+    font-size: 11.5px; font-weight: 650; letter-spacing: .04em; text-transform: uppercase; color: var(--bd-text-3);
+  }
+  .bd-dash > .bd-chat .bd-chat-suggest button {
+    display: flex; align-items: center; gap: 8px; height: auto; min-height: 44px; padding: 8px 12px;
+    border-radius: 13px; white-space: normal; text-align: left; line-height: 1.25; font-size: 12.5px;
+    transition: border-color .2s, background .2s, transform .3s var(--pn-ease-spring), box-shadow .3s;
+  }
+  .bd-dash > .bd-chat .bd-chat-suggest button .i { width: 17px; height: 17px; flex: none; color: var(--bd-violet); transition: transform .35s var(--pn-ease-spring); }
+  @media (hover: hover) and (pointer: fine) {
+    .bd-dash > .bd-chat .bd-chat-suggest button:hover {
+      border-color: color-mix(in srgb, var(--bd-primary) 50%, var(--bd-line)); transform: translateY(-2px);
+      background: color-mix(in srgb, var(--bd-primary) 10%, var(--bd-card-2)); box-shadow: 0 10px 22px -16px var(--bd-primary);
+    }
+    .bd-dash > .bd-chat .bd-chat-suggest button:hover .i { transform: scale(1.15) rotate(-6deg); }
+  }
 
   /* Notas: três colunas da mesma altura, cada uma rolando por dentro.
      Com uma nota aberta, ela ganha espaço para ler e escrever. */
@@ -474,6 +511,10 @@
 }
 
 @media (min-width: 1181px) and (max-width: 1500px) {
+  /* Notebook: o seletor de período do gráfico desce para a linha de baixo
+     em vez de passar da borda do cartão. */
+  .bd-evo .bd-card-head { flex-wrap: wrap; row-gap: 8px; }
+  .bd-evo .bd-card-head .bd-seg { margin-left: auto; }
   .bn-grid { grid-template-columns: 248px minmax(0, 1fr) 320px; }
   .bn-grid:has(#noteDetailModal:not([hidden])) { grid-template-columns: 232px minmax(0, 1fr) minmax(360px, 1.15fr); }
 }
