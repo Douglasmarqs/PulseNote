@@ -132,7 +132,10 @@ function getSavedTheme() {
 
 function setTheme(choice) {
   try { localStorage.setItem(THEME_STORAGE_KEY, choice); } catch { /* modo privado etc — segue só na sessão atual */ }
-  applyTheme(choice);
+  // No navegador, web-motion.js troca o tema com uma revelação circular
+  // a partir do ponto clicado (View Transitions); sem ele, troca direto.
+  if (typeof window.pnWithThemeTransition === "function") window.pnWithThemeTransition(() => applyTheme(choice));
+  else applyTheme(choice);
 }
 
 applyTheme(getSavedTheme()); // aplica assim que o script roda (reforça o que o <head> já fez)

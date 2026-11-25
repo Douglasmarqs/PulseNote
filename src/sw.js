@@ -40,7 +40,7 @@
 // v50: editor de nota novo, Pulsinho encaixado acima do teclado, botões do foco e app sem zoom.
 // v51: modo conversa do Pulsinho, abas do Planner e ilustrações de Planner/Finanças.
 // v53: Pulsinho em balão, Planner e Notas reformulados, tema automático sem mistura.
-const CACHE_NAME = "pulsenote-v58";
+const CACHE_NAME = "pulsenote-v59";
 
 // ── Firebase Cloud Messaging (push em segundo plano) ──────────────
 // Isso é o que permite uma notificação aparecer mesmo com o PulseNote
@@ -109,6 +109,8 @@ const CORE_ASSETS = [
   "/src/refine.css",
   "/src/finance-v2.css",
   "/src/profile-v3.css",
+  "/src/web.css",
+  "/src/web-motion.js",
   "/src/auth-boards.css",
   "/src/mobile.css",
   "/src/manifest.json",
