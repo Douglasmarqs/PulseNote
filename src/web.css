@@ -1,0 +1,336 @@
+/* ==========================================================================
+   PulseNote — experiência no navegador (web.css)
+   Carrega por ÚLTIMO. Dá corpo à versão de computador: fundo com
+   profundidade, barra lateral com indicador que desliza (e recolhe),
+   topo que se compacta ao rolar, cartões com brilho que segue o cursor,
+   números que contam, entrada dos blocos ao rolar e troca de tema com
+   revelação circular. O comportamento fica em web-motion.js.
+   Tudo respeita "reduzir movimento".
+   ========================================================================== */
+
+:root {
+  --pn-ease-out: cubic-bezier(.22, 1, .36, 1);
+  --pn-ease-spring: cubic-bezier(.34, 1.32, .52, 1);
+  --pn-ease-io: cubic-bezier(.65, 0, .35, 1);
+  --pn-content-max: 1560px;
+  --pn-aurora-a: rgba(99, 92, 255, .20);
+  --pn-aurora-b: rgba(34, 211, 238, .15);
+  --pn-aurora-c: rgba(236, 72, 153, .08);
+  --pn-card-edge: 0 1px 0 rgba(255, 255, 255, .9) inset, 0 1px 2px rgba(20, 30, 70, .05), 0 18px 40px -26px rgba(40, 50, 120, .32);
+  --pn-grid-dot: rgba(40, 52, 110, .075);
+  --pn-glass: color-mix(in srgb, var(--bd-side) 74%, transparent);
+  --pn-spot: rgba(99, 92, 255, .10);
+  --pn-spot-ring: rgba(99, 92, 255, .38);
+}
+:root[data-theme="dark"], :root[data-theme="aurora"], :root[data-theme="eclipse"] {
+  --pn-aurora-a: rgba(91, 79, 245, .26);
+  --pn-aurora-b: rgba(20, 184, 220, .13);
+  --pn-aurora-c: rgba(190, 70, 255, .10);
+  --pn-grid-dot: rgba(160, 175, 255, .06);
+  --pn-glass: color-mix(in srgb, var(--bd-side) 70%, transparent);
+  --pn-spot: rgba(120, 110, 255, .13);
+  --pn-spot-ring: rgba(150, 140, 255, .5);
+  --pn-card-edge: 0 1px 0 rgba(255, 255, 255, .05) inset, 0 20px 44px -24px rgba(0, 0, 0, .7);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --pn-aurora-a: rgba(91, 79, 245, .26);
+    --pn-aurora-b: rgba(20, 184, 220, .13);
+    --pn-aurora-c: rgba(190, 70, 255, .10);
+    --pn-grid-dot: rgba(160, 175, 255, .06);
+    --pn-spot: rgba(120, 110, 255, .13);
+    --pn-spot-ring: rgba(150, 140, 255, .5);
+    --pn-card-edge: 0 1px 0 rgba(255, 255, 255, .05) inset, 0 20px 44px -24px rgba(0, 0, 0, .7);
+  }
+}
+
+/* ---------- Finanças no celular: os três resumos lado a lado ----------
+   Antes eram uma faixa rolável com 1/3 de largura menos 48px cada — sobrava
+   um vão à direita e os cartões não chegavam na borda. Agora é uma grade
+   de três colunas iguais, da mesma largura do restante do conteúdo, com a
+   mesma altura e o conteúdo alinhado. */
+@media (max-width: 760px) {
+  #financesView .bf-kpis,
+  #financesView .bf[data-tab] .bf-kpis,
+  #financesView .bf:not([data-tab]) .bf-kpis {
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: stretch;
+    gap: 8px; margin: 0; padding: 0; overflow: visible; scroll-snap-type: none;
+  }
+  #financesView .bf-kpi { flex: none; width: auto; min-width: 0; height: 100%; justify-content: flex-start; }
+  #financesView .bf-kpi--shared { display: none; }
+  #financesView .bf-kpi-body { width: 100%; }
+  #financesView .bf-kpi-body > strong { overflow: hidden; text-overflow: ellipsis; }
+  #financesView .bf-kpi-body > small.bf-trend { min-height: 2.5em; align-items: flex-start; }
+  #financesView .bf-dots { display: none; }
+}
+
+.pn-kbd-chip { display: none; }
+
+/* ==========================================================================
+   COMPUTADOR / TABLET (a partir de 761px)
+   ========================================================================== */
+@media (min-width: 761px) {
+
+  /* ---------- Fundo com profundidade ----------
+     Três luzes suaves que derivam devagar + uma trama de pontos que some
+     nas bordas. Fica atrás de tudo (isolation no shell). */
+  .bd-shell { isolation: isolate; }
+  .bd-shell::before,
+  .bd-shell::after {
+    content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  }
+  .bd-shell::before {
+    background:
+      radial-gradient(38vw 30vw at 82% -6%, var(--pn-aurora-a), transparent 70%),
+      radial-gradient(34vw 28vw at 8% 104%, var(--pn-aurora-b), transparent 70%),
+      radial-gradient(26vw 22vw at 52% 48%, var(--pn-aurora-c), transparent 72%);
+    background-repeat: no-repeat;
+    filter: saturate(1.05);
+  }
+  .bd-shell::after {
+    background-image: radial-gradient(var(--pn-grid-dot) 1px, transparent 1.2px);
+    background-size: 22px 22px;
+    -webkit-mask-image: radial-gradient(120% 70% at 60% 0%, #000 0%, transparent 70%);
+            mask-image: radial-gradient(120% 70% at 60% 0%, #000 0%, transparent 70%);
+  }
+
+  /* ---------- Conteúdo centralizado em telas muito largas ---------- */
+  .bd-main {
+    --pn-pad: max(28px, calc((100vw - var(--bd-side-w) - var(--pn-content-max)) / 2));
+    padding-inline: var(--pn-pad);
+  }
+  .bd-topbar { margin-inline: calc(-1 * var(--pn-pad)); padding-inline: var(--pn-pad); }
+
+  /* ---------- Barra lateral de vidro ---------- */
+  .bd-shell { transition: grid-template-columns .42s var(--pn-ease-out); }
+  .bd-sidebar {
+    background: var(--pn-glass);
+    -webkit-backdrop-filter: blur(18px) saturate(1.2); backdrop-filter: blur(18px) saturate(1.2);
+    border-right-color: color-mix(in srgb, var(--bd-side-line) 80%, transparent);
+    overflow-x: hidden; scrollbar-width: none;
+  }
+  .bd-sidebar::-webkit-scrollbar { display: none; }
+  .bd-brand { position: relative; }
+  .bd-brand .bd-brand-mark { transition: transform .5s var(--pn-ease-spring); }
+  .bd-brand:hover .bd-brand-mark { transform: rotate(-8deg) scale(1.08); }
+
+  /* Indicador que desliza entre os itens (no lugar do fundo de cada item) */
+  .bd-nav { position: relative; }
+  .pn-nav-ink {
+    position: absolute; left: 0; top: 0; z-index: 0; width: 100%; height: 42px;
+    border-radius: 12px; pointer-events: none;
+    background: var(--bd-nav-active);
+    box-shadow: 0 0 0 1px var(--bd-nav-active-line) inset, 0 8px 22px -14px var(--bd-primary);
+    transform: translateY(var(--pn-ink-y, 0px));
+    transition: transform .48s var(--pn-ease-spring), height .3s var(--pn-ease-out), opacity .2s;
+  }
+  .pn-nav-ink::before {
+    content: ""; position: absolute; left: -10px; top: 50%; width: 4px; height: 20px; margin-top: -10px;
+    border-radius: 0 4px 4px 0; background: linear-gradient(180deg, var(--bd-primary-2), var(--bd-cyan));
+    box-shadow: 0 0 12px var(--bd-primary-2);
+  }
+  .pn-nav-ink.is-off { opacity: 0; }
+  .bd-nav.has-ink .bd-nav-item { position: relative; z-index: 1; }
+  .bd-nav.has-ink .bd-nav-item.active { background: transparent; border-color: transparent; }
+  .bd-nav-item { transition: background .18s, color .18s, border-color .18s; }
+  .bd-nav-item .i { transition: transform .35s var(--pn-ease-spring); }
+  .bd-nav-item:hover .i { transform: translateX(2px) scale(1.06); }
+  .bd-nav-item.active .i { stroke-width: 2.1; }
+  .bd-nav.has-ink .bd-nav-item:not(.active):hover { background: color-mix(in srgb, var(--bd-card-2) 70%, transparent); }
+
+  /* Atalho de teclado que aparece ao passar o mouse */
+  .pn-kbd {
+    margin-left: auto; display: inline-flex; gap: 3px; opacity: 0; transform: translateX(-4px);
+    transition: opacity .18s, transform .25s var(--pn-ease-out);
+  }
+  .pn-kbd kbd, .pn-kbd-chip kbd {
+    display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 4px;
+    border: 1px solid var(--bd-line); border-bottom-width: 2px; border-radius: 5px;
+    background: var(--bd-card); color: var(--bd-text-3);
+    font: 600 10.5px/1 var(--bd-font); text-transform: uppercase;
+  }
+  .bd-nav-item:hover .pn-kbd, .bd-nav-item:focus-visible .pn-kbd { opacity: 1; transform: none; }
+
+  /* Botão de recolher a barra */
+  .pn-side-toggle {
+    position: absolute; right: 14px; top: 23px; width: 28px; height: 28px;
+    display: grid; place-items: center; padding: 0;
+    border: 1px solid var(--bd-line); border-radius: 9px; background: var(--bd-card);
+    color: var(--bd-text-2); opacity: 0; box-shadow: var(--bd-shadow);
+    transition: opacity .2s, transform .3s var(--pn-ease-out), color .15s, border-color .15s;
+  }
+  .pn-side-toggle .i { width: 15px; height: 15px; transition: transform .4s var(--pn-ease-out); }
+  .bd-sidebar:hover .pn-side-toggle, .pn-side-toggle:focus-visible { opacity: 1; }
+  .pn-side-toggle:hover { color: var(--bd-primary-ink); border-color: var(--bd-primary); }
+
+  /* Card do Pulsinho na barra: onda viva e leve elevação */
+  .bd-side-pulsinho { transition: transform .35s var(--pn-ease-out), box-shadow .35s, border-color .2s; }
+  .bd-side-pulsinho:hover { transform: translateY(-3px); border-color: color-mix(in srgb, var(--bd-primary) 40%, var(--bd-line)); box-shadow: var(--bd-shadow-pop); }
+  .bd-side-wave path { transform-origin: 0 100%; }
+
+  /* ---------- Topo: título encorpado que se compacta ao rolar ---------- */
+  .bd-topbar {
+    transition: min-height .35s var(--pn-ease-out), padding .35s var(--pn-ease-out), box-shadow .3s, background .3s;
+    border-bottom: 1px solid transparent;
+  }
+  .bd-titles h1 {
+    font-size: 27px; letter-spacing: -.025em; font-weight: 760;
+    transition: font-size .35s var(--pn-ease-out);
+  }
+  .bd-subtitle { font-size: 14px; transition: opacity .25s, margin .3s var(--pn-ease-out), max-height .3s var(--pn-ease-out); max-height: 22px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  body.pn-scrolled .bd-topbar {
+    min-height: 64px; padding-top: 10px; padding-bottom: 10px;
+    background: color-mix(in srgb, var(--bd-bg) 72%, transparent);
+    border-bottom-color: var(--bd-line);
+    box-shadow: 0 12px 30px -24px rgba(20, 30, 80, .45);
+  }
+  body.pn-scrolled .bd-titles h1 { font-size: 20px; }
+  body.pn-scrolled .bd-subtitle { opacity: 0; max-height: 0; margin-top: 0; }
+
+  /* Linha de progresso ao trocar de área */
+  .pn-route-bar {
+    position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; pointer-events: none;
+    background: linear-gradient(90deg, transparent, var(--bd-primary-2) 30%, var(--bd-cyan) 70%, transparent);
+    transform: scaleX(0); transform-origin: 0 50%; opacity: 0;
+  }
+  .pn-route-bar.run { animation: pnRoute .7s var(--pn-ease-out) forwards; }
+  @keyframes pnRoute {
+    0% { transform: scaleX(0); opacity: 1; }
+    70% { transform: scaleX(1); opacity: 1; }
+    100% { transform: scaleX(1); opacity: 0; }
+  }
+  .bd-titles h1.pn-title-in { animation: pnTitleIn .5s var(--pn-ease-out); }
+  .bd-subtitle.pn-title-in { animation: pnTitleIn .6s var(--pn-ease-out) .05s backwards; }
+  @keyframes pnTitleIn {
+    from { opacity: 0; transform: translateY(6px); filter: blur(5px); }
+    to { opacity: 1; transform: none; filter: none; }
+  }
+
+  /* Chip ⌘K ao lado da busca */
+  .pn-kbd-chip {
+    display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 10px 0 12px;
+    border: 1px solid var(--bd-line); border-radius: 12px; background: var(--bd-card);
+    color: var(--bd-text-3); font: 500 13px var(--bd-font); white-space: nowrap; cursor: pointer;
+    transition: border-color .15s, color .15s, box-shadow .2s, transform .2s var(--pn-ease-out);
+  }
+  .pn-kbd-chip .i { width: 16px; height: 16px; }
+  /* Onde o topo já tem controles (Finanças) ou a tela é estreita, o chip
+     fica só com a lupa e o atalho. */
+  body[data-active-view="finances"] .pn-kbd-chip > span { display: none; }
+  @media (max-width: 1280px) { .pn-kbd-chip > span, .pn-kbd-chip kbd { display: none; } .pn-kbd-chip { width: 38px; padding: 0; justify-content: center; } }
+  .pn-kbd-chip:hover { color: var(--bd-text); border-color: color-mix(in srgb, var(--bd-primary) 45%, var(--bd-line)); box-shadow: var(--bd-focus); }
+  .pn-kbd-chip:active { transform: scale(.97); }
+  .bd-top-actions .bd-search { display: none; }
+  .bd-top-actions .bd-search.open { display: flex; }
+
+  /* ---------- Cartões: brilho que acompanha o cursor ---------- */
+  .bd-card { box-shadow: var(--pn-card-edge); }
+  .bd-card { transition: border-color .25s, box-shadow .35s var(--pn-ease-out), transform .35s var(--pn-ease-out); }
+  /* Anel de luz na borda + halo suave, no ::after do próprio cartão
+     (fica sobre o conteúdo, por isso o preenchimento é bem leve). */
+  .bd-card.pn-spot::after {
+    content: ""; position: absolute; inset: -1px; z-index: 3; border-radius: inherit; pointer-events: none;
+    padding: 1px;
+    background:
+      radial-gradient(240px circle at var(--mx, 50%) var(--my, 50%), var(--pn-spot-ring), transparent 62%);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor; mask-composite: exclude;
+    animation: pnFadeIn .3s ease;
+  }
+  .bd-card.pn-spot { border-color: color-mix(in srgb, var(--bd-primary) 22%, var(--bd-line)); }
+
+  /* Cartões clicáveis sobem de leve */
+  .bn-card, .bd-kpi, .bf-kpi, .pfx-stat, .bd-ts, .bf-card-tile {
+    transition: transform .35s var(--pn-ease-out), box-shadow .35s var(--pn-ease-out), border-color .2s;
+  }
+  .bn-card:hover, .bd-kpi:hover, .bf-kpi:hover, .pfx-stat:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--bd-shadow-pop);
+  }
+
+  /* ---------- Botões principais: brilho que passa + toque ---------- */
+  .bd-btn--primary, .primary-button { position: relative; overflow: hidden; isolation: isolate; transition: transform .2s var(--pn-ease-out), box-shadow .3s, filter .2s; }
+  .bd-btn--primary::after, .primary-button::after {
+    content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+    background: linear-gradient(110deg, transparent 30%, rgba(255,255,255,.28) 50%, transparent 70%);
+    transform: translateX(-110%);
+  }
+  .bd-btn--primary:hover::after, .primary-button:hover::after { transform: translateX(110%); transition: transform .75s var(--pn-ease-out); }
+  .bd-btn--primary:hover, .primary-button:hover { box-shadow: 0 12px 28px -12px var(--bd-primary); filter: saturate(1.08); }
+  .bd-btn--primary:active, .primary-button:active { transform: scale(.975); }
+
+  /* ---------- Rolagem discreta ---------- */
+  html { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--bd-text-3) 40%, transparent) transparent; }
+
+  /* ---------- Painel de atalhos ---------- */
+  .pn-keys {
+    position: fixed; inset: 0; z-index: 400; display: grid; place-items: center;
+    background: rgba(8, 12, 28, .42); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+    animation: pnFadeIn .2s ease;
+  }
+  .pn-keys[hidden] { display: none; }
+  .pn-keys-card {
+    width: min(440px, calc(100vw - 32px)); padding: 20px 22px 18px;
+    border: 1px solid var(--bd-line); border-radius: 20px; background: var(--bd-card);
+    box-shadow: var(--bd-shadow-pop); color: var(--bd-text);
+    animation: pnPop .32s var(--pn-ease-spring);
+  }
+  .pn-keys-card h2 { display: flex; align-items: center; justify-content: space-between; font-size: 16px; font-weight: 700; margin: 0 0 12px; }
+  .pn-keys-card ul { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+  .pn-keys-card li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 2px; border-top: 1px solid var(--bd-line); font-size: 13.5px; color: var(--bd-text-2); }
+  .pn-keys-card li:first-child { border-top: 0; }
+  .pn-keys-card li span:last-child { display: inline-flex; gap: 4px; }
+  .pn-keys-card kbd {
+    display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 6px;
+    border: 1px solid var(--bd-line); border-bottom-width: 2px; border-radius: 6px;
+    background: var(--bd-card-2); color: var(--bd-text); font: 600 11.5px/1 var(--bd-font);
+  }
+  @keyframes pnFadeIn { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes pnPop { from { opacity: 0; transform: translateY(10px) scale(.96); } to { opacity: 1; transform: none; } }
+}
+
+/* ---------- Barra completa (acima de 1180px): modo recolhido ---------- */
+@media (min-width: 1181px) {
+  html.pn-side-collapsed .bd-shell { --bd-side-w: 80px; }
+  html.pn-side-collapsed .bd-sidebar { padding: 22px 12px 16px; align-items: center; }
+  html.pn-side-collapsed .bd-brand strong,
+  html.pn-side-collapsed .bd-nav-item span,
+  html.pn-side-collapsed .bd-side-pulsinho,
+  html.pn-side-collapsed .bd-user-meta,
+  html.pn-side-collapsed .bd-user-chev,
+  html.pn-side-collapsed .pn-kbd { display: none; }
+  html.pn-side-collapsed .bd-brand { padding: 2px 0 22px; }
+  html.pn-side-collapsed .bd-nav { width: 52px; }
+  html.pn-side-collapsed .bd-nav-item { justify-content: center; padding: 0; width: 52px; }
+  html.pn-side-collapsed .bd-side-foot { margin-top: auto; justify-items: center; }
+  html.pn-side-collapsed .bd-nav-item--settings { width: 52px; }
+  html.pn-side-collapsed .bd-user-chip { width: auto; padding: 4px; }
+  html.pn-side-collapsed .pn-side-toggle { position: static; margin: -8px 0 16px; opacity: 1; }
+  html.pn-side-collapsed .pn-side-toggle .i { transform: rotate(180deg); }
+  /* Dica com o nome da área ao passar o mouse na barra recolhida */
+  html.pn-side-collapsed .bd-nav-item[data-tip]:hover::after {
+    content: attr(data-tip); position: absolute; left: calc(100% + 12px); top: 50%; z-index: 50;
+    transform: translateY(-50%); padding: 6px 10px; border-radius: 8px; white-space: nowrap;
+    background: var(--bd-text); color: var(--bd-bg); font-size: 12.5px; font-weight: 600;
+    box-shadow: var(--bd-shadow-pop); animation: pnFadeIn .15s ease;
+  }
+  html.pn-side-collapsed .bd-sidebar { overflow: visible; z-index: 40; }
+}
+@media (max-width: 1180px) {
+  .pn-side-toggle { display: none !important; }
+  .pn-kbd { display: none !important; }
+}
+
+/* ---------- Troca de tema com revelação circular ---------- */
+::view-transition-old(root), ::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+::view-transition-new(root) { z-index: 2; }
+::view-transition-old(root) { z-index: 1; }
+
+/* ---------- Reduzir movimento ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .bd-shell, .pn-nav-ink, .bd-topbar, .bd-titles h1, .bd-subtitle, .bd-card,
+  .bn-card, .bd-kpi, .bf-kpi, .pfx-stat, .bd-side-pulsinho, .bd-btn--primary, .primary-button { transition: none !important; }
+  .pn-route-bar.run, .bd-titles h1.pn-title-in, .bd-subtitle.pn-title-in, .pn-keys, .pn-keys-card { animation: none !important; }
+  .bn-card:hover, .bd-kpi:hover, .bf-kpi:hover, .pfx-stat:hover, .bd-side-pulsinho:hover { transform: none; }
+  .bd-btn--primary::after, .primary-button::after { display: none; }
+}
