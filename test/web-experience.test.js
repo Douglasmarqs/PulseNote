@@ -71,3 +71,18 @@ test("movimento ao passar o mouse, trocar de aba e rolar", () => {
   assert.match(js, /pn-scroll-line/);
   assert.match(js, /perspective\(900px\) rotateX/);
 });
+
+test("todos os aparelhos: toque responde, efeitos de mouse só com mouse", () => {
+  const css = read("src/web.css");
+  const js = read("src/web-motion.js");
+  // toque acende a linha / afunda o cartão, e solta ao rolar
+  assert.match(js, /e\.pointerType === "mouse"/);
+  assert.match(js, /classList\.add\("pn-press"\)/);
+  assert.match(css, /\.pn-press \{\s*background-color/);
+  // levantar cartão e brilho do botão só onde existe mouse (sem "hover preso" no tablet)
+  assert.match(css, /@media \(hover: hover\) and \(pointer: fine\) \{\s*\.bn-card:hover/);
+  // topo ao rolar e animação do título valem em qualquer largura
+  assert.doesNotMatch(js, /toggle\("pn-scrolled", desktop\.matches/);
+  assert.doesNotMatch(js, /if \(!desktop\.matches\) return;\s*replay/);
+  assert.match(css, /@media \(max-width: 760px\) \{\s*\.bd-topbar \{ transition/);
+});

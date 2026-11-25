@@ -165,7 +165,7 @@
 
   /* Card do Pulsinho na barra: onda viva e leve elevação */
   .bd-side-pulsinho { transition: transform .35s var(--pn-ease-out), box-shadow .35s, border-color .2s; }
-  .bd-side-pulsinho:hover { transform: translateY(-3px); border-color: color-mix(in srgb, var(--bd-primary) 40%, var(--bd-line)); box-shadow: var(--bd-shadow-pop); }
+  @media (hover: hover) and (pointer: fine) { .bd-side-pulsinho:hover { transform: translateY(-3px); border-color: color-mix(in srgb, var(--bd-primary) 40%, var(--bd-line)); box-shadow: var(--bd-shadow-pop); } }
   .bd-side-wave path { transform-origin: 0 100%; }
 
   /* ---------- Topo: título encorpado que se compacta ao rolar ---------- */
@@ -243,9 +243,11 @@
   .bn-card, .bd-kpi, .bf-kpi, .pfx-stat, .bd-ts, .bf-card-tile {
     transition: transform .35s var(--pn-ease-out), box-shadow .35s var(--pn-ease-out), border-color .2s;
   }
-  .bn-card:hover, .bd-kpi:hover, .bf-kpi:hover, .pfx-stat:hover {
-    transform: translateY(-3px);
-    box-shadow: var(--bd-shadow-pop);
+  @media (hover: hover) and (pointer: fine) {
+    .bn-card:hover, .bd-kpi:hover, .bf-kpi:hover, .pfx-stat:hover {
+      transform: translateY(-3px);
+      box-shadow: var(--bd-shadow-pop);
+    }
   }
 
   /* ---------- Botões principais: brilho que passa + toque ---------- */
@@ -255,8 +257,10 @@
     background: linear-gradient(110deg, transparent 30%, rgba(255,255,255,.28) 50%, transparent 70%);
     transform: translateX(-110%);
   }
-  .bd-btn--primary:hover::after, .primary-button:hover::after { transform: translateX(110%); transition: transform .75s var(--pn-ease-out); }
-  .bd-btn--primary:hover, .primary-button:hover { box-shadow: 0 12px 28px -12px var(--bd-primary); filter: saturate(1.08); }
+  @media (hover: hover) and (pointer: fine) {
+    .bd-btn--primary:hover::after, .primary-button:hover::after { transform: translateX(110%); transition: transform .75s var(--pn-ease-out); }
+    .bd-btn--primary:hover, .primary-button:hover { box-shadow: 0 12px 28px -12px var(--bd-primary); filter: saturate(1.08); }
+  }
   .bd-btn--primary:active, .primary-button:active { transform: scale(.975); }
 
   /* ---------- Rolagem discreta ---------- */
@@ -426,10 +430,63 @@
 ::view-transition-new(root) { z-index: 2; }
 ::view-transition-old(root) { z-index: 1; }
 
+
+/* ==========================================================================
+   TODOS OS APARELHOS — celular, tablet com toque, notebook, telas grandes
+   ========================================================================== */
+/* Título da área entra com leve desfoque em qualquer largura */
+.bd-titles h1.pn-title-in { animation: pnTitleInAll .5s cubic-bezier(.22, 1, .36, 1); }
+.bd-subtitle.pn-title-in { animation: pnTitleInAll .6s cubic-bezier(.22, 1, .36, 1) .05s backwards; }
+@keyframes pnTitleInAll {
+  from { opacity: 0; transform: translateY(6px); filter: blur(5px); }
+  to { opacity: 1; transform: none; filter: none; }
+}
+
+/* Toque: a linha acende e o cartão afunda de leve ao pressionar */
+:is(.bd-list li, .bf-tx, .bf-mini, .bd-agenda .bd-ag, .bp-task, .bf-brow, .bf-row, .bf-member, .bf-arow, .bf-rrow, .bf-srow, .bd-res-row, .pfx-row) {
+  transition: background-color .2s ease, transform .2s cubic-bezier(.22, 1, .36, 1);
+}
+:is(.bd-list li, .bf-tx, .bf-mini, .bd-agenda .bd-ag, .bp-task, .bf-brow, .bf-row, .bf-member, .bf-arow, .bf-rrow, .bf-srow, .bd-res-row, .pfx-row).pn-press {
+  background-color: color-mix(in srgb, var(--bd-primary) 9%, transparent) !important;
+  border-radius: 12px;
+  transform: scale(.985);
+}
+:is(.bn-card, .bd-kpi, .bf-kpi, .bd-ts, .pfx-stat, .bf-card-tile, .bd-side-pulsinho).pn-press {
+  transform: scale(.97) !important;
+  transition: transform .18s cubic-bezier(.22, 1, .36, 1) !important;
+}
+@media (hover: none), (pointer: coarse) {
+  :is(.bd-btn, .primary-button, .bd-ws-option, .fin-tab-btn, .bd-icon-btn):active { transform: scale(.96); }
+  :is(.bd-btn, .primary-button, .bd-ws-option, .fin-tab-btn, .bd-icon-btn) { transition: transform .18s cubic-bezier(.22, 1, .36, 1); }
+}
+
+/* Celular: topo com vidro, traço suave e fio de progresso ao rolar */
+@media (max-width: 760px) {
+  .bd-topbar { transition: box-shadow .3s, background .3s; }
+  body.pn-scrolled .bd-topbar {
+    background: color-mix(in srgb, var(--bd-bg) 78%, transparent);
+    box-shadow: 0 14px 28px -26px rgba(20, 30, 80, .55);
+  }
+  body.pn-scrolled .bd-topbar::after {
+    content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; pointer-events: none;
+    background: linear-gradient(90deg, transparent, var(--bd-line) 20%, var(--bd-line-strong) 50%, var(--bd-line) 80%, transparent);
+  }
+  .pn-scroll-line {
+    position: absolute; left: 0; bottom: 0; z-index: 1; height: 2px; width: 100%; pointer-events: none;
+    background: linear-gradient(90deg, var(--bd-primary-2), var(--bd-cyan));
+    transform: scaleX(var(--pn-progress, 0)); transform-origin: 0 50%;
+    opacity: 0; transition: opacity .3s; border-radius: 2px;
+  }
+  body.pn-scrolled .pn-scroll-line { opacity: .9; }
+  .pn-route-bar { display: none; }
+}
+
 /* ---------- Reduzir movimento ---------- */
 @media (prefers-reduced-motion: reduce) {
   .bd-shell, .pn-nav-ink, .bd-topbar, .bd-titles h1, .bd-subtitle, .bd-card,
   .bn-card, .bd-kpi, .bf-kpi, .pfx-stat, .bd-side-pulsinho, .bd-btn--primary, .primary-button { transition: none !important; }
+  .pn-press { transform: none !important; }
+  .bd-titles h1.pn-title-in, .bd-subtitle.pn-title-in { animation: none !important; }
   .pn-row-pill, .pn-seg-pill, .pn-scroll-line, .pn-row-host > * > .pn-ico { transition: none !important; }
   .pn-route-bar.run, .bd-titles h1.pn-title-in, .bd-subtitle.pn-title-in, .pn-keys, .pn-keys-card { animation: none !important; }
   .bn-card:hover, .bd-kpi:hover, .bf-kpi:hover, .pfx-stat:hover, .bd-side-pulsinho:hover { transform: none; }

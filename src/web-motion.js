@@ -137,14 +137,17 @@
     routeBar.setAttribute("aria-hidden", "true");
     topbar.append(routeBar);
 
-    // Topo compacto ao rolar (só no computador)
+    // Topo ao rolar (todas as larguras). Com folga entre ligar e desligar
+    // para o topo não "piscar" quando a rolagem para perto do limite.
     let ticking = false;
     function onScroll() {
       if (ticking) return;
       ticking = true;
       requestAnimationFrame(() => {
         ticking = false;
-        doc.body.classList.toggle("pn-scrolled", desktop.matches && scrollY > 12);
+        const on = doc.body.classList.contains("pn-scrolled");
+        if (!on && scrollY > 16) doc.body.classList.add("pn-scrolled");
+        else if (on && scrollY < 4) doc.body.classList.remove("pn-scrolled");
       });
     }
     addEventListener("scroll", onScroll, { passive: true });
@@ -250,8 +253,7 @@
       if (!view || view === current) return;
       current = view;
       moveInk();
-      if (!desktop.matches) return;
-      replay(routeBar, "run");
+      if (desktop.matches) replay(routeBar, "run");
       replay(title, "pn-title-in");
       replay(subtitle, "pn-title-in");
       const section = doc.getElementById(`${view}View`);
@@ -277,7 +279,6 @@
     doc.fonts?.ready?.then(() => moveInk({ instant: true }));
     const overlay = doc.getElementById("appLoadingOverlay");
     const firstCount = () => {
-      if (!desktop.matches) return;
       const section = doc.querySelector(".view.active-view");
       countView(section);
       armReveal(section);
@@ -352,6 +353,32 @@
     }, { passive: true });
     addEventListener("scroll", () => { if (hotRow && !hotRow.matches(":hover")) dimRows(); }, { passive: true });
 
+    // ── Toque (celular e tablet): resposta ao pressionar ────────
+    // Sem mouse não há "passar por cima": a linha acende e o cartão afunda
+    // de leve no instante do toque, e solta se a pessoa começar a rolar.
+    const PRESS_SEL = `${ROW_SEL}, .bn-card, .bd-kpi, .bf-kpi, .bd-ts, .pfx-stat, .bf-card-tile, .bd-side-pulsinho`;
+    let pressed = null;
+    let pressTimer = 0;
+    const release = () => {
+      clearTimeout(pressTimer);
+      const el = pressed;
+      pressed = null;
+      if (el) setTimeout(() => el.classList.remove("pn-press"), 140);
+    };
+    doc.addEventListener("pointerdown", (e) => {
+      if (e.pointerType === "mouse" || calm()) return;
+      const el = e.target.closest?.(PRESS_SEL);
+      if (!el || e.target.closest("input, textarea, select, [contenteditable]")) return;
+      release();
+      pressed = el;
+      // Um instante de espera: quem só está rolando a tela não acende nada.
+      pressTimer = setTimeout(() => el.classList.add("pn-press"), 60);
+    }, { passive: true });
+    ["pointerup", "pointercancel", "pointerleave"].forEach((type) => doc.addEventListener(type, release, { passive: true }));
+    addEventListener("scroll", () => { if (pressed) { clearTimeout(pressTimer); pressed.classList.remove("pn-press"); pressed = null; } }, { passive: true, capture: true });
+    // iOS só aplica :active com algum ouvinte de toque registrado.
+    doc.addEventListener("touchstart", () => {}, { passive: true });
+
     // ── Pílula deslizante nos seletores ─────────────────────────
     const SEG_SEL = ".bd-seg, .bf-ws";
     function placeSeg(group, { snap = false } = {}) {
@@ -419,7 +446,7 @@
         requestAnimationFrame(() => {
           const panel = cfg.panel();
           slideIn(panel, to > from ? 1 : -1);
-          if (desktop.matches) cascadeRows(panel, 120);
+          cascadeRows(panel, 120);
         });
         return;
       }
