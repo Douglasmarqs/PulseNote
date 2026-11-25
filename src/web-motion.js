@@ -9,16 +9,81 @@
    - Blocos que entram ao aparecer na rolagem
    - Brilho que acompanha o cursor nos cartões
    - Troca de tema com revelação circular (View Transitions)
-   Tudo desliga com "reduzir movimento". */
+   Tudo desliga com "reduzir movimento" — do aparelho ou escolhido no app
+   (Configurações → Aparência → Movimento). */
 (() => {
   "use strict";
   const doc = document;
   const root = doc.documentElement;
+
+  // ── Preferência de movimento do próprio app ──────────────────
+  // "auto" segue o aparelho; "full" mantém as animações mesmo quando o
+  // sistema pede menos movimento (no Windows, "Efeitos de animação"
+  // desligado faz o navegador pedir isso e o app ficava parado);
+  // "reduced" desliga mesmo com o aparelho animando.
+  const MOTION_KEY = "pulsenote-motion";
+  const readMotion = () => { try { const v = localStorage.getItem(MOTION_KEY); return v === "full" || v === "reduced" ? v : "auto"; } catch { return "auto"; } };
+  let motionPref = readMotion();
+  const nativeMatchMedia = window.matchMedia ? window.matchMedia.bind(window) : null;
+  function fakeList(media, matches) {
+    return { media, matches, onchange: null, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent() { return false; } };
+  }
+  // Todo o app (app.js e este arquivo) pergunta ao navegador por
+  // "prefers-reduced-motion"; a resposta passa a respeitar a escolha.
+  if (nativeMatchMedia) {
+    window.matchMedia = (query) => {
+      const q = String(query);
+      if (motionPref !== "auto" && q.includes("prefers-reduced-motion")) {
+        const wantsReduce = motionPref === "reduced";
+        return fakeList(q, /reduce/.test(q) ? wantsReduce : !wantsReduce);
+      }
+      return nativeMatchMedia(q);
+    };
+  }
+  // As folhas de estilo também: as regras @media de movimento são
+  // religadas/desligadas conforme a escolha.
+  const originalMedia = new WeakMap();
+  function retuneRules(rules) {
+    for (const rule of rules) {
+      if (rule.media && rule.cssRules) {
+        if (!originalMedia.has(rule)) originalMedia.set(rule, rule.media.mediaText);
+        const orig = originalMedia.get(rule);
+        if (/prefers-reduced-motion/.test(orig)) {
+          const isReduce = /prefers-reduced-motion:\s*reduce/.test(orig);
+          let next = orig;
+          if (motionPref === "full") next = isReduce ? "not all" : orig.replace(/\(\s*prefers-reduced-motion:\s*no-preference\s*\)/g, "(min-width: 0px)");
+          if (motionPref === "reduced") next = isReduce ? orig.replace(/\(\s*prefers-reduced-motion:\s*reduce\s*\)/g, "(min-width: 0px)") : "not all";
+          if (rule.media.mediaText !== next) rule.media.mediaText = next;
+        }
+      }
+      if (rule.cssRules) retuneRules(rule.cssRules);
+    }
+  }
+  function retuneSheets() {
+    for (const sheet of doc.styleSheets) {
+      let rules = null;
+      try { rules = sheet.cssRules; } catch { continue; } // folhas de outro domínio
+      if (rules) retuneRules(rules);
+    }
+  }
+  function setMotion(pref, { save = true } = {}) {
+    motionPref = pref;
+    root.dataset.motion = pref;
+    if (save) { try { localStorage.setItem(MOTION_KEY, pref); } catch { /* sem armazenamento */ } }
+    retuneSheets();
+    doc.dispatchEvent(new CustomEvent("pn:motion", { detail: pref }));
+  }
+  root.dataset.motion = motionPref;
+  retuneSheets();
+  // Estilos que chegam depois (avisos, banners) também seguem a escolha.
+  new MutationObserver(() => retuneSheets()).observe(doc.head, { childList: true });
+  addEventListener("load", retuneSheets, { once: true });
+  window.pnSetMotion = setMotion;
+
   const mq = (q) => { try { return window.matchMedia(q); } catch { return { matches: false, addEventListener() {} }; } };
-  const reduce = mq("(prefers-reduced-motion: reduce)");
   const desktop = mq("(min-width: 761px)");
   const finePointer = mq("(hover: hover) and (pointer: fine)");
-  const calm = () => reduce.matches;
+  const calm = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const SIDE_KEY = "pulsenote-side-collapsed";
 
   // Último ponto tocado/clicado: origem da revelação circular do tema.
@@ -508,6 +573,47 @@
       card.classList.add("pn-tilt");
       card.style.transform = `perspective(900px) rotateX(${(-y * 6).toFixed(2)}deg) rotateY(${(x * 7).toFixed(2)}deg) translateY(-4px)`;
     }, { passive: true });
+
+    // ── Configurações → Aparência → Movimento ───────────────────
+    const themeGroup = doc.getElementById("themeToggle");
+    if (themeGroup && !doc.getElementById("pnMotionSeg")) {
+      const OPTIONS = [["auto", "Automático"], ["full", "Sempre ligado"], ["reduced", "Reduzido"]];
+      const row = doc.createElement("div");
+      row.className = "pn-motion-row";
+      row.innerHTML = `<div class="pn-motion-copy"><strong id="pnMotionLabel">Movimento e animações</strong><small id="pnMotionHint"></small></div>
+        <div class="bd-seg pn-motion-seg" id="pnMotionSeg" role="radiogroup" aria-labelledby="pnMotionLabel">
+          ${OPTIONS.map(([v, l]) => `<button type="button" role="radio" data-motion-choice="${v}">${l}</button>`).join("")}
+        </div>`;
+      themeGroup.after(row);
+      const seg = row.querySelector("#pnMotionSeg");
+      const hint = row.querySelector("#pnMotionHint");
+      const systemReduces = () => nativeMatchMedia?.("(prefers-reduced-motion: reduce)").matches;
+      const sync = () => {
+        seg.querySelectorAll("button").forEach((b) => {
+          const on = b.dataset.motionChoice === motionPref;
+          b.classList.toggle("active", on);
+          b.setAttribute("aria-checked", String(on));
+          b.tabIndex = on ? 0 : -1;
+        });
+        hint.textContent = motionPref === "full" ? "Animações sempre ativas, mesmo se o aparelho pedir menos movimento."
+          : motionPref === "reduced" ? "Quase sem animações: telas trocam direto, sem efeitos."
+          : systemReduces() ? "Seu aparelho está pedindo menos movimento, então o app está quase parado. Escolha “Sempre ligado” para ver as animações."
+          : "Segue a configuração do aparelho.";
+      };
+      seg.addEventListener("click", (e) => {
+        const b = e.target.closest("[data-motion-choice]");
+        if (b) { setMotion(b.dataset.motionChoice); sync(); }
+      });
+      seg.addEventListener("keydown", (e) => {
+        if (!["ArrowRight", "ArrowLeft"].includes(e.key)) return;
+        e.preventDefault();
+        const list = [...seg.querySelectorAll("button")];
+        const i = list.findIndex((b) => b.classList.contains("active"));
+        const next = list[(i + (e.key === "ArrowRight" ? 1 : list.length - 1)) % list.length];
+        next.click(); next.focus();
+      });
+      sync();
+    }
 
     // ── Atalhos de teclado ──────────────────────────────────────
     const keysPanel = doc.createElement("div");

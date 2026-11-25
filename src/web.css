@@ -425,6 +425,74 @@
   .bn-card.pn-tilt { transition: transform .14s linear, box-shadow .35s; will-change: transform; }
 }
 
+/* ---------- Configurações: escolha de movimento ---------- */
+.pn-motion-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;
+  margin-top: 14px; padding-top: 14px;
+  background-image: linear-gradient(90deg, color-mix(in srgb, var(--bd-line-strong) 70%, transparent), var(--bd-line) 55%, transparent);
+  background-size: 100% 1px; background-repeat: no-repeat;
+}
+.pn-motion-copy { display: grid; gap: 3px; min-width: 0; flex: 1 1 220px; }
+.pn-motion-copy strong { font-size: 13.5px; font-weight: 650; color: var(--bd-text); }
+.pn-motion-copy small { font-size: 12px; line-height: 1.4; color: var(--bd-text-2); }
+.pn-motion-seg button { height: 30px; padding: 0 12px; font-size: 12.5px; }
+
+/* ==========================================================================
+   LAYOUT NO COMPUTADOR — conteúdo alinhado ao título e blocos proporcionais
+   ========================================================================== */
+@media (min-width: 761px) {
+  /* Notas, Planner e Finanças tinham larguras máximas próprias e ficavam
+     centralizados, desalinhados do título; agora começam na mesma linha. */
+  .bd-main > .view { margin-inline: 0 !important; }
+  .bd-main > #notesView, .bd-main > #plannerView, .bd-main > #financesView, .bd-main > #dashboardView { max-width: none !important; width: auto !important; }
+}
+
+@media (min-width: 1181px) {
+  /* Início: as três faixas (resumo, gráficos, listas) com a mesma divisão,
+     então as colunas batem de cima a baixo. */
+  .bd-kpis, .bd-row--charts, .bd-row--lists { grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); }
+  .bd-row--lists > *, .bd-row--charts > *, .bd-kpis > * { height: 100%; }
+
+  /* Notas: três colunas da mesma altura, cada uma rolando por dentro.
+     Com uma nota aberta, ela ganha espaço para ler e escrever. */
+  .bn-grid {
+    grid-template-columns: 284px minmax(0, 1fr) minmax(340px, 400px);
+    align-items: stretch;
+    height: max(600px, calc(100dvh - 118px));
+    transition: grid-template-columns .55s var(--pn-ease-out);
+  }
+  .bn-grid:has(#noteDetailModal:not([hidden])) { grid-template-columns: 264px minmax(0, 1fr) minmax(380px, 1.12fr); }
+  .bn-grid > * { min-height: 0; height: 100%; }
+  .bn-form-wrap { overflow: hidden; }
+  .bn-form-wrap > .bn-form { height: 100%; overflow-y: auto; scrollbar-width: thin; }
+  .bn-library { overflow-y: auto; scrollbar-width: thin; }
+  .bn-detail-empty { align-content: center; }
+  .bn-detail-wrap > .bn-detail { height: 100%; min-height: 0; overflow-y: auto; scrollbar-width: thin; padding: 18px 20px; }
+  .bn-detail-body { font-size: 15.5px; line-height: 1.65; }
+  .bn-detail-wrap:not([hidden]) > .bn-detail { animation: pnNoteIn .45s var(--pn-ease-out); }
+  @keyframes pnNoteIn { from { opacity: 0; transform: translateX(18px); } to { opacity: 1; transform: none; } }
+}
+
+@media (min-width: 1181px) and (max-width: 1500px) {
+  .bn-grid { grid-template-columns: 248px minmax(0, 1fr) 320px; }
+  .bn-grid:has(#noteDetailModal:not([hidden])) { grid-template-columns: 232px minmax(0, 1fr) minmax(360px, 1.15fr); }
+}
+
+@media (min-width: 1381px) {
+  /* Finanças: formulário, calendário e lançamentos com a mesma altura;
+     o calendário cresce para ocupar o espaço em vez de ficar pequeno. */
+  #financesView .bf-launch { grid-template-columns: minmax(0, 1.22fr) minmax(300px, .92fr) minmax(0, 1.12fr); align-items: stretch; }
+  #financesView .bf-launch > * { height: 100%; }
+  #financesView .bf-cal { display: flex; flex-direction: column; padding: 16px 18px 14px; }
+  #financesView .bf-cal-grid { flex: 1; grid-auto-rows: minmax(44px, 1fr); row-gap: 4px; }
+  #financesView .bf-cal .bf-day { height: auto; min-height: 44px; font-size: 14px; align-content: center; padding: 0; }
+  #financesView .bf-cal .bf-day > span { width: 32px; height: 32px; }
+  #financesView .bf-cal .bf-day.is-out { place-items: center; padding: 0; }
+  #financesView .bf-cal-head h3 { font-size: 16px; }
+  #financesView .bf-cal .bf-day:not(.is-out) { transition: background .2s, transform .25s var(--pn-ease-spring); }
+  #financesView .bf-cal .bf-day:not(.is-out):hover { transform: translateY(-2px); }
+}
+
 /* ---------- Troca de tema com revelação circular ---------- */
 ::view-transition-old(root), ::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
 ::view-transition-new(root) { z-index: 2; }

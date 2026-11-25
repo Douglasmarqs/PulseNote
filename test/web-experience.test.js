@@ -86,3 +86,23 @@ test("todos os aparelhos: toque responde, efeitos de mouse só com mouse", () =>
   assert.doesNotMatch(js, /if \(!desktop\.matches\) return;\s*replay/);
   assert.match(css, /@media \(max-width: 760px\) \{\s*\.bd-topbar \{ transition/);
 });
+
+test("preferência de movimento do app vence o 'reduzir movimento' do sistema quando escolhida", () => {
+  const js = read("src/web-motion.js");
+  assert.match(js, /const MOTION_KEY = "pulsenote-motion"/);
+  // matchMedia e as regras @media de movimento passam a seguir a escolha
+  assert.match(js, /window\.matchMedia = \(query\) =>/);
+  assert.match(js, /rule\.media\.mediaText = next/);
+  // opção nas Configurações → Aparência
+  assert.match(js, /data-motion-choice/);
+  assert.match(js, /\["full", "Sempre ligado"\]/);
+});
+
+test("navegador: colunas do Início batem, Notas com mesma altura e Finanças proporcional", () => {
+  const css = read("src/web.css");
+  assert.match(css, /\.bd-kpis, \.bd-row--charts, \.bd-row--lists \{ grid-template-columns: minmax\(0, 1\.45fr\) minmax\(0, 1fr\); \}/);
+  assert.match(css, /\.bn-grid:has\(#noteDetailModal:not\(\[hidden\]\)\)/);
+  assert.match(css, /height: max\(600px, calc\(100dvh - 118px\)\)/);
+  assert.match(css, /#financesView \.bf-launch \{ grid-template-columns: minmax\(0, 1\.22fr\) minmax\(300px, \.92fr\) minmax\(0, 1\.12fr\); align-items: stretch; \}/);
+  assert.match(css, /\.bd-main > \.view \{ margin-inline: 0 !important; \}/);
+});
