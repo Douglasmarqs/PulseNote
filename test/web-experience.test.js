@@ -107,6 +107,22 @@ test("navegador: colunas do Início batem, Notas com mesma altura e Finanças pr
   assert.match(css, /\.bd-main > \.view \{ margin-inline: 0 !important; \}/);
 });
 
+test("moldura sem riscas: barra lateral e topo sem linhas, sem letrinhas de atalho", () => {
+  const css = read("src/web.css");
+  const js = read("src/web-motion.js");
+  // topo: sem faixa parada; vidro que se dissolve só ao rolar
+  assert.match(css, /\.bd-topbar \{\s*background: transparent !important;/);
+  assert.match(css, /body\.pn-scrolled \.bd-topbar::after \{ content: none !important; \}/);
+  assert.match(css, /mask-image: linear-gradient\(180deg, #000 0, #000 calc\(100% - 30px\), transparent 100%\)/);
+  // barra lateral: sem borda, sem linha e sem desfoque que desenhava degrau
+  assert.match(css, /\.bd-sidebar::before \{ content: none !important; \}/);
+  assert.match(css, /border-right: 0 !important;/);
+  assert.match(css, /backdrop-filter: none !important;/);
+  // letrinhas "G N" ao passar o mouse saíram (o atalho continua funcionando)
+  assert.doesNotMatch(js, /<kbd>G<\/kbd><kbd>\$\{key\}<\/kbd>/);
+  assert.match(js, /aria-keyshortcuts", `G \$\{key\.toUpperCase\(\)\}`/);
+});
+
 test("Pulsinho no Início: coluna proporcional, alinhada aos cartões e com sugestões", () => {
   const css = read("src/web.css");
   const js = read("src/web-motion.js");

@@ -142,20 +142,14 @@
       inkPlaced = true;
     }
 
-    // Atalhos nos itens + dica de nome para a barra recolhida
+    // Atalhos nos itens (só para leitores de tela — as letrinhas visíveis
+    // ao passar o mouse saíram) + dica de nome para a barra recolhida.
     const KEYS = { dashboard: "i", planner: "p", notes: "n", finances: "f", autopilot: "a", settings: "c" };
     doc.querySelectorAll(".bd-sidebar [data-nav]").forEach((item) => {
       const label = item.querySelector("span")?.textContent.trim();
       if (label) item.dataset.tip = label;
       const key = KEYS[item.dataset.view];
-      if (key && !item.querySelector(".pn-kbd")) {
-        const k = doc.createElement("span");
-        k.className = "pn-kbd";
-        k.setAttribute("aria-hidden", "true");
-        k.innerHTML = `<kbd>G</kbd><kbd>${key}</kbd>`;
-        item.append(k);
-        item.setAttribute("aria-keyshortcuts", `G ${key.toUpperCase()}`);
-      }
+      if (key) item.setAttribute("aria-keyshortcuts", `G ${key.toUpperCase()}`);
     });
 
     // ── Barra recolhível ────────────────────────────────────────
@@ -550,7 +544,13 @@
     scrollLine.setAttribute("aria-hidden", "true");
     topbar.append(scrollLine);
     let lineTick = false;
+    let lineIdle = 0;
     addEventListener("scroll", () => {
+      // O fio só aparece enquanto a página está rolando e some sozinho
+      // logo depois — parado, o topo fica sem nenhuma risca.
+      doc.body.classList.add("pn-scrolling");
+      clearTimeout(lineIdle);
+      lineIdle = setTimeout(() => doc.body.classList.remove("pn-scrolling"), 900);
       if (lineTick) return;
       lineTick = true;
       requestAnimationFrame(() => {

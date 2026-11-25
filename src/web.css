@@ -425,6 +425,50 @@
   .bn-card.pn-tilt { transition: transform .14s linear, box-shadow .35s; will-change: transform; }
 }
 
+/* ==========================================================================
+   SEM RISCAS NA MOLDURA — barra lateral e topo se separam do conteúdo
+   pela superfície (vidro, tom e sombra suave), não por uma linha.
+   ========================================================================== */
+/* Topo: sem faixa parada. Ao rolar, surge um vidro que se dissolve para
+   baixo (nada de borda reta); o fio de progresso só aparece rolando. */
+.bd-topbar {
+  background: transparent !important;
+  -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
+  border-bottom: 0 !important; box-shadow: none !important;
+}
+.bd-topbar::before {
+  content: ""; position: absolute; inset: 0 0 -22px 0; z-index: -1; pointer-events: none;
+  opacity: 0; transition: opacity .35s ease;
+  background: color-mix(in srgb, var(--bd-bg) 74%, transparent);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2); backdrop-filter: blur(16px) saturate(1.2);
+  -webkit-mask-image: linear-gradient(180deg, #000 0, #000 calc(100% - 30px), transparent 100%);
+          mask-image: linear-gradient(180deg, #000 0, #000 calc(100% - 30px), transparent 100%);
+}
+body.pn-scrolled .bd-topbar::before { opacity: 1; }
+body.pn-scrolled .bd-topbar::after { content: none !important; }
+.pn-scroll-line { transition: opacity .45s ease !important; }
+body.pn-scrolled:not(.pn-scrolling) .pn-scroll-line { opacity: 0 !important; }
+/* Letrinhas de atalho na barra lateral: removidas */
+.pn-kbd { display: none !important; }
+
+@media (min-width: 761px) {
+  /* Barra lateral: sem a risca vertical. O vidro deixa o fundo do app
+     continuar por trás e uma sombra larga e bem suave marca a borda. */
+  .bd-sidebar {
+    border-right: 0 !important;
+    box-shadow: none !important;
+    /* O desfoque de vidro mudava o tom do fundo só dentro da barra e
+       desenhava um degrau na borda; sem ele, o fundo continua liso. */
+    -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
+    /* O tom da barra vai se dissolvendo até a borda: não sobra degrau. */
+    background: linear-gradient(90deg,
+      color-mix(in srgb, var(--bd-side) 82%, transparent) 0%,
+      color-mix(in srgb, var(--bd-side) 60%, transparent) 62%,
+      color-mix(in srgb, var(--bd-side) 0%, transparent) 100%) !important;
+  }
+  .bd-sidebar::before { content: none !important; }
+}
+
 /* ---------- Configurações: escolha de movimento ---------- */
 .pn-motion-row {
   display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;
