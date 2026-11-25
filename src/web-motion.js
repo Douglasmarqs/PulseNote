@@ -206,6 +206,7 @@
         entries.forEach((entry) => {
           if (!entry.isIntersecting) return;
           io.unobserve(entry.target);
+          cascadeRows(entry.target, 160);
           entry.target.animate(
             [{ opacity: 0, transform: "translateY(18px) scale(.985)" }, { opacity: 1, transform: "none" }],
             { duration: 560, delay: Math.min(i++, 4) * 60, easing: "cubic-bezier(.22, 1, .36, 1)", fill: "backwards" }
@@ -254,7 +255,7 @@
       replay(title, "pn-title-in");
       replay(subtitle, "pn-title-in");
       const section = doc.getElementById(`${view}View`);
-      requestAnimationFrame(() => { countView(section); armReveal(section); });
+      requestAnimationFrame(() => { countView(section); armReveal(section); armSegs(section); cascadeRows(section, 180); });
     }
     new MutationObserver(() => {
       const v = doc.body.dataset.activeView || doc.querySelector(".view.active-view")?.id.replace(/View$/, "");
@@ -280,6 +281,7 @@
       const section = doc.querySelector(".view.active-view");
       countView(section);
       armReveal(section);
+      cascadeRows(section, 200);
     };
     if (overlay && !overlay.hidden && overlay.isConnected) {
       const mo = new MutationObserver(() => {
@@ -293,6 +295,192 @@
     } else {
       setTimeout(firstCount, 300);
     }
+
+    // ── Destaque que desliza entre as linhas de uma lista ───────
+    // Um único "fundo" por lista corre até a linha sob o mouse, em vez de
+    // cada linha acender sozinha.
+    const ROW_SEL = ".bd-list li, .bf-tx, .bf-mini, .bd-agenda .bd-ag, .bp-task, .bf-brow, .bf-row, .bf-member, .bf-arow, .bf-rrow, .bf-srow, .bd-res-row, .pfx-row";
+    let hotRow = null;
+    function rowPill(host) {
+      let pill = host.querySelector(":scope > .pn-row-pill");
+      if (!pill) {
+        pill = doc.createElement("i");
+        pill.className = "pn-row-pill snap";
+        pill.setAttribute("aria-hidden", "true");
+        host.prepend(pill);
+        host.classList.add("pn-row-host");
+      }
+      return pill;
+    }
+    function markIcon(row) {
+      const first = row.firstElementChild;
+      if (first && !first.classList.contains("pn-ico") && first.offsetWidth && first.offsetWidth <= 48 && first.offsetHeight <= 48) first.classList.add("pn-ico");
+    }
+    function lightRow(row) {
+      const host = row.parentElement;
+      if (!host) return;
+      const pill = rowPill(host);
+      const fresh = !pill.classList.contains("on");
+      if (hotRow && hotRow !== row) hotRow.classList.remove("pn-hot");
+      hotRow = row;
+      row.classList.add("pn-hot");
+      markIcon(row);
+      if (fresh) pill.classList.add("snap");
+      pill.style.setProperty("--px", `${row.offsetLeft}px`);
+      pill.style.setProperty("--py", `${row.offsetTop}px`);
+      pill.style.setProperty("--pw", `${row.offsetWidth}px`);
+      pill.style.setProperty("--ph", `${row.offsetHeight}px`);
+      if (fresh) { void pill.offsetWidth; pill.classList.remove("snap"); }
+      pill.classList.add("on");
+    }
+    function dimRows() {
+      if (!hotRow) return;
+      hotRow.classList.remove("pn-hot");
+      hotRow.parentElement?.querySelector(":scope > .pn-row-pill")?.classList.remove("on");
+      hotRow = null;
+    }
+    doc.addEventListener("pointerover", (e) => {
+      if (!finePointer.matches || !desktop.matches) return;
+      const row = e.target.closest?.(ROW_SEL);
+      if (row === hotRow) return;
+      if (!row) { if (hotRow && !hotRow.parentElement?.contains(e.target)) dimRows(); return; }
+      if (row.parentElement !== hotRow?.parentElement) dimRows();
+      lightRow(row);
+    }, { passive: true });
+    doc.addEventListener("pointerout", (e) => {
+      if (hotRow && !e.relatedTarget) dimRows();
+    }, { passive: true });
+    addEventListener("scroll", () => { if (hotRow && !hotRow.matches(":hover")) dimRows(); }, { passive: true });
+
+    // ── Pílula deslizante nos seletores ─────────────────────────
+    const SEG_SEL = ".bd-seg, .bf-ws";
+    function placeSeg(group, { snap = false } = {}) {
+      const active = group.querySelector(":scope > button.active");
+      let pill = group.querySelector(":scope > .pn-seg-pill");
+      if (!active || !active.offsetWidth) { if (pill) pill.style.opacity = "0"; return; }
+      if (!pill) {
+        pill = doc.createElement("i");
+        pill.className = "pn-seg-pill snap";
+        pill.setAttribute("aria-hidden", "true");
+        group.prepend(pill);
+        group.classList.add("pn-seg-host");
+        snap = true;
+      }
+      if (snap || calm()) pill.classList.add("snap");
+      pill.style.opacity = "";
+      pill.style.setProperty("--sx", `${active.offsetLeft}px`);
+      pill.style.setProperty("--sy", `${active.offsetTop}px`);
+      pill.style.setProperty("--sw", `${active.offsetWidth}px`);
+      pill.style.setProperty("--sh", `${active.offsetHeight}px`);
+      if (pill.classList.contains("snap")) { void pill.offsetWidth; requestAnimationFrame(() => pill.classList.remove("snap")); }
+    }
+    const segObserver = new MutationObserver((records) => {
+      const groups = new Set();
+      records.forEach((r) => {
+        const g = r.target.closest?.(SEG_SEL) || (r.target.matches?.(SEG_SEL) ? r.target : null);
+        if (g && !(r.target.classList?.contains("pn-seg-pill"))) groups.add(g);
+      });
+      groups.forEach((g) => placeSeg(g, { snap: records.some((r) => r.type === "childList" && r.target === g && [...r.addedNodes].some((n) => n.nodeName === "BUTTON")) }));
+    });
+    function armSegs(scope = doc) {
+      scope.querySelectorAll(SEG_SEL).forEach((g) => {
+        if (!g.dataset.pnSeg) {
+          g.dataset.pnSeg = "1";
+          segObserver.observe(g, { attributes: true, attributeFilter: ["class"], subtree: true, childList: true });
+        }
+        placeSeg(g, { snap: true });
+      });
+    }
+    armSegs();
+    addEventListener("resize", () => doc.querySelectorAll(".pn-seg-host").forEach((g) => placeSeg(g, { snap: true })), { passive: true });
+
+    // ── Troca de aba com direção ────────────────────────────────
+    // A aba nova entra do lado para onde a pessoa "andou".
+    function slideIn(panel, dir) {
+      if (!panel || calm() || !panel.animate || panel.querySelector(VIEW_FIXED)) return;
+      panel.animate(
+        [{ opacity: 0, transform: `translateX(${dir * 26}px)`, filter: "blur(4px)" }, { opacity: 1, transform: "none", filter: "blur(0)" }],
+        { duration: 420, easing: "cubic-bezier(.22, 1, .36, 1)" }
+      );
+    }
+    const VIEW_FIXED = ".bp-fab, .bf-fab, .bf-pop, .modal-backdrop, .st-drawer";
+    const TAB_PANELS = [
+      { tab: "[data-planner-tab]", list: "#plannerView .planner-tabs", panel: () => doc.querySelector("#plannerView .planner-subview.active") },
+      { tab: ".fin-tab-btn", list: ".bf-tabs", panel: () => doc.querySelector(".fin-tab-panel:not([hidden])") },
+    ];
+    doc.addEventListener("click", (e) => {
+      for (const cfg of TAB_PANELS) {
+        const tab = e.target.closest?.(cfg.tab);
+        if (!tab) continue;
+        const tabs = [...(tab.closest(cfg.list)?.querySelectorAll(cfg.tab) || [])];
+        const from = tabs.findIndex((t) => t.classList.contains("active"));
+        const to = tabs.indexOf(tab);
+        if (from === to) return;
+        requestAnimationFrame(() => {
+          const panel = cfg.panel();
+          slideIn(panel, to > from ? 1 : -1);
+          if (desktop.matches) cascadeRows(panel, 120);
+        });
+        return;
+      }
+      // Pastas das notas: os cartões se reorganizam em cascata.
+      if (e.target.closest?.("#noteFolders button, .bn-chips button")) {
+        requestAnimationFrame(() => {
+          if (calm()) return;
+          [...doc.querySelectorAll("#notesList > *")].slice(0, 12).forEach((card, i) => {
+            card.animate?.([{ opacity: 0, transform: "translateY(12px) scale(.97)" }, { opacity: 1, transform: "none" }],
+              { duration: 420, delay: i * 35, easing: "cubic-bezier(.22, 1, .36, 1)", fill: "backwards" });
+          });
+        });
+      }
+    }, true);
+
+    // Linhas de uma lista entram em cascata (troca de área/aba e ao rolar).
+    function cascadeRows(scope, baseDelay = 0) {
+      if (!scope || calm()) return;
+      const seen = new Map();
+      scope.querySelectorAll(ROW_SEL).forEach((row) => {
+        if (!row.getClientRects().length) return;
+        const r = row.getBoundingClientRect();
+        if (r.bottom < 0 || r.top > innerHeight) return;
+        const host = row.parentElement;
+        const n = seen.get(host) || 0;
+        if (n >= 8) return;
+        seen.set(host, n + 1);
+        row.animate?.([{ opacity: 0, transform: "translateX(-8px)" }, { opacity: 1, transform: "none" }],
+          { duration: 380, delay: baseDelay + n * 40, easing: "cubic-bezier(.22, 1, .36, 1)", fill: "backwards" });
+      });
+    }
+
+    // ── Rolagem: fio de progresso e inclinação das notas ────────
+    const scrollLine = doc.createElement("i");
+    scrollLine.className = "pn-scroll-line";
+    scrollLine.setAttribute("aria-hidden", "true");
+    topbar.append(scrollLine);
+    let lineTick = false;
+    addEventListener("scroll", () => {
+      if (lineTick) return;
+      lineTick = true;
+      requestAnimationFrame(() => {
+        lineTick = false;
+        const max = doc.documentElement.scrollHeight - innerHeight;
+        scrollLine.style.setProperty("--pn-progress", max > 0 ? Math.min(1, scrollY / max).toFixed(4) : "0");
+      });
+    }, { passive: true });
+
+    let tiltCard = null;
+    doc.addEventListener("pointermove", (e) => {
+      if (!finePointer.matches || !desktop.matches || calm()) return;
+      const card = e.target.closest?.(".bn-card");
+      if (tiltCard && tiltCard !== card) { tiltCard.style.transform = ""; tiltCard.classList.remove("pn-tilt"); }
+      tiltCard = card;
+      if (!card) return;
+      const r = card.getBoundingClientRect();
+      const x = (e.clientX - r.left) / r.width - 0.5;
+      const y = (e.clientY - r.top) / r.height - 0.5;
+      card.classList.add("pn-tilt");
+      card.style.transform = `perspective(900px) rotateX(${(-y * 6).toFixed(2)}deg) rotateY(${(x * 7).toFixed(2)}deg) translateY(-4px)`;
+    }, { passive: true });
 
     // ── Atalhos de teclado ──────────────────────────────────────
     const keysPanel = doc.createElement("div");

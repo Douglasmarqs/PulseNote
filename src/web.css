@@ -321,6 +321,106 @@
   .pn-kbd { display: none !important; }
 }
 
+/* ==========================================================================
+   DIVISÓRIAS SUAVES (todas as larguras)
+   As linhas retas de ponta a ponta entre um item e outro viram um traço
+   que nasce e some nas pontas. A borda continua lá (transparente) para
+   não mudar nenhuma altura.
+   ========================================================================== */
+:root {
+  /* Traço que começa no texto (depois do ícone) e se dissolve à direita */
+  --pn-divider: linear-gradient(90deg, color-mix(in srgb, var(--bd-line-strong) 70%, transparent), var(--bd-line) 55%, transparent);
+  --pn-div-inset: 0px;
+}
+/* Linhas com ícone à esquerda: o traço começa alinhado ao texto */
+:is(.bf-tx, .bd-agenda .bd-ag, .bd-res-row, .bf-row, .bf-member, .bf-arow, .bf-rrow, .bf-srow, .bf-mini) { --pn-div-inset: 52px; }
+.bp-task { --pn-div-inset: 34px; }
+:is(.bd-list li, .bf-tx, .bf-mini, .bd-agenda .bd-ag, .st-profile-row, .gm-steps, .pfx-theme,
+    .ap-metrics li + li, .ap-confirm-rows li + li, .bd-res-row + .bd-res-row, .bn-more, .st-nav-item + .st-nav-item) {
+  border-top-color: transparent !important;
+  background-image: var(--pn-divider);
+  background-repeat: no-repeat;
+  background-size: calc(100% - var(--pn-div-inset)) 1px;
+  background-position: var(--pn-div-inset) 0;
+  background-origin: border-box;
+}
+:is(.bp-task, .bf-brow, .bf-row, .bf-member, .bf-arow, .bf-rrow, .bf-srow) {
+  border-bottom-color: transparent !important;
+  background-image: var(--pn-divider);
+  background-repeat: no-repeat;
+  background-size: calc(100% - var(--pn-div-inset)) 1px;
+  background-position: var(--pn-div-inset) 100%;
+  background-origin: border-box;
+}
+/* "Ver mais" e o primeiro item de cada lista não precisam de traço */
+.bd-ag-more { border-top-color: transparent !important; background-image: none !important; }
+:is(.bd-list li, .bf-tx, .bf-mini, .bd-agenda .bd-ag):first-child { background-image: none; }
+/* Último item sem traço solto embaixo */
+:is(.bp-task, .bf-brow, .bf-row, .bf-member, .bf-arow, .bf-rrow, .bf-srow):last-child { background-image: none; }
+/* Abas de Finanças já têm a pílula: sem a linha reta embaixo */
+.bf-tabs, #financesView .bf-tabs { border-bottom-color: transparent; }
+/* Linhas de hora do Planner: tracejado leve em vez de linha cheia */
+.bp-shell .planner-timeline-slot { border-top: 1px dashed color-mix(in srgb, var(--bd-line) 75%, transparent); }
+
+/* Destaque que desliza entre as linhas de uma lista (web-motion.js) */
+.pn-row-host { position: relative; }
+.pn-row-pill {
+  position: absolute; left: 0; top: 0; z-index: 0; pointer-events: none;
+  border-radius: 12px; opacity: 0;
+  background: color-mix(in srgb, var(--bd-primary) 8%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bd-primary) 16%, transparent);
+  width: var(--pw, 0px); height: var(--ph, 0px);
+  transform: translate(var(--px, 0px), var(--py, 0px));
+  transition: transform .34s var(--pn-ease-out), width .34s var(--pn-ease-out), height .34s var(--pn-ease-out), opacity .22s;
+}
+.pn-row-pill.on { opacity: 1; }
+.pn-row-pill.snap { transition: opacity .22s; }
+.pn-row-host > :not(.pn-row-pill) { position: relative; z-index: 1; }
+.pn-row-host > .pn-hot { background-color: transparent !important; background-image: none; }
+.pn-row-host > .pn-hot + * { background-image: none; }
+.pn-row-host > * > .pn-ico { transition: transform .35s var(--pn-ease-spring); }
+.pn-row-host > .pn-hot > .pn-ico { transform: scale(1.1) rotate(-4deg); }
+
+/* Pílula deslizante nos seletores (período do gráfico, espaço de Finanças) */
+.pn-seg-host { position: relative; isolation: isolate; }
+.pn-seg-pill {
+  position: absolute; left: 0; top: 0; z-index: -1; pointer-events: none; border-radius: 7px;
+  width: var(--sw, 0px); height: var(--sh, 0px);
+  transform: translate(var(--sx, 0px), var(--sy, 0px));
+  transition: transform .45s var(--pn-ease-spring), width .3s var(--pn-ease-out), height .3s var(--pn-ease-out);
+}
+.pn-seg-pill.snap { transition: none; }
+.bd-seg > .pn-seg-pill { background: var(--bd-seg-active); box-shadow: 0 4px 12px -6px color-mix(in srgb, var(--bd-primary) 60%, transparent); }
+.bf-ws > .pn-seg-pill { border-radius: 10px; background: var(--bd-nav-active); box-shadow: inset 0 0 0 1px var(--bd-nav-active-line); }
+.pn-seg-host > .active { background: transparent !important; box-shadow: none !important; }
+.pn-seg-host > button { transition: color .25s; }
+
+@media (min-width: 761px) {
+  /* Progresso da rolagem: fio de luz sob o topo */
+  .pn-scroll-line {
+    position: absolute; left: 0; bottom: -1px; height: 2px; width: 100%; pointer-events: none;
+    background: linear-gradient(90deg, var(--bd-primary-2), var(--bd-cyan));
+    transform: scaleX(var(--pn-progress, 0)); transform-origin: 0 50%;
+    opacity: 0; transition: opacity .3s;
+    box-shadow: 0 0 10px color-mix(in srgb, var(--bd-cyan) 60%, transparent);
+  }
+  body.pn-scrolled .pn-scroll-line { opacity: .85; }
+  body.pn-scrolled .bd-topbar { border-bottom-color: transparent; }
+  body.pn-scrolled .bd-topbar::after {
+    content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 1px; pointer-events: none;
+    background: var(--pn-divider);
+  }
+  /* Borda da barra lateral: traço que some nas pontas */
+  .bd-sidebar { border-right-color: transparent; }
+  .bd-sidebar::before {
+    content: ""; position: fixed; top: 0; bottom: 0; left: calc(var(--bd-side-w) - 1px); width: 1px; pointer-events: none;
+    background: linear-gradient(180deg, transparent, var(--bd-side-line) 12%, var(--bd-line-strong) 50%, var(--bd-side-line) 88%, transparent);
+    transition: left .42s var(--pn-ease-out);
+  }
+  /* Notas: inclinação 3D que segue o cursor */
+  .bn-card.pn-tilt { transition: transform .14s linear, box-shadow .35s; will-change: transform; }
+}
+
 /* ---------- Troca de tema com revelação circular ---------- */
 ::view-transition-old(root), ::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
 ::view-transition-new(root) { z-index: 2; }
@@ -330,6 +430,7 @@
 @media (prefers-reduced-motion: reduce) {
   .bd-shell, .pn-nav-ink, .bd-topbar, .bd-titles h1, .bd-subtitle, .bd-card,
   .bn-card, .bd-kpi, .bf-kpi, .pfx-stat, .bd-side-pulsinho, .bd-btn--primary, .primary-button { transition: none !important; }
+  .pn-row-pill, .pn-seg-pill, .pn-scroll-line, .pn-row-host > * > .pn-ico { transition: none !important; }
   .pn-route-bar.run, .bd-titles h1.pn-title-in, .bd-subtitle.pn-title-in, .pn-keys, .pn-keys-card { animation: none !important; }
   .bn-card:hover, .bd-kpi:hover, .bf-kpi:hover, .pfx-stat:hover, .bd-side-pulsinho:hover { transform: none; }
   .bd-btn--primary::after, .primary-button::after { display: none; }

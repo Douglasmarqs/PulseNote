@@ -47,3 +47,27 @@ test("atalhos de teclado não disparam enquanto se digita", () => {
   assert.match(js, /isContentEditable \|\| \/\^\(INPUT\|TEXTAREA\|SELECT\)\$\//);
   for (const key of ["i: \"dashboard\"", "p: \"planner\"", "n: \"notes\"", "f: \"finances\""]) assert.ok(js.includes(key), key);
 });
+
+test("divisórias entre itens são traços suaves, não linhas retas de ponta a ponta", () => {
+  const css = read("src/web.css");
+  assert.match(css, /--pn-divider: linear-gradient\(90deg,/);
+  for (const row of [".bf-tx", ".bd-agenda .bd-ag", ".bp-task", ".bf-row", ".bd-res-row"]) assert.ok(css.includes(row), row);
+  assert.match(css, /border-top-color: transparent !important;\s*background-image: var\(--pn-divider\)/);
+  assert.match(css, /border-bottom-color: transparent !important;\s*background-image: var\(--pn-divider\)/);
+  assert.match(css, /\.bd-ag-more \{ border-top-color: transparent !important; background-image: none !important; \}/);
+});
+
+test("movimento ao passar o mouse, trocar de aba e rolar", () => {
+  const js = read("src/web-motion.js");
+  // destaque único que desliza entre as linhas de uma lista
+  assert.match(js, /pn-row-pill/);
+  // pílula deslizante nos seletores de período/espaço
+  assert.match(js, /const SEG_SEL = "\.bd-seg, \.bf-ws"/);
+  // abas do Planner e de Finanças entram pelo lado para onde se andou
+  assert.match(js, /\[data-planner-tab\]/);
+  assert.match(js, /\.fin-tab-btn/);
+  assert.match(js, /translateX\(\$\{dir \* 26\}px\)/);
+  // fio de progresso da rolagem e inclinação 3D das notas
+  assert.match(js, /pn-scroll-line/);
+  assert.match(js, /perspective\(900px\) rotateX/);
+});
