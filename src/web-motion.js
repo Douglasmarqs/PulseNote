@@ -211,45 +211,8 @@
     }
     addEventListener("scroll", onScroll, { passive: true });
 
-    // ── Números que contam ─────────────────────────────────────
-    const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
-    const MONEY = /^\s*([+\-\u2212]?)\s*R\$\s?([\d.]+,\d{2})\s*$/;
-    function countUp(el) {
-      const text = el.textContent;
-      const m = MONEY.exec(text);
-      if (!m) return;
-      const sign = m[1] === "-" || m[1] === "−" ? -1 : 1;
-      const target = sign * Number(m[2].replace(/\./g, "").replace(",", "."));
-      if (!Number.isFinite(target) || Math.abs(target) < 1) return;
-      const prefix = m[1] === "+" ? "+" : "";
-      const fmt = (v) => prefix + brl.format(v).replace(/ /g, " ");
-      const sample = fmt(target);
-      // Só anima se o formato bater com o que o app escreveu (não mexe em
-      // valores com abreviações ou textos próprios).
-      if (sample.replace(/\s/g, "") !== text.replace(/\s/g, "").replace("−", "-")) return;
-      const dur = 900;
-      const t0 = performance.now();
-      let last = null;
-      el.classList.add("pn-counting");
-      const step = (now) => {
-        // Se o app reescreveu o valor no meio, ele manda.
-        if (last !== null && el.textContent !== last) { el.classList.remove("pn-counting"); return; }
-        const p = Math.min(1, (now - t0) / dur);
-        const eased = 1 - Math.pow(1 - p, 4);
-        last = p < 1 ? fmt(target * eased) : text;
-        el.textContent = last;
-        if (p < 1) requestAnimationFrame(step);
-        else el.classList.remove("pn-counting");
-      };
-      requestAnimationFrame(step);
-    }
-    // (Perfil fica de fora: os números contando mexiam na largura dos cartões.)
-    const COUNT_SEL = ".bd-kpi-body strong, .bf-kpi-body > strong, .overview-value";
-    function countView(view) {
-      // Só no computador: no celular os dígitos mudando pareciam tremer.
-      if (calm() || !view || !finePointer.matches) return;
-      view.querySelectorAll(COUNT_SEL).forEach((el) => { if (el.getClientRects().length) countUp(el); });
-    }
+    // (Os números que contavam até o valor foram removidos: os dígitos
+    // mudando de largura a cada quadro faziam os cartões "tremerem".)
 
     // ── Entrada dos blocos ao rolar ─────────────────────────────
     const REVEAL_SEL = ".bd-card, .bn-card";
@@ -271,7 +234,7 @@
           if (!entry.isIntersecting) return;
           io.unobserve(entry.target);
           entry.target.animate(
-            [{ opacity: 0, transform: "translateY(8px)" }, { opacity: 1, transform: "none" }],
+            [{ opacity: 0 }, { opacity: 1 }],
             { duration: 480, delay: Math.min(i++, 4) * 60, easing: "cubic-bezier(.22, 1, .36, 1)", fill: "backwards" }
           );
         });
@@ -325,7 +288,7 @@
       doc.body.classList.remove("pn-scrolled", "pn-scrolling");
       requestAnimationFrame(() => requestAnimationFrame(() => doc.body.classList.remove("pn-view-switch")));
       const section = doc.getElementById(`${view}View`);
-      requestAnimationFrame(() => { countView(section); armReveal(section); armSegs(section); });
+      requestAnimationFrame(() => { armReveal(section); armSegs(section); });
     }
     new MutationObserver(() => {
       const v = doc.body.dataset.activeView || doc.querySelector(".view.active-view")?.id.replace(/View$/, "");
@@ -348,7 +311,7 @@
     const overlay = doc.getElementById("appLoadingOverlay");
     const firstCount = () => {
       const section = doc.querySelector(".view.active-view");
-      countView(section);
+
       armReveal(section);
     };
     if (overlay && !overlay.hidden && overlay.isConnected) {
@@ -627,45 +590,28 @@
       setTimeout(() => burst.remove(), 1100);
     };
 
-    // ── Notas: ferramentas de formatação recolhíveis ────────────
-    // Ficam guardadas numa pílula "Formatar"; a setinha abre e fecha com
-    // animação, e a escolha fica lembrada.
-    const TOOLS_KEY = "pulsenote-note-tools";
-    const toolbar = doc.getElementById("noteDetailToolbar");
-    const toolRow = toolbar?.querySelector(".bn-tool-row");
-    if (toolbar && toolRow && !toolbar.querySelector(".pn-tool-toggle")) {
-      const toggleTools = doc.createElement("button");
-      toggleTools.type = "button";
-      toggleTools.className = "pn-tool-toggle";
-      toggleTools.innerHTML = '<span class="pn-tool-aa" aria-hidden="true">Aa</span><span class="pn-tool-label">Formatar texto</span><svg class="i pn-tool-chev" aria-hidden="true"><use href="#i-chev-down"/></svg>';
-      // Fora da faixa de botões (que rola): a setinha nunca fica cortada.
-      toolRow.after(toggleTools);
-      let open = false;
-      try { open = localStorage.getItem(TOOLS_KEY) === "open"; } catch { /* sem armazenamento */ }
-      const applyTools = (next, { animate = false } = {}) => {
-        const before = animate && !calm() ? toolbar.getBoundingClientRect() : null;
-        open = next;
-        toolbar.classList.toggle("is-collapsed", !open);
-        toggleTools.setAttribute("aria-expanded", String(open));
-        toggleTools.setAttribute("aria-label", open ? "Recolher ferramentas de formatação" : "Mostrar ferramentas de formatação");
-        if (before) {
-          const after = toolbar.getBoundingClientRect();
-          toolbar.animate(
-            [{ width: `${before.width}px`, height: `${before.height}px` }, { width: `${after.width}px`, height: `${after.height}px` }],
-            { duration: 340, easing: "cubic-bezier(.22, 1, .36, 1)" }
-          );
-          if (open) {
-            [...toolRow.children].forEach((c, i) => {
-              c.animate([{ opacity: 0, transform: "translateY(-4px) scale(.9)" }, { opacity: 1, transform: "none" }], { duration: 260, delay: 40 + i * 18, easing: "cubic-bezier(.22, 1, .36, 1)", fill: "backwards" });
-            });
-          }
-        }
+    // ── Notas: formatação acima do teclado (celular) ────────────
+    // Na nota aberta a barra de formatação só aparece enquanto se escreve
+    // no texto, presa logo acima do teclado (onde o polegar já está); o
+    // rodapé sai do caminho. No computador ela fica sempre visível no topo.
+    const ndDetail = doc.querySelector("#noteDetailModal .bn-detail");
+    const ndBody = doc.getElementById("ndBody");
+    if (ndDetail && ndBody) {
+      const keepWriting = () => {
+        const a = doc.activeElement;
+        return a === ndBody || ndBody.contains(a) || Boolean(a?.closest?.("#noteDetailToolbar, #ndLinkForm"));
       };
-      applyTools(open);
-      toggleTools.addEventListener("click", () => {
-        applyTools(!open, { animate: true });
-        try { localStorage.setItem(TOOLS_KEY, open ? "open" : "closed"); } catch { /* idem */ }
+      const syncKeyboard = () => {
+        const vv = window.visualViewport;
+        const kb = vv ? Math.max(0, Math.round(innerHeight - vv.height - vv.offsetTop)) : 0;
+        ndDetail.style.setProperty("--pn-kb", `${kb}px`);
+      };
+      ndBody.addEventListener("focus", () => { ndDetail.classList.add("is-writing"); syncKeyboard(); });
+      doc.addEventListener("focusout", () => {
+        setTimeout(() => { if (!keepWriting()) ndDetail.classList.remove("is-writing"); }, 60);
       });
+      window.visualViewport?.addEventListener("resize", syncKeyboard);
+      window.visualViewport?.addEventListener("scroll", syncKeyboard);
     }
 
     // ── Checklist da nota: concluídos descem para o fim ─────────

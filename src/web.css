@@ -710,6 +710,114 @@ body.pn-scrolled:not(.pn-scrolling) .pn-scroll-line { opacity: 0 !important; }
   border: 2px solid rgba(124, 107, 255, .75); box-shadow: 0 0 14px rgba(34, 211, 238, .45);
 }
 
+/* ==========================================================================
+   NOTA ABERTA — DIREÇÃO A ("Limpa")
+   Topo: ← · ● Salvo · ⋯  |  título grande, sem ícone  |  "● Baixa · Entrada
+   · hoje" (abre Detalhes)  |  abas leves  |  texto. Formatação acima do
+   teclado ao escrever (celular) ou barra fina fixa (computador). Rodapé:
+   Concluir largo + Tarefa compacto.
+   ========================================================================== */
+/* Topo: status discreto em ponto + texto; contagem de palavras vai para Detalhes */
+.bn-detail .bn-detail-head { display: flex !important; align-items: center; gap: 6px; }
+.bn-detail .bn-nd-count { display: none !important; }
+.bn-detail .bn-nd-status {
+  margin-left: auto; display: inline-flex !important; align-items: center; gap: 7px;
+  height: auto !important; min-height: 0 !important; padding: 4px 6px !important;
+  border: 0 !important; background: none !important; box-shadow: none !important;
+  color: var(--bd-text-3) !important; font-size: 12.5px !important; font-weight: 600 !important;
+}
+.bn-detail .bn-nd-status > i {
+  flex: none; width: 8px !important; height: 8px !important; min-width: 0 !important; padding: 0 !important;
+  border: 0 !important; border-radius: 50% !important; background: var(--bd-green) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--bd-green) 18%, transparent) !important; animation: none !important;
+}
+.bn-detail .bn-nd-status > i > *, .bn-detail .bn-nd-status > i::before, .bn-detail .bn-nd-status > i::after { display: none !important; }
+.bn-detail .bn-nd-status[data-state="editing"] > i, .bn-detail .bn-nd-status[data-state="saving"] > i {
+  background: var(--bd-amber) !important; box-shadow: 0 0 0 3px color-mix(in srgb, var(--bd-amber) 20%, transparent) !important;
+}
+.bn-detail .bn-nd-status[data-state="saving"] > i { animation: pnSavePulse 1s ease-in-out infinite !important; }
+@keyframes pnSavePulse { 50% { opacity: .35; } }
+.bn-detail .bn-nd-status > span { color: inherit !important; }
+
+/* Título grande, sem o quadradinho de ícone */
+.bn-detail .bn-nd-hero .bn-detail-ico { display: none !important; }
+.bn-detail .bn-nd-hero { display: block !important; padding-top: 2px; }
+.bn-detail .bn-detail-title { font-family: var(--bd-display, "Space Grotesk", var(--bd-font)) !important; font-size: 27px !important; font-weight: 750 !important; letter-spacing: -.02em; line-height: 1.15 !important; }
+@media (max-width: 760px) { .bn-detail .bn-detail-title { font-size: 26px !important; } }
+
+/* Linha de detalhes */
+.bn-detail .bn-nd-chips { display: block !important; margin-top: 6px; }
+.bn-nd-metaline {
+  display: inline-flex; flex-wrap: wrap; align-items: center; gap: 2px 0; max-width: 100%;
+  padding: 3px 6px; margin-left: -6px; border: 0; border-radius: 8px; background: none;
+  color: var(--bd-text-3); font: 600 13px var(--bd-font); text-align: left; cursor: pointer;
+  transition: background .2s, color .2s;
+}
+.bn-nd-metaline:hover { background: color-mix(in srgb, var(--bd-text) 6%, transparent); color: var(--bd-text-2); }
+.bn-nd-metaline:focus-visible { outline: 0; box-shadow: var(--bd-focus); }
+.bn-nd-metaline > span { display: inline-flex; align-items: center; white-space: nowrap; }
+.bn-nd-metaline > span + span::before { content: "·"; margin: 0 7px; opacity: .7; }
+.bn-nd-dot { width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; background: var(--c, var(--bd-green)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--c, var(--bd-green)) 18%, transparent); }
+
+/* Abas leves: texto + traço que desliza */
+.bn-detail .bn-nd-tabs {
+  justify-content: flex-start; gap: 22px; margin: 16px 18px 4px; padding: 0;
+  border-radius: 0; background: none;
+}
+.bn-detail .bn-nd-tabs [data-nd-tab] { flex: none; height: 34px; padding: 0; border-radius: 0; font-size: 14.5px; }
+.bn-detail .bn-nd-tabs [data-nd-tab] .i { display: none; }
+.bn-detail .bn-nd-tab-ink {
+  top: auto; bottom: 0; height: 2px; border-radius: 2px;
+  background: linear-gradient(90deg, var(--bd-primary-2), var(--bd-cyan)); box-shadow: none;
+}
+
+/* Formatação */
+.bn-detail .pn-tool-toggle { display: none !important; }
+.bn-detail .bn-toolbar.is-collapsed > .bn-tool-row { display: flex !important; }
+/* Computador: barra fina, sempre visível, só ícones */
+@media (min-width: 761px) {
+  .bn-detail .bn-toolbar { width: auto !important; margin: 10px 18px 0 !important; padding: 3px !important; border-radius: 12px !important; }
+  .bn-detail .bn-toolbar > .bn-tool-row { -webkit-mask-image: none; mask-image: none; }
+}
+/* Celular: só aparece escrevendo, presa acima do teclado; rodapé sai do caminho */
+@media (max-width: 760px) {
+  .bn-detail:not(.is-writing) #noteDetailToolbar { display: none !important; }
+  .bn-detail.is-writing #noteDetailToolbar {
+    position: fixed !important; left: 0; right: 0; bottom: var(--pn-kb, 0px); top: auto !important; z-index: 40;
+    width: auto !important; margin: 0 !important; padding: 6px max(8px, env(safe-area-inset-left, 0px)) !important;
+    border-radius: 0 !important; border: 0 !important; border-top: 1px solid var(--bd-line) !important;
+    background: color-mix(in srgb, var(--bd-card-2) 94%, transparent) !important;
+    -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); box-shadow: 0 -10px 24px -18px rgba(0, 0, 0, .6) !important;
+    animation: pnToolsUp .26s cubic-bezier(.22, 1, .36, 1);
+  }
+  @keyframes pnToolsUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+  .bn-detail.is-writing .bn-detail-foot { display: none !important; }
+  .bn-detail.is-writing .bn-detail-scroll { padding-bottom: 72px !important; }
+}
+
+/* Rodapé: Concluir largo, Tarefa compacto */
+.bn-detail .bn-detail-foot { grid-template-columns: auto minmax(0, 1fr) !important; }
+.bn-detail .bn-detail-foot::before { display: none !important; } /* espaçador antigo do computador */
+.bn-detail .bn-detail-foot #ndConvertTaskBtn { padding: 0 16px !important; }
+
+/* Folha "Detalhes da nota" */
+.bn-details-sheet .modal-body { display: grid; gap: 12px; }
+.bn-ds-label { font-size: 11.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--bd-text-3); }
+.bn-ds-prios { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.bn-ds-prio {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 40px; padding: 0 8px;
+  border: 1px solid var(--bd-line); border-radius: 12px; background: none; color: var(--bd-text);
+  font: 600 13px var(--bd-font); cursor: pointer; transition: background .2s, border-color .2s;
+}
+.bn-ds-prio i { width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
+.bn-ds-prio.is-on { border-color: var(--c); background: color-mix(in srgb, var(--c) 14%, transparent); }
+.bn-ds-prio:focus-visible { outline: 0; box-shadow: var(--bd-focus); }
+.bn-ds-folder { width: 100%; justify-content: space-between; }
+.bn-ds-change { display: inline-flex; align-items: center; gap: 4px; color: var(--bd-primary-ink); font-weight: 650; }
+.bn-ds-change .i { width: 15px; height: 15px; }
+.bn-ds-info { margin: 2px 0 0; font-size: 12.5px; color: var(--bd-text-3); }
+@media (max-width: 420px) { .bn-ds-prios { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
 /* ---------- Configurações: escolha de movimento ---------- */
 .pn-motion-row {
   display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;
@@ -876,8 +984,10 @@ body.pn-scrolled:not(.pn-scrolling) .pn-scroll-line { opacity: 0 !important; }
 /* ---------- Entradas mais calmas ----------
    Cartões de Finanças e do Perfil tinham subida + encolher + desfoque além
    do deslize da tela: somados, pareciam tremer. Agora só sobem 6px. */
-@keyframes cardRise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-@keyframes pfxRise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes cardRise { from { opacity: 0; } to { opacity: 1; } }
+@keyframes pfxRise { from { opacity: 0; } to { opacity: 1; } }
+@keyframes wfIn { from { opacity: 0; } to { opacity: 1; } }
+/* Troca de tela só esmaece: nenhum bloco desliza (ver animateViewEntrance) */
 /* Painéis das abas (Planner, Finanças) só esmaecem: os cartões de dentro
    já têm a própria entrada, e subir o painel inteiro somava movimento. */
 @keyframes pnPanelIn { from { opacity: 0; } to { opacity: 1; } }

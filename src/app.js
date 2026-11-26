@@ -4896,39 +4896,20 @@ const VIEW_FIXED_SELECTOR = ".bp-fab, .bf-fab, .bn-detail-wrap, .bn-form-wrap, .
 
 function animateViewEntrance(target, fromView, toView) {
   if (!target || typeof target.animate !== "function" || prefersReducedMotion()) return;
-  const from = VIEW_ORDER[fromView];
-  const to = VIEW_ORDER[toView];
-  const lateral = from !== undefined && to !== undefined && from !== to;
-  // 8px (antes 14): com as entradas próprias dos cartões somadas, o
-  // deslize maior dava a sensação de a tela tremer.
-  const dx = lateral ? (to > from ? 8 : -8) : 0;
-  // Telas fora da barra (Perfil, Configurações) só sobem 4px: com 10px
-  // parecia que a tela ainda estava se acomodando.
-  const dy = lateral ? 0 : 4;
+  // Troca de tela só por ESMAECER — nada desliza. Qualquer deslize, mesmo
+  // de 3 a 8px, somado às entradas dos cartões e ao texto em posições
+  // fracionadas, era percebido como uma "tremidinha". Medido quadro a
+  // quadro em todas as áreas: agora a posição dos blocos não muda.
   const wrapper = target.children.length === 1 ? target.firstElementChild : target;
   const blocks = [...wrapper.children].filter((el) => el.getClientRects().length && getComputedStyle(el).position !== "fixed");
-  target.classList.add("pn-entering");
   const easing = "cubic-bezier(.2, .8, .2, 1)";
-  let last = null;
   blocks.slice(0, 10).forEach((el, index) => {
-    const holdsFixed = Boolean(el.querySelector(VIEW_FIXED_SELECTOR)) || el.matches(VIEW_FIXED_SELECTOR);
-    // Finanças e Perfil já têm a entrada encenada dos cartões; aqui só
-    // esmaece, para não somar dois movimentos no mesmo bloco.
-    const ownEntrance = toView === "finances" || toView === "profile";
-    const frames = holdsFixed || ownEntrance
-      ? [{ opacity: 0 }, { opacity: 1 }]
-      : [{ opacity: 0, transform: `translate3d(${dx}px, ${dy}px, 0)` }, { opacity: 1, transform: "translate3d(0, 0, 0)" }];
-    last = el.animate(frames, { duration: lateral ? 300 : 260, delay: Math.min(index, 4) * 24, easing, fill: "backwards" });
+    el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 240, delay: Math.min(index, 4) * 22, easing, fill: "backwards" });
   });
-  const done = () => target.classList.remove("pn-entering");
-  if (last) last.finished.then(done, done); else done();
-  // Título e subtítulo trocam junto, sem "piscar": o texto novo já entra
-  // visível (nunca vai a zero) e só desliza de leve até o lugar. Antes ele
-  // sumia por completo e ainda havia uma segunda animação por cima
-  // (web.css), o que dava um piscão duplo no topo do celular.
+  // Título e subtítulo: o texto novo já entra quase visível e só clareia.
   [elements.viewTitle, document.querySelector("#viewSubtitle")].forEach((el) => {
     el?.getAnimations?.().forEach((a) => a.cancel());
-    el?.animate?.([{ opacity: 0.55, transform: `translate3d(${dx / 3}px, ${lateral ? 0 : 3}px, 0)` }, { opacity: 1, transform: "none" }], { duration: 220, easing });
+    el?.animate?.([{ opacity: 0.55 }, { opacity: 1 }], { duration: 200, easing });
   });
 }
 
@@ -9845,11 +9826,12 @@ function renderNoteDetailMeta(note) {
     `${folder} • Prioridade ${notePriorityLabel(note.priority).toLowerCase()} • Atualizado ${noteWhen(note)}`;
   document.querySelector(".bn-detail-ico")?.style.setProperty("--nc", `var(--np-${prio})`);
   document.querySelector(".bn-detail")?.style.setProperty("--nc", `var(--np-${prio})`);
+  // Uma linha de texto só ("● Baixa · Entrada · hoje, 15:53"): o toque abre
+  // a folha de detalhes (prioridade, pasta e informações da nota).
   const chips = document.querySelector("#ndChips");
   if (chips) {
-    chips.innerHTML = `<button type="button" class="bn-nd-chip is-prio" data-nd-prio style="--c:var(--np-${prio})" aria-label="Prioridade ${escapeHtml(notePriorityLabel(note.priority))}. Toque para trocar">${bdIcon(prio === "urgente" ? "alert" : "flag")}${escapeHtml(notePriorityLabel(note.priority))}</button>
-      <button type="button" class="bn-nd-chip" data-nd-folder aria-label="Pasta ${escapeHtml(folder)}. Toque para editar categoria, pasta e tags">${bdIcon("folder")}${escapeHtml(folder)}</button>
-      <span class="bn-nd-chip is-muted">${bdIcon("clock")}${escapeHtml(noteWhen(note))}</span>`;
+    const prioLabel = notePriorityLabel(note.priority);
+    chips.innerHTML = `<button type="button" class="bn-nd-metaline" data-nd-details style="--c:var(--np-${prio})" aria-label="Prioridade ${escapeHtml(prioLabel)}, pasta ${escapeHtml(folder)}, atualizada ${escapeHtml(noteWhen(note))}. Toque para editar os detalhes"><span><i class="bn-nd-dot" aria-hidden="true"></i>${escapeHtml(prioLabel)}</span><span>${escapeHtml(folder)}</span><span>${escapeHtml(noteWhen(note))}</span></button>`;
   }
 }
 
@@ -10274,6 +10256,53 @@ function openNoteFolderSheet(noteId) {
   });
 }
 
+// Folha "Detalhes da nota": prioridade (escolha direta), pasta (abre
+// "Mover para pasta") e informações — contagem de palavras e quando foi
+// atualizada, que saíram do topo da nota.
+function openNoteDetailsSheet(noteId) {
+  const note = state.notes.find((n) => n.id === noteId);
+  if (!note) return;
+  document.querySelector("#noteDetailsSheet")?.remove();
+  const PRIOS = ["Baixa", "Media", "Alta", "Urgente"];
+  const currentPrio = PRIOS.includes(note.priority) ? note.priority : "Media";
+  const folder = (note.folder || "").trim() || "Entrada";
+  const words = document.querySelector("#ndCount")?.textContent?.trim() || "";
+  const sheet = document.createElement("div");
+  sheet.id = "noteDetailsSheet";
+  sheet.className = "modal-backdrop";
+  sheet.innerHTML = `<div class="modal-card planner-action-sheet bn-details-sheet" role="dialog" aria-modal="true" aria-labelledby="noteDetailsSheetTitle">
+    <div class="modal-header"><h2 id="noteDetailsSheetTitle">Detalhes da nota</h2><button type="button" class="icon-button" data-close aria-label="Fechar">${bdIcon("x")}</button></div>
+    <div class="modal-body planner-action-sheet-body">
+      <div class="bn-ds-label" id="ndsPrioLabel">Prioridade</div>
+      <div class="bn-ds-prios" role="radiogroup" aria-labelledby="ndsPrioLabel">${PRIOS.map((p) => `<button type="button" role="radio" aria-checked="${p === currentPrio}" class="bn-ds-prio${p === currentPrio ? " is-on" : ""}" data-set-prio="${p}" style="--c:var(--np-${notePriorityKey(p)})"><i aria-hidden="true"></i>${escapeHtml(notePriorityLabel(p))}</button>`).join("")}</div>
+      <div class="bn-ds-label">Pasta</div>
+      <button type="button" class="planner-action-option bn-ds-folder" data-open-folders><span>${bdIcon("folder")}${escapeHtml(folder)}</span><span class="bn-ds-change">Mudar ${bdIcon("chev-right")}</span></button>
+      <p class="bn-ds-info">${escapeHtml([words, `atualizada ${noteWhen(note)}`, "salva automaticamente"].filter(Boolean).join(" · "))}</p>
+    </div></div>`;
+  document.body.appendChild(sheet);
+  const close = () => { sheet.remove(); document.removeEventListener("keydown", onKey); repairViewportAfterOverlay(); };
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  document.addEventListener("keydown", onKey);
+  sheet.addEventListener("click", (e) => {
+    if (e.target === sheet || e.target.closest("[data-close]")) { close(); return; }
+    const prio = e.target.closest("[data-set-prio]");
+    if (prio) {
+      const next = prio.dataset.setPrio;
+      sheet.querySelectorAll("[data-set-prio]").forEach((b) => { const on = b === prio; b.classList.toggle("is-on", on); b.setAttribute("aria-checked", String(on)); });
+      if (next !== note.priority) {
+        flushNoteDetailSave();
+        state.notes = state.notes.map((n) => (n.id === noteId ? { ...n, priority: next, updatedAt: new Date().toISOString() } : n));
+        if (ndCurrentNoteId === noteId) renderNoteDetailMeta(state.notes.find((n) => n.id === noteId));
+        queueNotePersist();
+        scheduleNotesListRefresh();
+      }
+      return;
+    }
+    if (e.target.closest("[data-open-folders]")) { close(); openNoteFolderSheet(noteId); }
+  });
+  setTimeout(() => sheet.querySelector(".bn-ds-prio.is-on")?.focus({ preventScroll: true }), 30);
+}
+
 // Tela de Notas: atalhos do celular, busca própria, pastas e "+ Pasta".
 function bindNotesBoard() {
   document.querySelector("#notesOpenForm")?.addEventListener("click", openNotesFormSheet);
@@ -10341,11 +10370,14 @@ function bindNoteDetail() {
   body.addEventListener("input", onNdInput);
   window.addEventListener("resize", debounce(updateNdSaveButton, 150));
 
-  // Etiquetas: prioridade troca a cada toque; pasta abre "Mover para pasta".
+  // Linha de detalhes: abre a folha com prioridade, pasta e informações.
+  // (Os seletores antigos de prioridade/pasta continuam atendidos.)
   document.querySelector("#ndChips")?.addEventListener("click", (event) => {
     const note = state.notes.find((n) => n.id === ndCurrentNoteId);
     if (!note) return;
-    if (event.target.closest("[data-nd-prio]")) {
+    if (event.target.closest("[data-nd-details]")) {
+      openNoteDetailsSheet(note.id);
+    } else if (event.target.closest("[data-nd-prio]")) {
       const order = ["Baixa", "Media", "Alta", "Urgente"];
       const next = order[(order.indexOf(note.priority) + 1) % order.length] || "Media";
       flushNoteDetailSave();

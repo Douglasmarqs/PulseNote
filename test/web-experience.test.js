@@ -126,7 +126,8 @@ test("moldura sem riscas: barra lateral e topo sem linhas, sem letrinhas de atal
 test("troca de tela sem piscar: título nunca some e só uma animação", () => {
   const app = read("src/app.js");
   const js = read("src/web-motion.js");
-  assert.match(app, /\{ opacity: 0\.55, transform: `translate3d\(\$\{dx \/ 3\}px/);
+  // título só clareia (0,55 → 1), sem deslizar
+  assert.match(app, /el\?\.animate\?\.\(\[\{ opacity: 0\.55 \}, \{ opacity: 1 \}\]/);
   assert.doesNotMatch(js, /replay\(title, "pn-title-in"\)/);
   assert.match(js, /classList\.add\("pn-view-switch"\)/);
 });
@@ -144,8 +145,6 @@ test("nota aberta: concluir comemora, ferramentas recolhem e checklist renovado"
   const css = read("src/web.css");
   assert.match(app, /window\.pnCelebrate\(document\.querySelector\("#ndSaveBtn"\)\);\s*setTimeout\(\(\) => \{ saveNoteDetail\.closing = false; closeNoteDetail\(\); \}, 380\);/);
   assert.match(js, /window\.pnCelebrate = /);
-  assert.match(js, /const TOOLS_KEY = "pulsenote-note-tools"/);
-  assert.match(css, /\.bn-toolbar\.is-collapsed > \.bn-tool-row,/);
   assert.match(css, /@keyframes pnCheckDraw/);
 });
 
@@ -183,20 +182,44 @@ test("site sem tremidinha: um movimento só por bloco, sem encolher ao tocar", (
   // toque: espera mais e cancela se o dedo andar; sem encolher
   assert.match(js, /Math\.hypot\(e\.clientX - pressStart\.x, e\.clientY - pressStart\.y\) > 6/);
   assert.doesNotMatch(css, /\.pn-press \{\s*transform: scale/);
-  // entradas próprias mais calmas e telas com entrada própria só esmaecem
-  assert.match(css, /@keyframes cardRise \{ from \{ opacity: 0; transform: translateY\(6px\); \}/);
-  assert.match(app, /const ownEntrance = toView === "finances" \|\| toView === "profile";/);
-  assert.match(app, /const dx = lateral \? \(to > from \? 8 : -8\) : 0;/);
+  // troca de tela só esmaece: nenhum bloco desliza, cartões não sobem e
+  // números não contam (largura mudando a cada quadro)
+  assert.match(css, /@keyframes cardRise \{ from \{ opacity: 0; \} to \{ opacity: 1; \} \}/);
+  assert.match(css, /@keyframes pfxRise \{ from \{ opacity: 0; \} to \{ opacity: 1; \} \}/);
+  assert.match(css, /@keyframes wfIn \{ from \{ opacity: 0; \} to \{ opacity: 1; \} \}/);
+  assert.match(app, /el\.animate\(\[\{ opacity: 0 \}, \{ opacity: 1 \}\], \{ duration: 240/);
+  assert.doesNotMatch(app, /translate3d\(\$\{dx\}px, \$\{dy\}px, 0\)/);
+  assert.doesNotMatch(js, /function countUp/);
   // colunas das Notas não animam a largura (reorganizava os cartões a cada quadro)
   assert.doesNotMatch(css, /transition: grid-template-columns \.55s/);
 });
 
-test("ferramentas da nota: seta fora da faixa que rola; checklist leve e prático", () => {
+test("nota aberta (direção A): topo limpo, detalhes numa linha, formatação acima do teclado", () => {
+  const js = read("src/web-motion.js");
+  const css = read("src/web.css");
+  const app = read("src/app.js");
+  const html = read("src/index.html");
+  // topo: status discreto, sem contagem de palavras, sem ícone ao lado do título
+  assert.match(css, /\.bn-detail \.bn-nd-count \{ display: none !important; \}/);
+  assert.match(css, /\.bn-detail \.bn-nd-hero \.bn-detail-ico \{ display: none !important; \}/);
+  // prioridade · pasta · data numa linha que abre a folha de detalhes
+  assert.match(app, /class="bn-nd-metaline" data-nd-details/);
+  assert.match(app, /function openNoteDetailsSheet\(noteId\)/);
+  assert.match(app, /if \(event\.target\.closest\("\[data-nd-details\]"\)\) \{\s*openNoteDetailsSheet\(note\.id\);/);
+  // formatação: no celular só ao escrever, presa acima do teclado; rodapé sai
+  assert.match(js, /ndDetail\.classList\.add\("is-writing"\)/);
+  assert.match(js, /--pn-kb/);
+  assert.match(css, /\.bn-detail:not\(\.is-writing\) #noteDetailToolbar \{ display: none !important; \}/);
+  assert.match(css, /\.bn-detail\.is-writing \.bn-detail-foot \{ display: none !important; \}/);
+  // rodapé: Concluir largo, Tarefa compacto
+  assert.match(html, /id="ndConvertTaskBtn" aria-label="Virar tarefa"><svg class="i"><use href="#i-bolt"\/><\/svg><span>Tarefa<\/span>/);
+  assert.match(css, /\.bn-detail \.bn-detail-foot \{ grid-template-columns: auto minmax\(0, 1fr\) !important; \}/);
+});
+
+test("checklist leve e prático", () => {
   const js = read("src/web-motion.js");
   const css = read("src/web.css");
   const html = read("src/index.html");
-  assert.match(js, /toolRow\.after\(toggleTools\)/);
-  assert.match(css, /\.bn-detail \.bn-toolbar > \.pn-tool-toggle \{ display: inline-flex !important;/);
   // checklist tem campo próprio (aba): a área de texto não é mais encurtada
   assert.doesNotMatch(css, /\.bn-detail-scroll:has\(#ndChecklistSection/);
   // concluídos descem para o fim sob "Concluídos"
