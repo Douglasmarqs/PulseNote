@@ -474,83 +474,112 @@ body.pn-scrolled:not(.pn-scrolling) .pn-scroll-line { opacity: 0 !important; }
 /* ==========================================================================
    NOTA ABERTA — ferramentas recolhíveis, checklist renovado e "Concluir"
    ========================================================================== */
-/* Pílula "Formatar texto" com setinha */
+/* Ferramentas de formatação: a faixa de botões rola sozinha e a setinha
+   fica FORA dela, fixa à direita (antes ia no fim da faixa e aparecia
+   cortada no celular). Recolhida, vira a pílula "Aa Formatar texto". */
+.bn-detail .bn-toolbar {
+  display: grid !important; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 4px;
+  overflow: hidden;
+}
+.bn-detail .bn-toolbar > .bn-tool-panel { grid-column: 1 / -1; }
+.bn-detail .bn-toolbar > .bn-tool-row {
+  min-width: 0; overflow-x: auto; scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 22px), transparent);
+          mask-image: linear-gradient(90deg, #000 calc(100% - 22px), transparent);
+}
 .pn-tool-toggle {
-  display: inline-flex; align-items: center; gap: 7px; flex: none;
-  height: 34px; margin-left: auto; padding: 0 10px; border: 0; border-radius: 11px;
-  background: transparent; color: var(--bd-text-2); font: inherit; font-size: 12.5px; font-weight: 650; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px; flex: none;
+  width: 36px; height: 36px; padding: 0; border: 0; border-radius: 12px;
+  background: color-mix(in srgb, var(--bd-primary) 12%, transparent); color: var(--bd-primary-ink);
+  font: inherit; font-size: 13px; font-weight: 650; white-space: nowrap; cursor: pointer;
   transition: background .2s, color .2s;
 }
-.bn-detail .bn-tool-row .pn-tool-toggle { display: inline-flex !important; align-items: center; width: auto !important; min-width: 34px; flex: none !important; white-space: nowrap; }
-.pn-tool-toggle:hover { background: color-mix(in srgb, var(--bd-primary) 10%, transparent); color: var(--bd-text); }
+.pn-tool-toggle:hover { background: color-mix(in srgb, var(--bd-primary) 20%, transparent); }
+/* No celular os botões da barra são grade (ícone centralizado); a setinha
+   precisa ficar em linha, senão "Aa" e "Formatar texto" empilham. */
+.bn-detail .bn-toolbar > .pn-tool-toggle { display: inline-flex !important; flex-direction: row; place-items: center; width: 36px !important; height: 36px !important; }
+.bn-detail .bn-toolbar.is-collapsed > .pn-tool-toggle { width: auto !important; }
 .pn-tool-toggle:focus-visible { outline: 0; box-shadow: var(--bd-focus); }
 .pn-tool-aa { display: none; font-weight: 800; color: var(--bd-violet); letter-spacing: -.02em; }
 .pn-tool-label { display: none; }
-.pn-tool-chev { width: 16px !important; height: 16px !important; transform: rotate(180deg); transition: transform .35s cubic-bezier(.34, 1.4, .5, 1); }
-.bn-detail .bn-toolbar { overflow: hidden; }
-.bn-detail .bn-toolbar.is-collapsed { width: fit-content; max-width: calc(100% - 28px); padding: 3px; border-radius: 13px; }
-.bn-toolbar.is-collapsed .bn-tool-row > :not(.pn-tool-toggle),
-.bn-toolbar.is-collapsed .bn-tool-panel { display: none !important; }
+.pn-tool-chev { width: 17px; height: 17px; stroke-width: 2.2; transform: rotate(180deg); transition: transform .35s cubic-bezier(.34, 1.4, .5, 1); }
+/* Recolhida: só a pílula */
+.bn-detail .bn-toolbar.is-collapsed { grid-template-columns: auto; width: fit-content; max-width: calc(100% - 28px); padding: 3px; border-radius: 14px; }
+.bn-toolbar.is-collapsed > .bn-tool-row,
+.bn-toolbar.is-collapsed > .bn-tool-panel { display: none !important; }
 .bn-toolbar.is-collapsed + .bn-link-form { display: none !important; }
-.bn-toolbar.is-collapsed .bn-tool-row { justify-content: flex-start; }
-.bn-toolbar.is-collapsed .pn-tool-toggle { margin-left: 0; padding: 0 12px; color: var(--bd-text); }
+.bn-toolbar.is-collapsed .pn-tool-toggle { width: auto; padding: 0 14px 0 12px; background: transparent; color: var(--bd-text); }
+.bn-toolbar.is-collapsed .pn-tool-toggle:hover { background: color-mix(in srgb, var(--bd-primary) 10%, transparent); }
 .bn-toolbar.is-collapsed .pn-tool-aa, .bn-toolbar.is-collapsed .pn-tool-label { display: inline; }
 .bn-toolbar.is-collapsed .pn-tool-chev { transform: none; }
 
-/* Checklist dentro da nota */
-.bn-detail .bn-check {
-  gap: 10px; margin-top: 8px; padding: 14px 14px 12px;
-  border: 1px solid var(--bd-line); border-radius: 16px;
-  background: color-mix(in srgb, var(--bd-card-2) 55%, transparent);
+/* Checklist dentro da nota — leve e prático
+   - fica logo abaixo do texto (a área de texto só é alta sem checklist);
+   - sem caixa pesada: cabeçalho "Checklist" + contador + barra fina;
+   - linhas de 44px fáceis de tocar, caixinha redonda que desenha o check;
+   - concluídos descem para o fim (com movimento) sob "Concluídos";
+   - "+ Adicionar item" com cara de item: Enter adiciona e segue digitando. */
+.bn-detail .bn-detail-scroll:has(#ndChecklistSection:not([hidden])) .bn-detail-body { min-height: 2.8em !important; }
+.bn-detail .bn-check { gap: 6px; margin-top: 2px; padding: 0; border: 0; background: none; }
+.bn-detail .bn-check-head { align-items: baseline; justify-content: flex-start; gap: 10px; padding: 0 4px; font-size: 14px; font-weight: 700; }
+.bn-detail .bn-check-head span:last-child { font-size: 12.5px; font-weight: 650; color: var(--bd-text-3); font-variant-numeric: tabular-nums; }
+.bn-detail .bn-check.is-complete .bn-check-head span:last-child { color: var(--bd-green); }
+.bn-detail .bn-check-track { height: 4px; margin: 2px 4px 4px; background: color-mix(in srgb, var(--bd-text) 9%, transparent); }
+.bn-detail .bn-check-track span { background: linear-gradient(90deg, var(--bd-primary-2), var(--bd-cyan)); transition: width .55s cubic-bezier(.22, 1, .36, 1); }
+.bn-detail .bn-check.is-complete .bn-check-track span { background: linear-gradient(90deg, #1fbf7a, #3be0a0); }
+.bn-detail .bn-check-items { display: flex !important; flex-direction: column; gap: 0; }
+.bn-detail .bn-check-row {
+  grid-template-columns: 40px minmax(0, 1fr) 36px !important; align-items: center !important;
+  min-height: 44px; border-radius: 12px; transition: background .2s, opacity .3s;
 }
-.bn-detail .bn-check-head { align-items: center; font-size: 13.5px; }
-.bn-detail .bn-check-head span:first-child { display: inline-flex; align-items: center; gap: 8px; }
-.bn-detail .bn-check-head span:first-child::before {
-  content: ""; width: 18px; height: 18px; border-radius: 6px; flex: none;
-  background: linear-gradient(135deg, var(--bd-primary-2), var(--bd-cyan));
-  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3.5' y='3.5' width='17' height='17' rx='5'/%3E%3Cpath d='M8 12.3l2.7 2.7L16 9.5'/%3E%3C/svg%3E") center / contain no-repeat;
-          mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3.5' y='3.5' width='17' height='17' rx='5'/%3E%3Cpath d='M8 12.3l2.7 2.7L16 9.5'/%3E%3C/svg%3E") center / contain no-repeat;
-}
-.bn-detail .bn-check-head span:last-child {
-  padding: 3px 9px; border-radius: 99px; font-size: 12px; font-weight: 650;
-  background: color-mix(in srgb, var(--bd-primary) 12%, transparent); color: var(--bd-primary-ink);
-}
-.bn-detail .bn-check-track { height: 8px; background: color-mix(in srgb, var(--bd-text) 9%, transparent); }
-.bn-detail .bn-check-track span {
-  position: relative; background: linear-gradient(90deg, var(--bd-primary-2), var(--bd-cyan));
-  transition: width .55s cubic-bezier(.22, 1, .36, 1); box-shadow: 0 0 12px color-mix(in srgb, var(--bd-cyan) 45%, transparent);
-}
-.bn-detail .bn-check.is-complete .bn-check-track span { background: linear-gradient(90deg, #1fbf7a, #3be0a0); box-shadow: 0 0 14px rgba(37, 211, 136, .5); }
-.bn-detail .bn-check.is-complete .bn-check-head span:last-child { background: var(--bd-green-soft); color: var(--bd-green); }
-.bn-detail .bn-check-items { gap: 2px; }
-.bn-detail .bn-check-row { border-radius: 12px; transition: background .2s, opacity .3s; }
+.bn-detail .bn-check-row > * { margin-top: 0 !important; }
 .bn-detail .bn-check-row:hover { background: color-mix(in srgb, var(--bd-text) 4%, transparent); }
-.bn-detail .bn-check-row.is-done { opacity: .72; }
-/* Caixinha redonda com check que se desenha */
+.bn-detail .bn-check-toggle { width: 40px; height: 44px; }
+.bn-detail .bn-check-text { min-height: 40px !important; padding-top: 10px !important; padding-bottom: 10px !important; font-size: 15px; }
+.bn-detail .bn-check-row.is-done { opacity: .6; }
+.bn-detail .bn-check-row.is-done .bn-check-text { text-decoration-thickness: 1.5px; }
+/* Concluídos vão para o fim; o primeiro deles ganha o rótulo */
+.bn-detail .bn-check-row.pn-sunk { order: 1; }
+.bn-detail .bn-check-row.pn-sunk:not(.pn-sunk ~ .pn-sunk)::before {
+  content: "Concluídos"; grid-column: 1 / -1; padding: 10px 4px 2px;
+  font-size: 11.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--bd-text-3);
+}
+/* Caixinha redonda */
 .bn-detail .bn-check-box {
-  width: 22px; height: 22px; border-radius: 50%; border: 2px solid color-mix(in srgb, var(--bd-text-3) 80%, transparent);
-  transition: background .25s, border-color .25s, box-shadow .3s, transform .3s cubic-bezier(.34, 1.5, .5, 1);
+  width: 22px; height: 22px; border-radius: 50%; border: 2px solid color-mix(in srgb, var(--bd-text-3) 85%, transparent);
+  transition: background .25s, border-color .25s, transform .3s cubic-bezier(.34, 1.5, .5, 1);
 }
-.bn-detail .bn-check-toggle:hover .bn-check-box { border-color: var(--bd-primary-2); transform: scale(1.06); }
-.bn-detail .bn-check-row.is-done .bn-check-box {
-  background: linear-gradient(135deg, var(--bd-primary-2), var(--bd-primary));
-  border-color: transparent; box-shadow: 0 4px 12px -4px var(--bd-primary);
-}
+.bn-detail .bn-check-toggle:hover .bn-check-box { border-color: var(--bd-primary-2); }
+.bn-detail .bn-check-toggle:active .bn-check-box { transform: scale(.88); }
+.bn-detail .bn-check-row.is-done .bn-check-box { background: var(--bd-primary); border-color: var(--bd-primary); }
 .bn-detail .bn-check-row.is-done .bn-check-box .i { stroke-dasharray: 22; animation: pnCheckDraw .4s cubic-bezier(.65, 0, .35, 1) .05s backwards; }
 @keyframes pnCheckDraw { from { stroke-dashoffset: 22; } to { stroke-dashoffset: 0; } }
-.bn-detail .bn-check-row.is-done .bn-check-text { text-decoration-thickness: 1.5px; }
-/* Campo de novo item */
-.bn-detail .bn-check-add {
-  align-items: center; margin-top: 2px; padding: 4px 4px 4px 12px;
-  border: 1px dashed var(--bd-line-strong); border-radius: 12px; transition: border-color .2s, background .2s, box-shadow .2s;
+/* × discreto: aparece ao passar o mouse/focar; no toque fica suave */
+.bn-detail .bn-check-del { width: 36px; height: 36px; opacity: .45; }
+@media (hover: hover) and (pointer: fine) {
+  .bn-detail .bn-check-del { opacity: 0; }
+  .bn-detail .bn-check-row:hover .bn-check-del, .bn-detail .bn-check-row:focus-within .bn-check-del { opacity: 1; }
 }
-.bn-detail .bn-check-add:focus-within { border-style: solid; border-color: color-mix(in srgb, var(--bd-primary) 55%, var(--bd-line)); background: var(--bd-card); box-shadow: var(--bd-focus); }
-.bn-detail .bn-check-add input { height: 34px; padding: 0; border: 0 !important; background: transparent !important; box-shadow: none !important; }
+/* "+ Adicionar item": linha com cara de item, o + alinhado às caixinhas */
+.bn-detail .bn-check-add {
+  display: grid !important; grid-template-columns: 40px minmax(0, 1fr); align-items: center;
+  min-height: 44px; margin-top: 2px; padding: 0; border: 0; border-radius: 12px; background: none; box-shadow: none;
+  transition: background .2s;
+}
+.bn-detail .bn-check-add:focus-within { background: color-mix(in srgb, var(--bd-primary) 7%, transparent); }
 .bn-detail .bn-check-add .bd-icon-btn {
-  width: 32px; height: 32px; border-radius: 10px; background: color-mix(in srgb, var(--bd-primary) 14%, transparent) !important; color: var(--bd-primary-ink);
+  order: -1; justify-self: center; width: 26px; height: 26px; border-radius: 50%; padding: 0;
+  background: color-mix(in srgb, var(--bd-primary) 16%, transparent) !important; color: var(--bd-primary-ink);
   transition: transform .3s cubic-bezier(.34, 1.5, .5, 1), background .2s;
 }
-.bn-detail .bn-check-add .bd-icon-btn:hover { transform: rotate(90deg); }
+.bn-detail .bn-check-add .bd-icon-btn .i { width: 15px; height: 15px; stroke-width: 2.4; }
+.bn-detail .bn-check-add:focus-within .bd-icon-btn { background: var(--bd-primary) !important; color: #fff; transform: rotate(90deg); }
+.bn-detail .bn-check-add input {
+  height: 44px; padding: 0 8px; border: 0 !important; background: transparent !important; box-shadow: none !important;
+  color: var(--bd-text); font: inherit; font-size: 15px;
+}
+.bn-detail .bn-check-add input::placeholder { color: var(--bd-text-3); }
+.bn-detail .bn-check-add input:focus { outline: 0; }
 
 /* "Concluir": o botão afunda e volta, o check se desenha */
 .pn-done-pop { animation: pnDonePop .62s cubic-bezier(.34, 1.5, .5, 1); }
@@ -694,7 +723,6 @@ body.pn-scrolled:not(.pn-scrolling) .pn-scroll-line { opacity: 0 !important; }
     grid-template-columns: 284px minmax(0, 1fr) minmax(340px, 400px);
     align-items: stretch;
     height: max(600px, calc(100dvh - 118px));
-    transition: grid-template-columns .55s var(--pn-ease-out);
   }
   .bn-grid:has(#noteDetailModal:not([hidden])) { grid-template-columns: 264px minmax(0, 1fr) minmax(380px, 1.12fr); }
   .bn-grid > * { min-height: 0; height: 100%; }
@@ -704,8 +732,6 @@ body.pn-scrolled:not(.pn-scrolling) .pn-scroll-line { opacity: 0 !important; }
   .bn-detail-empty { align-content: center; }
   .bn-detail-wrap > .bn-detail { height: 100%; min-height: 0; overflow-y: auto; scrollbar-width: thin; padding: 18px 20px; }
   .bn-detail-body { font-size: 15.5px; line-height: 1.65; }
-  .bn-detail-wrap:not([hidden]) > .bn-detail { animation: pnNoteIn .45s var(--pn-ease-out); }
-  @keyframes pnNoteIn { from { opacity: 0; transform: translateX(18px); } to { opacity: 1; transform: none; } }
 }
 
 @media (min-width: 1181px) and (max-width: 1500px) {
@@ -750,17 +776,18 @@ body.pn-scrolled:not(.pn-scrolling) .pn-scroll-line { opacity: 0 !important; }
 }
 
 /* Toque: a linha acende e o cartão afunda de leve ao pressionar */
+/* Toque: só um leve acender (sem encolher — o encolher dava "tremidinha"
+   ao rolar a tela). */
 :is(.bd-list li, .bf-tx, .bf-mini, .bd-agenda .bd-ag, .bp-task, .bf-brow, .bf-row, .bf-member, .bf-arow, .bf-rrow, .bf-srow, .bd-res-row, .pfx-row) {
-  transition: background-color .2s ease, transform .2s cubic-bezier(.22, 1, .36, 1);
+  transition: background-color .2s ease;
 }
 :is(.bd-list li, .bf-tx, .bf-mini, .bd-agenda .bd-ag, .bp-task, .bf-brow, .bf-row, .bf-member, .bf-arow, .bf-rrow, .bf-srow, .bd-res-row, .pfx-row).pn-press {
   background-color: color-mix(in srgb, var(--bd-primary) 9%, transparent) !important;
   border-radius: 12px;
-  transform: scale(.985);
 }
 :is(.bn-card, .bd-kpi, .bf-kpi, .bd-ts, .pfx-stat, .bf-card-tile, .bd-side-pulsinho).pn-press {
-  transform: scale(.97) !important;
-  transition: transform .18s cubic-bezier(.22, 1, .36, 1) !important;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--bd-primary) 35%, transparent) !important;
+  transition: box-shadow .18s ease !important;
 }
 @media (hover: none), (pointer: coarse) {
   :is(.bd-btn, .primary-button, .bd-ws-option, .fin-tab-btn, .bd-icon-btn):active { transform: scale(.96); }
@@ -787,6 +814,16 @@ body.pn-scrolled:not(.pn-scrolling) .pn-scroll-line { opacity: 0 !important; }
   body.pn-scrolled .pn-scroll-line { opacity: .9; }
   .pn-route-bar { display: none; }
 }
+
+/* ---------- Entradas mais calmas ----------
+   Cartões de Finanças e do Perfil tinham subida + encolher + desfoque além
+   do deslize da tela: somados, pareciam tremer. Agora só sobem 6px. */
+@keyframes cardRise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes pfxRise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+/* Painéis das abas (Planner, Finanças) só esmaecem: os cartões de dentro
+   já têm a própria entrada, e subir o painel inteiro somava movimento. */
+@keyframes pnPanelIn { from { opacity: 0; } to { opacity: 1; } }
+.bd-main .planner-subview.active, .bd-main .fin-tab-panel:not([hidden]) { animation-name: pnPanelIn !important; }
 
 /* ---------- Reduzir movimento ---------- */
 @media (prefers-reduced-motion: reduce) {

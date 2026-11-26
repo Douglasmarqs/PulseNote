@@ -145,7 +145,7 @@ test("nota aberta: concluir comemora, ferramentas recolhem e checklist renovado"
   assert.match(app, /window\.pnCelebrate\(document\.querySelector\("#ndSaveBtn"\)\);\s*setTimeout\(\(\) => \{ saveNoteDetail\.closing = false; closeNoteDetail\(\); \}, 380\);/);
   assert.match(js, /window\.pnCelebrate = /);
   assert.match(js, /const TOOLS_KEY = "pulsenote-note-tools"/);
-  assert.match(css, /\.bn-toolbar\.is-collapsed \.bn-tool-row > :not\(\.pn-tool-toggle\)/);
+  assert.match(css, /\.bn-toolbar\.is-collapsed > \.bn-tool-row,/);
   assert.match(css, /@keyframes pnCheckDraw/);
 });
 
@@ -170,6 +170,41 @@ test("gráfico redondo: fatia ativa não move a área de clique e não pisca", (
   assert.match(app, /\{ opacity: 0\.4, transform: "scale\(\.95\)" \}/);
   // texto de baixo com altura fixa
   assert.match(css, /\.bd-cats-insight \{ min-height: 52px;/);
+});
+
+test("site sem tremidinha: um movimento só por bloco, sem encolher ao tocar", () => {
+  const js = read("src/web-motion.js");
+  const css = read("src/web.css");
+  const app = read("src/app.js");
+  // linhas não deslizam mais em sentido contrário à tela
+  assert.doesNotMatch(js, /cascadeRows/);
+  // revelar ao rolar: sem escala
+  assert.doesNotMatch(js, /translateY\(18px\) scale\(\.985\)/);
+  // toque: espera mais e cancela se o dedo andar; sem encolher
+  assert.match(js, /Math\.hypot\(e\.clientX - pressStart\.x, e\.clientY - pressStart\.y\) > 6/);
+  assert.doesNotMatch(css, /\.pn-press \{\s*transform: scale/);
+  // entradas próprias mais calmas e telas com entrada própria só esmaecem
+  assert.match(css, /@keyframes cardRise \{ from \{ opacity: 0; transform: translateY\(6px\); \}/);
+  assert.match(app, /const ownEntrance = toView === "finances" \|\| toView === "profile";/);
+  assert.match(app, /const dx = lateral \? \(to > from \? 8 : -8\) : 0;/);
+  // colunas das Notas não animam a largura (reorganizava os cartões a cada quadro)
+  assert.doesNotMatch(css, /transition: grid-template-columns \.55s/);
+});
+
+test("ferramentas da nota: seta fora da faixa que rola; checklist leve e prático", () => {
+  const js = read("src/web-motion.js");
+  const css = read("src/web.css");
+  const html = read("src/index.html");
+  assert.match(js, /toolRow\.after\(toggleTools\)/);
+  assert.match(css, /\.bn-detail \.bn-toolbar > \.pn-tool-toggle \{ display: inline-flex !important;/);
+  // checklist logo abaixo do texto
+  assert.match(css, /\.bn-detail-scroll:has\(#ndChecklistSection:not\(\[hidden\]\)\) \.bn-detail-body \{ min-height: 2\.8em !important; \}/);
+  // concluídos descem para o fim sob "Concluídos"
+  assert.match(css, /\.bn-check-row\.pn-sunk \{ order: 1; \}/);
+  assert.match(css, /content: "Concluídos"/);
+  assert.match(js, /flip\(\(\) => row\.classList\.add\("pn-sunk"\)\)/);
+  assert.match(html, /<span>Checklist<\/span><span id="ndChecklistProgress">/);
+  assert.match(html, /placeholder="Adicionar item"/);
 });
 
 test("Pulsinho no Início: coluna proporcional, alinhada aos cartões e com sugestões", () => {

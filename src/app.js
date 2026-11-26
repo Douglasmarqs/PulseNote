@@ -4756,7 +4756,9 @@ function animateViewEntrance(target, fromView, toView) {
   const from = VIEW_ORDER[fromView];
   const to = VIEW_ORDER[toView];
   const lateral = from !== undefined && to !== undefined && from !== to;
-  const dx = lateral ? (to > from ? 14 : -14) : 0;
+  // 8px (antes 14): com as entradas próprias dos cartões somadas, o
+  // deslize maior dava a sensação de a tela tremer.
+  const dx = lateral ? (to > from ? 8 : -8) : 0;
   // Telas fora da barra (Perfil, Configurações) só sobem 4px: com 10px
   // parecia que a tela ainda estava se acomodando.
   const dy = lateral ? 0 : 4;
@@ -4767,7 +4769,10 @@ function animateViewEntrance(target, fromView, toView) {
   let last = null;
   blocks.slice(0, 10).forEach((el, index) => {
     const holdsFixed = Boolean(el.querySelector(VIEW_FIXED_SELECTOR)) || el.matches(VIEW_FIXED_SELECTOR);
-    const frames = holdsFixed
+    // Finanças e Perfil já têm a entrada encenada dos cartões; aqui só
+    // esmaece, para não somar dois movimentos no mesmo bloco.
+    const ownEntrance = toView === "finances" || toView === "profile";
+    const frames = holdsFixed || ownEntrance
       ? [{ opacity: 0 }, { opacity: 1 }]
       : [{ opacity: 0, transform: `translate3d(${dx}px, ${dy}px, 0)` }, { opacity: 1, transform: "translate3d(0, 0, 0)" }];
     last = el.animate(frames, { duration: lateral ? 300 : 260, delay: Math.min(index, 4) * 24, easing, fill: "backwards" });
@@ -9910,7 +9915,7 @@ function updateNoteDetailChecklistProgress(note) {
   section?.classList.toggle("is-complete", items.length > 0 && completed === items.length);
   section?.classList.toggle("is-empty", items.length === 0);
   if (summary) summary.textContent = !items.length ? "Checklist vazio" : completed === items.length ? "Tudo concluído" : `${items.length - completed} ${items.length - completed === 1 ? "item pendente" : "itens pendentes"}`;
-  if (progress) progress.textContent = items.length ? `${completed} de ${items.length} (${pct}%)` : "Sem itens ainda";
+  if (progress) progress.textContent = !items.length ? "Sem itens ainda" : completed === items.length ? "Tudo feito" : `${completed} de ${items.length}`;
   if (progressBar) progressBar.style.width = `${pct}%`;
 }
 

@@ -246,7 +246,8 @@
     // (Perfil fica de fora: os números contando mexiam na largura dos cartões.)
     const COUNT_SEL = ".bd-kpi-body strong, .bf-kpi-body > strong, .overview-value";
     function countView(view) {
-      if (calm() || !view) return;
+      // Só no computador: no celular os dígitos mudando pareciam tremer.
+      if (calm() || !view || !finePointer.matches) return;
       view.querySelectorAll(COUNT_SEL).forEach((el) => { if (el.getClientRects().length) countUp(el); });
     }
 
@@ -269,10 +270,9 @@
         entries.forEach((entry) => {
           if (!entry.isIntersecting) return;
           io.unobserve(entry.target);
-          cascadeRows(entry.target, 160);
           entry.target.animate(
-            [{ opacity: 0, transform: "translateY(18px) scale(.985)" }, { opacity: 1, transform: "none" }],
-            { duration: 560, delay: Math.min(i++, 4) * 60, easing: "cubic-bezier(.22, 1, .36, 1)", fill: "backwards" }
+            [{ opacity: 0, transform: "translateY(8px)" }, { opacity: 1, transform: "none" }],
+            { duration: 480, delay: Math.min(i++, 4) * 60, easing: "cubic-bezier(.22, 1, .36, 1)", fill: "backwards" }
           );
         });
       }, { rootMargin: "0px 0px 60px 0px" });
@@ -325,7 +325,7 @@
       doc.body.classList.remove("pn-scrolled", "pn-scrolling");
       requestAnimationFrame(() => requestAnimationFrame(() => doc.body.classList.remove("pn-view-switch")));
       const section = doc.getElementById(`${view}View`);
-      requestAnimationFrame(() => { countView(section); armReveal(section); armSegs(section); cascadeRows(section, 180); });
+      requestAnimationFrame(() => { countView(section); armReveal(section); armSegs(section); });
     }
     new MutationObserver(() => {
       const v = doc.body.dataset.activeView || doc.querySelector(".view.active-view")?.id.replace(/View$/, "");
@@ -350,7 +350,6 @@
       const section = doc.querySelector(".view.active-view");
       countView(section);
       armReveal(section);
-      cascadeRows(section, 200);
     };
     if (overlay && !overlay.hidden && overlay.isConnected) {
       const mo = new MutationObserver(() => {
@@ -427,6 +426,7 @@
     const PRESS_SEL = `${ROW_SEL}, .bn-card, .bd-kpi, .bf-kpi, .bd-ts, .pfx-stat, .bf-card-tile, .bd-side-pulsinho`;
     let pressed = null;
     let pressTimer = 0;
+    let pressStart = { x: 0, y: 0 };
     const release = () => {
       clearTimeout(pressTimer);
       const el = pressed;
@@ -439,8 +439,18 @@
       if (!el || e.target.closest("input, textarea, select, [contenteditable]")) return;
       release();
       pressed = el;
-      // Um instante de espera: quem só está rolando a tela não acende nada.
-      pressTimer = setTimeout(() => el.classList.add("pn-press"), 60);
+      pressStart = { x: e.clientX, y: e.clientY };
+      // Espera um pouco mais e cancela se o dedo andar: quem só está rolando
+      // a tela não acende nada (antes a linha acendia e apagava ao rolar).
+      pressTimer = setTimeout(() => el.classList.add("pn-press"), 110);
+    }, { passive: true });
+    doc.addEventListener("pointermove", (e) => {
+      if (!pressed || e.pointerType === "mouse") return;
+      if (Math.hypot(e.clientX - pressStart.x, e.clientY - pressStart.y) > 6) {
+        clearTimeout(pressTimer);
+        pressed.classList.remove("pn-press");
+        pressed = null;
+      }
     }, { passive: true });
     ["pointerup", "pointercancel", "pointerleave"].forEach((type) => doc.addEventListener(type, release, { passive: true }));
     addEventListener("scroll", () => { if (pressed) { clearTimeout(pressTimer); pressed.classList.remove("pn-press"); pressed = null; } }, { passive: true, capture: true });
@@ -514,7 +524,6 @@
         requestAnimationFrame(() => {
           const panel = cfg.panel();
           slideIn(panel, to > from ? 1 : -1);
-          cascadeRows(panel, 120);
         });
         return;
       }
@@ -529,23 +538,6 @@
         });
       }
     }, true);
-
-    // Linhas de uma lista entram em cascata (troca de área/aba e ao rolar).
-    function cascadeRows(scope, baseDelay = 0) {
-      if (!scope || calm()) return;
-      const seen = new Map();
-      scope.querySelectorAll(ROW_SEL).forEach((row) => {
-        if (!row.getClientRects().length) return;
-        const r = row.getBoundingClientRect();
-        if (r.bottom < 0 || r.top > innerHeight) return;
-        const host = row.parentElement;
-        const n = seen.get(host) || 0;
-        if (n >= 8) return;
-        seen.set(host, n + 1);
-        row.animate?.([{ opacity: 0, transform: "translateX(-8px)" }, { opacity: 1, transform: "none" }],
-          { duration: 380, delay: baseDelay + n * 40, easing: "cubic-bezier(.22, 1, .36, 1)", fill: "backwards" });
-      });
-    }
 
     // ── Rolagem: fio de progresso e inclinação das notas ────────
     const scrollLine = doc.createElement("i");
@@ -646,7 +638,8 @@
       toggleTools.type = "button";
       toggleTools.className = "pn-tool-toggle";
       toggleTools.innerHTML = '<span class="pn-tool-aa" aria-hidden="true">Aa</span><span class="pn-tool-label">Formatar texto</span><svg class="i pn-tool-chev" aria-hidden="true"><use href="#i-chev-down"/></svg>';
-      toolRow.append(toggleTools);
+      // Fora da faixa de botões (que rola): a setinha nunca fica cortada.
+      toolRow.after(toggleTools);
       let open = false;
       try { open = localStorage.getItem(TOOLS_KEY) === "open"; } catch { /* sem armazenamento */ }
       const applyTools = (next, { animate = false } = {}) => {
@@ -662,7 +655,7 @@
             { duration: 340, easing: "cubic-bezier(.22, 1, .36, 1)" }
           );
           if (open) {
-            [...toolRow.children].filter((c) => c !== toggleTools).forEach((c, i) => {
+            [...toolRow.children].forEach((c, i) => {
               c.animate([{ opacity: 0, transform: "translateY(-4px) scale(.9)" }, { opacity: 1, transform: "none" }], { duration: 260, delay: 40 + i * 18, easing: "cubic-bezier(.22, 1, .36, 1)", fill: "backwards" });
             });
           }
@@ -673,6 +666,47 @@
         applyTools(!open, { animate: true });
         try { localStorage.setItem(TOOLS_KEY, open ? "open" : "closed"); } catch { /* idem */ }
       });
+    }
+
+    // ── Checklist da nota: concluídos descem para o fim ─────────
+    // Marcou: o item fica um instante no lugar (dá para ver o check) e então
+    // desliza para o grupo "Concluídos"; desmarcou: volta para cima na hora.
+    // Só muda a ordem visual (CSS order) — os índices do app continuam iguais.
+    const checkList = doc.getElementById("ndChecklistItems");
+    if (checkList) {
+      const sinkTimers = new WeakMap();
+      const flip = (mutate) => {
+        if (calm()) { mutate(); return; }
+        const rows = [...checkList.children];
+        const before = new Map(rows.map((r) => [r, r.getBoundingClientRect().top]));
+        mutate();
+        rows.forEach((r) => {
+          const dy = before.get(r) - r.getBoundingClientRect().top;
+          if (Math.abs(dy) > 1) r.animate([{ transform: `translateY(${dy}px)` }, { transform: "none" }], { duration: 380, easing: "cubic-bezier(.22, 1, .36, 1)" });
+        });
+      };
+      const syncAll = () => checkList.querySelectorAll(".bn-check-row").forEach((r) => {
+        const done = r.classList.contains("is-done");
+        if (r.classList.contains("pn-sunk") !== done) r.classList.toggle("pn-sunk", done);
+      });
+      new MutationObserver((records) => {
+        for (const rec of records) {
+          if (rec.type === "childList") { syncAll(); continue; } // redesenho: sem animação
+          const row = rec.target;
+          if (!row.classList?.contains("bn-check-row")) continue;
+          const done = row.classList.contains("is-done");
+          if (done === row.classList.contains("pn-sunk")) continue;
+          clearTimeout(sinkTimers.get(row));
+          if (done) {
+            sinkTimers.set(row, setTimeout(() => {
+              if (row.isConnected && row.classList.contains("is-done") && !row.classList.contains("pn-sunk")) flip(() => row.classList.add("pn-sunk"));
+            }, 650));
+          } else {
+            flip(() => row.classList.remove("pn-sunk"));
+          }
+        }
+      }).observe(checkList, { childList: true, subtree: true, attributes: true, attributeFilter: ["class"] });
+      syncAll();
     }
 
     // ── Pulsinho no Início: mesma altura dos blocos ao lado ─────
