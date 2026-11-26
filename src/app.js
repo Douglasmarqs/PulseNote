@@ -3518,10 +3518,8 @@ function openPulsinhoConvo() {
       chat.animate([
         { clipPath: pulsinhoClipFor(from, to, 22) },
         { clipPath: "inset(0px 0px 0px 0px round 22px)" },
-      ], { duration: 420, easing: "cubic-bezier(.2,.9,.22,1)" });
-      chat.querySelectorAll(":scope > .bd-chat-head, :scope > .bd-chat-stage, :scope > .bd-chat-suggest, :scope > .bd-chat-form").forEach((part, index) => {
-        part.animate([{ opacity: 0, transform: "translateY(10px)" }, { opacity: 1, transform: "none" }], { duration: 300, delay: 90 + index * 40, easing: "cubic-bezier(.2,.9,.3,1)", fill: "backwards" });
-      });
+      ], { duration: 460, easing: "cubic-bezier(.2,.9,.22,1)" });
+      playPulsinhoOpenChoreography(chat, from, to);
       return;
     }
     // Cartão antigo (fora do modo balão): "levanta" de onde estava.
@@ -3532,6 +3530,43 @@ function openPulsinhoConvo() {
   });
   scrollPulsinhoToEnd();
   updatePulsinhoSuggestions();
+}
+
+// Abertura da conversa (celular): enquanto o recorte cresce a partir do
+// balão, um brilho se espalha desse ponto, o Pulsinho dá um pulinho no
+// cabeçalho, as mensagens entram em cascata do lado de quem falou e o campo
+// de digitar sobe de baixo.
+function playPulsinhoOpenChoreography(chat, from, to) {
+  const ease = "cubic-bezier(.2,.9,.3,1)";
+  const glow = document.createElement("i");
+  glow.className = "bd-chat-glow";
+  glow.setAttribute("aria-hidden", "true");
+  glow.style.left = `${(from.left + from.width / 2 - to.left).toFixed(1)}px`;
+  glow.style.top = `${(from.top + from.height / 2 - to.top).toFixed(1)}px`;
+  chat.appendChild(glow);
+  glow.animate([
+    { transform: "translate(-50%, -50%) scale(.2)", opacity: 0.9 },
+    { transform: "translate(-50%, -50%) scale(3.2)", opacity: 0 },
+  ], { duration: 720, easing: "cubic-bezier(.2,.7,.3,1)", fill: "forwards" }).finished.then(() => glow.remove(), () => glow.remove());
+  chat.querySelector(":scope > .bd-chat-head")?.animate([{ opacity: 0, transform: "translateY(-10px)" }, { opacity: 1, transform: "none" }], { duration: 320, delay: 80, easing: ease, fill: "backwards" });
+  chat.querySelector(".bd-chat-mascot")?.animate([
+    { transform: "translateY(0) scale(.6) rotate(-12deg)" },
+    { transform: "translateY(-7px) scale(1.12) rotate(6deg)", offset: 0.55 },
+    { transform: "translateY(0) scale(.96) rotate(-2deg)", offset: 0.8 },
+    { transform: "none" },
+  ], { duration: 640, delay: 140, easing: "cubic-bezier(.34,1.4,.5,1)", fill: "backwards" });
+  const messages = [...chat.querySelectorAll("#pulseCommandResponse > .bd-msg")].slice(-6);
+  // Folha de confirmação (quando há uma ação pendente) sobe de baixo.
+  chat.querySelector("#pulseCommandResponse .bd-confirm")?.animate([{ opacity: 0, transform: "translateY(18px)" }, { opacity: 1, transform: "none" }], { duration: 380, delay: 220, easing: ease, fill: "backwards" });
+  messages.forEach((msg, index) => {
+    const user = msg.classList.contains("bd-msg--user");
+    msg.animate([
+      { opacity: 0, transform: `translateX(${user ? 16 : -16}px) scale(.96)` },
+      { opacity: 1, transform: "none" },
+    ], { duration: 360, delay: 160 + index * 55, easing: ease, fill: "backwards" });
+  });
+  chat.querySelector(":scope > .bd-chat-suggest:not([hidden])")?.animate([{ opacity: 0, transform: "translateY(10px)" }, { opacity: 1, transform: "none" }], { duration: 320, delay: 260, easing: ease, fill: "backwards" });
+  chat.querySelector(":scope > .bd-chat-form")?.animate([{ opacity: 0, transform: "translateY(22px)" }, { opacity: 1, transform: "none" }], { duration: 380, delay: 180, easing: ease, fill: "backwards" });
 }
 
 function finishClosePulsinhoConvo(chat) {
@@ -3565,19 +3600,33 @@ function closePulsinhoConvo() {
     pulsinhoClosing = true;
     const box = chat.getBoundingClientRect();
     const target = placeholder.getBoundingClientRect();
-    chat.querySelectorAll(":scope > .bd-chat-head, :scope > .bd-chat-stage, :scope > .bd-chat-suggest, :scope > .bd-chat-form").forEach((part) => {
-      part.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, easing: "ease-in", fill: "forwards" });
+    // Fecha "recolhendo": o conteúdo desce e some, o campo de digitar
+    // afunda, e o recorte volta para dentro do balão.
+    chat.querySelectorAll(":scope > .bd-chat-head, :scope > .bd-chat-stage, :scope > .bd-chat-suggest").forEach((part) => {
+      part.animate([{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(8px) scale(.98)" }], { duration: 180, easing: "ease-in", fill: "forwards" });
     });
+    chat.querySelector(":scope > .bd-chat-form")?.animate([{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(18px)" }], { duration: 200, easing: "ease-in", fill: "forwards" });
     const animation = chat.animate([
       { clipPath: "inset(0px 0px 0px 0px round 22px)" },
       { clipPath: pulsinhoClipFor(target, box, 22) },
-    ], { duration: 300, easing: "cubic-bezier(.4,0,.2,1)", fill: "forwards" });
+    ], { duration: 340, delay: 40, easing: "cubic-bezier(.5,0,.2,1)", fill: "forwards" });
     const done = () => {
       pulsinhoClosing = false;
       chat.getAnimations?.().forEach((item) => item.cancel());
       chat.querySelectorAll(":scope > *").forEach((part) => part.getAnimations?.().forEach((item) => item.cancel()));
       finishClosePulsinhoConvo(chat);
-      document.querySelector("#bdChatTeaser")?.animate?.([{ opacity: 0, transform: "scale(.98)" }, { opacity: 1, transform: "none" }], { duration: 220, easing: "ease-out" });
+      // O balão "recebe" a conversa de volta: encolhe e volta com mola, e o
+      // Pulsinho do balão dá um pulinho.
+      document.querySelector("#bdChatTeaser")?.animate?.([
+        { opacity: 0.4, transform: "scale(.94)" },
+        { opacity: 1, transform: "scale(1.02)", offset: 0.6 },
+        { opacity: 1, transform: "none" },
+      ], { duration: 420, easing: "cubic-bezier(.34,1.4,.5,1)" });
+      document.querySelector(".bd-teaser-mascot")?.animate?.([
+        { transform: "none" },
+        { transform: "translateY(-6px) rotate(-8deg) scale(1.08)", offset: 0.45 },
+        { transform: "none" },
+      ], { duration: 520, delay: 80, easing: "cubic-bezier(.34,1.4,.5,1)" });
     };
     animation.finished.then(done, done);
     return;
@@ -9819,6 +9868,46 @@ function closeNoteDetailThen(next) {
   setTimeout(run, 450); // reserva, caso o navegador não dispare popstate
 }
 
+// ── Abas da nota aberta: Anotação | Checklist ────────────────────
+// Campos separados: a barra de formatação só vale para o texto, e o
+// checklist tem a tela dele, sem se misturar com a anotação.
+let ndTab = "text";
+function moveNdTabInk() {
+  const tabs = document.querySelector("#ndTabs");
+  const active = tabs?.querySelector(`[data-nd-tab="${ndTab}"]`);
+  const ink = tabs?.querySelector(".bn-nd-tab-ink");
+  if (!tabs || !active || !ink || !active.offsetWidth) return;
+  ink.style.setProperty("--x", `${active.offsetLeft}px`);
+  ink.style.setProperty("--w", `${active.offsetWidth}px`);
+}
+function setNdTab(tab, { focus = false, animate = true } = {}) {
+  const detail = document.querySelector("#noteDetailModal .bn-detail");
+  if (!detail) return;
+  const previous = ndTab;
+  ndTab = tab === "check" ? "check" : "text";
+  detail.dataset.tab = ndTab;
+  document.querySelectorAll("#ndTabs [data-nd-tab]").forEach((button) => {
+    const on = button.dataset.ndTab === ndTab;
+    button.setAttribute("aria-selected", String(on));
+    button.tabIndex = on ? 0 : -1;
+  });
+  moveNdTabInk();
+  const note = state.notes.find((n) => n.id === ndCurrentNoteId);
+  if (ndTab === "check") {
+    setNdPanel(null);
+    ndChecklistAdding = true;
+    if (note) renderNoteDetailChecklist(note);
+    if (focus || !(note?.checklist || []).length) {
+      setTimeout(() => document.querySelector("#ndChecklistAddInput")?.focus({ preventScroll: true }), animate ? 120 : 0);
+    }
+  }
+  if (animate && previous !== ndTab && !prefersReducedMotion()) {
+    const panel = ndTab === "check" ? document.querySelector("#ndChecklistSection") : document.querySelector("#ndBody");
+    const dir = ndTab === "check" ? 1 : -1;
+    panel?.animate?.([{ opacity: 0, transform: `translateX(${dir * 18}px)` }, { opacity: 1, transform: "none" }], { duration: 300, easing: "cubic-bezier(.22,1,.36,1)" });
+  }
+}
+
 function openNoteDetail(id) {
   const note = state.notes.find((item) => item.id === id);
   if (!note) return;
@@ -9847,6 +9936,10 @@ function openNoteDetail(id) {
     : escapeHtml(note.description || "").replace(/\n/g, "<br>");
 
   renderNoteDetailChecklist(note);
+  // Abre no Checklist quando a nota é só uma lista (sem texto).
+  const onlyList = (note.checklist || []).length > 0 && !noteHtmlToPlainText(body.innerHTML).trim();
+  setNdTab(onlyList ? "check" : "text", { animate: false });
+  requestAnimationFrame(moveNdTabInk);
 
   renderNoteDetailMeta(note);
   setNdStatus("saved");
@@ -9915,7 +10008,12 @@ function updateNoteDetailChecklistProgress(note) {
   section?.classList.toggle("is-complete", items.length > 0 && completed === items.length);
   section?.classList.toggle("is-empty", items.length === 0);
   if (summary) summary.textContent = !items.length ? "Checklist vazio" : completed === items.length ? "Tudo concluído" : `${items.length - completed} ${items.length - completed === 1 ? "item pendente" : "itens pendentes"}`;
-  if (progress) progress.textContent = !items.length ? "Sem itens ainda" : completed === items.length ? "Tudo feito" : `${completed} de ${items.length}`;
+  if (progress) progress.textContent = !items.length ? "Sem itens ainda" : completed === items.length ? "Tudo feito" : `${completed} de ${items.length} concluídos`;
+  const tabCount = document.querySelector("#ndTabCount");
+  if (tabCount) {
+    tabCount.textContent = items.length ? `${completed}/${items.length}` : "";
+    tabCount.classList.toggle("is-done", items.length > 0 && completed === items.length);
+  }
   if (progressBar) progressBar.style.width = `${pct}%`;
 }
 
@@ -10196,6 +10294,20 @@ function bindNoteDetail() {
     if (ndCurrentNoteId) openNoteFolderSheet(ndCurrentNoteId);
   });
 
+  // ── Abas Anotação | Checklist ──
+  const ndTabs = document.querySelector("#ndTabs");
+  ndTabs?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-nd-tab]");
+    if (button) setNdTab(button.dataset.ndTab);
+  });
+  ndTabs?.addEventListener("keydown", (event) => {
+    if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
+    event.preventDefault();
+    setNdTab(ndTab === "text" ? "check" : "text");
+    document.querySelector(`#ndTabs [data-nd-tab="${ndTab}"]`)?.focus();
+  });
+  window.addEventListener("resize", () => moveNdTabInk(), { passive: true });
+
   // ── Checklist da nota aberta: marcar, editar o texto, remover ──
   const checklistList = document.querySelector("#ndChecklistItems");
   const removeChecklistItem = (index) => {
@@ -10299,13 +10411,9 @@ function bindNoteDetail() {
       return;
     }
     if (cmd === "checklist") {
-      setNdPanel(null);
-      ndChecklistAdding = true;
-      const note = state.notes.find((n) => n.id === ndCurrentNoteId);
-      if (note) renderNoteDetailChecklist(note);
-      const addInput = document.querySelector("#ndChecklistAddInput");
-      addInput?.scrollIntoView({ block: "nearest", behavior: prefersReducedMotion() ? "auto" : "smooth" });
-      setTimeout(() => addInput?.focus({ preventScroll: true }), 30);
+      // O checklist tem campo próprio: o botão leva para a aba dele, já
+      // pronta para digitar o próximo item.
+      setNdTab("check", { focus: true });
       return;
     }
 

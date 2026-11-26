@@ -197,14 +197,37 @@ test("ferramentas da nota: seta fora da faixa que rola; checklist leve e prátic
   const html = read("src/index.html");
   assert.match(js, /toolRow\.after\(toggleTools\)/);
   assert.match(css, /\.bn-detail \.bn-toolbar > \.pn-tool-toggle \{ display: inline-flex !important;/);
-  // checklist logo abaixo do texto
-  assert.match(css, /\.bn-detail-scroll:has\(#ndChecklistSection:not\(\[hidden\]\)\) \.bn-detail-body \{ min-height: 2\.8em !important; \}/);
+  // checklist tem campo próprio (aba): a área de texto não é mais encurtada
+  assert.doesNotMatch(css, /\.bn-detail-scroll:has\(#ndChecklistSection/);
   // concluídos descem para o fim sob "Concluídos"
   assert.match(css, /\.bn-check-row\.pn-sunk \{ order: 1; \}/);
   assert.match(css, /content: "Concluídos"/);
   assert.match(js, /flip\(\(\) => row\.classList\.add\("pn-sunk"\)\)/);
   assert.match(html, /<span>Checklist<\/span><span id="ndChecklistProgress">/);
   assert.match(html, /placeholder="Adicionar item"/);
+});
+
+test("nota: Anotação e Checklist em abas separadas", () => {
+  const html = read("src/index.html");
+  const app = read("src/app.js");
+  const css = read("src/web.css");
+  assert.match(html, /id="ndTabs" role="tablist"/);
+  assert.match(html, /data-nd-tab="text"/);
+  assert.match(html, /data-nd-tab="check"/);
+  assert.match(app, /function setNdTab\(tab, \{ focus = false, animate = true \} = \{\}\)/);
+  // botão de checklist da barra leva para a aba
+  assert.match(app, /if \(cmd === "checklist"\) \{\s*\/\/[^\n]*\n[^\n]*\n\s*setNdTab\("check", \{ focus: true \}\);/);
+  // uma aba por vez
+  assert.match(css, /\.bn-detail\[data-tab="text"\] #ndChecklistSection \{ display: none !important; \}/);
+  assert.match(css, /\.bn-detail\[data-tab="check"\] #ndBody,/);
+  assert.match(app, /tabCount\.textContent = items\.length \? `\$\{completed\}\/\$\{items\.length\}` : "";/);
+});
+
+test("Pulsinho: abertura e fechamento com coreografia", () => {
+  const app = read("src/app.js");
+  assert.match(app, /function playPulsinhoOpenChoreography\(chat, from, to\)/);
+  assert.match(app, /glow\.className = "bd-chat-glow";/);
+  assert.match(app, /querySelector\("\.bd-teaser-mascot"\)\?\.animate\?\./);
 });
 
 test("Pulsinho no Início: coluna proporcional, alinhada aos cartões e com sugestões", () => {

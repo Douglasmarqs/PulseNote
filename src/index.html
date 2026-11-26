@@ -161,7 +161,7 @@
     <!-- Perfil v3 -->
     <link rel="stylesheet" href="/src/profile-v3.css?v=4" />
     <!-- Experiência no navegador: profundidade, barra lateral viva, movimento -->
-    <link rel="stylesheet" href="/src/web.css?v=9" />
+    <link rel="stylesheet" href="/src/web.css?v=10" />
   </head>
   <body class="bd">
     <!-- Tela de abertura já no HTML: aparece na primeira pintura, antes de
@@ -1215,6 +1215,14 @@
                     </div>
                   </div>
 
+                  <!-- Anotação e Checklist em campos separados: uma aba por vez,
+                       com a pílula deslizando entre elas. -->
+                  <div class="bn-nd-tabs" id="ndTabs" role="tablist" aria-label="Conteúdo da nota">
+                    <i class="bn-nd-tab-ink" aria-hidden="true"></i>
+                    <button type="button" role="tab" id="ndTabText" data-nd-tab="text" aria-selected="true" aria-controls="ndBody"><svg class="i" aria-hidden="true"><use href="#i-note"/></svg><span>Anotação</span></button>
+                    <button type="button" role="tab" id="ndTabCheck" data-nd-tab="check" aria-selected="false" aria-controls="ndChecklistSection" tabindex="-1"><svg class="i" aria-hidden="true"><use href="#i-check-circle"/></svg><span>Checklist</span><em class="bn-nd-tab-count" id="ndTabCount"></em></button>
+                  </div>
+
                   <div class="bn-toolbar" id="noteDetailToolbar" role="toolbar" aria-label="Formatação">
                     <div class="bn-tool-row">
                       <button type="button" data-nd-cmd="bold" title="Negrito" aria-label="Negrito" aria-pressed="false"><b>B</b></button>
@@ -2244,7 +2252,7 @@
     <script src="/src/card-installments.js?v=1"></script>
     <script src="/src/notifications.js?v=36" defer></script>
     <script src="/src/web-motion.js?v=8" defer></script>
-    <script type="module" src="/src/app.js?v=60"></script>
+    <script type="module" src="/src/app.js?v=61"></script>
     <script type="module" src="/src/push-notifications.js?v=35"></script>
     <!-- Configuração inicial (primeiro acesso) — ver src/onboarding.js -->
   <div id="onboardingRoot" class="bdo" role="dialog" aria-modal="true" aria-labelledby="bdoTitle" hidden></div>

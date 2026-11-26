@@ -513,13 +513,52 @@ body.pn-scrolled:not(.pn-scrolling) .pn-scroll-line { opacity: 0 !important; }
 .bn-toolbar.is-collapsed .pn-tool-aa, .bn-toolbar.is-collapsed .pn-tool-label { display: inline; }
 .bn-toolbar.is-collapsed .pn-tool-chev { transform: none; }
 
+/* Abas da nota: Anotação | Checklist (campos separados) */
+.bn-nd-tabs {
+  position: relative; display: flex; gap: 4px; margin: 0 14px 10px; padding: 4px;
+  border-radius: 14px; background: color-mix(in srgb, var(--bd-text) 6%, transparent);
+}
+.bn-nd-tabs [data-nd-tab] {
+  position: relative; z-index: 1; flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  height: 38px; padding: 0 12px; border: 0; border-radius: 11px; background: none;
+  color: var(--bd-text-2); font: inherit; font-size: 14px; font-weight: 650; cursor: pointer; transition: color .25s;
+}
+.bn-nd-tabs [data-nd-tab] .i { width: 17px; height: 17px; }
+.bn-nd-tabs [data-nd-tab][aria-selected="true"] { color: var(--bd-text); }
+.bn-nd-tabs [data-nd-tab]:focus-visible { outline: 0; box-shadow: var(--bd-focus); }
+.bn-nd-tab-ink {
+  position: absolute; left: 0; top: 4px; bottom: 4px; z-index: 0; width: var(--w, 50%); border-radius: 11px;
+  background: var(--bd-card); box-shadow: 0 6px 16px -10px rgba(0, 0, 0, .55), 0 0 0 1px var(--bd-line) inset;
+  transform: translateX(var(--x, 4px)); transition: transform .42s cubic-bezier(.34, 1.3, .5, 1), width .3s cubic-bezier(.22, 1, .36, 1);
+}
+.bn-nd-tab-count {
+  min-width: 26px; padding: 1px 7px; border-radius: 99px; font-style: normal; font-size: 11.5px; font-weight: 750;
+  background: color-mix(in srgb, var(--bd-primary) 16%, transparent); color: var(--bd-primary-ink); font-variant-numeric: tabular-nums;
+}
+.bn-nd-tab-count:empty { display: none; }
+.bn-nd-tab-count.is-done { background: var(--bd-green-soft); color: var(--bd-green); }
+/* Uma aba por vez */
+.bn-detail[data-tab="text"] #ndChecklistSection { display: none !important; }
+.bn-detail[data-tab="check"] #ndBody,
+.bn-detail[data-tab="check"] #noteDetailToolbar,
+.bn-detail[data-tab="check"] #ndLinkForm { display: none !important; }
+.bn-detail[data-tab="check"] #ndChecklistSection { display: grid !important; }
+/* Dentro da aba o título "Checklist" já está na aba: fica só o progresso */
+.bn-detail[data-tab="check"] .bn-check-head span:first-child { display: none; }
+.bn-detail[data-tab="check"] .bn-check-head span:last-child { font-size: 13px; color: var(--bd-text-2); }
+/* Checklist vazio: uma dica no lugar da lista */
+.bn-detail[data-tab="check"] .bn-check.is-empty .bn-check-items::before {
+  content: "Monte a lista desta nota: escreva um item e toque Enter para adicionar o próximo.";
+  display: block; padding: 18px 8px 8px; color: var(--bd-text-3); font-size: 14px; line-height: 1.5;
+}
+@media (prefers-reduced-motion: reduce) { .bn-nd-tab-ink { transition: none; } }
+
 /* Checklist dentro da nota — leve e prático
    - fica logo abaixo do texto (a área de texto só é alta sem checklist);
    - sem caixa pesada: cabeçalho "Checklist" + contador + barra fina;
    - linhas de 44px fáceis de tocar, caixinha redonda que desenha o check;
    - concluídos descem para o fim (com movimento) sob "Concluídos";
    - "+ Adicionar item" com cara de item: Enter adiciona e segue digitando. */
-.bn-detail .bn-detail-scroll:has(#ndChecklistSection:not([hidden])) .bn-detail-body { min-height: 2.8em !important; }
 .bn-detail .bn-check { gap: 6px; margin-top: 2px; padding: 0; border: 0; background: none; }
 .bn-detail .bn-check-head { align-items: baseline; justify-content: flex-start; gap: 10px; padding: 0 4px; font-size: 14px; font-weight: 700; }
 .bn-detail .bn-check-head span:last-child { font-size: 12.5px; font-weight: 650; color: var(--bd-text-3); font-variant-numeric: tabular-nums; }
@@ -650,6 +689,13 @@ body.pn-scrolled:not(.pn-scrolling) .pn-scroll-line { opacity: 0 !important; }
 @media (prefers-reduced-motion: reduce) {
   .bd-donut-seg-g.is-active .bd-donut-seg { transform: none; }
   .bd-cat-row.is-active { transform: none; }
+}
+
+/* Pulsinho: brilho que se espalha do balão ao abrir a conversa */
+.bd-chat-glow {
+  position: absolute; z-index: 5; width: 180px; height: 180px; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(circle, rgba(124, 107, 255, .55), rgba(34, 211, 238, .22) 45%, transparent 70%);
+  mix-blend-mode: screen;
 }
 
 /* ---------- Configurações: escolha de movimento ---------- */
