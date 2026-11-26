@@ -749,6 +749,68 @@ const autopilotUi = createAutopilotUI({
   notify: (message) => showToast(message),
 });
 
+// Saída da abertura: o Pulsinho dá um impulso e voa em arco até o logo do
+// app (barra lateral no computador, topo no celular) enquanto a tela se
+// revela num círculo que nasce do logo. Ao pousar, o logo dá um pulinho e
+// os blocos da tela esmaecem em sequência. Devolve false se não houver
+// onde pousar (ex.: tela de verificação), e a abertura sai do jeito simples.
+function playSplashExit(overlay) {
+  const mascot = overlay.querySelector(".pulsinho");
+  const hop = overlay.querySelector(".pulsinho-hop");
+  const logos = [...document.querySelectorAll(".bd-sidebar .bd-brand-mark, .bd-mobile-brand .bd-brand-mark")];
+  const logo = logos.find((el) => el.getClientRects().length && el.getBoundingClientRect().width > 0);
+  if (!mascot || !hop || !logo || typeof overlay.animate !== "function") return false;
+  const from = mascot.getBoundingClientRect();
+  const to = logo.getBoundingClientRect();
+  const dx = to.left + to.width / 2 - (from.left + from.width / 2);
+  const dy = to.top + to.height / 2 - (from.top + from.height / 2);
+  const scale = to.width / from.width;
+  const lift = Math.min(120, Math.abs(dy) * 0.35 + 40);
+  hop.style.animation = "none";
+  overlay.querySelectorAll(".pulsinho-ring, .pulsinho-orbit").forEach((el) => { el.style.display = "none"; });
+  const flight = hop.animate([
+    { transform: "none" },
+    { transform: "translateY(10px) scale(1.1, .88)", offset: 0.16 },
+    { transform: `translate(${dx * 0.45}px, ${dy * 0.45 - lift}px) scale(${(1 + scale) / 2}) rotate(-12deg)`, offset: 0.58 },
+    { transform: `translate(${dx}px, ${dy}px) scale(${scale}) rotate(0deg)` },
+  ], { duration: 820, easing: "cubic-bezier(.45,0,.2,1)", fill: "forwards" });
+  // A tela aparece num círculo que nasce do logo (o fundo da abertura "abre").
+  const cx = to.left + to.width / 2;
+  const cy = to.top + to.height / 2;
+  const r = Math.hypot(Math.max(cx, innerWidth - cx), Math.max(cy, innerHeight - cy)) + 30;
+  // (boards.css pinta o fundo da abertura com !important; o "véu" assume.)
+  overlay.style.setProperty("background", "transparent", "important");
+  overlay.style.setProperty("background-color", "transparent", "important");
+  const veil = document.createElement("i");
+  veil.className = "app-loading-veil";
+  overlay.prepend(veil);
+  veil.animate([
+    { clipPath: `circle(${r}px at ${cx}px ${cy}px)` },
+    { clipPath: `circle(${r}px at ${cx}px ${cy}px)`, offset: 0.35 },
+    { clipPath: `circle(0px at ${cx}px ${cy}px)` },
+  ], { duration: 900, easing: "cubic-bezier(.65,0,.35,1)", fill: "forwards" });
+  const view = document.querySelector(".view.active-view");
+  const blocks = view ? [...(view.children.length === 1 ? view.firstElementChild.children : view.children)].filter((el) => el.getClientRects().length).slice(0, 8) : [];
+  blocks.forEach((el, i) => el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 420, delay: 360 + i * 60, easing: "ease-out", fill: "backwards" }));
+  flight.finished.then(() => {
+    logo.animate([
+      { transform: "scale(.7)" },
+      { transform: "scale(1.22) rotate(-8deg)", offset: 0.45 },
+      { transform: "scale(.94) rotate(3deg)", offset: 0.75 },
+      { transform: "none" },
+    ], { duration: 520, easing: "cubic-bezier(.34,1.5,.5,1)" });
+    const ring = document.createElement("i");
+    ring.className = "app-loading-land";
+    ring.style.left = `${cx}px`;
+    ring.style.top = `${cy}px`;
+    document.body.appendChild(ring);
+    ring.animate([{ transform: "translate(-50%,-50%) scale(.5)", opacity: 0.9 }, { transform: "translate(-50%,-50%) scale(2.6)", opacity: 0 }], { duration: 640, easing: "cubic-bezier(.2,.7,.3,1)", fill: "forwards" })
+      .finished.then(() => ring.remove(), () => ring.remove());
+    overlay.remove();
+  }, () => overlay.remove());
+  return true;
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
   // Mostra overlay de carregamento enquanto o Firebase autentica.
   // O Pulsinho (mascote) "acorda" aqui — é o único trecho do carregamento
@@ -789,11 +851,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   const shownFor = performance.now();
   if (shownFor < minShow) await new Promise((resolve) => setTimeout(resolve, minShow - shownFor));
   overlay.classList.add("is-leaving");
-  setTimeout(() => {
-    overlay.style.transition = "opacity 300ms ease";
-    overlay.style.opacity = "0";
-    setTimeout(() => overlay.remove(), 320);
-  }, reduceMotion ? 200 : 260);
+  if (reduceMotion || !playSplashExit(overlay)) {
+    setTimeout(() => {
+      overlay.style.transition = "opacity 300ms ease";
+      overlay.style.opacity = "0";
+      setTimeout(() => overlay.remove(), 320);
+    }, reduceMotion ? 200 : 260);
+  }
 
   if (!currentUser) return; // já foi redirecionado para login.html
   if (!currentUser.emailVerified) return; // gate de verificação já está sendo exibido

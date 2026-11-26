@@ -818,6 +818,19 @@ body.pn-scrolled:not(.pn-scrolling) .pn-scroll-line { opacity: 0 !important; }
 .bn-ds-info { margin: 2px 0 0; font-size: 12.5px; color: var(--bd-text-3); }
 @media (max-width: 420px) { .bn-ds-prios { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
+/* Valores em reais: dígitos de largura igual (o odômetro não muda a largura) */
+.bd-kpi-value, .bf-kpi-body > strong, #bdResTotal, #bdResIn, #bdResOut { font-variant-numeric: tabular-nums; }
+.pn-odo { display: inline-block; vertical-align: top; white-space: nowrap; line-height: var(--lh); }
+.pn-odo-c, .pn-odo-d { display: inline-block; vertical-align: top; height: var(--lh); line-height: var(--lh); }
+.pn-odo-d {
+  overflow: hidden;
+  /* o dígito some suave nas bordas enquanto gira (sem "pedaços" de vizinhos) */
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 22%, #000 78%, transparent 100%);
+          mask-image: linear-gradient(180deg, transparent 0, #000 22%, #000 78%, transparent 100%);
+}
+.pn-odo-s { display: flex; flex-direction: column; will-change: transform; }
+.pn-odo-s i { display: block; height: var(--lh); line-height: var(--lh); font-style: normal; text-align: center; }
+
 /* ---------- Configurações: escolha de movimento ---------- */
 .pn-motion-row {
   display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;

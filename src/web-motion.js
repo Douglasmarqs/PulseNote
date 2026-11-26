@@ -211,8 +211,128 @@
     }
     addEventListener("scroll", onScroll, { passive: true });
 
-    // (Os números que contavam até o valor foram removidos: os dígitos
-    // mudando de largura a cada quadro faziam os cartões "tremerem".)
+    // ── Valores em reais como odômetro ──────────────────────────
+    // Cada dígito rola na própria casa (fonte com dígitos de largura igual):
+    // o número já ocupa a largura final desde o 1º quadro, então nada ao
+    // redor se mexe — a contagem antiga mudava de largura e "tremia".
+    // Roda ao abrir a área (de 0 até o valor) e sempre que o valor muda
+    // (do valor antigo para o novo, ex.: ao registrar um gasto).
+    const ODO_SEL = ".bd-kpi-value, .bf-kpi-body > strong, #bdResTotal, #bdResIn, #bdResOut";
+    const ODO_MONEY = /^([+\-−]\s?)?R\$\s?[\d.]+,\d{2}$/;
+    const odoLast = new WeakMap();
+    const odoRolling = new Map();
+    const escHtml = (t) => t.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    function odoFinish(el, text) {
+      const anims = odoRolling.get(el);
+      if (!anims) return;
+      odoRolling.delete(el);
+      anims.forEach((a) => { try { a.cancel(); } catch { /* já terminou */ } });
+      odoLast.set(el, text);
+      el.textContent = text;
+    }
+    function odoRoll(el, fromText) {
+      const to = el.textContent.replace(/\s+/g, " ").trim();
+      if (odoRolling.has(el)) odoFinish(el, to);
+      odoLast.set(el, to);
+      if (calm() || !ODO_MONEY.test(to) || !el.offsetWidth) return;
+      const cs = getComputedStyle(el);
+      const fontPx = parseFloat(cs.fontSize) || 16;
+      const lh = parseFloat(cs.lineHeight) || fontPx * 1.2;
+      if (el.scrollHeight > lh * 1.5) return; // quebrou em duas linhas: deixa quieto
+      const toDigits = [...to].filter((c) => /\d/.test(c));
+      const fromDigits = [...String(fromText || "")].filter((c) => /\d/.test(c));
+      const offset = toDigits.length - fromDigits.length; // alinha pela direita
+      let k = -1;
+      const cells = [...to].map((ch) => {
+        if (!/\d/.test(ch)) return `<span class="pn-odo-c">${ch === " " ? "&nbsp;" : escHtml(ch)}</span>`;
+        k += 1;
+        const t = Number(ch);
+        const fromIdx = k - offset;
+        const f = fromText == null ? 0 : (fromIdx >= 0 && fromDigits[fromIdx] != null ? Number(fromDigits[fromIdx]) : 0);
+        const start = f;
+        const end = fromText == null ? 10 + t : (t >= f ? t : t + 10);
+        const rows = Array.from({ length: 20 }, (_, n) => `<i>${n % 10}</i>`).join("");
+        return `<span class="pn-odo-d" data-s="${start}" data-e="${end}"><span class="pn-odo-s">${rows}</span></span>`;
+      });
+      el.classList.add("pn-odo-host");
+      el.innerHTML = `<span class="pn-odo" aria-hidden="true" style="--lh:${lh}px">${cells.join("")}</span><span class="sr-only">${escHtml(to)}</span>`;
+      const strips = [...el.querySelectorAll(".pn-odo-d")];
+      const anims = strips.map((cell, i) => {
+        const fromRow = Number(cell.dataset.s), toRow = Number(cell.dataset.e);
+        const fromRight = strips.length - 1 - i;
+        return cell.firstElementChild.animate(
+          [{ transform: `translateY(${-fromRow * lh}px)` }, { transform: `translateY(${-toRow * lh}px)` }],
+          { duration: 720 + fromRight * 70, delay: 40, easing: "cubic-bezier(.16, 1, .3, 1)", fill: "both" }
+        );
+      });
+      odoRolling.set(el, anims);
+      Promise.all(anims.map((a) => a.finished)).then(() => { if (odoRolling.get(el) === anims) odoFinish(el, to); }, () => {});
+    }
+    function odoEnter(section) {
+      if (calm() || !section) return;
+      // Depois do ajuste de tamanho da fonte do app (2 quadros).
+      setTimeout(() => section.querySelectorAll(ODO_SEL).forEach((el) => { if (el.getClientRects().length) odoRoll(el, null); }), 90);
+    }
+    const odoObserver = new MutationObserver((records) => {
+      const touched = new Set();
+      records.forEach((r) => { const host = (r.target.nodeType === 1 ? r.target : r.target.parentElement)?.closest?.(ODO_SEL); if (host) touched.add(host); });
+      touched.forEach((el) => {
+        if (odoRolling.has(el)) {
+          // O app reescreveu no meio da rolagem: termina na hora e segue.
+          if (!el.querySelector(".pn-odo")) { const now = el.textContent.trim(); const prev = odoLast.get(el); odoRolling.delete(el); odoLast.set(el, now); if (prev && prev !== now) odoRoll(el, prev); }
+          return;
+        }
+        const now = el.textContent.replace(/\s+/g, " ").trim();
+        const prev = odoLast.get(el);
+        odoLast.set(el, now);
+        if (!prev || prev === now || doc.getElementById("appLoadingOverlay")) return;
+        if (ODO_MONEY.test(prev) && ODO_MONEY.test(now) && el.getClientRects().length) odoRoll(el, prev);
+      });
+    });
+    doc.querySelectorAll(ODO_SEL).forEach((el) => {
+      odoLast.set(el, el.textContent.replace(/\s+/g, " ").trim());
+      odoObserver.observe(el, { childList: true, characterData: true, subtree: true });
+    });
+    window.pnOdoEnter = odoEnter;
+
+    // ── Tarefa concluída: faíscas na caixinha ───────────────────
+    function pnSpark(rect, { count = 10, colors = ["#25d388", "#7c6bff", "#22d3ee", "#ffc83d"] } = {}) {
+      if (calm() || !rect) return;
+      const burst = doc.createElement("div");
+      burst.className = "pn-burst";
+      burst.setAttribute("aria-hidden", "true");
+      burst.style.left = `${rect.left + rect.width / 2}px`;
+      burst.style.top = `${rect.top + rect.height / 2}px`;
+      for (let i = 0; i < count; i += 1) {
+        const dot = doc.createElement("i");
+        dot.className = "pn-burst-dot";
+        const angle = (Math.PI * 2 * i) / count + Math.random() * 0.4;
+        const dist = 22 + Math.random() * 18;
+        const size = 4 + Math.random() * 3;
+        dot.style.width = dot.style.height = `${size}px`;
+        dot.style.background = dot.style.color = colors[i % colors.length];
+        burst.append(dot);
+        dot.animate([
+          { transform: "translate(-50%, -50%) scale(.3)", opacity: 1 },
+          { transform: `translate(calc(-50% + ${Math.cos(angle) * dist}px), calc(-50% + ${Math.sin(angle) * dist}px)) scale(1)`, opacity: 0 },
+        ], { duration: 520 + Math.random() * 160, easing: "cubic-bezier(.2, .7, .3, 1)", fill: "forwards" });
+      }
+      doc.body.append(burst);
+      setTimeout(() => burst.remove(), 800);
+    }
+    window.pnSpark = pnSpark;
+    doc.addEventListener("click", (e) => {
+      const check = e.target.closest?.(".bp-check");
+      if (!check || check.classList.contains("is-done")) return; // só ao concluir
+      const id = check.closest("[data-task-id]")?.dataset.taskId;
+      const rect = check.getBoundingClientRect();
+      navigator.vibrate?.(10);
+      requestAnimationFrame(() => {
+        pnSpark(rect);
+        const fresh = id ? doc.querySelector(`[data-task-id="${CSS.escape(id)}"] .bp-check`) : null;
+        fresh?.animate?.([{ transform: "scale(.6)" }, { transform: "scale(1.18)", offset: 0.55 }, { transform: "none" }], { duration: 420, easing: "cubic-bezier(.34, 1.5, .5, 1)" });
+      });
+    }, true);
 
     // ── Entrada dos blocos ao rolar ─────────────────────────────
     const REVEAL_SEL = ".bd-card, .bn-card";
@@ -288,7 +408,7 @@
       doc.body.classList.remove("pn-scrolled", "pn-scrolling");
       requestAnimationFrame(() => requestAnimationFrame(() => doc.body.classList.remove("pn-view-switch")));
       const section = doc.getElementById(`${view}View`);
-      requestAnimationFrame(() => { armReveal(section); armSegs(section); });
+      requestAnimationFrame(() => { armReveal(section); armSegs(section); odoEnter(section); });
     }
     new MutationObserver(() => {
       const v = doc.body.dataset.activeView || doc.querySelector(".view.active-view")?.id.replace(/View$/, "");
@@ -311,8 +431,8 @@
     const overlay = doc.getElementById("appLoadingOverlay");
     const firstCount = () => {
       const section = doc.querySelector(".view.active-view");
-
       armReveal(section);
+      odoEnter(section);
     };
     if (overlay && !overlay.hidden && overlay.isConnected) {
       const mo = new MutationObserver(() => {

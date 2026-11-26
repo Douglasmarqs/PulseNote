@@ -274,3 +274,31 @@ test("Pulsinho no Início: coluna proporcional, alinhada aos cartões e com suge
   const suggest = html.slice(html.indexOf('id="bdChatSuggest"'), html.indexOf('id="pulseCommandForm"'));
   assert.doesNotMatch(suggest, /\p{Extended_Pictographic}/u);
 });
+
+test("valores em odômetro: largura fixa, rola ao abrir e ao mudar o valor", () => {
+  const js = read("src/web-motion.js");
+  const css = read("src/web.css");
+  assert.match(js, /const ODO_SEL = /);
+  assert.match(js, /function odoRoll\(el, fromText\)/);
+  assert.match(js, /odoObserver\.observe\(el, \{ childList: true, characterData: true, subtree: true \}\)/);
+  assert.match(css, /font-variant-numeric: tabular-nums;/);
+  assert.match(css, /\.pn-odo-d \{\s*overflow: hidden;/);
+  // leitor de tela continua lendo o valor certo
+  assert.match(js, /<span class="sr-only">\$\{escHtml\(to\)\}<\/span>/);
+});
+
+test("abertura: Pulsinho voa até o logo e a tela se revela em círculo", () => {
+  const app = read("src/app.js");
+  const html = read("src/index.html");
+  assert.match(app, /function playSplashExit\(overlay\)/);
+  assert.match(app, /if \(reduceMotion \|\| !playSplashExit\(overlay\)\)/);
+  assert.match(app, /overlay\.style\.setProperty\("background", "transparent", "important"\)/);
+  assert.match(html, /class="app-loading-word" aria-label="PulseNote"><span style="--i:0">P<\/span>/);
+  assert.match(html, /class="app-loading-beat"/);
+});
+
+test("tarefa concluída: faíscas na caixinha", () => {
+  const js = read("src/web-motion.js");
+  assert.match(js, /window\.pnSpark = pnSpark;/);
+  assert.match(js, /const check = e\.target\.closest\?\.\("\.bp-check"\);/);
+});
