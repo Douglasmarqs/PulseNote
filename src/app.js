@@ -3482,6 +3482,10 @@ function openPulsinhoConvo() {
   if (!chat || pulsinhoClosing || isPulsinhoConvo() || !chatIsMobile() || !document.querySelector("#dashboardView")?.contains(chat)) return;
   const teaser = pulsinhoTeaserMode();
   const from = chat.getBoundingClientRect();
+  // Onde está o Pulsinho do balão agora: ele "voa" daqui até o cabeçalho.
+  const teaserMascot = teaser ? document.querySelector(".bd-teaser-mascot") : null;
+  const mascotFrom = teaserMascot?.getBoundingClientRect() || null;
+  if (mascotFrom) pulsinhoMascotOffset = { x: mascotFrom.left - from.left, y: mascotFrom.top - from.top, w: mascotFrom.width, h: mascotFrom.height };
   // Guarda o lugar do cartão na página (nada pula por baixo).
   const placeholder = document.createElement("div");
   placeholder.id = "bdChatPlaceholder";
@@ -3511,15 +3515,15 @@ function openPulsinhoConvo() {
   requestAnimationFrame(() => {
     const to = chat.getBoundingClientRect();
     if (!to.height || reduce || typeof chat.animate !== "function") return;
-    backdrop.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 260, easing: "ease-out" });
+    if (!teaser) backdrop.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 260, easing: "ease-out" });
     if (teaser) {
       // O balão "se abre" até virar a tela de conversa: o recorte começa
       // exatamente onde o balão estava e cresce até a tela inteira.
       chat.animate([
         { clipPath: pulsinhoClipFor(from, to, 22) },
         { clipPath: "inset(0px 0px 0px 0px round 22px)" },
-      ], { duration: 460, easing: "cubic-bezier(.2,.9,.22,1)" });
-      playPulsinhoOpenChoreography(chat, from, to);
+      ], { duration: 520, easing: "cubic-bezier(.16,1,.3,1)" });
+      playPulsinhoOpenChoreography(chat, from, to, { backdrop, teaserMascot, mascotFrom });
       return;
     }
     // Cartão antigo (fora do modo balão): "levanta" de onde estava.
@@ -3532,41 +3536,110 @@ function openPulsinhoConvo() {
   updatePulsinhoSuggestions();
 }
 
-// Abertura da conversa (celular): enquanto o recorte cresce a partir do
-// balão, um brilho se espalha desse ponto, o Pulsinho dá um pulinho no
-// cabeçalho, as mensagens entram em cascata do lado de quem falou e o campo
-// de digitar sobe de baixo.
-function playPulsinhoOpenChoreography(chat, from, to) {
+// Abertura da conversa (celular) — transição de "elemento compartilhado":
+// 1. o escurecido do fundo se espalha em círculo a partir do balão;
+// 2. o Pulsinho do balão VOA em arco até o cabeçalho enquanto a tela cresce
+//    em volta dele, pousa com um leve amassar e a linha de pulso se desenha;
+// 3. nome e "Online agora" deslizam, mensagens entram em cascata do lado de
+//    quem falou, a confirmação e o campo sobem e a borda do campo acende.
+let pulsinhoMascotOffset = null;
+function pulsinhoFlyMascot(source, fromRect, toRect, { duration = 620, delay = 0, back = false } = {}) {
+  if (!source || !fromRect || !toRect || !fromRect.width || !toRect.width) return null;
+  const clone = source.cloneNode(true);
+  clone.classList.add("bd-mascot-fly");
+  clone.setAttribute("aria-hidden", "true");
+  Object.assign(clone.style, { left: `${fromRect.left}px`, top: `${fromRect.top}px`, width: `${fromRect.width}px`, height: `${fromRect.height}px`, "--s": `${fromRect.width}px` });
+  document.body.appendChild(clone);
+  const dx = toRect.left + toRect.width / 2 - (fromRect.left + fromRect.width / 2);
+  const dy = toRect.top + toRect.height / 2 - (fromRect.top + fromRect.height / 2);
+  const scale = toRect.width / fromRect.width;
+  // Arco: sobe um pouco acima da reta (como um pulo) e gira de leve.
+  const lift = Math.min(90, Math.abs(dy) * 0.22 + 26);
+  const flight = clone.animate([
+    { transform: "translate(0, 0) scale(1) rotate(0deg)" },
+    { transform: `translate(${dx * 0.5}px, ${dy * 0.5 - lift}px) scale(${((1 + scale) / 2) * 1.12}) rotate(${back ? 10 : -10}deg)`, offset: 0.5 },
+    { transform: `translate(${dx}px, ${dy}px) scale(${scale}) rotate(0deg)` },
+  ], { duration, delay, easing: "cubic-bezier(.5,0,.2,1)", fill: "both" });
+  const cleanup = () => clone.remove();
+  flight.finished.then(cleanup, cleanup);
+  return flight;
+}
+
+function playPulsinhoOpenChoreography(chat, from, to, { backdrop, teaserMascot, mascotFrom } = {}) {
   const ease = "cubic-bezier(.2,.9,.3,1)";
+  const cx = from.left + from.width / 2;
+  const cy = from.top + Math.min(from.height / 2, 60);
+  // 1. Fundo escurece espalhando-se em círculo a partir do balão.
+  if (backdrop) {
+    const r = Math.hypot(Math.max(cx, innerWidth - cx), Math.max(cy, innerHeight - cy)) + 40;
+    backdrop.animate([
+      { clipPath: `circle(0px at ${cx}px ${cy}px)`, opacity: 0.6 },
+      { clipPath: `circle(${r}px at ${cx}px ${cy}px)`, opacity: 1 },
+    ], { duration: 560, easing: "cubic-bezier(.16,1,.3,1)" });
+  }
+  // Brilho suave que nasce no balão.
   const glow = document.createElement("i");
   glow.className = "bd-chat-glow";
   glow.setAttribute("aria-hidden", "true");
-  glow.style.left = `${(from.left + from.width / 2 - to.left).toFixed(1)}px`;
-  glow.style.top = `${(from.top + from.height / 2 - to.top).toFixed(1)}px`;
+  glow.style.left = `${(cx - to.left).toFixed(1)}px`;
+  glow.style.top = `${(cy - to.top).toFixed(1)}px`;
   chat.appendChild(glow);
   glow.animate([
-    { transform: "translate(-50%, -50%) scale(.2)", opacity: 0.9 },
-    { transform: "translate(-50%, -50%) scale(3.2)", opacity: 0 },
-  ], { duration: 720, easing: "cubic-bezier(.2,.7,.3,1)", fill: "forwards" }).finished.then(() => glow.remove(), () => glow.remove());
-  chat.querySelector(":scope > .bd-chat-head")?.animate([{ opacity: 0, transform: "translateY(-10px)" }, { opacity: 1, transform: "none" }], { duration: 320, delay: 80, easing: ease, fill: "backwards" });
-  chat.querySelector(".bd-chat-mascot")?.animate([
-    { transform: "translateY(0) scale(.6) rotate(-12deg)" },
-    { transform: "translateY(-7px) scale(1.12) rotate(6deg)", offset: 0.55 },
-    { transform: "translateY(0) scale(.96) rotate(-2deg)", offset: 0.8 },
-    { transform: "none" },
-  ], { duration: 640, delay: 140, easing: "cubic-bezier(.34,1.4,.5,1)", fill: "backwards" });
+    { transform: "translate(-50%, -50%) scale(.2)", opacity: 0.85 },
+    { transform: "translate(-50%, -50%) scale(3.4)", opacity: 0 },
+  ], { duration: 760, easing: "cubic-bezier(.2,.7,.3,1)", fill: "forwards" }).finished.then(() => glow.remove(), () => glow.remove());
+
+  // 2. O Pulsinho voa do balão até o cabeçalho.
+  const avatar = chat.querySelector("#bdChatAvatar");
+  const headMascot = chat.querySelector(".bd-chat-mascot");
+  const landAt = headMascot?.getBoundingClientRect();
+  const flight = pulsinhoFlyMascot(teaserMascot, mascotFrom, landAt, { duration: 600, delay: 40 });
+  const landDelay = flight ? 620 : 120;
+  if (avatar) {
+    if (flight) avatar.animate([{ opacity: 0 }, { opacity: 0 }], { duration: landDelay });
+    // Pouso: amassa e volta (o mascote tem animação própria; mexemos no avatar).
+    avatar.animate([
+      { transform: "scale(1.18, .82)" },
+      { transform: "scale(.94, 1.06)", offset: 0.45 },
+      { transform: "none" },
+    ], { duration: 420, delay: landDelay, easing: "cubic-bezier(.34,1.5,.5,1)", fill: "backwards" });
+    const ring = document.createElement("i");
+    ring.className = "bd-chat-land-ring";
+    ring.setAttribute("aria-hidden", "true");
+    avatar.appendChild(ring);
+    ring.animate([{ transform: "scale(.6)", opacity: 0.8 }, { transform: "scale(2.1)", opacity: 0 }], { duration: 620, delay: landDelay, easing: "cubic-bezier(.2,.7,.3,1)", fill: "both" })
+      .finished.then(() => ring.remove(), () => ring.remove());
+  }
+  // Linha de pulso desenhada ao pousar.
+  const pulse = headMascot?.querySelector(".bd-mascot__pulse path");
+  if (pulse && typeof pulse.getTotalLength === "function") {
+    const len = pulse.getTotalLength();
+    pulse.animate([{ strokeDasharray: `${len}`, strokeDashoffset: `${len}` }, { strokeDasharray: `${len}`, strokeDashoffset: "0" }], { duration: 520, delay: landDelay + 60, easing: "cubic-bezier(.65,0,.35,1)", fill: "backwards" });
+  }
+  // 3. Textos do cabeçalho, botões, mensagens, confirmação e campo.
+  chat.querySelectorAll(".bd-chat-head h3, #bdChatStatus").forEach((el, index) => {
+    el.animate([{ opacity: 0, transform: "translateX(-12px)", filter: "blur(3px)" }, { opacity: 1, transform: "none", filter: "blur(0)" }], { duration: 380, delay: Math.max(0, landDelay - 140) + index * 70, easing: ease, fill: "backwards" });
+  });
+  chat.querySelectorAll(".bd-chat-head > .bd-icon-btn:not([hidden]), .bd-chat-head > .bd-chat-menu-wrap").forEach((el, index) => {
+    el.animate([{ opacity: 0, transform: "scale(.7)" }, { opacity: 1, transform: "none" }], { duration: 320, delay: 280 + index * 60, easing: "cubic-bezier(.34,1.5,.5,1)", fill: "backwards" });
+  });
   const messages = [...chat.querySelectorAll("#pulseCommandResponse > .bd-msg")].slice(-6);
-  // Folha de confirmação (quando há uma ação pendente) sobe de baixo.
-  chat.querySelector("#pulseCommandResponse .bd-confirm")?.animate([{ opacity: 0, transform: "translateY(18px)" }, { opacity: 1, transform: "none" }], { duration: 380, delay: 220, easing: ease, fill: "backwards" });
   messages.forEach((msg, index) => {
     const user = msg.classList.contains("bd-msg--user");
     msg.animate([
-      { opacity: 0, transform: `translateX(${user ? 16 : -16}px) scale(.96)` },
-      { opacity: 1, transform: "none" },
-    ], { duration: 360, delay: 160 + index * 55, easing: ease, fill: "backwards" });
+      { opacity: 0, transform: `translate(${user ? 22 : -22}px, 10px) scale(.94)`, filter: "blur(4px)" },
+      { opacity: 1, transform: "none", filter: "blur(0)" },
+    ], { duration: 420, delay: 220 + index * 70, easing: ease, fill: "backwards" });
   });
-  chat.querySelector(":scope > .bd-chat-suggest:not([hidden])")?.animate([{ opacity: 0, transform: "translateY(10px)" }, { opacity: 1, transform: "none" }], { duration: 320, delay: 260, easing: ease, fill: "backwards" });
-  chat.querySelector(":scope > .bd-chat-form")?.animate([{ opacity: 0, transform: "translateY(22px)" }, { opacity: 1, transform: "none" }], { duration: 380, delay: 180, easing: ease, fill: "backwards" });
+  // Folha de confirmação (quando há uma ação pendente) sobe de baixo.
+  chat.querySelector("#pulseCommandResponse .bd-confirm")?.animate([{ opacity: 0, transform: "translateY(24px) scale(.97)" }, { opacity: 1, transform: "none" }], { duration: 440, delay: 320 + messages.length * 50, easing: ease, fill: "backwards" });
+  chat.querySelector(":scope > .bd-chat-suggest:not([hidden])")?.animate([{ opacity: 0, transform: "translateY(12px)" }, { opacity: 1, transform: "none" }], { duration: 340, delay: 380, easing: ease, fill: "backwards" });
+  chat.querySelector(":scope > .bd-chat-form")?.animate([{ opacity: 0, transform: "translateY(28px)" }, { opacity: 1, transform: "none" }], { duration: 440, delay: 200, easing: ease, fill: "backwards" });
+  chat.querySelector(".bd-composer")?.animate([
+    { boxShadow: "0 0 0 0 rgba(106,92,255,0)" },
+    { boxShadow: "0 0 0 5px rgba(106,92,255,.35), 0 0 24px rgba(34,211,238,.25)", offset: 0.4 },
+    { boxShadow: "0 0 0 0 rgba(106,92,255,0)" },
+  ], { duration: 900, delay: 560, easing: "ease-out" });
 }
 
 function finishClosePulsinhoConvo(chat) {
@@ -3600,6 +3673,14 @@ function closePulsinhoConvo() {
     pulsinhoClosing = true;
     const box = chat.getBoundingClientRect();
     const target = placeholder.getBoundingClientRect();
+    // O Pulsinho do cabeçalho volta voando para o lugar dele no balão.
+    const headMascot = chat.querySelector(".bd-chat-mascot");
+    const off = pulsinhoMascotOffset;
+    if (headMascot && off) {
+      const mascotTo = { left: target.left + off.x, top: target.top + off.y, width: off.w, height: off.h };
+      const back = pulsinhoFlyMascot(headMascot, headMascot.getBoundingClientRect(), mascotTo, { duration: 420, back: true });
+      if (back) chat.querySelector("#bdChatAvatar")?.animate([{ opacity: 0 }, { opacity: 0 }], { duration: 460, fill: "forwards" });
+    }
     // Fecha "recolhendo": o conteúdo desce e some, o campo de digitar
     // afunda, e o recorte volta para dentro do balão.
     chat.querySelectorAll(":scope > .bd-chat-head, :scope > .bd-chat-stage, :scope > .bd-chat-suggest").forEach((part) => {

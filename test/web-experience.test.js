@@ -225,9 +225,16 @@ test("nota: Anotação e Checklist em abas separadas", () => {
 
 test("Pulsinho: abertura e fechamento com coreografia", () => {
   const app = read("src/app.js");
-  assert.match(app, /function playPulsinhoOpenChoreography\(chat, from, to\)/);
+  assert.match(app, /function playPulsinhoOpenChoreography\(chat, from, to, \{ backdrop, teaserMascot, mascotFrom \} = \{\}\)/);
   assert.match(app, /glow\.className = "bd-chat-glow";/);
   assert.match(app, /querySelector\("\.bd-teaser-mascot"\)\?\.animate\?\./);
+  // elemento compartilhado: o Pulsinho voa do balão ao cabeçalho e volta
+  assert.match(app, /function pulsinhoFlyMascot\(source, fromRect, toRect/);
+  assert.match(app, /pulsinhoFlyMascot\(teaserMascot, mascotFrom, landAt/);
+  assert.match(app, /pulsinhoFlyMascot\(headMascot, headMascot\.getBoundingClientRect\(\), mascotTo/);
+  // fundo escurece em círculo a partir do balão; pulso desenhado ao pousar
+  assert.match(app, /clipPath: `circle\(0px at \$\{cx\}px \$\{cy\}px\)`/);
+  assert.match(app, /strokeDashoffset: `\$\{len\}`/);
 });
 
 test("Pulsinho no Início: coluna proporcional, alinhada aos cartões e com sugestões", () => {
