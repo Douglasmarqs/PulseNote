@@ -243,7 +243,8 @@
       };
       requestAnimationFrame(step);
     }
-    const COUNT_SEL = ".bd-kpi-body strong, .bf-kpi-body > strong, .overview-value, .pfx-stat strong, .pfx-stat-value";
+    // (Perfil fica de fora: os números contando mexiam na largura dos cartões.)
+    const COUNT_SEL = ".bd-kpi-body strong, .bf-kpi-body > strong, .overview-value";
     function countView(view) {
       if (calm() || !view) return;
       view.querySelectorAll(COUNT_SEL).forEach((el) => { if (el.getClientRects().length) countUp(el); });
@@ -281,7 +282,9 @@
     // ── Brilho que acompanha o cursor ───────────────────────────
     // Só uma classe + duas variáveis: o brilho é um ::after do próprio
     // cartão (web.css), sem inserir nada no conteúdo que o app redesenha.
-    const SPOT_SKIP = ".bd-chat, .modal-card, .fin-form-card, .pf-hero";
+    // Cartões com gráfico ficam de fora: repintar o brilho a cada movimento
+    // do mouse forçava o gráfico inteiro a ser redesenhado e ele "engasgava".
+    const SPOT_SKIP = ".bd-chat, .modal-card, .fin-form-card, .pf-hero, .bd-evo, .bf-evo, .bd-cats, .bf-cmp, .bf-an > .bd-card";
     let spotCard = null;
     doc.addEventListener("pointermove", (e) => {
       if (!finePointer.matches || !desktop.matches || calm()) return;
@@ -313,8 +316,14 @@
       current = view;
       moveInk();
       if (desktop.matches) replay(routeBar, "run");
-      replay(title, "pn-title-in");
-      replay(subtitle, "pn-title-in");
+      // O título já anima no app.js (uma única animação, sem sumir). Aqui
+      // só garantimos que o vidro do topo some na hora — a tela nova abre
+      // no topo, e o vidro esmaecendo por 0,35s parecia uma piscada.
+      title?.classList.remove("pn-title-in");
+      subtitle?.classList.remove("pn-title-in");
+      doc.body.classList.add("pn-view-switch");
+      doc.body.classList.remove("pn-scrolled", "pn-scrolling");
+      requestAnimationFrame(() => requestAnimationFrame(() => doc.body.classList.remove("pn-view-switch")));
       const section = doc.getElementById(`${view}View`);
       requestAnimationFrame(() => { countView(section); armReveal(section); armSegs(section); cascadeRows(section, 180); });
     }
@@ -573,6 +582,98 @@
       card.classList.add("pn-tilt");
       card.style.transform = `perspective(900px) rotateX(${(-y * 6).toFixed(2)}deg) rotateY(${(x * 7).toFixed(2)}deg) translateY(-4px)`;
     }, { passive: true });
+
+    // ── Notas: comemoração ao concluir ──────────────────────────
+    // O botão afunda e volta, o check se desenha e faíscas saem dele.
+    // As faíscas ficam no <body>, então seguem visíveis mesmo se a nota
+    // fechar logo depois (celular).
+    window.pnCelebrate = (btn, { soft = false } = {}) => {
+      if (!btn || calm()) return;
+      btn.classList.remove("pn-done-pop");
+      void btn.offsetWidth;
+      btn.classList.add("pn-done-pop");
+      setTimeout(() => btn.classList.remove("pn-done-pop"), 720);
+      if (soft) return;
+      const r = btn.getBoundingClientRect();
+      const burst = doc.createElement("div");
+      burst.className = "pn-burst";
+      burst.setAttribute("aria-hidden", "true");
+      burst.style.left = `${r.left + r.width / 2}px`;
+      burst.style.top = `${r.top + r.height / 2}px`;
+      const ring = doc.createElement("i");
+      ring.className = "pn-burst-ring";
+      ring.style.width = `${r.width}px`;
+      ring.style.height = `${r.height}px`;
+      burst.append(ring);
+      const colors = ["#7c6bff", "#22d3ee", "#25d388", "#ffc83d", "#ff6b9a"];
+      const count = 14;
+      for (let i = 0; i < count; i += 1) {
+        const dot = doc.createElement("i");
+        dot.className = "pn-burst-dot";
+        const angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.5;
+        const dist = Math.max(r.width, 90) * (0.42 + Math.random() * 0.3);
+        const size = 6 + Math.random() * 5;
+        dot.style.width = dot.style.height = `${size}px`;
+        dot.style.background = colors[i % colors.length];
+        dot.style.color = colors[i % colors.length];
+        if (i % 3 === 0) dot.style.borderRadius = "2px";
+        burst.append(dot);
+        dot.animate(
+          [
+            { transform: "translate(-50%, -50%) scale(.4)", opacity: 0 },
+            { transform: `translate(calc(-50% + ${Math.cos(angle) * dist * 0.55}px), calc(-50% + ${Math.sin(angle) * dist * 0.55}px)) scale(1)`, opacity: 1, offset: 0.35 },
+            { transform: `translate(calc(-50% + ${Math.cos(angle) * dist}px), calc(-50% + ${Math.sin(angle) * dist + 18}px)) scale(.6) rotate(${Math.random() * 180}deg)`, opacity: 0 },
+          ],
+          { duration: 720 + Math.random() * 220, easing: "cubic-bezier(.2, .7, .3, 1)", fill: "forwards" }
+        );
+      }
+      ring.animate(
+        [{ transform: "translate(-50%, -50%) scale(1)", opacity: 0.7 }, { transform: "translate(-50%, -50%) scale(1.35)", opacity: 0 }],
+        { duration: 620, easing: "cubic-bezier(.2, .7, .3, 1)", fill: "forwards" }
+      );
+      doc.body.append(burst);
+      setTimeout(() => burst.remove(), 1100);
+    };
+
+    // ── Notas: ferramentas de formatação recolhíveis ────────────
+    // Ficam guardadas numa pílula "Formatar"; a setinha abre e fecha com
+    // animação, e a escolha fica lembrada.
+    const TOOLS_KEY = "pulsenote-note-tools";
+    const toolbar = doc.getElementById("noteDetailToolbar");
+    const toolRow = toolbar?.querySelector(".bn-tool-row");
+    if (toolbar && toolRow && !toolbar.querySelector(".pn-tool-toggle")) {
+      const toggleTools = doc.createElement("button");
+      toggleTools.type = "button";
+      toggleTools.className = "pn-tool-toggle";
+      toggleTools.innerHTML = '<span class="pn-tool-aa" aria-hidden="true">Aa</span><span class="pn-tool-label">Formatar texto</span><svg class="i pn-tool-chev" aria-hidden="true"><use href="#i-chev-down"/></svg>';
+      toolRow.append(toggleTools);
+      let open = false;
+      try { open = localStorage.getItem(TOOLS_KEY) === "open"; } catch { /* sem armazenamento */ }
+      const applyTools = (next, { animate = false } = {}) => {
+        const before = animate && !calm() ? toolbar.getBoundingClientRect() : null;
+        open = next;
+        toolbar.classList.toggle("is-collapsed", !open);
+        toggleTools.setAttribute("aria-expanded", String(open));
+        toggleTools.setAttribute("aria-label", open ? "Recolher ferramentas de formatação" : "Mostrar ferramentas de formatação");
+        if (before) {
+          const after = toolbar.getBoundingClientRect();
+          toolbar.animate(
+            [{ width: `${before.width}px`, height: `${before.height}px` }, { width: `${after.width}px`, height: `${after.height}px` }],
+            { duration: 340, easing: "cubic-bezier(.22, 1, .36, 1)" }
+          );
+          if (open) {
+            [...toolRow.children].filter((c) => c !== toggleTools).forEach((c, i) => {
+              c.animate([{ opacity: 0, transform: "translateY(-4px) scale(.9)" }, { opacity: 1, transform: "none" }], { duration: 260, delay: 40 + i * 18, easing: "cubic-bezier(.22, 1, .36, 1)", fill: "backwards" });
+            });
+          }
+        }
+      };
+      applyTools(open);
+      toggleTools.addEventListener("click", () => {
+        applyTools(!open, { animate: true });
+        try { localStorage.setItem(TOOLS_KEY, open ? "open" : "closed"); } catch { /* idem */ }
+      });
+    }
 
     // ── Pulsinho no Início: mesma altura dos blocos ao lado ─────
     // Começa na linha dos cartões de resumo e termina com o último bloco.

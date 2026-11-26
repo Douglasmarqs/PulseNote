@@ -32,7 +32,9 @@ test("perfil v3: compacto, útil e sem colidir com o cartão de foco do Planner"
   assert.match(view, /id="profileAchAll" hidden/, "lista completa de conquistas começa recolhida");
   assert.doesNotMatch(view, /Como ganhar XP<\/h3>/, "o quadro de XP virou dica no nível");
   for (const fn of ["pfxRenderHeatmap", "pfxAccountRows", "bindProfileV3", "pfxBestStreak"]) assert.match(app, new RegExp(`function ${fn}\\(`), fn);
-  assert.match(app, /if \(view === "profile"\) requestAnimationFrame\(pfxRenderHeatmap\);/);
+  // O mapa é desenhado no mesmo quadro em que o Perfil aparece (no quadro
+  // seguinte ele mudava de altura e a tela "tremia").
+  assert.match(app, /if \(view === "profile"\) pfxRenderHeatmap\(\);/);
   assert.match(css, /prefers-reduced-motion/);
   assert.match(html, /href="\/src\/profile-v3\.css\?v=\d+"/);
   assert.match(read("src/sw.js"), /"\/src\/profile-v3\.css"/);

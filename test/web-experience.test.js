@@ -123,6 +123,41 @@ test("moldura sem riscas: barra lateral e topo sem linhas, sem letrinhas de atal
   assert.match(js, /aria-keyshortcuts", `G \$\{key\.toUpperCase\(\)\}`/);
 });
 
+test("troca de tela sem piscar: título nunca some e só uma animação", () => {
+  const app = read("src/app.js");
+  const js = read("src/web-motion.js");
+  assert.match(app, /\{ opacity: 0\.55, transform: `translate3d\(\$\{dx \/ 3\}px/);
+  assert.doesNotMatch(js, /replay\(title, "pn-title-in"\)/);
+  assert.match(js, /classList\.add\("pn-view-switch"\)/);
+});
+
+test("Perfil abre estável: mapa desenhado no mesmo quadro e sem números contando", () => {
+  const app = read("src/app.js");
+  const js = read("src/web-motion.js");
+  assert.match(app, /if \(view === "profile"\) pfxRenderHeatmap\(\);/);
+  assert.doesNotMatch(js, /COUNT_SEL = "[^"]*pfx-stat/);
+});
+
+test("nota aberta: concluir comemora, ferramentas recolhem e checklist renovado", () => {
+  const app = read("src/app.js");
+  const js = read("src/web-motion.js");
+  const css = read("src/web.css");
+  assert.match(app, /window\.pnCelebrate\(document\.querySelector\("#ndSaveBtn"\)\);\s*setTimeout\(\(\) => \{ saveNoteDetail\.closing = false; closeNoteDetail\(\); \}, 380\);/);
+  assert.match(js, /window\.pnCelebrate = /);
+  assert.match(js, /const TOOLS_KEY = "pulsenote-note-tools"/);
+  assert.match(css, /\.bn-toolbar\.is-collapsed \.bn-tool-row > :not\(\.pn-tool-toggle\)/);
+  assert.match(css, /@keyframes pnCheckDraw/);
+});
+
+test("gráfico de evolução: leitura ao passar o mouse sem redesenhar e sem brilho pesado", () => {
+  const app = read("src/app.js");
+  const js = read("src/web-motion.js");
+  assert.match(app, /function bindBalanceChartHover\(host\)/);
+  assert.match(app, /if \(!frame\) frame = requestAnimationFrame\(paint\);/);
+  assert.match(app, /class="pn-chart-tip"/);
+  assert.match(js, /SPOT_SKIP = "[^"]*\.bd-evo, \.bf-evo/);
+});
+
 test("Pulsinho no Início: coluna proporcional, alinhada aos cartões e com sugestões", () => {
   const css = read("src/web.css");
   const js = read("src/web-motion.js");

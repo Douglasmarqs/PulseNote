@@ -445,6 +445,8 @@
           mask-image: linear-gradient(180deg, #000 0, #000 calc(100% - 30px), transparent 100%);
 }
 body.pn-scrolled .bd-topbar::before { opacity: 1; }
+/* Troca de tela: o vidro e o fio somem sem transição (sem "piscada") */
+body.pn-view-switch .bd-topbar::before, body.pn-view-switch .pn-scroll-line { transition: none !important; }
 body.pn-scrolled .bd-topbar::after { content: none !important; }
 .pn-scroll-line { transition: opacity .45s ease !important; }
 body.pn-scrolled:not(.pn-scrolling) .pn-scroll-line { opacity: 0 !important; }
@@ -467,6 +469,136 @@ body.pn-scrolled:not(.pn-scrolling) .pn-scroll-line { opacity: 0 !important; }
       color-mix(in srgb, var(--bd-side) 0%, transparent) 100%) !important;
   }
   .bd-sidebar::before { content: none !important; }
+}
+
+/* ==========================================================================
+   NOTA ABERTA — ferramentas recolhíveis, checklist renovado e "Concluir"
+   ========================================================================== */
+/* Pílula "Formatar texto" com setinha */
+.pn-tool-toggle {
+  display: inline-flex; align-items: center; gap: 7px; flex: none;
+  height: 34px; margin-left: auto; padding: 0 10px; border: 0; border-radius: 11px;
+  background: transparent; color: var(--bd-text-2); font: inherit; font-size: 12.5px; font-weight: 650; cursor: pointer;
+  transition: background .2s, color .2s;
+}
+.bn-detail .bn-tool-row .pn-tool-toggle { display: inline-flex !important; align-items: center; width: auto !important; min-width: 34px; flex: none !important; white-space: nowrap; }
+.pn-tool-toggle:hover { background: color-mix(in srgb, var(--bd-primary) 10%, transparent); color: var(--bd-text); }
+.pn-tool-toggle:focus-visible { outline: 0; box-shadow: var(--bd-focus); }
+.pn-tool-aa { display: none; font-weight: 800; color: var(--bd-violet); letter-spacing: -.02em; }
+.pn-tool-label { display: none; }
+.pn-tool-chev { width: 16px !important; height: 16px !important; transform: rotate(180deg); transition: transform .35s cubic-bezier(.34, 1.4, .5, 1); }
+.bn-detail .bn-toolbar { overflow: hidden; }
+.bn-detail .bn-toolbar.is-collapsed { width: fit-content; max-width: calc(100% - 28px); padding: 3px; border-radius: 13px; }
+.bn-toolbar.is-collapsed .bn-tool-row > :not(.pn-tool-toggle),
+.bn-toolbar.is-collapsed .bn-tool-panel { display: none !important; }
+.bn-toolbar.is-collapsed + .bn-link-form { display: none !important; }
+.bn-toolbar.is-collapsed .bn-tool-row { justify-content: flex-start; }
+.bn-toolbar.is-collapsed .pn-tool-toggle { margin-left: 0; padding: 0 12px; color: var(--bd-text); }
+.bn-toolbar.is-collapsed .pn-tool-aa, .bn-toolbar.is-collapsed .pn-tool-label { display: inline; }
+.bn-toolbar.is-collapsed .pn-tool-chev { transform: none; }
+
+/* Checklist dentro da nota */
+.bn-detail .bn-check {
+  gap: 10px; margin-top: 8px; padding: 14px 14px 12px;
+  border: 1px solid var(--bd-line); border-radius: 16px;
+  background: color-mix(in srgb, var(--bd-card-2) 55%, transparent);
+}
+.bn-detail .bn-check-head { align-items: center; font-size: 13.5px; }
+.bn-detail .bn-check-head span:first-child { display: inline-flex; align-items: center; gap: 8px; }
+.bn-detail .bn-check-head span:first-child::before {
+  content: ""; width: 18px; height: 18px; border-radius: 6px; flex: none;
+  background: linear-gradient(135deg, var(--bd-primary-2), var(--bd-cyan));
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3.5' y='3.5' width='17' height='17' rx='5'/%3E%3Cpath d='M8 12.3l2.7 2.7L16 9.5'/%3E%3C/svg%3E") center / contain no-repeat;
+          mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3.5' y='3.5' width='17' height='17' rx='5'/%3E%3Cpath d='M8 12.3l2.7 2.7L16 9.5'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+.bn-detail .bn-check-head span:last-child {
+  padding: 3px 9px; border-radius: 99px; font-size: 12px; font-weight: 650;
+  background: color-mix(in srgb, var(--bd-primary) 12%, transparent); color: var(--bd-primary-ink);
+}
+.bn-detail .bn-check-track { height: 8px; background: color-mix(in srgb, var(--bd-text) 9%, transparent); }
+.bn-detail .bn-check-track span {
+  position: relative; background: linear-gradient(90deg, var(--bd-primary-2), var(--bd-cyan));
+  transition: width .55s cubic-bezier(.22, 1, .36, 1); box-shadow: 0 0 12px color-mix(in srgb, var(--bd-cyan) 45%, transparent);
+}
+.bn-detail .bn-check.is-complete .bn-check-track span { background: linear-gradient(90deg, #1fbf7a, #3be0a0); box-shadow: 0 0 14px rgba(37, 211, 136, .5); }
+.bn-detail .bn-check.is-complete .bn-check-head span:last-child { background: var(--bd-green-soft); color: var(--bd-green); }
+.bn-detail .bn-check-items { gap: 2px; }
+.bn-detail .bn-check-row { border-radius: 12px; transition: background .2s, opacity .3s; }
+.bn-detail .bn-check-row:hover { background: color-mix(in srgb, var(--bd-text) 4%, transparent); }
+.bn-detail .bn-check-row.is-done { opacity: .72; }
+/* Caixinha redonda com check que se desenha */
+.bn-detail .bn-check-box {
+  width: 22px; height: 22px; border-radius: 50%; border: 2px solid color-mix(in srgb, var(--bd-text-3) 80%, transparent);
+  transition: background .25s, border-color .25s, box-shadow .3s, transform .3s cubic-bezier(.34, 1.5, .5, 1);
+}
+.bn-detail .bn-check-toggle:hover .bn-check-box { border-color: var(--bd-primary-2); transform: scale(1.06); }
+.bn-detail .bn-check-row.is-done .bn-check-box {
+  background: linear-gradient(135deg, var(--bd-primary-2), var(--bd-primary));
+  border-color: transparent; box-shadow: 0 4px 12px -4px var(--bd-primary);
+}
+.bn-detail .bn-check-row.is-done .bn-check-box .i { stroke-dasharray: 22; animation: pnCheckDraw .4s cubic-bezier(.65, 0, .35, 1) .05s backwards; }
+@keyframes pnCheckDraw { from { stroke-dashoffset: 22; } to { stroke-dashoffset: 0; } }
+.bn-detail .bn-check-row.is-done .bn-check-text { text-decoration-thickness: 1.5px; }
+/* Campo de novo item */
+.bn-detail .bn-check-add {
+  align-items: center; margin-top: 2px; padding: 4px 4px 4px 12px;
+  border: 1px dashed var(--bd-line-strong); border-radius: 12px; transition: border-color .2s, background .2s, box-shadow .2s;
+}
+.bn-detail .bn-check-add:focus-within { border-style: solid; border-color: color-mix(in srgb, var(--bd-primary) 55%, var(--bd-line)); background: var(--bd-card); box-shadow: var(--bd-focus); }
+.bn-detail .bn-check-add input { height: 34px; padding: 0; border: 0 !important; background: transparent !important; box-shadow: none !important; }
+.bn-detail .bn-check-add .bd-icon-btn {
+  width: 32px; height: 32px; border-radius: 10px; background: color-mix(in srgb, var(--bd-primary) 14%, transparent) !important; color: var(--bd-primary-ink);
+  transition: transform .3s cubic-bezier(.34, 1.5, .5, 1), background .2s;
+}
+.bn-detail .bn-check-add .bd-icon-btn:hover { transform: rotate(90deg); }
+
+/* "Concluir": o botão afunda e volta, o check se desenha */
+.pn-done-pop { animation: pnDonePop .62s cubic-bezier(.34, 1.5, .5, 1); }
+.pn-done-pop .i { stroke-dasharray: 22; animation: pnCheckDraw .45s cubic-bezier(.65, 0, .35, 1) .08s backwards; }
+@keyframes pnDonePop {
+  0% { transform: scale(1); }
+  25% { transform: scale(.92); }
+  60% { transform: scale(1.05); box-shadow: 0 0 0 6px color-mix(in srgb, var(--bd-primary) 18%, transparent), 0 14px 30px -12px var(--bd-primary); }
+  100% { transform: scale(1); }
+}
+.pn-burst { position: fixed; z-index: 9999; width: 0; height: 0; pointer-events: none; }
+.pn-burst-dot { position: absolute; left: 0; top: 0; border-radius: 50%; box-shadow: 0 0 10px currentColor; filter: saturate(1.3) brightness(1.15); }
+.pn-burst-ring { position: absolute; left: 0; top: 0; border-radius: 16px; border: 2px solid color-mix(in srgb, var(--bd-primary-2) 80%, transparent); }
+
+/* ==========================================================================
+   GRÁFICO "EVOLUÇÃO DO SALDO" — linha que se desenha e leitura ao passar
+   o mouse (linha-guia, ponto e etiqueta). Início e Finanças.
+   ========================================================================== */
+[data-pn-chart] { position: relative; cursor: crosshair; touch-action: pan-y; }
+[data-pn-chart] .line { filter: drop-shadow(0 4px 10px color-mix(in srgb, var(--bd-cyan) 45%, transparent)); }
+[data-pn-chart] svg.is-drawing .line { stroke-dasharray: 1; animation: pnLineDraw 1s cubic-bezier(.65, 0, .35, 1) both; }
+[data-pn-chart] svg.is-drawing .area { animation: pnFadeIn .8s ease .35s both; }
+[data-pn-chart] svg.is-drawing .dot, [data-pn-chart] svg.is-drawing .tip { animation: pnPopIn .45s cubic-bezier(.34, 1.5, .5, 1) .85s both; }
+@keyframes pnLineDraw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@keyframes pnPopIn { from { opacity: 0; transform: scale(.6); } to { opacity: 1; transform: none; } }
+[data-pn-chart] svg .dot, [data-pn-chart] svg .tip { transform-box: fill-box; transform-origin: center; transition: opacity .2s; }
+[data-pn-chart] .hover { opacity: 0; transition: opacity .18s; pointer-events: none; }
+[data-pn-chart] .hover .guide { stroke: color-mix(in srgb, var(--bd-cyan) 55%, transparent); stroke-width: 1.2; stroke-dasharray: 3 4; }
+[data-pn-chart] .hover .hdot { fill: var(--bd-cyan); stroke: var(--bd-card); stroke-width: 2.5; filter: drop-shadow(0 0 8px var(--bd-cyan)); }
+[data-pn-chart].is-hovering .hover { opacity: 1; }
+[data-pn-chart].is-hovering svg .tip, [data-pn-chart].is-hovering svg .dot { opacity: .25; }
+.pn-chart-tip {
+  position: absolute; left: 0; top: 0; z-index: 5; display: grid; gap: 1px; min-width: 128px; padding: 7px 11px 8px;
+  border: 1px solid color-mix(in srgb, var(--bd-cyan) 45%, var(--bd-line)); border-radius: 12px;
+  background: color-mix(in srgb, var(--bd-card) 92%, transparent);
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+  box-shadow: 0 14px 30px -16px rgba(0, 0, 0, .55); pointer-events: none; white-space: nowrap;
+  opacity: 0; transition: opacity .18s, transform .16s cubic-bezier(.22, 1, .36, 1);
+}
+[data-pn-chart].is-hovering .pn-chart-tip { opacity: 1; }
+.pn-chart-tip small { font-size: 11px; font-weight: 600; color: var(--bd-text-3); }
+.pn-chart-tip strong { font-size: 14px; font-weight: 750; color: var(--bd-text); letter-spacing: -.01em; }
+.pn-chart-tip em { font-style: normal; font-size: 11.5px; font-weight: 650; color: var(--bd-text-3); }
+.pn-chart-tip em.up { color: var(--bd-green); }
+.pn-chart-tip em.down { color: var(--bd-red); }
+@media (prefers-reduced-motion: reduce) {
+  [data-pn-chart] svg.is-drawing .line, [data-pn-chart] svg.is-drawing .area, [data-pn-chart] svg.is-drawing .dot, [data-pn-chart] svg.is-drawing .tip { animation: none !important; }
+  .pn-chart-tip { transition: opacity .1s; }
 }
 
 /* ---------- Configurações: escolha de movimento ---------- */

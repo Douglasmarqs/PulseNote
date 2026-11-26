@@ -4724,7 +4724,9 @@ function setView(view, { fromHistory = false } = {}) {
     if (previousView !== view) finPlayEntrance();
   }
   // Perfil: o mapa de atividade precisa da largura real (a tela estava oculta).
-  if (view === "profile") requestAnimationFrame(pfxRenderHeatmap);
+  // Desenha já, no mesmo quadro em que a tela aparece: no quadro seguinte
+  // o mapa mudava de altura e empurrava o resto (o "tremido" do Perfil).
+  if (view === "profile") pfxRenderHeatmap();
   if (view === "dashboard") fitCurrencyValues("summaryFinSaldo", "dashFinReceitas", "dashFinDespesas", "dashFinSaldo");
   if (view === "autopilot" || view === "dashboard") autopilotUi.show();
   if (previousView !== view) {
@@ -4755,7 +4757,9 @@ function animateViewEntrance(target, fromView, toView) {
   const to = VIEW_ORDER[toView];
   const lateral = from !== undefined && to !== undefined && from !== to;
   const dx = lateral ? (to > from ? 14 : -14) : 0;
-  const dy = lateral ? 0 : 10;
+  // Telas fora da barra (Perfil, Configurações) só sobem 4px: com 10px
+  // parecia que a tela ainda estava se acomodando.
+  const dy = lateral ? 0 : 4;
   const wrapper = target.children.length === 1 ? target.firstElementChild : target;
   const blocks = [...wrapper.children].filter((el) => el.getClientRects().length && getComputedStyle(el).position !== "fixed");
   target.classList.add("pn-entering");
@@ -4770,9 +4774,13 @@ function animateViewEntrance(target, fromView, toView) {
   });
   const done = () => target.classList.remove("pn-entering");
   if (last) last.finished.then(done, done); else done();
-  // Título e subtítulo trocam junto, sem "piscar".
-  [elements.viewTitle, document.querySelector("#viewSubtitle")].forEach((el, index) => {
-    el?.animate?.([{ opacity: 0, transform: `translate3d(${dx / 3}px, ${lateral ? 0 : 4}px, 0)` }, { opacity: 1, transform: "none" }], { duration: 240, delay: index * 30, easing, fill: "backwards" });
+  // Título e subtítulo trocam junto, sem "piscar": o texto novo já entra
+  // visível (nunca vai a zero) e só desliza de leve até o lugar. Antes ele
+  // sumia por completo e ainda havia uma segunda animação por cima
+  // (web.css), o que dava um piscão duplo no topo do celular.
+  [elements.viewTitle, document.querySelector("#viewSubtitle")].forEach((el) => {
+    el?.getAnimations?.().forEach((a) => a.cancel());
+    el?.animate?.([{ opacity: 0.55, transform: `translate3d(${dx / 3}px, ${lateral ? 0 : 3}px, 0)` }, { opacity: 1, transform: "none" }], { duration: 220, easing });
   });
 }
 
@@ -9981,10 +9989,20 @@ function saveNoteDetail() {
     }
     if (changed) requestAnimationFrame(() => { renderNotes(); });
     const button = document.querySelector("#ndSaveBtn");
-    if (!prefersReducedMotion()) button?.animate?.([{ transform: "scale(1)" }, { transform: "scale(.96)" }, { transform: "scale(1)" }], { duration: 220, easing: "ease-out" });
+    if (typeof window.pnCelebrate === "function") window.pnCelebrate(button, { soft: !changed });
+    else if (!prefersReducedMotion()) button?.animate?.([{ transform: "scale(1)" }, { transform: "scale(.96)" }, { transform: "scale(1)" }], { duration: 220, easing: "ease-out" });
     return;
   }
   clearTimeout(ndAutosaveTimer);
+  // "Concluir": o botão comemora (check desenhado + faíscas) e a nota fecha
+  // logo em seguida, para a animação ser vista antes de voltar à lista.
+  if (typeof window.pnCelebrate === "function" && !prefersReducedMotion()) {
+    if (saveNoteDetail.closing) return;
+    saveNoteDetail.closing = true;
+    window.pnCelebrate(document.querySelector("#ndSaveBtn"));
+    setTimeout(() => { saveNoteDetail.closing = false; closeNoteDetail(); }, 380);
+    return;
+  }
   closeNoteDetail();
 }
 let ndAutosaveTimer = 0;
@@ -13273,16 +13291,83 @@ function drawBalanceChart(host, range, gradientId) {
   // Etiqueta à esquerda da bolinha; acima dela quando há espaço, senão abaixo.
   const tipX = Math.min(Math.max(last[0] - tipW - 10, pad.left), width - tipW - 4);
   const tipY = last[1] - 34 >= 2 ? last[1] - 34 : Math.min(last[1] + 12, height - pad.bottom - 24);
-  host.innerHTML = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" preserveAspectRatio="none" overflow="visible">
+  // A linha se desenha (e a área aparece) só quando o período muda ou na
+  // primeira vez — redimensionar a janela não repete a animação.
+  const drawIn = host.dataset.pnRange !== String(range);
+  host.dataset.pnRange = String(range);
+  host.dataset.pnChart = "";
+  host.innerHTML = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" preserveAspectRatio="none" overflow="visible"${drawIn ? ' class="is-drawing"' : ""}>
     <defs><linearGradient id="${gradientId}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#22d3ee" stop-opacity=".38"/><stop offset="1" stop-color="#22d3ee" stop-opacity="0"/></linearGradient></defs>
     <g class="grid">${grid}</g>
-    <path d="${area}" fill="url(#${gradientId})"/>
-    <path class="line" d="${line}"/>
+    <path class="area" d="${area}" fill="url(#${gradientId})"/>
+    <path class="line" d="${line}" pathLength="1"/>
     ${xLabels}
     <g class="tip"><rect x="${tipX.toFixed(1)}" y="${tipY.toFixed(1)}" width="${tipW.toFixed(1)}" height="24" rx="8"/><text x="${(tipX + tipW / 2).toFixed(1)}" y="${(tipY + 16).toFixed(1)}" text-anchor="middle">${escapeHtml(tipText)}</text></g>
     <circle class="dot" cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="4.5"/>
-  </svg>`;
+    <g class="hover" aria-hidden="true"><line class="guide" x1="0" x2="0" y1="${pad.top}" y2="${(pad.top + plotH).toFixed(1)}"/><circle class="hdot" cx="0" cy="0" r="5.5"/></g>
+  </svg><div class="pn-chart-tip" aria-hidden="true"><small></small><strong></strong><em></em></div>`;
   host.setAttribute("aria-label", `Evolução do saldo: ${tipText} hoje`);
+  host.__pnChart = { coords, series, monthly, padLeft: pad.left, plotW, plotTop: pad.top, plotH, width };
+  bindBalanceChartHover(host);
+}
+
+// Passar o mouse (ou o dedo) no gráfico: uma linha-guia e um ponto correm
+// até o dia mais próximo e uma etiqueta mostra data, saldo e a variação do
+// dia. Tudo é só mover elementos já desenhados (nada de redesenhar o SVG
+// a cada movimento), num quadro de animação por vez.
+function bindBalanceChartHover(host) {
+  if (host.dataset.pnHover) return;
+  host.dataset.pnHover = "1";
+  let frame = 0;
+  let lastIndex = -1;
+  let pointerX = 0;
+  const hide = () => {
+    cancelAnimationFrame(frame);
+    frame = 0;
+    lastIndex = -1;
+    host.classList.remove("is-hovering");
+  };
+  const paint = () => {
+    frame = 0;
+    const chart = host.__pnChart;
+    const svg = host.querySelector("svg");
+    if (!chart || !svg) return;
+    const n = chart.series.length;
+    const rel = Math.min(1, Math.max(0, (pointerX - chart.padLeft) / (chart.plotW || 1)));
+    const index = n === 1 ? 0 : Math.round(rel * (n - 1));
+    host.classList.add("is-hovering");
+    if (index === lastIndex) return;
+    lastIndex = index;
+    const [cx, cy] = chart.coords[index];
+    const guide = svg.querySelector(".hover .guide");
+    const dot = svg.querySelector(".hover .hdot");
+    guide?.setAttribute("x1", cx.toFixed(1));
+    guide?.setAttribute("x2", cx.toFixed(1));
+    dot?.setAttribute("cx", cx.toFixed(1));
+    dot?.setAttribute("cy", cy.toFixed(1));
+    const tip = host.querySelector(".pn-chart-tip");
+    if (!tip) return;
+    const point = chart.series[index];
+    const prev = chart.series[index - 1];
+    const delta = prev ? point.value - prev.value : 0;
+    const [yy, mm, dd] = point.date.split("-").map(Number);
+    tip.querySelector("small").textContent = chart.monthly ? `${BD_MONTHS[mm - 1]} de ${yy}` : `${dd} de ${BD_MONTHS[mm - 1]}`;
+    tip.querySelector("strong").textContent = formatCurrency(point.value);
+    const em = tip.querySelector("em");
+    em.textContent = delta ? `${delta > 0 ? "+" : "−"}${formatCurrency(Math.abs(delta))} ${chart.monthly ? "no mês" : "no dia"}` : (chart.monthly ? "sem variação no mês" : "sem movimento no dia");
+    em.className = delta > 0 ? "up" : delta < 0 ? "down" : "";
+    const tipW = tip.offsetWidth || 140;
+    const left = Math.min(Math.max(cx - tipW / 2, 0), chart.width - tipW);
+    const top = Math.max(0, cy - tip.offsetHeight - 14);
+    tip.style.transform = `translate(${left.toFixed(1)}px, ${top.toFixed(1)}px)`;
+  };
+  host.addEventListener("pointermove", (event) => {
+    const rect = host.getBoundingClientRect();
+    pointerX = event.clientX - rect.left;
+    if (!frame) frame = requestAnimationFrame(paint);
+  }, { passive: true });
+  host.addEventListener("pointerleave", hide, { passive: true });
+  host.addEventListener("pointercancel", hide, { passive: true });
 }
 
 function renderFinSaldoEvolution() {
