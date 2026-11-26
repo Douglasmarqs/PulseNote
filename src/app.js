@@ -3565,8 +3565,18 @@ function pulsinhoFlyMascot(source, fromRect, toRect, { duration = 620, delay = 0
   return flight;
 }
 
+// Cancela só os efeitos criados por código (WAAPI) dentro da conversa —
+// as animações de CSS do mascote (piscar, respirar) continuam.
+function clearPulsinhoScriptedAnimations(chat) {
+  chat?.getAnimations?.({ subtree: true }).forEach((item) => {
+    const isCss = (typeof CSSAnimation !== "undefined" && item instanceof CSSAnimation) || (typeof CSSTransition !== "undefined" && item instanceof CSSTransition);
+    if (!isCss) item.cancel();
+  });
+}
+
 function playPulsinhoOpenChoreography(chat, from, to, { backdrop, teaserMascot, mascotFrom } = {}) {
   const ease = "cubic-bezier(.2,.9,.3,1)";
+  clearPulsinhoScriptedAnimations(chat.querySelector(".bd-chat-head"));
   const cx = from.left + from.width / 2;
   const cy = from.top + Math.min(from.height / 2, 60);
   // 1. Fundo escurece espalhando-se em círculo a partir do balão.
@@ -3679,7 +3689,9 @@ function closePulsinhoConvo() {
     if (headMascot && off) {
       const mascotTo = { left: target.left + off.x, top: target.top + off.y, width: off.w, height: off.h };
       const back = pulsinhoFlyMascot(headMascot, headMascot.getBoundingClientRect(), mascotTo, { duration: 420, back: true });
-      if (back) chat.querySelector("#bdChatAvatar")?.animate([{ opacity: 0 }, { opacity: 0 }], { duration: 460, fill: "forwards" });
+      // Sem "fill: forwards": um efeito preso no fim deixava o Pulsinho do
+      // cabeçalho invisível para sempre (sumia na próxima abertura).
+      if (back) chat.querySelector("#bdChatAvatar")?.animate([{ opacity: 0 }, { opacity: 0 }], { duration: 460, id: "pn-avatar-hide" });
     }
     // Fecha "recolhendo": o conteúdo desce e some, o campo de digitar
     // afunda, e o recorte volta para dentro do balão.
@@ -3695,6 +3707,7 @@ function closePulsinhoConvo() {
       pulsinhoClosing = false;
       chat.getAnimations?.().forEach((item) => item.cancel());
       chat.querySelectorAll(":scope > *").forEach((part) => part.getAnimations?.().forEach((item) => item.cancel()));
+      clearPulsinhoScriptedAnimations(chat);
       finishClosePulsinhoConvo(chat);
       // O balão "recebe" a conversa de volta: encolhe e volta com mola, e o
       // Pulsinho do balão dá um pulinho.
