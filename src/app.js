@@ -6187,7 +6187,12 @@ function paintBoardsCategories(previewIndex) {
          <strong>${escapeHtml(formatCurrency(total))}</strong>
          <span>${count} lançamento${count === 1 ? "" : "s"}</span>`;
     center.setAttribute("aria-label", row ? "Voltar ao total do mês" : `Total gasto no mês: ${formatCurrency(total)}`);
-    if (!prefersReducedMotion()) center.animate?.([{ opacity: 0, transform: "scale(.92)" }, { opacity: 1, transform: "scale(1)" }], { duration: 220, easing: "cubic-bezier(.2,.9,.3,1)" });
+    // Troca suave do centro: o conteúdo novo entra já meio visível (sem
+    // apagar e acender), e uma troca rápida cancela a anterior.
+    if (!prefersReducedMotion()) {
+      center.getAnimations?.().forEach((a) => a.cancel());
+      center.animate?.([{ opacity: 0.4, transform: "scale(.95)" }, { opacity: 1, transform: "scale(1)" }], { duration: 200, easing: "cubic-bezier(.2,.9,.3,1)" });
+    }
   }
   if (insight && insight.dataset.key !== key) {
     insight.dataset.key = key;
@@ -6216,17 +6221,31 @@ function bindBoardsCategories() {
   host.dataset.bound = "1";
   const fine = () => window.matchMedia?.("(hover: hover) and (pointer: fine)").matches;
   host.addEventListener("click", (event) => {
+    previewIndex = undefined; // o clique redesenha; a próxima prévia sempre pinta
     if (event.target.closest("[data-cats-clear]")) { bdCatsSelected = null; paintBoardsCategories(null); return; }
     const target = event.target.closest("[data-cat-index]");
     if (target) selectBoardsCategory(Number(target.dataset.catIndex));
   });
   // Prévia ao passar o mouse (só com mouse de verdade; no toque vale o toque).
+  // Nos vãos entre as fatias (ou entre as linhas da lista) a prévia espera um
+  // instante antes de voltar ao total: passar de uma fatia para a vizinha não
+  // pisca mais "Total gasto" no meio do caminho.
+  let revertTimer = 0;
+  let previewIndex = null;
+  const preview = (index) => {
+    clearTimeout(revertTimer);
+    if (index === previewIndex) return;
+    previewIndex = index;
+    paintBoardsCategories(index);
+  };
   host.addEventListener("pointerover", (event) => {
     if (!fine()) return;
     const target = event.target.closest("[data-cat-index]");
-    paintBoardsCategories(target ? Number(target.dataset.catIndex) : null);
+    if (target) { preview(Number(target.dataset.catIndex)); return; }
+    clearTimeout(revertTimer);
+    revertTimer = setTimeout(() => preview(null), 180);
   });
-  host.addEventListener("pointerleave", () => { if (fine()) paintBoardsCategories(null); });
+  host.addEventListener("pointerleave", () => { if (fine()) { clearTimeout(revertTimer); preview(null); } });
   host.addEventListener("keydown", (event) => {
     const row = event.target.closest(".bd-cat-row");
     if (!row) return;

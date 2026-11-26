@@ -601,6 +601,28 @@ body.pn-scrolled:not(.pn-scrolling) .pn-scroll-line { opacity: 0 !important; }
   .pn-chart-tip { transition: opacity .1s; }
 }
 
+/* ==========================================================================
+   GRÁFICO REDONDO "GASTOS POR CATEGORIA"
+   A fatia ativa se destaca sem mover a área de clique (antes o grupo todo
+   andava 6px e o cursor perdia a fatia na borda: ela ia e voltava sem
+   parar). O texto de baixo tem altura fixa para o cartão não mudar de
+   tamanho a cada fatia.
+   ========================================================================== */
+.bd-donut-seg-g.is-active { transform: none !important; }
+.bd-donut-seg { transform-box: view-box; transform-origin: center; transition: stroke-width .3s cubic-bezier(.34, 1.4, .5, 1), filter .3s ease, transform .35s cubic-bezier(.34, 1.4, .5, 1) !important; }
+.bd-donut-seg-g.is-active .bd-donut-seg { transform: translate(var(--dx), var(--dy)); }
+.bd-donut-seg-g { transition: opacity .25s ease !important; }
+.bd-cats-insight { min-height: 52px; align-items: center; }
+.bd-cats-insight span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.bd-cat-row { transition: opacity .25s ease, background .2s ease, transform .3s cubic-bezier(.22, 1, .36, 1); }
+@media (hover: hover) and (pointer: fine) {
+  .bd-cat-row.is-active { transform: translateX(3px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bd-donut-seg-g.is-active .bd-donut-seg { transform: none; }
+  .bd-cat-row.is-active { transform: none; }
+}
+
 /* ---------- Configurações: escolha de movimento ---------- */
 .pn-motion-row {
   display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;

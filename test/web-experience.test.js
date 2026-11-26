@@ -158,6 +158,20 @@ test("gráfico de evolução: leitura ao passar o mouse sem redesenhar e sem bri
   assert.match(js, /SPOT_SKIP = "[^"]*\.bd-evo, \.bf-evo/);
 });
 
+test("gráfico redondo: fatia ativa não move a área de clique e não pisca", () => {
+  const app = read("src/app.js");
+  const css = read("src/web.css");
+  // só o traço visível se desloca; o grupo (com a área de clique) fica parado
+  assert.match(css, /\.bd-donut-seg-g\.is-active \{ transform: none !important; \}/);
+  assert.match(css, /\.bd-donut-seg-g\.is-active \.bd-donut-seg \{ transform: translate\(var\(--dx\), var\(--dy\)\); \}/);
+  // vãos entre fatias esperam antes de voltar ao total
+  assert.match(app, /revertTimer = setTimeout\(\(\) => preview\(null\), 180\);/);
+  // centro troca sem apagar
+  assert.match(app, /\{ opacity: 0\.4, transform: "scale\(\.95\)" \}/);
+  // texto de baixo com altura fixa
+  assert.match(css, /\.bd-cats-insight \{ min-height: 52px;/);
+});
+
 test("Pulsinho no Início: coluna proporcional, alinhada aos cartões e com sugestões", () => {
   const css = read("src/web.css");
   const js = read("src/web-motion.js");
