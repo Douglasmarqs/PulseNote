@@ -13,7 +13,7 @@ test("evolução do saldo oferece gráfico acessível e intervalos de período",
     assert.match(html, new RegExp(`<button type="button" data-range="${range}"`));
   }
   assert.match(html, /id="pulseForecastDetailModal"/);
-  assert.match(app, /function renderBoardsEvolution\(\)/);
+  assert.match(app, /function renderBoardsEvolution\(opts = \{\}\)/);
   assert.match(app, /host\.setAttribute\("aria-label"/);
 });
 

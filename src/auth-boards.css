@@ -149,3 +149,8 @@ body.bda {
 /* v26: sem zoom (pinça e toque duplo) */
 html, body { touch-action: manipulation; -webkit-text-size-adjust: 100%; }
 @media (max-width: 760px) { input, select, textarea { font-size: max(16px, 1em); } }
+
+/* Fluidez: a mudança de forma do Pulsinho (recalculada a cada quadro)
+   sai; o pulinho dele continua. */
+@keyframes pulsinhoMorph { 0%, 100% { opacity: 1; } }
+button, a, [role="button"] { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }

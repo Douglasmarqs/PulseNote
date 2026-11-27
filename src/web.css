@@ -863,6 +863,58 @@ body.pn-scrolled:not(.pn-scrolling) .pn-scroll-line { opacity: 0 !important; }
 .bn-detail .bn-nd-status[data-state="new"] > i { background: var(--bd-primary-2) !important; box-shadow: 0 0 0 3px color-mix(in srgb, var(--bd-primary-2) 22%, transparent) !important; }
 .bn-detail .bn-nd-status[data-state="new"] { color: var(--bd-primary-ink) !important; }
 
+/* ==========================================================================
+   FLUIDEZ — nada roda para sempre fora da placa de vídeo
+   Medido: com o app parado, o navegador recalculava a página a cada quadro
+   (~120 vezes em 2s) por causa de animações infinitas que não são
+   aceleradas (forma do Pulsinho, linhas desenhando no ícone do título,
+   pulsos de sombra). Isso disputava cada toque e cada troca de tela.
+   ========================================================================== */
+/* Pulsinho: a mudança de forma (border-radius, recalculada a cada quadro)
+   vira nada; onde ele só "respirava", a respiração passa a ser escala
+   (acelerada pela placa de vídeo). Onde há outro movimento (pulinho),
+   ele continua intacto. */
+@keyframes pulsinhoMorph { 0%, 100% { opacity: 1; } }
+@keyframes pnMascotBreath { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.035, .97); } }
+.bd-mascot { animation: pnMascotBreath 6s ease-in-out infinite; }
+/* Ícone do título: anima ao abrir a tela e depois descansa */
+.pn-glyph, .pn-glyph * { animation-iteration-count: 2 !important; }
+/* Pulsos de sombra: alguns ciclos e param */
+.bf-spark-dot, .bd-teaser-avatar::after { animation-iteration-count: 3 !important; }
+/* Toque sem atraso e sem realce cinza do navegador */
+button, a, [role="button"], [role="tab"], .bd-tab, .bd-nav-item, .bn-card, .bf-tx, .bp-task { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+/* Painel das Configurações: entra e sai com movimento (a saída é feita em
+   closeSettingsDrawer). Celular: tela empilhada que desliza da direita por
+   cima da lista; navegador: fundo esmaece e o cartão chega de lado. */
+@keyframes stFade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes stPush { from { transform: translateX(100%); } to { transform: translateX(0); } }
+.st-drawer:not([hidden]) { animation: stFade .2s ease; }
+.st-drawer-card { animation: stIn .24s cubic-bezier(.16, 1, .3, 1); will-change: transform; }
+@media (max-width: 760px) {
+  .st-drawer:not([hidden]) { background: transparent; animation: none; }
+  .st-drawer-card { animation: stPush .32s cubic-bezier(.16, 1, .3, 1); box-shadow: -18px 0 40px -28px rgba(6, 10, 24, .5); }
+}
+@media (prefers-reduced-motion: reduce) { .st-drawer:not([hidden]), .st-drawer-card { animation: none; } }
+/* Janelas (modais): abriam e fechavam "no corte". Agora o fundo esmaece e o
+   cartão chega (navegador: cresce de leve; celular: sobe como folha) — e
+   sai do mesmo jeito. Sem JavaScript: o "hidden" continua valendo, a troca
+   de display só acontece no fim (allow-discrete). Navegador antigo: abre
+   como antes. Enquanto some, não captura toques. */
+.modal-backdrop { transition: opacity .2s ease, display .2s allow-discrete; }
+.modal-backdrop[hidden] { opacity: 0; pointer-events: none; transition-duration: .16s; }
+.modal-backdrop .modal-card { transition: transform .3s cubic-bezier(.16, 1, .3, 1), opacity .2s ease; }
+.modal-backdrop[hidden] .modal-card { opacity: 0; transform: translateY(6px) scale(.97); transition-duration: .16s; transition-timing-function: cubic-bezier(.4, 0, 1, 1); }
+@starting-style {
+  .modal-backdrop:not([hidden]) { opacity: 0; }
+  .modal-backdrop:not([hidden]) .modal-card { opacity: 0; transform: translateY(10px) scale(.97); }
+}
+@media (max-width: 760px) {
+  .modal-backdrop[hidden] { transition-duration: .22s; }
+  .modal-backdrop[hidden] .modal-card { opacity: 1; transform: translateY(100%); transition-duration: .22s; }
+  @starting-style { .modal-backdrop:not([hidden]) .modal-card { opacity: 1; transform: translateY(100%); } }
+}
+@media (prefers-reduced-motion: reduce) { .modal-backdrop, .modal-backdrop .modal-card { transition: none !important; } }
+
 /* ---------- Configurações: escolha de movimento ---------- */
 .pn-motion-row {
   display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;

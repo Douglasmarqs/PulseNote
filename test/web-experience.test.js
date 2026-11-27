@@ -127,7 +127,7 @@ test("troca de tela sem piscar: título nunca some e só uma animação", () => 
   const app = read("src/app.js");
   const js = read("src/web-motion.js");
   // título só clareia (0,55 → 1), sem deslizar
-  assert.match(app, /el\?\.animate\?\.\(\[\{ opacity: 0\.55 \}, \{ opacity: 1 \}\]/);
+  assert.match(app, /el\.__pnTitleAnim = el\.animate\?\.\(\[\{ opacity: 0\.55 \}, \{ opacity: 1 \}\]/);
   assert.doesNotMatch(js, /replay\(title, "pn-title-in"\)/);
   assert.match(js, /classList\.add\("pn-view-switch"\)/);
 });
@@ -135,7 +135,7 @@ test("troca de tela sem piscar: título nunca some e só uma animação", () => 
 test("Perfil abre estável: mapa desenhado no mesmo quadro e sem números contando", () => {
   const app = read("src/app.js");
   const js = read("src/web-motion.js");
-  assert.match(app, /if \(view === "profile"\) pfxRenderHeatmap\(\);/);
+  assert.match(app, /if \(view === "profile"\) pfxRenderHeatmap\(\{ fromView: true \}\);/);
   assert.doesNotMatch(js, /COUNT_SEL = "[^"]*pfx-stat/);
 });
 
@@ -187,7 +187,7 @@ test("site sem tremidinha: um movimento só por bloco, sem encolher ao tocar", (
   assert.match(css, /@keyframes cardRise \{ from \{ opacity: 0; \} to \{ opacity: 1; \} \}/);
   assert.match(css, /@keyframes pfxRise \{ from \{ opacity: 0; \} to \{ opacity: 1; \} \}/);
   assert.match(css, /@keyframes wfIn \{ from \{ opacity: 0; \} to \{ opacity: 1; \} \}/);
-  assert.match(app, /el\.animate\(\[\{ opacity: 0 \}, \{ opacity: 1 \}\], \{ duration: 240/);
+  assert.match(app, /el\.animate\(\[\{ opacity: 0 \}, \{ opacity: 1 \}\], \{ duration: 180/);
   assert.doesNotMatch(app, /translate3d\(\$\{dx\}px, \$\{dy\}px, 0\)/);
   assert.doesNotMatch(js, /function countUp/);
   // colunas das Notas não animam a largura (reorganizava os cartões a cada quadro)
@@ -321,4 +321,36 @@ test("tarefa concluída: faíscas na caixinha", () => {
   const js = read("src/web-motion.js");
   assert.match(js, /window\.pnSpark = pnSpark;/);
   assert.match(js, /const check = e\.target\.closest\?\.\("\.bp-check"\);/);
+});
+
+test("fluidez: trocar de tela não força recálculo de layout nem anima sem parar", () => {
+  const app = read("src/app.js");
+  const js = read("src/web-motion.js");
+  const css = read("src/web.css");
+  // abas respondem no toque (pointerdown), sem esperar o clique
+  assert.match(app, /button\.addEventListener\("pointerdown"/);
+  // título: cancela a animação anterior em vez de consultar getAnimations()
+  assert.match(app, /el\.__pnTitleAnim\?\.cancel\(\);/);
+  // gráfico e mapa do Perfil: mesmos dados → nada é medido na troca
+  assert.match(app, /if \(fromView && host\.dataset\.pnDataSig === dataSig && host\.firstElementChild\) return;/);
+  assert.match(app, /if \(fromView && root\.childElementCount && root\.dataset\.pnDataSig === dataSig\) return;/);
+  // revelar ao rolar só com IntersectionObserver (sem getBoundingClientRect)
+  const reveal = js.slice(js.indexOf("function armReveal"), js.indexOf("function armReveal") + 1500);
+  assert.doesNotMatch(reveal, /getBoundingClientRect/);
+  // enfeites infinitos param sozinhos; toque sem atraso de duplo toque
+  assert.match(css, /\.pn-glyph, \.pn-glyph \* \{ animation-iteration-count: 2 !important; \}/);
+  assert.match(css, /touch-action: manipulation;/);
+});
+
+test("fluidez: Configurações e janelas abrem e fecham com movimento", () => {
+  const app = read("src/app.js");
+  const css = read("src/web.css");
+  // painel das Configurações: sai deslizando e só depois devolve o conteúdo
+  assert.match(app, /let stDrawerExit = null;/);
+  assert.match(app, /stDrawerExit = \(\) => \{ finish\(\); anims\.forEach\(\(a\) => a\.cancel\(\)\); \};/);
+  assert.match(css, /@keyframes stPush \{ from \{ transform: translateX\(100%\); \}/);
+  // modais: entrada com @starting-style e saída com display allow-discrete
+  assert.match(css, /\.modal-backdrop \{ transition: opacity \.2s ease, display \.2s allow-discrete; \}/);
+  assert.match(css, /\.modal-backdrop\[hidden\] \{ opacity: 0; pointer-events: none;/);
+  assert.match(css, /@starting-style \{\s*\.modal-backdrop:not\(\[hidden\]\) \{ opacity: 0; \}/);
 });

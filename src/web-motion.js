@@ -340,17 +340,21 @@
     function armReveal(view) {
       io?.disconnect();
       if (calm() || !view || typeof IntersectionObserver !== "function") return;
-      const vh = innerHeight;
-      const pending = [...view.querySelectorAll(REVEAL_SEL)].filter((el) => {
-        if (!el.getClientRects().length) return false;
-        if (el.closest(".bd-card") !== el && el.parentElement?.closest(".bd-card")) return false; // só o cartão de fora
-        const r = el.getBoundingClientRect();
-        return r.top > vh; // ainda abaixo da dobra
-      });
+      // Sem medir posições: o próprio observador diz, na 1ª leitura, quem já
+      // está à vista (esses ficam como estão); só os de baixo esmaecem ao
+      // aparecer. Medir cada cartão aqui recalculava a página na troca.
+      const pending = [...view.querySelectorAll(REVEAL_SEL)].filter((el) => !(el.closest(".bd-card") !== el && el.parentElement?.closest(".bd-card")));
       if (!pending.length) return;
+      const firstSeen = new WeakSet();
       io = new IntersectionObserver((entries) => {
         let i = 0;
         entries.forEach((entry) => {
+          if (!firstSeen.has(entry.target)) {
+            firstSeen.add(entry.target);
+            if (entry.isIntersecting || !entry.boundingClientRect.height) { io.unobserve(entry.target); return; }
+            if (entry.boundingClientRect.top < 0) { io.unobserve(entry.target); return; }
+            return;
+          }
           if (!entry.isIntersecting) return;
           io.unobserve(entry.target);
           entry.target.animate(
@@ -397,8 +401,9 @@
     function onViewChange(view) {
       if (!view || view === current) return;
       current = view;
-      moveInk();
-      if (desktop.matches) replay(routeBar, "run");
+      // Medições e reinício de animação no quadro seguinte (sem recálculo
+      // forçado no meio da troca de tela).
+      requestAnimationFrame(() => { moveInk(); if (desktop.matches) replay(routeBar, "run"); });
       // O título já anima no app.js (uma única animação, sem sumir). Aqui
       // só garantimos que o vidro do topo some na hora — a tela nova abre
       // no topo, e o vidro esmaecendo por 0,35s parecia uma piscada.
@@ -419,7 +424,7 @@
     const navObserver = new MutationObserver((records) => {
       if (!records.some((r) => r.target !== ink)) return;
       const v = nav.querySelector(".bd-nav-item.active")?.dataset.view;
-      if (v) onViewChange(v); else moveInk();
+      if (v) onViewChange(v); else requestAnimationFrame(() => moveInk());
     });
     nav.querySelectorAll(".bd-nav-item").forEach((item) => navObserver.observe(item, { attributes: true, attributeFilter: ["class"] }));
 

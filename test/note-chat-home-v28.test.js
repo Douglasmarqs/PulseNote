@@ -45,7 +45,7 @@ test("nota aberta: hover não gruda no toque e rodapé com duas ações", () => 
 
 test("Home: sem reajuste ao voltar e troca de telas fluida", () => {
   assert.match(app, /if \(!scroller\.clientWidth\) return;/);
-  assert.match(app, /if \(view === "dashboard"\) renderBoardsEvolution\(\);/);
+  assert.match(app, /if \(view === "dashboard"\) renderBoardsEvolution\(\{ fromView: true \}\);/);
   assert.doesNotMatch(css, /\.bd-kpis, #financesView \.bf-kpis \{ scroll-behavior: smooth;/);
   assert.match(app, /function animateViewEntrance\(target, fromView, toView\)/);
   assert.match(app, /function syncTabbarInk\(/);

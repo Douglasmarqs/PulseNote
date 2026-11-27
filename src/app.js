@@ -1265,14 +1265,22 @@ function pfxBestStreak() {
   return best;
 }
 
-function pfxRenderHeatmap() {
+function pfxRenderHeatmap({ fromView = false } = {}) {
   const root = document.querySelector("#profileHeatmap");
   if (!root) return;
+  const activity = pfxActivityByDay();
+  let activitySig = 0;
+  activity.forEach((n, iso) => { activitySig = (activitySig * 31 + n * 7 + Number(iso.replaceAll("-", ""))) % 1e9; });
+  const dataSig = `${todayIso}|${activity.size}|${activitySig}`;
+  // Ao abrir o Perfil: mesmo dia e mesma atividade do último desenho →
+  // nada a fazer, sem medir (medir aqui recalculava a página na troca).
+  // Mudança de largura é tratada pelo ResizeObserver (pfxWatchHeatmap).
+  if (fromView && root.childElementCount && root.dataset.pnDataSig === dataSig) return;
   const wrapEl = root.closest(".pfx-heat-wrap");
   // Tela de perfil escondida (largura 0): desenha quando ela aparecer.
   if (!wrapEl || !wrapEl.clientWidth) return;
+  root.dataset.pnDataSig = dataSig;
   pfxWatchHeatmap(wrapEl);
-  const activity = pfxActivityByDay();
   // Quantas semanas cabem (12 a 20) e de que tamanho fica cada célula para o
   // mapa ocupar a largura exata do cartão — sem rolagem nem célula cortada.
   const cs = getComputedStyle(wrapEl);
@@ -1285,6 +1293,11 @@ function pfxRenderHeatmap() {
   const weeks = Math.max(12, Math.min(26, Math.floor((avail + gap) / (13 + gap))));
   const cell = Math.max(9, Math.min(24, Math.floor((avail - gap * (weeks - 1)) / weeks)));
   wrapEl.style.setProperty("--cell", `${cell}px`);
+  // Mesmo dia, mesmo tamanho e mesma atividade do último desenho: não
+  // refaz as ~180 células (abrir o Perfil reconstruía o mapa inteiro).
+  const sig =`${todayIso}|${weeks}|${cell}|${activity.size}|${activitySig}`;
+  if (root.dataset.pnSig === sig && root.childElementCount) return;
+  root.dataset.pnSig = sig;
   wrapEl.dataset.weeks = String(weeks);
   wrapEl.dataset.width = String(wrapEl.clientWidth);
   const today = new Date(`${todayIso}T12:00:00`);
@@ -1294,6 +1307,7 @@ function pfxRenderHeatmap() {
   const level = (n) => (n <= 0 ? 0 : n === 1 ? 1 : n <= 3 ? 2 : n <= 6 ? 3 : 4);
   let activeDays = 0;
   const cells = [];
+  const MONTHS_SHORT = ["jan.", "fev.", "mar.", "abr.", "mai.", "jun.", "jul.", "ago.", "set.", "out.", "nov.", "dez."];
   for (let i = 0; i < weeks * 7; i += 1) {
     const day = new Date(start);
     day.setDate(start.getDate() + i);
@@ -1301,7 +1315,8 @@ function pfxRenderHeatmap() {
     const future = iso > todayIso;
     const count = future ? 0 : activity.get(iso) || 0;
     if (count) activeDays += 1;
-    const label = `${safeFormatDate(day, { day: "numeric", month: "short" }, iso)}: ${count ? `${count} ${count === 1 ? "atividade" : "atividades"}` : "sem atividade"}`;
+    // Data montada à mão (formatar com Intl em cada célula custava ~8ms).
+    const label = `${day.getDate()} de ${MONTHS_SHORT[day.getMonth()]}: ${count ? `${count} ${count === 1 ? "atividade" : "atividades"}` : "sem atividade"}`;
     cells.push(`<i class="l${level(count)}${future ? " is-future" : ""}${iso === todayIso ? " is-today" : ""}" style="--d:${i}" title="${escapeHtml(label)}"></i>`);
   }
   root.innerHTML = cells.join("");
@@ -1688,17 +1703,38 @@ function openSettingsSection(key) {
   requestAnimationFrame(() => (drawer.querySelector(stIsMobile() ? "#stDrawerBack" : "#stDrawerClose"))?.focus());
 }
 
+// Saída do painel de Configurações: desliza para fora (celular: volta
+// como uma tela empilhada; navegador: recua e esmaece) e só então devolve o
+// conteúdo ao lugar — fechar não "corta" mais de uma vez.
+let stDrawerExit = null;
 function closeSettingsDrawer({ keepNav = false } = {}) {
   const drawer = document.getElementById("stDrawer");
-  if (stMovedHome) {
-    const { panel, parent, next } = stMovedHome;
-    parent.insertBefore(panel, next && next.parentElement === parent ? next : null);
-    stMovedHome = null;
-  }
-  if (drawer) drawer.hidden = true;
-  document.body.classList.remove("st-drawer-open");
+  stDrawerExit?.();
+  const wasOpen = Boolean(drawer && !drawer.hidden && stOpenKey);
+  const finish = () => {
+    stDrawerExit = null;
+    if (stMovedHome) {
+      const { panel, parent, next } = stMovedHome;
+      parent.insertBefore(panel, next && next.parentElement === parent ? next : null);
+      stMovedHome = null;
+    }
+    if (drawer) { drawer.hidden = true; drawer.style.pointerEvents = ""; }
+    document.body.classList.remove("st-drawer-open");
+  };
   if (!keepNav && stOpenKey) stSetActiveNav(stIsMobile() ? "" : "conta");
   stOpenKey = "";
+  const card = drawer?.querySelector(".st-drawer-card");
+  if (!wasOpen || keepNav || !card?.animate || prefersReducedMotion()) { finish(); return; }
+  const mobile = stIsMobile();
+  const duration = mobile ? 240 : 190;
+  const easing = "cubic-bezier(.4, 0, .9, .55)";
+  drawer.style.pointerEvents = "none";
+  const anims = [card.animate(mobile
+    ? [{ transform: "translateX(0)" }, { transform: "translateX(100%)" }]
+    : [{ transform: "translateX(0)", opacity: 1 }, { transform: "translateX(28px)", opacity: 0 }], { duration, easing, fill: "forwards" })];
+  if (!mobile) anims.push(drawer.animate([{ opacity: 1 }, { opacity: 0 }], { duration, easing: "ease", fill: "forwards" }));
+  stDrawerExit = () => { finish(); anims.forEach((a) => a.cancel()); };
+  anims[0].onfinish = () => stDrawerExit?.();
 }
 
 function bindSettingsBoard() {
@@ -2920,8 +2956,23 @@ function offsetDate(days) {
 }
 
 function bindNavigation() {
+  // Barra inferior e lateral trocam de área no instante do toque (como em
+  // apps nativos) em vez de esperar o dedo sair (~100ms a menos). O clique
+  // que vem logo depois é ignorado; teclado e leitores de tela continuam
+  // pelo clique normal.
+  let navArmedAt = 0;
+  document.querySelectorAll(".bd-tabbar [data-view], .bd-sidebar [data-nav][data-view]").forEach((button) => {
+    button.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0 || event.pointerType === "pen") return;
+      navArmedAt = performance.now();
+      if (button.dataset.view !== activeView) setView(button.dataset.view);
+    });
+  });
   document.querySelectorAll("[data-view]").forEach((button) => {
-    button.addEventListener("click", () => setView(button.dataset.view));
+    button.addEventListener("click", () => {
+      if (performance.now() - navArmedAt < 900 && button.closest(".bd-tabbar, .bd-sidebar")) return;
+      setView(button.dataset.view);
+    });
   });
   document.querySelectorAll("[data-view-shortcut]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -4716,7 +4767,12 @@ function bindFinTabs() {
   document.querySelectorAll(".fin-tab-btn").forEach((tab) => {
     tab.addEventListener("click", () => {
       setFinBoardTab(tab.dataset.finTab);
-      tab.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+      // Centraliza a aba só se a fileira de abas rola (celular), e no
+      // quadro seguinte — rolar agora forçava um recálculo no meio da troca.
+      requestAnimationFrame(() => {
+        const row = tab.parentElement;
+        if (row && row.scrollWidth > row.clientWidth + 2) tab.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+      });
     });
   });
   bindFinanceBoard();
@@ -4912,7 +4968,7 @@ function setView(view, { fromHistory = false } = {}) {
   // Desenha o gráfico da Home já no mesmo quadro em que ela aparece. Antes
   // ia para o próximo quadro: o primeiro mostrava o gráfico antigo e, logo
   // depois, ele se redesenhava — a "leve recentralizada" ao voltar para a Home.
-  if (view === "dashboard") renderBoardsEvolution();
+  if (view === "dashboard") renderBoardsEvolution({ fromView: true });
   if (view === "notes") renderNotes();
   // Trocas de area precisam começar no topo imediatamente. "instant" ignora
   // qualquer scroll-behavior: smooth herdado do CSS (com "auto" o navegador
@@ -4933,7 +4989,7 @@ function setView(view, { fromHistory = false } = {}) {
   // Perfil: o mapa de atividade precisa da largura real (a tela estava oculta).
   // Desenha já, no mesmo quadro em que a tela aparece: no quadro seguinte
   // o mapa mudava de altura e empurrava o resto (o "tremido" do Perfil).
-  if (view === "profile") pfxRenderHeatmap();
+  if (view === "profile") pfxRenderHeatmap({ fromView: true });
   if (view === "dashboard") fitCurrencyValues("summaryFinSaldo", "dashFinReceitas", "dashFinDespesas", "dashFinSaldo");
   if (view === "autopilot" || view === "dashboard") autopilotUi.show();
   if (previousView !== view) {
@@ -4964,23 +5020,55 @@ function animateViewEntrance(target, fromView, toView) {
   // de 3 a 8px, somado às entradas dos cartões e ao texto em posições
   // fracionadas, era percebido como uma "tremidinha". Medido quadro a
   // quadro em todas as áreas: agora a posição dos blocos não muda.
+  // Sem ler tamanhos/posições aqui (ler logo após trocar a tela obrigava o
+  // navegador a recalcular a página inteira no meio da troca).
   const wrapper = target.children.length === 1 ? target.firstElementChild : target;
-  const blocks = [...wrapper.children].filter((el) => el.getClientRects().length && getComputedStyle(el).position !== "fixed");
+  const blocks = [...wrapper.children].filter((el) => !el.hidden && !el.matches(VIEW_FIXED_SELECTOR));
   const easing = "cubic-bezier(.2, .8, .2, 1)";
+  // Curto e com início rápido (sensação de tela a 120 Hz): 180ms.
   blocks.slice(0, 10).forEach((el, index) => {
-    el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 240, delay: Math.min(index, 4) * 22, easing, fill: "backwards" });
+    el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 180, delay: Math.min(index, 4) * 18, easing: "cubic-bezier(.16, 1, .3, 1)", fill: "backwards" });
   });
   // Título e subtítulo: o texto novo já entra quase visível e só clareia.
   [elements.viewTitle, document.querySelector("#viewSubtitle")].forEach((el) => {
-    el?.getAnimations?.().forEach((a) => a.cancel());
-    el?.animate?.([{ opacity: 0.55 }, { opacity: 1 }], { duration: 200, easing });
+    // Cancela só a animação anterior que guardamos: perguntar ao elemento
+    // por todas as animações (getAnimations) forçava o navegador a
+    // recalcular a página inteira no meio da troca (12–31ms).
+    if (!el) return;
+    el.__pnTitleAnim?.cancel();
+    el.__pnTitleAnim = el.animate?.([{ opacity: 0.55 }, { opacity: 1 }], { duration: 180, easing });
   });
 }
 
 // Barra inferior: uma pílula desliza até a aba ativa.
+// A barra inferior não muda de lugar ao trocar de tela: as posições das
+// abas são medidas uma vez (e de novo só quando a janela muda de tamanho).
+// Antes elas eram lidas a cada troca, logo depois de trocar a tela, o que
+// forçava o navegador a recalcular a página inteira no meio da transição.
+let tabbarInkPositions = null;
+window.addEventListener("resize", () => { tabbarInkPositions = null; }, { passive: true });
+function measureTabbarInk(bar) {
+  const barBox = bar.getBoundingClientRect();
+  if (!barBox.width) return null;
+  const positions = {};
+  bar.querySelectorAll(".bd-tab[data-view]").forEach((tab) => {
+    const box = (tab.querySelector(".bd-tab-icon") || tab).getBoundingClientRect();
+    positions[tab.dataset.view] = { x: box.left - barBox.left + box.width / 2 - 26, y: box.top - barBox.top + box.height / 2 - 15 };
+  });
+  return positions;
+}
 function syncTabbarInk(view = activeView, { animate = false } = {}) {
   const bar = document.querySelector(".bd-tabbar");
-  if (!bar || !bar.getClientRects().length) return;
+  if (!bar) return;
+  if (!tabbarInkPositions) {
+    // Mede no quadro seguinte, com a página já calculada.
+    requestAnimationFrame(() => {
+      if (!bar.getClientRects().length) return;
+      tabbarInkPositions = measureTabbarInk(bar);
+      if (tabbarInkPositions) syncTabbarInk(view, { animate: false });
+    });
+    return;
+  }
   let ink = bar.querySelector(".bd-tab-ink");
   if (!ink) {
     ink = document.createElement("span");
@@ -4989,13 +5077,10 @@ function syncTabbarInk(view = activeView, { animate = false } = {}) {
     bar.prepend(ink);
   }
   const tab = bar.querySelector(`.bd-tab[data-view="${view}"]`);
-  if (!tab) { ink.style.opacity = "0"; return; }
-  const icon = tab.querySelector(".bd-tab-icon") || tab;
-  const barBox = bar.getBoundingClientRect();
-  const box = icon.getBoundingClientRect();
+  const pos = tabbarInkPositions[view];
+  if (!tab || !pos) { ink.style.opacity = "0"; return; }
   const width = 52;
-  const x = box.left - barBox.left + box.width / 2 - width / 2;
-  const y = box.top - barBox.top + box.height / 2 - 15;
+  const { x, y } = pos;
   ink.classList.toggle("is-instant", !animate || prefersReducedMotion() || ink.style.opacity !== "1");
   ink.style.transform = `translate3d(${Math.round(x)}px, ${Math.round(y)}px, 0)`;
   ink.style.width = `${width}px`;
@@ -6200,8 +6285,8 @@ function bdPointLabel(point, monthly) {
   return monthly ? `${BD_MONTHS[month - 1]}/${String(year).slice(2)}` : `${day} ${BD_MONTHS[month - 1]}`;
 }
 
-function renderBoardsEvolution() {
-  drawBalanceChart(document.querySelector("#bdEvoChart"), bdEvoRange, "bdEvoFill");
+function renderBoardsEvolution(opts = {}) {
+  drawBalanceChart(document.querySelector("#bdEvoChart"), bdEvoRange, "bdEvoFill", opts);
 }
 
 function renderBoardsSparkline(series) {
@@ -13115,10 +13200,17 @@ function fitCurrencyValues(...ids) {
       // real pra medir agora; deixa o CSS/clamp cuidar até a próxima vez
       // que essa função rodar com o card visível.
       if (el.clientWidth === 0) return;
+      // A largura do texto é proporcional ao tamanho da fonte: calcula o
+      // tamanho certo de uma vez (antes reduzia 0,5px por vez, medindo a
+      // cada passo — vários recálculos da página por valor).
       let fontPx = maxPx;
-      while (el.scrollWidth > el.clientWidth + 0.5 && fontPx > minPx) {
-        fontPx -= 0.5;
+      if (el.scrollWidth > el.clientWidth + 0.5) {
+        fontPx = Math.max(minPx, Math.floor((maxPx * (el.clientWidth / el.scrollWidth)) * 2) / 2);
         el.style.fontSize = `${fontPx}px`;
+        if (el.scrollWidth > el.clientWidth + 0.5 && fontPx > minPx) {
+          fontPx = Math.max(minPx, fontPx - 0.5);
+          el.style.fontSize = `${fontPx}px`;
+        }
       }
       // Mesmo na fonte mínima o valor não coube numa linha só (ex.: "-R$
       // 2.927,35" em 3 colunas numa tela bem estreita) — em vez de cortar
@@ -13660,17 +13752,30 @@ function filterFinByDate(date) {
 }
 
 // Gráfico de linha do saldo (mesmo desenho do Início), para qualquer contêiner.
-function drawBalanceChart(host, range, gradientId) {
+function drawBalanceChart(host, range, gradientId, opts) {
   if (!host) return;
+  const fromView = Boolean(opts?.fromView);
+  const monthly = range > 120;
+  const series = bdBalanceSeries(range);
+  // Ao voltar para a tela: se os dados são os mesmos do último desenho,
+  // não mede nada (ler a largura agora forçava recalcular a página inteira
+  // no meio da troca). Mudança de tamanho é tratada pelo ResizeObserver.
+  const dataSig = `${range}|${todayIso}|${series.length}|${series[0]?.value}|${series.at(-1)?.value}|${series.reduce((sum, p, i) => (sum + p.value * (i + 1)) % 1e12, 0)}`;
+  if (fromView && host.dataset.pnDataSig === dataSig && host.firstElementChild) return;
   const width = host.clientWidth;
   const height = host.clientHeight;
   if (!width || !height) return; // aba escondida: desenha de novo quando aparecer
-  const monthly = range > 120;
-  const series = bdBalanceSeries(range);
+  host.dataset.pnDataSig = dataSig;
   if (!bdWorkspaceFinances().length || !series.length) {
+    host.dataset.pnSig = "";
     host.innerHTML = '<div class="bd-empty">Sem lançamentos no período. Registre uma receita ou despesa para ver a evolução.</div>';
     return;
   }
+  // Mesmo tamanho, período e valores do último desenho: nada a refazer
+  // (voltar ao Início redesenhava o gráfico inteiro a cada vez).
+  const sig = `${width}x${height}|${dataSig}`;
+  if (host.dataset.pnSig === sig && host.querySelector("svg")) return;
+  host.dataset.pnSig = sig;
   const values = series.map((p) => p.value);
   const rawMin = Math.min(...values);
   const rawMax = Math.max(...values);
@@ -13850,9 +13955,15 @@ window.addEventListener("resize", () => finMoveTabIndicator());
 function finPlayEntrance() {
   const board = document.querySelector(".bf");
   if (!board) return;
-  board.classList.remove("bf-anim");
-  void board.offsetWidth;
-  board.classList.add("bf-anim");
+  // Reinicia a entrada sem forçar recálculo da página (antes: remover a
+  // classe + ler offsetWidth = ~40ms de trava a cada abertura de Finanças).
+  if (board.classList.contains("bf-anim")) {
+    board.getAnimations({ subtree: true }).forEach((anim) => {
+      if (typeof CSSAnimation !== "undefined" && anim instanceof CSSAnimation) anim.currentTime = 0;
+    });
+  } else {
+    board.classList.add("bf-anim");
+  }
   window.clearTimeout(finPlayEntrance.timer);
   finPlayEntrance.timer = window.setTimeout(() => board.classList.remove("bf-anim"), 1400);
 }
@@ -13866,7 +13977,7 @@ function setFinBoardTab(target) {
   document.querySelectorAll(".fin-tab-panel").forEach((p) => { p.hidden = p.dataset.finPanel !== target; });
   const board = document.querySelector(".bf");
   if (board) board.dataset.tab = target;
-  finMoveTabIndicator();
+  requestAnimationFrame(finMoveTabIndicator); // mede no quadro seguinte (sem trava)
   finPlayEntrance();
   const slot = document.querySelector(`[data-sim-slot="${target}"]`);
   const sim = document.querySelector("#finSimulatorCard");
