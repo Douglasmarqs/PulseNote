@@ -297,6 +297,26 @@ test("abertura: Pulsinho voa até o logo e a tela se revela em círculo", () => 
   assert.match(html, /class="app-loading-beat"/);
 });
 
+test("criar nota = nota em branco na mesma tela (sem formulário)", () => {
+  const app = read("src/app.js");
+  const css = read("src/web.css");
+  const html = read("src/index.html");
+  assert.match(app, /function startNewNote\(\{ focusTitle = true, openFolders = false \} = \{\}\)/);
+  assert.match(app, /function finalizeNoteDraft\(id\)/);
+  // vazio é descartado; com conteúdo vira nota (título da 1ª linha se faltar)
+  assert.match(app, /return "discarded";/);
+  assert.match(app, /const \{ draft, \.\.\.rest \} = n;/);
+  // rascunho fora da biblioteca e das contagens
+  assert.match(app, /let notes = state\.notes\.filter\(\(note\) => !note\.draft &&/);
+  // fecha, volta, troca de nota e "Criar nota" finalizam o rascunho
+  assert.match(app, /const draftResult = finalizeNoteDraft\(id\);\s*closeNoteDetailUI\(\);/);
+  assert.match(app, /label\.textContent = "Criar nota";/);
+  assert.match(app, /if \(ndDraftIsEmpty\(\)\) \{/);
+  // formulário antigo escondido; botão na biblioteca
+  assert.match(css, /\.bn-grid > \.bn-form-wrap, #noteFormBackdrop \{ display: none !important; \}/);
+  assert.match(html, /id="notesNewNote"/);
+});
+
 test("tarefa concluída: faíscas na caixinha", () => {
   const js = read("src/web-motion.js");
   assert.match(js, /window\.pnSpark = pnSpark;/);

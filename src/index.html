@@ -177,7 +177,7 @@
     <!-- Perfil v3 -->
     <link rel="stylesheet" href="/src/profile-v3.css?v=4" />
     <!-- Experiência no navegador: profundidade, barra lateral viva, movimento -->
-    <link rel="stylesheet" href="/src/web.css?v=13" />
+    <link rel="stylesheet" href="/src/web.css?v=14" />
   </head>
   <body class="bd">
     <!-- Tela de abertura já no HTML: aparece na primeira pintura, antes de
@@ -1092,7 +1092,7 @@
 
             <!-- Celular: atalhos como no quadro -->
             <div class="bn-entries">
-              <button type="button" class="bn-entry" id="notesOpenForm"><span class="bn-entry-ico"><svg class="i"><use href="#i-layers"/></svg></span><strong>Nova nota</strong><svg class="i"><use href="#i-chev-right"/></svg></button>
+              <button type="button" class="bn-entry" id="notesOpenForm"><span class="bn-entry-ico"><svg class="i"><use href="#i-plus"/></svg></span><strong>Nova nota</strong><svg class="i"><use href="#i-chev-right"/></svg></button>
               <button type="button" class="bn-entry" id="notesOpenLibrary" aria-expanded="false"><span class="bn-entry-ico"><svg class="i"><use href="#i-layers"/></svg></span><strong>Minha biblioteca</strong><svg class="i"><use href="#i-chev-right"/></svg></button>
             </div>
 
@@ -1188,6 +1188,7 @@
                   <span class="bn-head-ico"><svg class="i"><use href="#i-layers"/></svg></span>
                   <h3>Minha biblioteca</h3>
                   <label class="bn-search"><svg class="i"><use href="#i-search"/></svg><input id="notesSearch" type="text" inputmode="search" placeholder="Buscar notas..." autocomplete="off" aria-label="Buscar notas" /></label>
+                  <button type="button" class="bd-btn bd-btn--primary bn-new-note" id="notesNewNote"><svg class="i"><use href="#i-plus"/></svg><span>Nova nota</span></button>
                 </header>
                 <div class="bn-chips-row">
                   <div id="noteFolders" class="bn-chips" role="group" aria-label="Pastas"></div>
@@ -2268,8 +2269,8 @@
     <script src="/src/recurring-detector.js?v=1"></script>
     <script src="/src/card-installments.js?v=1"></script>
     <script src="/src/notifications.js?v=36" defer></script>
-    <script src="/src/web-motion.js?v=10" defer></script>
-    <script type="module" src="/src/app.js?v=65"></script>
+    <script src="/src/web-motion.js?v=11" defer></script>
+    <script type="module" src="/src/app.js?v=66"></script>
     <script type="module" src="/src/push-notifications.js?v=35"></script>
     <!-- Configuração inicial (primeiro acesso) — ver src/onboarding.js -->
   <div id="onboardingRoot" class="bdo" role="dialog" aria-modal="true" aria-labelledby="bdoTitle" hidden></div>

@@ -727,6 +727,18 @@
         ndDetail.style.setProperty("--pn-kb", `${kb}px`);
       };
       ndBody.addEventListener("focus", () => { ndDetail.classList.add("is-writing"); syncKeyboard(); });
+      // "OK" no fim da barra (celular): fecha o teclado e o rodapé volta.
+      const toolbar = doc.getElementById("noteDetailToolbar");
+      if (toolbar && !toolbar.querySelector(".pn-tool-done")) {
+        const done = doc.createElement("button");
+        done.type = "button";
+        done.className = "pn-tool-done";
+        done.textContent = "OK";
+        done.setAttribute("aria-label", "Fechar o teclado");
+        done.addEventListener("mousedown", (e) => e.preventDefault());
+        done.addEventListener("click", () => { ndBody.blur(); ndDetail.classList.remove("is-writing"); });
+        toolbar.append(done);
+      }
       doc.addEventListener("focusout", () => {
         setTimeout(() => { if (!keepWriting()) ndDetail.classList.remove("is-writing"); }, 60);
       });

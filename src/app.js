@@ -9003,19 +9003,78 @@ function closeNotesFormSheet() {
   if (backdrop) backdrop.hidden = true;
 }
 
+// Criar nota = abrir uma nota em branco na mesma tela da nota aberta
+// (como o Notas do iPhone/Keep): uma tela só para criar e editar. A nota
+// nasce como rascunho (draft) — fica fora da biblioteca e, se a pessoa sair
+// sem escrever nada, é descartada (nada de notas vazias por engano).
 function openNotesFormSheet({ focusTitle = true } = {}) {
-  document.querySelector("#noteFormWrap")?.classList.add("is-open");
-  const backdrop = document.querySelector("#noteFormBackdrop");
-  if (backdrop && !notesPanelMode() && window.matchMedia("(max-width: 760px)").matches) backdrop.hidden = false;
-  renderNoteFolderPicker();
-  if (focusTitle) setTimeout(() => document.querySelector("#noteTitle")?.focus(), 60);
+  startNewNote({ focusTitle });
+}
+
+function startNewNote({ focusTitle = true, openFolders = false } = {}) {
+  const current = state.notes.find((n) => n.id === ndCurrentNoteId);
+  if (current?.draft) {
+    if (focusTitle) document.querySelector("#ndTitle")?.focus();
+    if (openFolders) openNoteFolderSheet(current.id);
+    return;
+  }
+  if (activeView !== "notes") setView("notes");
+  const folder = notesFolderFilter !== "all" && notesFolderFilter !== "Sem pasta" ? notesFolderFilter : "Entrada";
+  const now = new Date().toISOString();
+  const note = {
+    id: crypto.randomUUID(), title: "", description: "", descriptionHtml: "", category: "Geral", folder,
+    tags: [], priority: "Media", checklist: [], attachments: [], goal: "", observations: "",
+    color: "blue", textColor: "", favorite: false, createdAt: todayIso, updatedAt: now, convertedToTaskId: "", draft: true,
+  };
+  state.notes = [note, ...state.notes];
+  openNoteDetail(note.id);
+  if (focusTitle) setTimeout(() => document.querySelector("#ndTitle")?.focus({ preventScroll: true }), 90);
+  if (openFolders) openNoteFolderSheet(note.id);
+}
+window.startNewNote = startNewNote;
+
+// A nota aberta ainda é um rascunho sem nada escrito?
+function ndDraftIsEmpty() {
+  const note = state.notes.find((n) => n.id === ndCurrentNoteId);
+  if (!note?.draft) return false;
+  const title = document.querySelector("#ndTitle")?.value.trim();
+  const text = noteHtmlToPlainText(sanitizeNoteHtml(document.querySelector("#ndBody")?.innerHTML || "")).trim();
+  return !title && !text && !(note.checklist || []).some((item) => noteChecklistItemText(item).trim());
+}
+
+// Rascunho vira nota de verdade (com título tirado da 1ª linha, se faltar)
+// ou é descartado se ficou vazio. Devolve "created", "discarded" ou null.
+function finalizeNoteDraft(id) {
+  const note = state.notes.find((n) => n.id === id);
+  if (!note?.draft) return null;
+  const text = String(note.description || "").trim();
+  const items = (note.checklist || []).filter((item) => noteChecklistItemText(item).trim());
+  const typed = String(note.title || "").trim();
+  const hasTitle = Boolean(typed) && typed !== "Sem título";
+  if (!hasTitle && !text && !items.length) {
+    state.notes = state.notes.filter((n) => n.id !== id);
+    queueNotePersist();
+    return "discarded";
+  }
+  const title = hasTitle ? typed : (text.split("\n").find((line) => line.trim()) || noteChecklistItemText(items[0]) || "Sem título").trim().slice(0, 80);
+  state.notes = state.notes.map((n) => {
+    if (n.id !== id) return n;
+    const { draft, ...rest } = n;
+    return { ...rest, title, updatedAt: new Date().toISOString() };
+  });
+  if (notesFolderFilter !== "all" && notesFolderFilter !== ((note.folder || "").trim() || "Sem pasta")) notesFolderFilter = "all";
+  queueNotePersist();
+  return "created";
 }
 
 function renderNotes() {
   const filter = document.querySelector("#noteFilter").value;
   const searchQuery = (notesSearchQuery || elements.globalSearch.value || "").trim();
   const q = searchQuery.toLowerCase();
-  let notes = state.notes.filter((note) => !q || ["title", "description", "category", "folder", "goal"].some((field) => String(note[field] || "").toLowerCase().includes(q)));
+  // Rascunhos que ficaram para trás (app fechado no meio): viram nota ou
+  // somem. O rascunho aberto agora não aparece na biblioteca.
+  state.notes.filter((note) => note.draft && note.id !== ndCurrentNoteId).forEach((note) => finalizeNoteDraft(note.id));
+  let notes = state.notes.filter((note) => !note.draft && (!q || ["title", "description", "category", "folder", "goal"].some((field) => String(note[field] || "").toLowerCase().includes(q))));
   if (filter === "favorite") notes = notes.filter((note) => note.favorite);
   if (["Alta", "Urgente"].includes(filter)) notes = notes.filter((note) => note.priority === filter);
   if (notesFolderFilter !== "all") notes = notes.filter((note) => ((note.folder || "").trim() || "Sem pasta") === notesFolderFilter);
@@ -9030,7 +9089,7 @@ function renderNotes() {
     emptyStateHtml(
       isFiltering
         ? { iconName: "inbox", title: "Nada por aqui com esse filtro", desc: "Tente limpar a busca, trocar a pasta ou o filtro." }
-        : { iconName: "notebook", title: "Sua primeira nota está a um toque", desc: "Ideias, lembretes e recados soltos: tudo cabe aqui.", ctaLabel: "Nova nota", ctaOnClick: "openNotesFormSheet()", mascot: true, mascotBadgeIcon: "notebook" }
+        : { iconName: "notebook", title: "Sua primeira nota está a um toque", desc: "Ideias, lembretes e recados soltos: tudo cabe aqui.", ctaLabel: "Nova nota", ctaOnClick: "startNewNote()", mascot: true, mascotBadgeIcon: "notebook" }
     ),
     ""
   );
@@ -9049,14 +9108,15 @@ function renderNoteFolders() {
   const root = document.querySelector("#noteFolders");
   if (!root) return;
   const counts = {};
-  state.notes.forEach((n) => {
+  const saved = state.notes.filter((n) => !n.draft);
+  saved.forEach((n) => {
     const key = (n.folder || "").trim() || "Sem pasta";
     counts[key] = (counts[key] || 0) + 1;
   });
   const folders = Object.keys(counts).sort((a, b) => counts[b] - counts[a] || a.localeCompare(b, "pt-BR"));
   const chip = (value, label, count) => `<button type="button" class="bn-chip${notesFolderFilter === value ? " active" : ""}" data-note-folder="${escapeHtml(value)}" aria-pressed="${notesFolderFilter === value}">${escapeHtml(label)} <span>(${count})</span></button>`;
   root.innerHTML = [
-    chip("all", "Todas", state.notes.length),
+    chip("all", "Todas", saved.length),
     ...folders.map((f) => chip(f, f, counts[f])),
     `<button type="button" class="bn-chip bn-chip--add" data-new-folder>${bdIcon("plus")}Pasta</button>`,
   ].join("");
@@ -9158,15 +9218,9 @@ function editNote(id) {
   }));
   renderNoteChecklistBuilder();
 
-  // Deixa claro que agora é edição, não criação.
-  document.querySelector("#noteEditingBanner").hidden = false;
-  document.querySelector("#noteEditingTitle").textContent = note.title || "Sem título";
-  document.querySelector("#noteSaveBtnLabel").textContent = "Salvar alterações";
-  const formHeading = document.querySelector("#noteFormHeading");
-  if (formHeading) formHeading.textContent = "Editar nota";
-
+  // Editar abre a própria nota (a mesma tela de criar e ler).
   setView("notes");
-  openNotesFormSheet();
+  openNoteDetail(note.id);
 }
 
 function toggleFavorite(id) {
@@ -9905,7 +9959,7 @@ function renderNoteDetailMeta(note) {
 //   saved   → "Salvo"        (a nuvem confirmou — evento pulsenote:synced)
 //   local   → "Salvo no aparelho" (sem internet/sem sessão; sobe depois)
 // O texto troca com fade ("Text states swap", transitions.dev).
-const ND_STATUS_LABELS = { editing: "Não salvo", saving: "Salvando…", saved: "Salvo", local: "Salvo no aparelho" };
+const ND_STATUS_LABELS = { new: "Nova nota", editing: "Não salvo", saving: "Salvando…", saved: "Salvo", local: "Salvo no aparelho" };
 function setNdStatus(mode) {
   const el = document.querySelector("#ndStatus");
   if (!el) return;
@@ -9948,6 +10002,12 @@ function updateNdSaveButton() {
   const label = document.querySelector("#ndSaveLabel");
   if (!button || !label) return;
   const saved = ndStatusIsSaved();
+  if (state.notes.find((n) => n.id === ndCurrentNoteId)?.draft) {
+    label.textContent = "Criar nota";
+    button.classList.remove("is-saved");
+    button.setAttribute("aria-label", "Criar a nota");
+    return;
+  }
   if (notesPanelMode()) {
     label.textContent = saved ? "Salvo" : "Salvar";
     button.classList.toggle("is-saved", saved);
@@ -10051,10 +10111,12 @@ function setNdTab(tab, { focus = false, animate = true } = {}) {
 function openNoteDetail(id) {
   const note = state.notes.find((item) => item.id === id);
   if (!note) return;
-  if (ndCurrentNoteId && ndCurrentNoteId !== id && flushNoteDetailSave()) {
+  if (ndCurrentNoteId && ndCurrentNoteId !== id) {
     const savedId = ndCurrentNoteId;
+    const flushed = flushNoteDetailSave();
+    const draftResult = finalizeNoteDraft(savedId);
     // A nota anterior foi salva agora: atualiza o cartão dela na lista.
-    setTimeout(() => { renderNotes(); flashNoteCard(savedId); }, 0);
+    if (flushed || draftResult) setTimeout(() => { renderNotes(); if (draftResult !== "discarded") flashNoteCard(savedId); }, 0);
   }
   const switching = Boolean(ndCurrentNoteId);
   ndCurrentNoteId = id;
@@ -10082,7 +10144,9 @@ function openNoteDetail(id) {
   requestAnimationFrame(moveNdTabInk);
 
   renderNoteDetailMeta(note);
-  setNdStatus("saved");
+  setNdStatus(note.draft ? "new" : "saved");
+  document.querySelector("#noteDetailModal .bn-detail")?.classList.toggle("is-new", Boolean(note.draft));
+  updateNdSaveButton();
   updateNdCount();
   const detailIcon = document.querySelector(".bn-detail-ico use");
   if (detailIcon) detailIcon.setAttribute("href", `#i-${noteIconFor(note)}`);
@@ -10227,20 +10291,43 @@ function closeNoteDetail({ updateHistory = true } = {}) {
   if (!ndCurrentNoteId) return;
   const id = ndCurrentNoteId;
   const changed = flushNoteDetailSave();
+  const draftResult = finalizeNoteDraft(id);
   closeNoteDetailUI();
   requestAnimationFrame(() => {
     renderNotes();
-    if (changed) flashNoteCard(id);
+    if ((changed || draftResult === "created") && draftResult !== "discarded") flashNoteCard(id);
   });
+  if (draftResult === "created") showToast("Nota criada");
   if (updateHistory && history.state && history.state.noteDetail) history.back();
   else if (!updateHistory) history.replaceState({ ...(history.state || {}), pnView: activeView, noteDetail: false }, "");
 }
 
 function saveNoteDetail() {
   if (!ndCurrentNoteId) return;
+  // "Criar nota" sem nada escrito: avisa em vez de criar uma nota vazia.
+  if (ndDraftIsEmpty()) {
+    const title = document.querySelector("#ndTitle");
+    title?.focus();
+    if (!prefersReducedMotion()) document.querySelector("#noteDetailModal .bn-detail")?.animate?.([
+      { transform: "translateX(0)" }, { transform: "translateX(-6px)" }, { transform: "translateX(6px)" }, { transform: "translateX(-3px)" }, { transform: "translateX(0)" },
+    ], { duration: 320, easing: "ease-in-out" });
+    showToast("Escreva um título, um texto ou um item do checklist para criar a nota.");
+    return;
+  }
   if (notesPanelMode()) {
     clearTimeout(ndAutosaveTimer);
-    const changed = flushNoteDetailSave({ persist: "now" });
+    const draftId = ndCurrentNoteId;
+    let changed = flushNoteDetailSave({ persist: "now" });
+    if (finalizeNoteDraft(draftId) === "created") {
+      changed = true;
+      document.querySelector("#noteDetailModal .bn-detail")?.classList.remove("is-new");
+      const note = state.notes.find((n) => n.id === draftId);
+      if (note) { document.querySelector("#ndTitle").value = note.title; renderNoteDetailMeta(note); }
+      notePersistQueued = false;
+      saveState();
+      showToast("Nota criada");
+      requestAnimationFrame(() => flashNoteCard(draftId));
+    }
     if (changed && currentUser?.emailVerified && navigator.onLine) {
       ndAwaitingSync = true;
       setNdStatus("saving");
@@ -10369,7 +10456,8 @@ function openNoteDetailsSheet(noteId) {
 
 // Tela de Notas: atalhos do celular, busca própria, pastas e "+ Pasta".
 function bindNotesBoard() {
-  document.querySelector("#notesOpenForm")?.addEventListener("click", openNotesFormSheet);
+  document.querySelector("#notesOpenForm")?.addEventListener("click", () => startNewNote());
+  document.querySelector("#notesNewNote")?.addEventListener("click", () => startNewNote());
   document.querySelector("#notesCloseForm")?.addEventListener("click", closeNotesFormSheet);
   document.querySelector("#noteFormBackdrop")?.addEventListener("click", closeNotesFormSheet);
   document.querySelector("#notesOpenLibrary")?.addEventListener("click", (event) => {
@@ -10383,8 +10471,8 @@ function bindNotesBoard() {
   search?.addEventListener("input", debounce(() => { notesSearchQuery = search.value; renderNotes(); }, 150));
   document.querySelector("#noteFolders")?.addEventListener("click", (event) => {
     if (event.target.closest("[data-new-folder]")) {
-      openNotesFormSheet({ focusTitle: false });
-      openNoteFolderNew();
+      // Nova nota já com a folha de pastas aberta (lá dá para criar a pasta).
+      startNewNote({ focusTitle: false, openFolders: true });
       return;
     }
     const chip = event.target.closest("[data-note-folder]");
@@ -10717,8 +10805,10 @@ function bindNoteDetail() {
     if (!modal.hidden && ndCurrentNoteId) {
       const id = ndCurrentNoteId;
       const changed = flushNoteDetailSave();
+      const draftResult = finalizeNoteDraft(id);
       closeNoteDetailUI();
-      requestAnimationFrame(() => { renderNotes(); if (changed) flashNoteCard(id); });
+      requestAnimationFrame(() => { renderNotes(); if ((changed || draftResult === "created") && draftResult !== "discarded") flashNoteCard(id); });
+      if (draftResult === "created") showToast("Nota criada");
     }
     const view = event.state?.pnView;
     if (view && view !== activeView) setView(view, { fromHistory: true });

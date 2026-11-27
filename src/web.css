@@ -831,6 +831,38 @@ body.pn-scrolled:not(.pn-scrolling) .pn-scroll-line { opacity: 0 !important; }
 .pn-odo-s { display: flex; flex-direction: column; will-change: transform; }
 .pn-odo-s i { display: block; height: var(--lh); line-height: var(--lh); font-style: normal; text-align: center; }
 
+/* ==========================================================================
+   CRIAR NOTA = NOTA EM BRANCO NA MESMA TELA
+   O formulário antigo saiu: "+ Nova nota" abre a nota aberta vazia. No
+   computador a coluna do formulário some e a biblioteca ganha o espaço.
+   ========================================================================== */
+.bn-new-note { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 14px; border-radius: 12px; white-space: nowrap; }
+.bn-new-note .i { width: 16px; height: 16px; stroke-width: 2.4; }
+.bn-grid > .bn-form-wrap, #noteFormBackdrop { display: none !important; }
+@media (min-width: 1181px) {
+  .bn-grid { grid-template-columns: minmax(0, 1fr) minmax(380px, 440px) !important; }
+  .bn-grid:has(#noteDetailModal:not([hidden])) { grid-template-columns: minmax(0, 1fr) minmax(420px, 1.05fr) !important; }
+}
+@media (min-width: 761px) and (max-width: 1180px) {
+  .bn-grid { grid-template-columns: minmax(0, 1fr) !important; }
+}
+@media (max-width: 760px) {
+  .bn-new-note span { display: none; }
+  .bn-new-note { width: 38px; padding: 0; justify-content: center; }
+}
+/* "OK" para fechar o teclado (só no celular, enquanto se escreve) */
+.bn-detail .bn-toolbar > .pn-tool-done { display: none !important; }
+@media (max-width: 760px) {
+  .bn-detail.is-writing .bn-toolbar > .pn-tool-done {
+    display: inline-flex !important; align-items: center; justify-content: center; flex: none; height: 34px; padding: 0 14px;
+    border: 0; border-radius: 11px; background: var(--bd-primary); color: #fff; font: 700 13px var(--bd-font); cursor: pointer;
+  }
+}
+/* Nota nova: título com convite e "Nova nota" no lugar do status */
+.bn-detail.is-new .bn-detail-title::placeholder { color: var(--bd-text-3); opacity: 1; }
+.bn-detail .bn-nd-status[data-state="new"] > i { background: var(--bd-primary-2) !important; box-shadow: 0 0 0 3px color-mix(in srgb, var(--bd-primary-2) 22%, transparent) !important; }
+.bn-detail .bn-nd-status[data-state="new"] { color: var(--bd-primary-ink) !important; }
+
 /* ---------- Configurações: escolha de movimento ---------- */
 .pn-motion-row {
   display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;

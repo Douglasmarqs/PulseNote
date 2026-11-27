@@ -120,7 +120,8 @@ test("Resto do app: sem emojis na interface e aviso de erro sem alarme falso", (
 test("Notas: como no iPhone — nada grava durante a edição; salva ao sair ou em Salvar", () => {
   const status = fn("setNdStatus");
   assert.match(status, /if \(el\.dataset\.state === state\) return;/, "não repinta a cada tecla");
-  assert.match(app, /const ND_STATUS_LABELS = \{ editing: "Não salvo", saving: "Salvando…", saved: "Salvo", local: "Salvo no aparelho" \}/);
+  // "Nova nota" é o estado de uma nota recém-criada, ainda sem texto.
+  assert.match(app, /const ND_STATUS_LABELS = \{ new: "Nova nota", editing: "Não salvo", saving: "Salvando…", saved: "Salvo", local: "Salvo no aparelho" \}/);
   // Sem timer de salvamento automático: digitar/formatar só marca "Não salvo".
   assert.doesNotMatch(app, /scheduleNdAutosave|commitNdAutosave|ndFirstPendingAt/);
   const bind = fn("bindNoteDetail");
@@ -128,7 +129,8 @@ test("Notas: como no iPhone — nada grava durante a edição; salva ao sair ou 
   assert.match(bind, /if \(beforeHtml !== body\.innerHTML\) markNdDirty\(\);/, "formatação não grava na hora");
   // Salva ao sair: fechar, trocar de nota e antes de a página sumir.
   assert.match(fn("closeNoteDetail"), /flushNoteDetailSave\(\)/);
-  assert.match(fn("openNoteDetail"), /if \(ndCurrentNoteId && ndCurrentNoteId !== id && flushNoteDetailSave\(\)\) \{/);
+  // Trocar de nota salva a anterior (e finaliza se ela era uma nota nova).
+  assert.match(fn("openNoteDetail"), /if \(ndCurrentNoteId && ndCurrentNoteId !== id\) \{\s*const savedId = ndCurrentNoteId;\s*const flushed = flushNoteDetailSave\(\);\s*const draftResult = finalizeNoteDraft\(savedId\);/);
   assert.match(app, /window\.addEventListener\("pagehide", flushOpenNoteOnLeave\);/);
   assert.match(app, /document\.addEventListener\("visibilitychange", \(\) => \{ if \(document\.hidden\) flushOpenNoteOnLeave\(\); \}\);/);
   // Checklist editado sem mudar o texto também é salvo.
