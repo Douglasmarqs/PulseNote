@@ -798,8 +798,8 @@ body.pn-scrolled:not(.pn-scrolling) .pn-scroll-line { opacity: 0 !important; }
 .pn-odo-d {
   overflow: hidden;
   /* o dígito some suave nas bordas enquanto gira (sem "pedaços" de vizinhos) */
-  -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 22%, #000 78%, transparent 100%);
-          mask-image: linear-gradient(180deg, transparent 0, #000 22%, #000 78%, transparent 100%);
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 12%, #000 88%, transparent 100%);
+          mask-image: linear-gradient(180deg, transparent 0, #000 12%, #000 88%, transparent 100%);
 }
 .pn-odo-s { display: block; white-space: pre; line-height: var(--lh); text-align: center; will-change: transform; }
 

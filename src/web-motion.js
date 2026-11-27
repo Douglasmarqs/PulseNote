@@ -269,13 +269,19 @@
       });
       el.classList.add("pn-odo-host");
       el.innerHTML = `<span class="pn-odo" aria-hidden="true" style="--lh:${lh}px">${cells.join("")}</span><span class="sr-only">${escHtml(to)}</span>`;
+      // Todas as casas chegam JUNTAS e a desaceleração é curta: antes cada
+      // casa à esquerda durava mais (o número "rastejava" pela esquerda) e a
+      // curva passava quase metade do tempo parada perto do fim — parecia
+      // travar antes de fixar o valor.
       const strips = [...el.querySelectorAll(".pn-odo-d")];
-      const anims = strips.map((cell, i) => {
+      const anims = strips.map((cell) => {
         const fromRow = Number(cell.dataset.s), toRow = Number(cell.dataset.e);
-        const fromRight = strips.length - 1 - i;
         return cell.firstElementChild.animate(
           [{ transform: `translateY(${-fromRow * lh}px)` }, { transform: `translateY(${-toRow * lh}px)` }],
-          { duration: 720 + fromRight * 70, delay: 40, easing: "cubic-bezier(.16, 1, .3, 1)", fill: "both" }
+          // quad-out: segue andando até ~40 ms do fim e pousa direto no
+          // texto final (curvas mais "esticadas" deixavam o número parado,
+          // meio borrado na camada de vídeo, e depois ele "nitidava").
+          { duration: 800, delay: 40, easing: "cubic-bezier(.5, 1, .89, 1)", fill: "both" }
         );
       });
       odoRolling.set(el, anims);

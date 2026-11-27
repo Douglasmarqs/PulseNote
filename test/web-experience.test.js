@@ -382,6 +382,23 @@ test("abertura lisa: app monta em pedaços antes do voo do Pulsinho", () => {
   assert.match(js, /if \(key === lastFit\) return;/);
 });
 
+test("sem 'voltar' arrastando a tela: trocar de área não cria histórico", () => {
+  const app = read("src/app.js");
+  assert.match(app, /if \(!fromHistory && previousView !== view\) \{\s*history\.replaceState\(\{ \.\.\.\(history\.state \|\| \{\}\), pnView: view, noteDetail: false \}, ""\);/);
+  assert.doesNotMatch(app, /history\.pushState\(\{ \.\.\.\(history\.state \|\| \{\}\), pnView: view, noteDetail: false \}/);
+  // nota aberta: no iPhone/iPad sem entrada (só existe o gesto); no Android o voltar fecha a nota
+  assert.match(app, /const IS_APPLE_TOUCH = /);
+  assert.match(app, /if \(!IS_APPLE_TOUCH\) history\.pushState\(\{ \.\.\.\(history\.state \|\| \{\}\), pnView: activeView, noteDetail: true \}, ""\);/);
+});
+
+test("odômetro pousa direto no valor: casas juntas, sem parada antes de fixar", () => {
+  const js = read("src/web-motion.js");
+  const css = read("src/web.css");
+  assert.match(js, /\{ duration: 800, delay: 40, easing: "cubic-bezier\(\.5, 1, \.89, 1\)", fill: "both" \}/);
+  assert.doesNotMatch(js, /duration: 720 \+ fromRight \* 70/);
+  assert.match(css, /mask-image: linear-gradient\(180deg, transparent 0, #000 12%, #000 88%, transparent 100%\)/);
+});
+
 test("CSS sem regras mortas das telas antigas", () => {
   // classes de versões antigas que nenhum HTML/JS cria mais
   for (const [file, dead] of [["src/styles.css", ".toast-mascot"], ["src/web.css", ".pn-kbd"], ["src/web.css", ".pn-tool-toggle"], ["src/refine.css", ".bd-chat-wave"]]) {
