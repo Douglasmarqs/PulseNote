@@ -453,14 +453,6 @@ body::before {
    dela visualmente em navegadores que respeitam a ordem de empilhamento
    à risca. .app-shell é o único wrapper de topo (ver index.html), então
    basta erguer ele — todo o resto dentro já acompanha. */
-.app-shell {
-  position: relative;
-  z-index: 1;
-  width: 100%;
-  max-width: 100%;
-  min-width: 0;
-  overflow-x: clip;
-}
 
 button, input, textarea, select {
   font: inherit;
@@ -473,12 +465,6 @@ p, h1, h2, h3 { margin: 0; overflow-wrap: anywhere; }
 img, video { max-width: 100%; height: auto; }
 
 /* ---------- App Shell ---------- */
-.app-shell {
-  display: grid;
-  grid-template-columns: 260px 1fr;
-  min-height: 100vh;
-  min-height: 100dvh;
-}
 
 /* ---------- SIDEBAR (desktop) ---------- */
 .sidebar {
@@ -542,67 +528,6 @@ img, video { max-width: 100%; height: auto; }
 .brand strong { font-size: 1.15rem; font-weight: 800; letter-spacing: -0.02em; }
 .brand > div > span { font-size: 0.76rem; color: var(--muted); }
 
-.nav-list { display: flex; flex-direction: column; gap: 2px; }
-
-.nav-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 11px 14px;
-  border-radius: 14px;
-  color: var(--text2);
-  font-weight: 600;
-  font-size: 0.93rem;
-  transition: all 180ms ease;
-  border: none;
-  background: none;
-  width: 100%;
-  text-align: left;
-}
-
-.nav-item .icon {
-  width: 32px;
-  height: 32px;
-  border-radius: 10px;
-  display: grid;
-  place-items: center;
-  font-size: 1rem;
-  background: var(--surface2);
-  transition: all 180ms ease;
-  flex-shrink: 0;
-}
-
-.nav-item .icon svg {
-  width: 18px;
-  height: 18px;
-  display: block;
-}
-
-.nav-item:hover {
-  background: var(--surface2);
-  color: var(--text);
-}
-
-.nav-item.active {
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-weight: 700;
-}
-
-.nav-item.active .icon {
-  background: var(--accent);
-  color: #fff;
-  box-shadow: 0 4px 10px color-mix(in srgb, var(--accent) 40%, transparent);
-}
-
-.sidebar-footer {
-  margin-top: auto;
-  padding-top: 12px;
-  border-top: 1px solid var(--line);
-  display: grid;
-  gap: 8px;
-}
-
 .ghost-button {
   display: flex;
   align-items: center;
@@ -619,26 +544,7 @@ img, video { max-width: 100%; height: auto; }
 }
 .ghost-button:hover { background: var(--line); color: var(--text); }
 
-.streak-box {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 12px;
-  background: var(--orange-soft);
-  border-radius: 12px;
-}
-.streak-box .muted { font-size: 0.82rem; color: var(--text2); }
-.streak-box strong { color: var(--orange); font-weight: 700; }
-
 /* ---------- MAIN AREA ---------- */
-.main-area {
-  min-width: 0;
-  width: 100%;
-  max-width: 100%;
-  display: flex;
-  flex-direction: column;
-  overflow-x: clip;
-}
 
 /* ---------- TOP BAR ---------- */
 .topbar {
@@ -662,9 +568,6 @@ img, video { max-width: 100%; height: auto; }
 
 /* Cabeçalho em uma linha no desktop; a busca fica integrada às ações em
    vez de competir com a saudação como um bloco separado. */
-.topbar-row { display: flex; align-items: center; gap: 14px; min-width: 0; }
-
-.topbar-greeting { flex: 1; }
 
 #todayLabel {
   font-size: 0.76rem;
@@ -679,14 +582,6 @@ img, video { max-width: 100%; height: auto; }
   font-weight: 800;
   letter-spacing: -0.03em;
   color: var(--text);
-}
-
-.topbar-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-left: auto;
-  min-width: 0;
 }
 
 .search-box {
@@ -1023,7 +918,7 @@ button.overview-card-action {
   min-width: 0;
 }
 
-.panel, .list-panel, .calendar-panel {
+.panel {
   background: var(--surface);
   border-radius: 18px;
   border: 1.5px solid var(--line);
@@ -1033,7 +928,7 @@ button.overview-card-action {
 
 .wide { grid-column: span 2; }
 
-.panel-header, .form-heading, .board-toolbar {
+.panel-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1045,8 +940,7 @@ button.overview-card-action {
 /* Os dois "lados" de um cabeçalho (ex.: título + selos de Receita/Despesa)
    nunca devem forçar a página a ficar mais larga que a tela — se não
    couber ao lado do título, quebra pra linha de baixo. */
-.panel-header > div:first-child,
-.form-heading > div:first-child {
+.panel-header > div:first-child {
   min-width: 0;
 }
 
@@ -1087,7 +981,9 @@ button.overview-card-action {
 .icon-button:hover { background: var(--accent-soft); color: var(--accent); }
 
 /* ---------- TASK ROWS ---------- */
-.compact-list, .event-list, .goal-stack, .connector-grid { display: grid; gap: 8px; }
+.compact-list,
+.event-list,
+.goal-stack { display: grid; gap: 8px; }
 
 .task-row, .event-row, .goal-row {
   display: flex;
@@ -1194,7 +1090,8 @@ button.overview-card-action {
 }
 
 .task-title { font-weight: 600; font-size: 0.9rem; overflow-wrap: anywhere; color: var(--text); }
-.task-meta, .note-meta, .event-meta { color: var(--muted); font-size: 0.8rem; margin-top: 1px; }
+.task-meta,
+.event-meta { color: var(--muted); font-size: 0.8rem; margin-top: 1px; }
 .event-meta .pn-icon { margin-right: 2px; opacity: 0.8; }
 .event-meta-dot { margin: 0 1px; }
 
@@ -1273,7 +1170,7 @@ button.overview-card-action {
 .status-Pendente    { background: var(--surface2);    color: var(--muted); }
 
 /* ---------- MINI BUTTONS ---------- */
-.mini-button, .card-actions button {
+.mini-button {
   height: 30px;
   padding: 0 10px;
   border-radius: 8px;
@@ -1284,17 +1181,17 @@ button.overview-card-action {
   font-weight: 600;
   transition: all 150ms;
 }
-.mini-button:hover, .card-actions button:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.mini-button:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
 
 /* No mobile, botões de ação pequenos (editar, excluir, favoritar, mover)
    ganham uma área de toque mínima de 44x44px mesmo mantendo o visual
    compacto — usa um "padding invisível" via pseudo-elemento para não
    precisar tocar 2-3 vezes até acertar o botão certo. */
 @media (max-width: 720px) {
-  .mini-button, .card-actions button {
+  .mini-button {
     position: relative;
   }
-  .mini-button::after, .card-actions button::after {
+  .mini-button::after {
     content: "";
     position: absolute;
     inset: -7px;
@@ -1352,25 +1249,8 @@ button.overview-card-action {
 .connector-row:last-child { border-bottom: none; }
 
 /* ---------- NOTES VIEW — MASONRY POST-IT ---------- */
-#notesView .workbench {
-  display: grid;
-  grid-template-columns: 380px 1fr;
-  gap: 20px;
-  align-items: start;
-}
 
 /* Editor Panel */
-.editor-panel {
-  background: var(--surface);
-  border-radius: 18px;
-  border: 1.5px solid var(--line);
-  box-shadow: var(--shadow-card);
-  padding: 14px 16px;
-  display: grid;
-  gap: 12px;
-}
-
-.compact-editor { gap: 10px; }
 
 label {
   display: grid;
@@ -1443,15 +1323,6 @@ input[aria-invalid="true"], textarea[aria-invalid="true"], select[aria-invalid="
 input.has-error:focus, textarea.has-error:focus, select.has-error:focus {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--red) 20%, transparent);
 }
-.field-error-msg {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 0.76rem;
-  font-weight: 600;
-  color: var(--red);
-  margin-top: -2px;
-}
 
 input:disabled, textarea:disabled, select:disabled {
   opacity: 0.55;
@@ -1463,25 +1334,10 @@ input:disabled, textarea:disabled, select:disabled {
    dependem de uma resposta assíncrona pra saber o valor certo — evita
    que a pessoa digite em cima de um campo que está prestes a ser
    preenchido/substituído sozinho. */
-.field-loading-wrap { position: relative; }
 input.is-loading, textarea.is-loading, select.is-loading {
   color: transparent;
   pointer-events: none;
 }
-.field-loading-wrap.is-loading::after {
-  content: "";
-  position: absolute;
-  right: 14px;
-  top: 50%;
-  width: 16px;
-  height: 16px;
-  margin-top: -8px;
-  border: 2px solid var(--line);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: fieldSpin 700ms linear infinite;
-}
-@keyframes fieldSpin { to { transform: rotate(360deg); } }
 
 textarea { resize: vertical; min-height: 80px; }
 
@@ -1511,230 +1367,11 @@ input[type="time"] {
 .form-actions { display: flex; gap: 8px; }
 
 /* ---------- Note editor (versão simplificada) ---------- */
-.note-editor {
-  gap: 9px;
-  min-width: 0;
-  max-width: 100%;
-}
-.note-editor .form-heading { margin-bottom: 0; }
-.note-editor .form-heading h2 {
-  max-width: 24ch;
-  font-size: 1.16rem;
-  line-height: 1.25;
-  letter-spacing: -0.02em;
-  overflow-wrap: anywhere;
-}
-.note-title-field,
-.note-body-field { min-width: 0; }
-
-.note-title-field input {
-  font-size: 1.05rem;
-  font-weight: 700;
-  border: none;
-  background: transparent;
-  padding: 4px 2px;
-  min-height: 38px;
-}
-.note-title-field input:focus { box-shadow: none; }
-
-.note-body-field textarea {
-  border: none;
-  background: transparent;
-  resize: none;
-  overflow: hidden;
-  padding: 4px 2px;
-  min-height: 56px;
-  font-size: 0.94rem;
-  line-height: 1.5;
-}
-.note-body-field textarea:focus { box-shadow: none; }
 
 textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms ease; }
 
-.note-draft-format-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  min-width: 0;
-  padding: 6px 2px 2px;
-}
-.note-control-label {
-  color: var(--muted);
-  font-size: 0.72rem;
-  font-weight: 800;
-  white-space: nowrap;
-}
-.note-text-color-picker {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-  gap: 7px;
-  min-width: 0;
-}
-.note-text-color-default,
-.note-text-color-dot {
-  width: 30px;
-  height: 30px;
-  min-height: 30px;
-  flex: 0 0 30px;
-  padding: 0;
-  border: 2px solid transparent;
-  border-radius: 50%;
-  cursor: pointer;
-  transition: transform 160ms ease, box-shadow 160ms ease;
-}
-.note-text-color-default {
-  display: grid;
-  place-items: center;
-  background: var(--surface2);
-  color: var(--text);
-  border-color: var(--line);
-  font-size: 0.78rem;
-  font-weight: 800;
-}
-.note-text-color-dot { background: var(--note-text-color); }
-.note-text-color-default:hover,
-.note-text-color-dot:hover { transform: scale(1.06); }
-.note-text-color-default.active,
-.note-text-color-dot.active {
-  border-color: var(--text);
-  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent);
-}
-
-.note-quick-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding-top: 8px;
-  border-top: 1.5px dashed var(--line);
-}
-
 /* Aparência continua disponível, porém recolhida em "Mais detalhes".
    O editor principal fica focado no conteúdo e não em duas paletas. */
-.note-appearance-options {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  margin: 10px 0 12px;
-  padding: 10px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--surface2);
-}
-.note-appearance-option {
-  display: grid;
-  align-content: start;
-  gap: 7px;
-  min-width: 0;
-}
-.note-appearance-options .note-text-color-picker,
-.note-appearance-options .note-color-picker {
-  justify-content: flex-start;
-}
-
-.note-priority-picker { display: flex; gap: 6px; flex-wrap: wrap; }
-
-.note-card-color-control {
-  display: grid;
-  gap: 6px;
-  min-width: 0;
-}
-
-.note-color-picker { display:flex; gap:7px; align-items:center; }
-.note-color-dot {
-  width:20px; height:20px; min-height:20px; padding:0; border-radius:50%;
-  border:2px solid transparent; cursor:pointer; transition:transform 160ms ease, box-shadow 160ms ease;
-}
-.note-color-dot:hover, .note-color-dot.active { transform:scale(1.12); box-shadow:0 0 0 2px var(--surface), 0 0 0 4px var(--accent); }
-.note-color-dot[data-note-color="blue"]   { background:#5ac8fa; }
-.note-color-dot[data-note-color="green"]  { background:#30d158; }
-.note-color-dot[data-note-color="pink"]   { background:#ff375f; }
-.note-color-dot[data-note-color="purple"] { background:#bf5af2; }
-.note-color-dot[data-note-color="orange"] { background:#8b5cf6; }
-.note-color-dot[data-note-color="teal"]   { background:#40c8e0; }
-
-.note-priority-dot {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: auto;
-  min-height: 0;
-  padding: 6px 12px 6px 10px;
-  border-radius: 999px;
-  font-size: 0.78rem;
-  font-weight: 700;
-  border: 1.5px solid var(--line);
-  background: var(--surface2);
-  cursor: pointer;
-  transition: all 160ms ease;
-  white-space: nowrap;
-}
-.note-priority-dot .dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: currentColor;
-  flex-shrink: 0;
-}
-.note-priority-dot[data-priority="Baixa"]   { color: var(--green); }
-.note-priority-dot[data-priority="Media"]   { color: #0891b2; }
-.note-priority-dot[data-priority="Alta"]    { color: #8b5cf6; }
-.note-priority-dot[data-priority="Urgente"] { color: var(--red); }
-
-.note-priority-dot.active[data-priority="Baixa"]   { background: var(--green-soft);  border-color: var(--green); }
-.note-priority-dot.active[data-priority="Media"]   { background: #cffafe; color: #155e75; border-color: #0891b2; }
-.note-priority-dot.active[data-priority="Alta"]    { background: #ede9fe; color: #6d28d9; border-color: #8b5cf6; }
-.note-priority-dot.active[data-priority="Urgente"] { background: var(--red-soft);    border-color: var(--red); }
-.note-priority-dot.active { transform: scale(1.04); font-weight: 800; }
-
-.note-checklist-toggle {
-  min-height: 0;
-  padding: 6px 12px;
-  border-radius: 999px;
-  font-size: 0.8rem;
-  font-weight: 700;
-  background: var(--surface2);
-  color: var(--text2);
-  border: 1.5px solid var(--line);
-  cursor: pointer;
-  transition: all 160ms;
-  white-space: nowrap;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.note-checklist-toggle.active,
-.note-checklist-toggle:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
-
-.note-checklist-field { margin-top: 0; }
-
-.note-more-details {
-  border-top: 1.5px dashed var(--line);
-  padding-top: 8px;
-}
-.note-more-details summary {
-  cursor: pointer;
-  list-style: none;
-  font-size: 0.82rem;
-  font-weight: 700;
-  color: var(--muted);
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  user-select: none;
-}
-.note-more-details summary::-webkit-details-marker { display: none; }
-.note-more-details summary .chev { transition: transform 160ms ease; font-size: 0.75rem; }
-.note-more-details[open] summary .chev { transform: rotate(180deg); }
-.note-more-details > *:not(summary) { margin-top: 10px; }
-.note-more-details > div.form-grid:not(:first-of-type),
-.note-more-details > label { margin-top: 10px; }
-
-.note-save-btn { flex: 1; justify-content: center; height: 44px; font-size: 0.92rem; }
 
 /* Botão "Salvar compromisso" — mesmo tratamento do botão de notas: fica
    no final do formulário (depois de todos os campos), ocupando a largura
@@ -1744,32 +1381,6 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 .form-actions .ghost-button { flex: 0 0 auto; width: auto; padding: 10px 18px; }
 
 /* Note filters */
-.list-panel { position: relative; }
-
-.note-filters {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  margin-bottom: 16px;
-}
-
-.filter-chip {
-  padding: 6px 14px;
-  border-radius: 999px;
-  font-size: 0.82rem;
-  font-weight: 600;
-  background: var(--surface2);
-  color: var(--text2);
-  border: 1.5px solid var(--line);
-  cursor: pointer;
-  transition: all 160ms;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.filter-chip:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
-.filter-chip.active { background: var(--accent); color: #fff; border-color: var(--accent); box-shadow: 0 3px 10px color-mix(in srgb, var(--accent) 30%, transparent); }
 
 /* Note select (legacy, hidden by JS if filter chips present) */
 #noteFilter { display: none; }
@@ -1777,12 +1388,6 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 /* NOTE GRID — grid responsivo (substitui o antigo "columns" CSS, que
    reordenava e cortava os cartões de forma imprevisível quando uma nota
    tinha muito texto — a causa do layout "quebrando" ao escrever mais). */
-.note-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
-  gap: 14px;
-  align-items: stretch;
-}
 
 /* Pastas: chips derivados dos valores de "folder" das notas — quebra
    em várias linhas em telas estreitas (nunca scroll horizontal, nunca
@@ -1827,193 +1432,20 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   flex-shrink: 0;
 }
 
-.note-filter-group-label {
-  font-size: 0.68rem;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  color: var(--muted);
-  margin: 2px 0 6px;
-}
-
-.note-folders {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-.folder-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border-radius: 999px;
-  font-size: 0.8rem;
-  font-weight: 600;
-  background: var(--surface2);
-  color: var(--text2);
-  border: 1.5px solid var(--line);
-  transition: all 160ms;
-}
-.folder-chip:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
-.folder-chip.active { background: var(--accent); color: #fff; border-color: var(--accent); box-shadow: 0 3px 10px color-mix(in srgb, var(--accent) 30%, transparent); }
-.folder-chip .pill { background: rgba(255,255,255,0.25); color: inherit; border: none; }
-.folder-chip:not(.active) .pill { background: var(--surface); color: var(--muted); }
-
 /* A cor escolhida acompanha a nota no cartão, não só no editor. */
-.note-card {
-  border-radius: var(--radius-card);
-  padding: 15px 15px 15px 16px;
-  border: 1.5px solid var(--line);
-  border-left-width: 4px;
-  background: color-mix(in srgb, var(--note-card-bg, var(--surface2)) 76%, var(--surface));
-  transition: transform 200ms ease, box-shadow 200ms ease;
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  position: relative;
-  overflow-wrap: anywhere;
-  word-break: break-word;
-  animation: fadeUp 200ms ease both;
-}
-
-.note-card:hover {
-  transform: translateY(-3px) scale(1.01);
-  box-shadow: var(--shadow-card-hover);
-}
 
 /* Note card content */
-.note-card header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.note-card h3 {
-  font-size: 0.96rem;
-  font-weight: 700;
-  color: color-mix(in srgb, var(--note-card-ink, var(--text)) 62%, var(--text));
-  line-height: 1.3;
-}
-
-.note-card .note-meta {
-  font-size: 0.78rem;
-  color: var(--text2);
-  margin-bottom: 6px;
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.note-folder-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: var(--surface);
-  color: var(--muted);
-  font-size: 0.72rem;
-  font-weight: 700;
-}
-
-.note-card-preview {
-  font-size: 0.86rem;
-  color: var(--text2);
-  line-height: 1.5;
-  margin-bottom: 10px;
-  display: -webkit-box;
-  -webkit-line-clamp: 4;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  overflow-wrap: anywhere;
-  word-break: break-word;
-}
-.note-card-preview [style*="background-color"] { padding: 1px 3px; border-radius: 4px; }
-.note-card-preview mark { background: var(--yellow-soft); color: inherit; border-radius: 3px; }
-
-.note-wordcount { display: block; margin-top: 2px; margin-bottom: 8px; }
-
-.note-card .tag-list { flex-wrap: wrap; }
-.note-priority-row { margin-top: auto; padding-top: 8px; }
 
 /* 3 ações por nota: "Editar" e "Tarefa" dividem o espaço em partes
    iguais, e "Excluir" vira um botão circular só com ícone à direita —
    em vez dos 4 botões de texto que quebravam linha de formas diferentes
    dependendo do tamanho da nota. */
-.note-card .card-actions {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr) 36px;
-  align-items: center;
-  gap: 6px;
-  margin-top: 10px;
-}
-.note-card .card-actions button { flex: 1; text-align: center; }
-.note-card-actions button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  min-width: 0;
-  min-height: 36px;
-  padding: 7px 4px;
-  white-space: normal;
-  line-height: 1.2;
-  text-align: center;
-}
-.note-card-actions button span { min-width: 0; overflow-wrap: anywhere; }
-.note-card-actions button svg { flex-shrink: 0; }
-.note-card header > div { min-width: 0; }
-.note-card .card-actions .is-done-action { justify-content: center; }
-.note-card .card-actions .danger-action {
-  flex: 0 0 auto;
-  width: 30px;
-  height: 30px;
-  padding: 0;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  font-size: 0.9rem;
-}
-.note-card .card-actions .danger-action:hover {
-  background: var(--red-soft);
-  color: var(--red);
-  border-color: var(--red);
-}
 
 /* Depois de virar tarefa, o botão "Tarefa" vira um selo verde discreto
    em vez de continuar parecendo uma ação disponível pra repetir — deixa
    claro (sem precisar clicar de novo) que aquilo já aconteceu. */
-.note-card .card-actions .is-done-action {
-  background: var(--green-soft);
-  color: var(--green);
-  border-color: transparent;
-}
 
 /* Botão de favoritar — estrela com preenchimento suave quando ativa */
-.note-fav-btn {
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border-radius: 50%;
-  background: var(--surface);
-  border: 1.5px solid var(--line);
-  color: var(--muted);
-  display: grid;
-  place-items: center;
-  flex-shrink: 0;
-  transition: all 160ms;
-}
-.note-fav-btn:hover { border-color: var(--accent); color: var(--accent); }
-.note-fav-btn.is-active {
-  background: color-mix(in srgb, #f5b400 18%, var(--surface));
-  border-color: #f5b400;
-  color: #f5b400;
-}
 
 /* Checklist preview */
 .checklist-preview {
@@ -2021,29 +1453,6 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   gap: 5px;
   margin: 8px 0;
 }
-
-.checklist-preview .cl-item {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 0.84rem;
-  color: var(--text2);
-}
-
-.cl-check {
-  width: 16px;
-  height: 16px;
-  min-width: 16px;
-  border-radius: 50%;
-  border: 2px solid var(--muted);
-  display: grid;
-  place-items: center;
-  font-size: 0.6rem;
-  cursor: pointer;
-  transition: all 150ms;
-  position: relative;
-}
-.cl-check .pn-icon { width: 9px; height: 9px; margin: 0; }
 
 /* Itens além do 3º ficam escondidos até a nota expandir — antes disso
    o "+N mais itens" era só texto, sem nenhum jeito de ver o resto sem
@@ -2054,70 +1463,8 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
    pra ela, então os itens "extras" nunca ficavam escondidos de verdade
    (aaí sim o botão "+N mais itens" parecia inútil, porque não escondia
    nada mesmo). */
-.checklist-preview .cl-item.cl-item-extra { display: none; }
-.checklist-preview.expanded .cl-item.cl-item-extra { display: flex; }
-
-.cl-toggle-btn {
-  background: none;
-  border: none;
-  padding: 2px 0;
-  margin-top: 1px;
-  color: var(--accent);
-  font-size: 0.8rem;
-  font-weight: 700;
-  cursor: pointer;
-  text-align: left;
-  width: fit-content;
-}
-.cl-toggle-btn:hover { text-decoration: underline; }
-
-@media (max-width: 720px) {
-  .cl-check::after { content: ""; position: absolute; inset: -12px; }
-}
-
-.cl-check.done {
-  background: var(--green);
-  border-color: var(--green);
-  color: #fff;
-}
-
-.cl-text.done {
-  text-decoration: line-through;
-  opacity: 0.5;
-}
 
 /* ---------- TASKS VIEW ---------- */
-.board-toolbar {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 18px;
-  flex-wrap: wrap;
-}
-
-.inline-form {
-  display: flex;
-  gap: 8px;
-  flex: 1;
-  flex-wrap: wrap;
-}
-
-.inline-form input, .inline-form select {
-  flex: 1;
-  min-width: 140px;
-}
-
-.progress-strip {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
-  background: var(--surface);
-  border: 1.5px solid var(--line);
-  border-radius: 14px;
-  font-size: 0.85rem;
-  font-weight: 600;
-  white-space: nowrap;
-}
 
 .progress-track {
   flex: 1;
@@ -2225,14 +1572,6 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 }
 
 /* ---------- CALENDAR VIEW ---------- */
-.calendar-layout {
-  display: grid;
-  grid-template-columns: 340px 1fr;
-  gap: 20px;
-  align-items: start;
-}
-
-.calendar-panel { padding: 18px; }
 
 .segmented {
   display: inline-flex;
@@ -2256,13 +1595,6 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   background: var(--surface);
   color: var(--accent);
   box-shadow: 0 2px 6px rgba(0,0,0,0.06);
-}
-
-.calendar-grid {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 6px;
-  margin-bottom: 14px;
 }
 
 .calendar-day {
@@ -2289,9 +1621,8 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 .event-row { flex-wrap: wrap; }
 
 /* ---------- GOALS VIEW ---------- */
-.goals-layout { display: grid; gap: 20px; }
 
-.goal-grid, .achievement-grid {
+.goal-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 14px;
@@ -2382,28 +1713,6 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 /* Pulsinho no toast — dá "voz" às mensagens do app, incluindo o
    fallback do sistema de notificações (window.PulseNoteShowToast,
    usado quando notificações do sistema não estão disponíveis). */
-.toast-mascot {
-  width: 26px;
-  height: 26px;
-  flex-shrink: 0;
-  border-radius: 50%;
-  background: linear-gradient(155deg, var(--accent), var(--purple));
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  animation: pulsinhoBob 2.6s ease-in-out infinite;
-}
-.toast-mascot .pulsinho__eyes { display: flex; gap: 4px; }
-.toast-mascot .pulsinho__eye {
-  width: 3px;
-  height: 3px;
-  border-radius: 50%;
-  background: #0c0d1c;
-  animation: pulsinhoBlink 4.4s ease-in-out infinite;
-}
-@media (prefers-reduced-motion: reduce) {
-  .toast-mascot, .toast-mascot .pulsinho__eye { animation: none !important; }
-}
 
 /* ---------- CELEBRATION ---------- */
 .celebration-burst { position: fixed; inset: 0; z-index: 100; pointer-events: none; }
@@ -2472,7 +1781,6 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 }
 
 /* ---------- BOTTOM NAV (mobile) ---------- */
-.bottom-nav { display: none; }
 
 /* ============================================================
    RESPONSIVE
@@ -2486,15 +1794,10 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 
 /* ---- Tablet ---- */
 @media (max-width: 1100px) {
-  .app-shell { grid-template-columns: 72px 1fr; }
 
-  .brand > div:not(.brand-mark),
-  .nav-item span:last-child,
-  .streak-box { display: none; }
+  .brand > div:not(.brand-mark) { display: none; }
 
   .sidebar { align-items: center; padding: 20px 10px; gap: 4px; }
-  .nav-item { justify-content: center; padding: 12px; width: 50px; border-radius: 14px; }
-  .nav-item .icon { margin: 0; }
 
   .overview-grid { grid-template-columns: repeat(3, 1fr); }
   .dashboard-layout { grid-template-columns: 1fr; }
@@ -2502,8 +1805,6 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   .task-board { grid-template-columns: repeat(2, 1fr); }
 
   .daily-hero { grid-template-columns: 1fr; }
-  #notesView .workbench { grid-template-columns: 1fr; }
-  .calendar-layout { grid-template-columns: 1fr; }
 }
 
 /* ---- Mobile ---- */
@@ -2511,94 +1812,19 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   /* Os modais vivem dentro de .app-shell, enquanto a navegação mobile é
      irmã desse wrapper. Eleva somente quando existe um modal aberto para
      que a barra inferior nunca fique por cima de formulários/ações. */
-  .app-shell:has(.modal-backdrop:not([hidden])) { z-index: 200; }
-
-  .app-shell { grid-template-columns: 1fr; }
 
   /* Hide desktop sidebar */
   .sidebar { display: none; }
 
   /* Show bottom nav */
-  .bottom-nav {
-    display: flex;
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    z-index: 100;
-    background: color-mix(in srgb, var(--surface) 88%, transparent);
-    backdrop-filter: blur(24px);
-    border-top: 1px solid var(--line);
-    padding: 8px 4px max(12px, env(safe-area-inset-bottom));
-    gap: 0;
-    justify-content: space-around;
-  }
-
-  .bottom-nav-item {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 3px;
-    flex: 1;
-    padding: 6px 4px;
-    border-radius: 14px;
-    color: var(--muted);
-    font-size: 0.65rem;
-    font-weight: 600;
-    transition: all 160ms;
-    cursor: pointer;
-    border: none;
-    background: none;
-  }
-
-  .bottom-nav-item .bn-icon {
-    width: 28px;
-    height: 28px;
-    border-radius: 8px;
-    display: grid;
-    place-items: center;
-    font-size: 1.1rem;
-    transition: all 200ms;
-  }
-
-  .bottom-nav-item .bn-icon svg {
-    width: 19px;
-    height: 19px;
-    display: block;
-  }
-
-  .bottom-nav-item.active {
-    color: var(--accent);
-  }
-
-  .bottom-nav-item.active .bn-icon {
-    background: var(--accent-soft);
-    transform: scale(1.1);
-  }
 
   /* Botão "+" flutuante no meio da navegação (referência TaskifyAI) —
      mesmo `flex:1` da barra, mas com `flex: 0 0 auto` pra não esticar
      junto com os outros 4 itens; o espaço ao redor sobra naturalmente
      do `justify-content: space-around` do container, então não muda
      nada no alinhamento dos botões existentes. */
-  .bottom-nav-fab {
-    flex: 0 0 auto;
-    width: 52px;
-    height: 52px;
-    border-radius: 50%;
-    display: grid;
-    place-items: center;
-    background: linear-gradient(135deg, var(--accent), var(--teal));
-    color: #fff;
-    box-shadow: 0 8px 20px color-mix(in srgb, var(--accent) 36%, transparent);
-    margin-top: -26px;
-    border: 4px solid var(--surface);
-    flex-shrink: 0;
-  }
-  .bottom-nav-fab:active { transform: scale(0.93); }
 
   /* Mobile main area adjustments */
-  .main-area { padding-bottom: calc(var(--nav-height) + 20px + env(safe-area-inset-bottom)); }
 
   .topbar {
     padding: calc(10px + env(safe-area-inset-top)) 16px 12px;
@@ -2608,26 +1834,9 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   /* No mobile a .topbar-row deixa de ser "invisível" (display:contents
      do desktop) e vira uma linha de verdade, ocupando a largura toda,
      com a saudação flexível de um lado e o avatar fixo do outro. */
-  .topbar-row {
-    display: flex;
-    align-items: flex-start;
-    flex-wrap: wrap;
-    width: 100%;
-    gap: 10px;
-  }
-
-  .topbar-greeting {
-    flex: 1 1 auto;
-    min-width: 0;
-  }
 
   /* Mascote maior no mobile — como não divide mais espaço com a busca
      nessa linha, dá pra deixar ele com presença de verdade. */
-  .pulsinho--greeting {
-    width: 58px;
-    height: 58px;
-    margin: 4px 0;
-  }
 
   #todayLabel {
     font-size: 0.82rem;
@@ -2645,14 +1854,6 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
     max-width: 100%;
   }
 
-  .topbar-actions {
-    flex: 1 1 100%;
-    width: 100%;
-    gap: 6px;
-    margin-left: 0;
-    order: 3;
-  }
-
   /* Busca integrada às ações, ocupando só a linha complementar no mobile. */
   .search-box {
     width: auto;
@@ -2663,10 +1864,6 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   }
 
   /* Avatar e botão de instalar PWA (quando aparece) do mesmo tamanho. */
-  .topbar-actions .user-avatar-btn {
-    width: 40px;
-    height: 40px;
-  }
 
   .pwa-fixed-install-btn {
     flex-shrink: 0;
@@ -2682,7 +1879,6 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   /* Rede de segurança pros aparelhos mais estreitos comuns (iPhone SE e
      afins, ~375px) — só encolhe um pouco mais o mascote/título. */
   @media (max-width: 380px) {
-    .pulsinho--greeting { width: 48px; height: 48px; }
     #viewTitle { font-size: 1.15rem; }
     .topbar { padding-left: 14px; padding-right: 14px; }
   }
@@ -2694,14 +1890,6 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
      dentro de .form-heading (Agenda/Anotações/Finanças) está numa linha,
      não numa coluna — dar width:100% nele empurra o botão para fora da
      tela (foi exatamente o bug visto nos prints). */
-  .inline-form .primary-button {
-    flex: 0 0 auto;
-    width: 100%;
-  }
-
-  .form-heading .primary-button {
-    flex: 0 0 auto;
-  }
 
   .view { padding: 16px; }
 
@@ -2719,71 +1907,31 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   .dashboard-main, .dashboard-side { gap: 10px; }
   .dashboard-side { grid-template-columns: 1fr; }
   .wide { grid-column: auto; }
-  .panel, .list-panel, .calendar-panel, .editor-panel { padding: 12px 14px; border-radius: 16px; }
+  .panel { padding: 12px 14px; border-radius: 16px; }
   .panel-header { margin-bottom: 8px; gap: 8px; }
   .panel-header h2 { font-size: 0.9rem; }
   .icon-button { width: 30px; height: 30px; border-radius: 9px; font-size: 0.82rem; }
 
   /* Mobile notes */
-  #notesView .workbench { grid-template-columns: 1fr; }
-  .note-grid { grid-template-columns: 1fr; }
 
   /* Mobile tasks — cartão de "adicionar tarefa rápida". Todos os campos
      (texto, prioridade, data) e a barra de progresso ficam com a MESMA
      altura, mesmo raio de borda e texto centralizado, em vez de cada
      um alinhar o conteúdo de um jeito (o texto encostado à esquerda,
      o select mais pra dentro, a data centralizada pelo navegador). */
-  .board-toolbar { flex-direction: column; gap: 10px; }
-  .inline-form {
-    flex-direction: column;
-    background: var(--surface);
-    border: 1.5px solid var(--line);
-    border-radius: 20px;
-    padding: 16px;
-    box-shadow: var(--shadow-card);
-    gap: 10px;
-  }
-  .inline-form input,
-  .inline-form select {
-    width: 100%;
-    height: 46px;
-    text-align: center;
-    border-radius: 13px;
-  }
   /* Select nativo some com a aparência do sistema (que varia de navegador
      pra navegador) e ganha uma setinha customizada, igual ao resto do
      app — assim o texto fica realmente centralizado em vez de sobrar
      espaço reservado pra seta do lado direito. */
-  .inline-form select {
-    -webkit-appearance: none;
-    appearance: none;
-    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b8aa8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M6 9l6 6 6-6'/></svg>");
-    background-repeat: no-repeat;
-    background-position: right 12px center;
-    background-size: 16px;
-    padding-right: 34px;
-    text-align-last: center;
-  }
-  .inline-form .primary-button {
-    width: 100%;
-    justify-content: center;
-    height: 46px;
-  }
   .task-board { grid-template-columns: 1fr; }
 
   /* Barra de progresso das tarefas: centralizada, mesma largura do
      cartão de cima em vez de encostar nas bordas de um jeito diferente. */
-  .progress-strip {
-    width: 100%;
-    justify-content: center;
-    text-align: center;
-  }
 
   /* Mobile calendar */
-  .calendar-layout { grid-template-columns: 1fr; }
 
   /* Mobile goals */
-  .goal-grid, .achievement-grid { grid-template-columns: 1fr; }
+  .goal-grid { grid-template-columns: 1fr; }
 
   /* Toast above nav */
   .toast { bottom: calc(var(--nav-height) + 12px); right: 16px; left: 16px; justify-content: center; }
@@ -2797,51 +1945,10 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
      quebra automática (flex-wrap), a prioridade vira uma grade de 4 colunas
      iguais — sempre cabe tudo numa linha só — e o checklist fica em sua
      própria linha, ocupando a largura toda, como uma ação separada e clara. */
-  .note-quick-row {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .note-draft-format-row {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-  .note-text-color-picker { justify-content: flex-start; width: 100%; }
-  .note-text-color-default,
-  .note-text-color-dot {
-    width: 40px;
-    height: 40px;
-    min-height: 40px;
-    flex-basis: 40px;
-  }
-  .note-card-color-control { width: 100%; }
-  .note-priority-picker {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    width: 100%;
-  }
-  .note-priority-dot {
-    justify-content: center;
-    padding: 8px 4px;
-    font-size: 0.72rem;
-    gap: 4px;
-  }
-  .note-checklist-toggle {
-    width: 100%;
-    display: flex;
-    justify-content: center;
-  }
 
   /* Cartão de anotação no mobile: mesma lógica do desktop (Editar/Tarefa
      dividem o espaço, Excluir vira um círculo só com ícone), garantindo
      que a linha de ações nunca quebre de forma imprevisível. */
-  .note-card .card-actions button {
-    padding: 0 6px;
-  }
-  .note-card .card-actions { min-width: 0; max-width: 100%; }
-  .note-card-actions button span {
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
 }
 
 /* Note grid já se adapta sozinha em telas grandes via auto-fill */
@@ -2854,23 +1961,6 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
    ============================================================ */
 
 /* Cabeçalho fixo (mês + resumo), visível em todas as abas de Finanças */
-.fin-header { display: grid; gap: 14px; margin-bottom: 18px; }
-
-.fin-budget-bar { padding: 14px 16px; display: grid; gap: 10px; }
-.fin-budget-bar-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-.fin-budget-bar-title { font-weight: 700; font-size: 0.88rem; color: var(--text); }
-.fin-budget-bar-label { font-size: 0.8rem; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
-.fin-budget-track {
-  height: 12px;
-  background: var(--surface2);
-  box-shadow: inset 0 1px 3px rgba(0,0,0,0.08);
-}
-.fin-budget-fill {
-  height: 100%;
-  border-radius: inherit;
-  background: var(--green);
-  transition: width 500ms cubic-bezier(0.22, 1, 0.36, 1), background 300ms ease;
-}
 
 /* Abas de Finanças: Lançamentos / Análise / Controle / Automação —
    separam o fluxo de "registrar" (usado toda hora) dos painéis de
@@ -2910,14 +2000,6 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   scroll-snap-align: center;
 }
 
-.fin-tab-icon {
-  display: inline-flex;
-  width: 17px;
-  height: 17px;
-}
-
-.fin-tab-icon svg { width: 100%; height: 100%; display: block; }
-
 .fin-tab-btn:hover { color: var(--text); }
 .fin-tab-btn:active { transform: scale(0.97); }
 
@@ -2947,39 +2029,6 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 
 /* Aba Análise: por categoria + gráfico dos últimos 6 meses lado a lado
    em telas largas, empilhados em telas estreitas. */
-.fin-analise-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
-  align-items: stretch;
-  min-width: 0;
-}
-
-.note-detail-checklist { margin: 16px 0 4px; padding: 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface2); }
-.note-detail-checklist-heading { display: flex; justify-content: space-between; align-items: start; gap: 12px; }
-.note-detail-checklist-title { font-size: 0.78rem; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
-.note-detail-checklist-summary { margin: 3px 0 0; color: var(--text2); font-size: .78rem; }
-.note-detail-checklist-progress { flex: 0 0 auto; padding: 4px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: .75rem; font-weight: 800; }
-.note-detail-checklist-track { height: 5px; margin: 11px 0 5px; overflow: hidden; border-radius: 999px; background: var(--line); }
-.note-detail-checklist-track span { display: block; width: 0; height: 100%; border-radius: inherit; background: var(--purple); transition: width 220ms ease; }
-.note-detail-checklist.is-complete .note-detail-checklist-track span { background: var(--green); }
-.note-detail-check-item { width: 100%; display: flex; align-items: center; gap: 10px; padding: 10px 4px; color: var(--text); text-align: left; border: 0; border-bottom: 1px solid var(--line); background: transparent; border-radius: 8px; transition: background 160ms ease, color 160ms ease; }
-.note-detail-check-item:hover { background: color-mix(in srgb, var(--accent-soft) 45%, transparent); }
-.note-detail-check-item:last-child { border-bottom: 0; }
-.note-detail-check-box { display: inline-grid; place-items: center; flex: 0 0 20px; width: 20px; height: 20px; border: 1.5px solid var(--line-strong); border-radius: 6px; color: white; }
-.note-detail-check-item.is-done .note-detail-check-box { border-color: var(--purple); background: var(--purple); }
-.note-detail-check-item.is-done { color: var(--muted); text-decoration: line-through; }
-.fin-analise-grid > .panel.wide { grid-column: 1 / -1; }
-
-.fin-analysis-intro {
-  display: flex;
-  justify-content: space-between;
-  align-items: end;
-  gap: 18px;
-  margin: 2px 2px 14px;
-}
-.fin-analysis-intro h2 { margin: 2px 0 0; font-size: 1.2rem; }
-.fin-analysis-intro > p { max-width: 470px; margin: 0; color: var(--text2); font-size: 0.88rem; line-height: 1.5; }
 .fin-insights-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 20px; }
 .fin-insight-card { min-width: 0; padding: 16px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: var(--shadow-card); }
 .fin-insight-card.primary { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); background: color-mix(in srgb, var(--accent-soft) 58%, var(--surface)); }
@@ -2988,50 +2037,19 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 .fin-insight-label { display: block; color: var(--muted); font-size: 0.74rem; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
 .fin-insight-card strong { display: block; overflow-wrap: anywhere; margin: 7px 0 5px; color: var(--text); font-size: 1.05rem; }
 .fin-insight-card small { display: block; color: var(--text2); line-height: 1.4; }
-.fin-chart-metrics { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: baseline; width: 100%; margin: 0 0 10px; color: var(--muted); font-size: .77rem; }
-.fin-chart-metrics span { color: var(--text2); }
-.fin-chart-metrics b { color: var(--text); font-size: .84rem; }
-.fin-chart-metrics small { margin-left: auto; color: var(--muted); }
 
 /* Os dois gráficos ficam lado a lado, com a mesma altura (align-items:
    stretch acima), e o conteúdo do gráfico ocupa o espaço disponível em
    vez de deixar sobra em branco — era isso que fazia a aba parecer
    "esquisita"/desalinhada no desktop. */
-.fin-chart-panel {
-  display: flex;
-  flex-direction: column;
-}
-.fin-chart-panel .fin-chart6m {
-  flex: 1;
-  display: flex;
-  align-items: center;
-}
-.fin-chart-panel .fin-chart6m .empty-state {
-  width: 100%;
-}
-.fin-chart-panel .fin-chart6m svg {
-  width: 100%;
-}
 
 @media (max-width: 900px) {
-  .fin-analise-grid { grid-template-columns: 1fr; }
-  .fin-analysis-intro { align-items: start; flex-direction: column; }
   .fin-insights-grid { grid-template-columns: 1fr; }
 }
 
 /* Layout: 2 colunas em desktop, 1 coluna em mobile/tablet */
-.fin-layout {
-  display: grid;
-  grid-template-columns: 340px 1fr;
-  gap: 20px;
-  align-items: start;
-  min-width: 0;
-}
-
-.fin-left, .fin-right { display: grid; gap: 14px; min-width: 0; }
 
 /* Proteção global contra overflow em Finanças */
-.fin-layout, .fin-layout * { min-width: 0; }
 
 /* Form card */
 .fin-form-card { gap: 12px; min-width: 0; transition: border-color 200ms ease, box-shadow 200ms ease; }
@@ -3057,13 +2075,6 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
    diferentes entre si — deixamos tudo à esquerda, igual a um formulário
    comum, pra ficar consistente do início ao fim. */
 #expenseDescription { text-align: left; }
-
-.fin-form-row {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 8px;
-  align-items: stretch;
-}
 .fin-date-input {
   height: 44px;
   border: 1.5px solid var(--line);
@@ -3081,10 +2092,6 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 }
 
 /* Categoria: botão seletor customizado (abre o picker) + botão "+" */
-.fin-cat-select-row { display: flex; gap: 6px; }
-.fin-cat-select-row select { flex: 1; height: 40px; border: 1.5px solid var(--line); border-radius: 12px; padding: 0 10px; background: var(--surface2); color: var(--text); font: inherit; }
-.fin-cat-add-btn { width: 40px; height: 40px; border-radius: 12px; border: 1.5px dashed var(--line); background: transparent; color: var(--muted); font-size: 1.2rem; cursor: pointer; flex-shrink: 0; transition: all 150ms; }
-.fin-cat-add-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 
 .fin-cat-trigger {
   flex: 1;
@@ -3110,8 +2117,6 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 .fin-cat-trigger:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .fin-cat-trigger-icon { font-size: 1.05rem; flex-shrink: 0; line-height: 1; }
 .fin-cat-trigger-label { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
-.fin-cat-trigger-chevron { flex-shrink: 0; color: var(--muted); transition: transform 150ms ease; margin-left: auto; }
-.fin-cat-trigger[aria-expanded="true"] .fin-cat-trigger-chevron { transform: rotate(180deg); }
 
 /* ---------- CATEGORY PICKER (sheet de seleção/criação de categoria) ---------- */
 
@@ -3215,48 +2220,6 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
     linear-gradient(120deg, #6c5ce7, #af52de) border-box;
 }
 
-.ai-quick-entry-label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.84rem;
-  font-weight: 700;
-  color: var(--text);
-  margin-bottom: 8px;
-}
-
-.ai-quick-entry-row { display: flex; gap: 8px; }
-
-.ai-quick-entry-row input {
-  flex: 1;
-  min-width: 0;
-  min-height: 44px;
-  border: 1.5px solid var(--line);
-  border-radius: 12px;
-  padding: 8px 12px;
-  background: var(--surface);
-  color: var(--text);
-  font-size: 0.92rem;
-}
-
-.ai-quick-entry-row .primary-button {
-  flex-shrink: 0;
-  height: 44px;
-  background: linear-gradient(120deg, #6c5ce7, #af52de);
-}
-
-.ai-quick-entry-hint {
-  font-size: 0.76rem;
-  color: var(--muted);
-  margin: 8px 0 0;
-  line-height: 1.4;
-}
-
-@media (max-width: 720px) {
-  .ai-quick-entry-row { flex-direction: column; }
-  .ai-quick-entry-row .primary-button { width: 100%; justify-content: center; }
-}
-
 /* Seletor de tema (Claro / Aurora / Automático) — Configurações > Aparência */
 .theme-toggle {
   display: grid;
@@ -3317,14 +2280,6 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
   background: none;
 }
 
-.fin-type-icon {
-  display: inline-flex;
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-}
-.fin-type-icon svg { width: 100%; height: 100%; display: block; }
-
 .fin-type-btn.active[data-fin-type="despesa"] {
   background: var(--red-soft);
   color: var(--red);
@@ -3339,280 +2294,19 @@ textarea.autogrow { overflow: hidden; resize: none; transition: height 120ms eas
 
 /* Amount field — "R$" e o valor formam um único bloco centralizado no
    campo, em vez do valor ficar solto encostado à esquerda. */
-.fin-amount-field {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 6px;
-  background: var(--surface2);
-  border: 2px solid var(--line);
-  border-radius: 16px;
-  padding: 4px 16px;
-  transition: border-color 200ms, box-shadow 200ms;
-}
-
-.fin-amount-field:focus-within {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
-  background: var(--surface);
-}
-
-.fin-currency-sign {
-  font-size: 1.1rem;
-  font-weight: 800;
-  color: var(--muted);
-  flex-shrink: 0;
-}
-
-.fin-amount-field input {
-  border: none;
-  background: transparent;
-  font-size: 1.8rem;
-  font-weight: 800;
-  color: var(--text);
-  min-height: 52px;
-  padding: 0;
-  letter-spacing: -0.03em;
-  text-align: left;
-  box-shadow: none !important;
-  flex: 0 1 auto;
-  width: auto;
-  max-width: 100%;
-}
-
-.fin-amount-field input:focus {
-  outline: none;
-  box-shadow: none;
-}
 
 /* ─── Navegador de mês em Finanças ─────────────────────────── */
-.fin-month-nav {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: var(--surface);
-  border-radius: 18px;
-  border: 1.5px solid var(--line);
-  padding: 8px;
-  gap: 6px;
-  margin-top: 4px;
-  box-shadow: var(--shadow-card);
-}
 
 /* Área clicável maior (44px, alvo de toque confortável em mobile),
    texto e chevron centralizados, transição suave nos estados —
    inspirado no seletor de mês do calendário nativo do iOS. */
-.fin-month-arrow {
-  width: 44px;
-  height: 44px;
-  border-radius: 14px;
-  background: var(--surface2);
-  border: 1.5px solid var(--line);
-  color: var(--text2);
-  font-size: 1.3rem;
-  font-weight: 700;
-  cursor: pointer;
-  display: grid;
-  place-items: center;
-  transition: background 160ms ease, color 160ms ease, border-color 160ms ease, transform 160ms ease;
-  flex-shrink: 0;
-}
-.fin-month-arrow:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
-.fin-month-arrow:active { transform: scale(0.92); }
-
-.fin-month-center {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  flex: 1;
-  min-height: 44px;
-}
-
-.fin-month-label {
-  font-size: 1.05rem;
-  font-weight: 800;
-  color: var(--text);
-  text-transform: capitalize;
-  letter-spacing: -0.02em;
-  text-align: center;
-  transition: opacity 160ms ease;
-}
-
-.fin-closed-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  background: var(--green-soft);
-  color: var(--green);
-  border: 1px solid var(--green);
-  border-radius: 999px;
-  padding: 2px 10px;
-  font-size: 0.72rem;
-  font-weight: 700;
-}
 
 /* Botões de ação (Fechar / Reabrir / Exportar) */
-.fin-month-actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.fin-action-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  height: 42px;
-  flex: 1;
-  min-width: 0;
-  padding: 0 16px;
-  border-radius: 13px;
-  font-size: 0.84rem;
-  font-weight: 700;
-  cursor: pointer;
-  border: 1.5px solid transparent;
-  transition: background 160ms ease, color 160ms ease, box-shadow 160ms ease, transform 120ms ease;
-  white-space: nowrap;
-}
-.fin-action-btn:active { transform: translateY(1px) scale(0.99); }
-
-.fin-action-icon {
-  display: inline-flex;
-  width: 15px;
-  height: 15px;
-  flex-shrink: 0;
-  transition: transform 160ms ease;
-}
-.fin-action-icon svg { width: 100%; height: 100%; display: block; }
-.fin-action-btn:hover .fin-action-icon { transform: scale(1.1); }
-
-.fin-action-btn.close {
-  background: var(--orange-soft);
-  color: var(--orange);
-  border-color: var(--orange);
-}
-.fin-action-btn.close:hover { background: var(--orange); color: #fff; box-shadow: 0 6px 16px color-mix(in srgb, var(--orange) 35%, transparent); }
-
-.fin-action-btn.reopen {
-  background: var(--green-soft);
-  color: var(--green);
-  border-color: var(--green);
-}
-.fin-action-btn.reopen:hover { background: var(--green); color: #fff; box-shadow: 0 6px 16px color-mix(in srgb, var(--green) 35%, transparent); }
-
-.fin-action-btn.export {
-  background: var(--accent-soft);
-  color: var(--accent);
-  border-color: var(--accent);
-}
-.fin-action-btn.export:hover { background: var(--accent); color: #fff; box-shadow: 0 6px 16px color-mix(in srgb, var(--accent) 35%, transparent); }
 
 /* Summary cards */
-.fin-summary-grid{
-display:grid;
-grid-template-columns:repeat(3,minmax(0,1fr));
-gap:14px;
-align-items:stretch;
-}
-
-.fin-summary-card{
-  background: var(--surface);
-  border-radius: 16px;
-  border: 1.5px solid var(--line);
-  box-shadow: var(--shadow-card);
-  transition: transform 180ms ease, box-shadow 180ms ease;
-  position: relative;
-  /* Container query: o tamanho do valor abaixo escala com a largura do
-     próprio card (não do viewport), então funciona igual em 2 ou 3
-     colunas, mobile ou desktop, sem precisar de breakpoints manuais. */
-  container-type: inline-size;
-
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 6px;
-  padding: 14px;
-  min-height: 78px;
-  width: 100%;
-  min-width: 0;
-  overflow: hidden;
-}
-
-.fin-summary-card::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  opacity: 0.05;
-  pointer-events: none;
-}
-.fin-summary-card.receita::before { background: radial-gradient(120px 60px at 100% 0%, var(--green), transparent); }
-.fin-summary-card.despesa::before { background: radial-gradient(120px 60px at 100% 0%, var(--red), transparent); }
-.fin-summary-card.saldo::before   { background: radial-gradient(120px 60px at 100% 0%, var(--saldo-color, var(--green)), transparent); }
-
-.fin-summary-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-card-hover); }
 
 /* Bolinha discreta indicando que o saldo mostrado inclui valor transferido
    do mês anterior — some ao passar o mouse/tocar (title nativo explica). */
-.fin-summary-card.has-carryover::after {
-  content: "";
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 0 2px var(--surface);
-}
-
-.fin-sum-icon {
-  display: inline-flex;
-  width: 15px;
-  height: 15px;
-  margin-right: 5px;
-  vertical-align: -2px;
-}
-
-.fin-sum-icon svg { width: 100%; height: 100%; display: block; }
-
-.fin-sum-label {
-  display: flex;
-  align-items: center;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
-}
-
-.fin-summary-card.receita .fin-sum-icon { color: var(--green); }
-.fin-summary-card.despesa .fin-sum-icon { color: var(--red); }
-.fin-summary-card.saldo .fin-sum-icon   { color: var(--saldo-color, var(--green)); }
-
-.fin-summary-card strong{
-display:flex;
-align-items:center;
-width:100%;
-min-width:0;
-overflow:hidden;
-white-space:nowrap;
-font-weight:800;
-font-size:clamp(1.05rem,2.8vw,1.45rem);
-line-height:1.05;
-letter-spacing:-0.02em;
-font-variant-numeric:tabular-nums;
-}
-
-.fin-summary-card.receita strong { color: var(--green); }
-.fin-summary-card.despesa strong { color: var(--red); }
-.fin-summary-card.saldo strong   { color: var(--saldo-color, var(--green)); }
 
 /* Category breakdown */
 .fin-cat-list { display: grid; gap: 10px; }
@@ -3623,51 +2317,7 @@ font-variant-numeric:tabular-nums;
   gap: 10px;
 }
 
-.fin-cat-info {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  min-width: 120px;
-  font-size: 0.84rem;
-  font-weight: 600;
-  color: var(--text2);
-}
-
-.fin-cat-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.fin-cat-label { white-space: nowrap; }
-
-.fin-cat-bar-wrap {
-  flex: 1;
-  height: 8px;
-  background: var(--surface2);
-  border-radius: 999px;
-  overflow: hidden;
-  border: 1px solid var(--line);
-}
-
-.fin-cat-bar {
-  height: 100%;
-  border-radius: inherit;
-  min-width: 4px;
-  transition: width 400ms ease;
-}
-
-.fin-cat-value {
-  font-size: 0.84rem;
-  font-weight: 700;
-  color: var(--text);
-  min-width: 80px;
-  text-align: right;
-}
-
 /* Financial calendar */
-.fin-calendar-card { padding: 18px; }
 
 .fin-cal-grid {
   display: grid;
@@ -3676,174 +2326,16 @@ font-variant-numeric:tabular-nums;
   justify-content: center;
 }
 
-.fin-cal-day {
-  min-height: 58px;
-  border-radius: 10px;
-  background: var(--surface2);
-  border: 1.5px solid transparent;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: var(--text2);
-  cursor: pointer;
-  transition: all 150ms;
-  gap: 4px;
-  padding: 5px 2px;
-}
-
-.fin-cal-day-top { display: inline-flex; align-items: center; justify-content: center; gap: 4px; }
-
-.fin-day-balance {
-  display: block;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: var(--text2);
-  font-size: 0.58rem;
-  font-weight: 750;
-  line-height: 1;
-  letter-spacing: -0.02em;
-}
-
-.fin-day-balance.is-negative { color: var(--red); }
-.fin-cal-day.today .fin-day-balance { color: rgba(255,255,255,.88); }
-.fin-cal-day.has-projection { box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--accent) 55%, transparent); }
-
-.fin-cal-day strong {
-  font-size: 0.82rem;
-  font-weight: 700;
-}
-
-.fin-cal-day:hover {
-  background: var(--accent-soft);
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.fin-cal-day.today {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
-}
-
-.fin-cal-day.has-data {
-  border-color: var(--line);
-}
-
 /* Day dots */
-.fin-day-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.fin-day-dot.receita { background: var(--green); }
-.fin-day-dot.despesa { background: var(--red); }
-.fin-day-dot.both    { background: linear-gradient(90deg, var(--green) 50%, var(--red) 50%); }
-
-.fin-cal-day.today .fin-day-dot { background: rgba(255,255,255,0.7); }
 
 /* Transaction list */
 .fin-tx-list { display: grid; gap: 8px; }
 
-.fin-transaction {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px;
-  background: var(--surface2);
-  border-radius: 14px;
-  border: 1.5px solid var(--line);
-  transition: all 160ms;
-}
-
-.fin-transaction:hover { background: var(--line); }
-
-.fin-tx-icon {
-  width: 40px;
-  height: 40px;
-  min-width: 40px;
-  border-radius: 12px;
-  display: grid;
-  place-items: center;
-  font-size: 1.1rem;
-  flex-shrink: 0;
-}
-
 /* Coluna principal: 2 linhas (título+valor / categoria+ações), em vez de
    tudo numa linha só competindo por espaço com ícone + 2 botões — era isso
    que deixava o título espremido e cortado (ex.: "Alimen..."). */
-.fin-tx-main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.fin-tx-top {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.fin-tx-title {
-  min-width: 0;
-  flex: 1;
-  font-size: 0.9rem;
-  font-weight: 700;
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.fin-tx-bottom {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.fin-tx-meta {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.fin-tx-actions {
-  display: flex;
-  gap: 6px;
-  flex-shrink: 0;
-}
-
-.fin-tx-amount {
-  font-size: 0.96rem;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.fin-tx-amount.receita { color: var(--green); }
-.fin-tx-amount.despesa { color: var(--red); }
 
 /* ---- Finance responsive ---- */
-@media (max-width: 1100px) {
-  .fin-layout { grid-template-columns: 1fr; }
-  .fin-summary-grid{
-display:grid;
-grid-template-columns:repeat(3,minmax(0,1fr));
-gap:14px;
-align-items:stretch;
-}
-}
 
 @media (max-width: 720px) {
   /* Antes rolava na horizontal (com máscara de esmaecimento nas bordas);
@@ -3871,47 +2363,10 @@ align-items:stretch;
     border-radius: 14px;
   }
   .fin-tab-btn.active { box-shadow: none; border-color: var(--accent); }
-  .fin-tab-icon { width: 15px; height: 15px; }
-  .fin-layout { grid-template-columns: 1fr; gap: 10px; }
-  .fin-left, .fin-right { gap: 10px; }
   .fin-form-card { padding: 14px; gap: 10px; }
-  .fin-amount-field input { font-size: 1.5rem; min-height: 46px; }
-  .fin-form-row { grid-template-columns: 1fr; }
   .fin-date-input { width: 100%; }
-  .fin-left .panel, .fin-right .panel, .fin-calendar-card { padding: 14px; }
-  .fin-summary-card{
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    padding: 10px 8px;
-    gap: 4px;
-    min-height: 76px;
-    width: 100%;
-    min-width: 0;
-    overflow: hidden;
-  }
-  .fin-sum-icon { display: none; }
-  .fin-summary-grid{
-display:grid;
-grid-template-columns:repeat(3,minmax(0,1fr));
-gap:14px;
-align-items:stretch;
-}
   .fin-cal-grid { grid-template-columns: repeat(7, 1fr); gap: 3px; }
-  .fin-cal-day { min-height: 52px; font-size: 0.7rem; border-radius: 8px; padding-inline: 1px; }
-  .fin-day-balance { font-size: 0.52rem; }
   .fin-cat-row { gap: 6px; }
-  .fin-cat-info { min-width: 76px; font-size: 0.74rem; flex-shrink: 0; }
-  .fin-cat-bar-wrap { min-width: 0; }
-  .fin-cat-value { min-width: 56px; font-size: 0.74rem; flex-shrink: 0; }
-  .fin-month-actions { flex-wrap: wrap; }
-  .fin-action-btn { font-size: 0.78rem; padding: 0 10px; }
-  .fin-tx-actions .mini-button { width: 26px; height: 26px; }
-}
-
-@media (max-width: 380px) {
-  .fin-cat-info { min-width: 64px; font-size: 0.7rem; }
-  .fin-cat-value { min-width: 48px; font-size: 0.7rem; }
 }
 
 /* ---- Modal "Nova categoria": ícones agrupados por tema + paleta ampla ----
@@ -4206,18 +2661,6 @@ align-items:stretch;
 }
 
 /* ---- Botão de editar transação ---- */
-.fin-tx-actions .mini-button {
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  display: grid;
-  place-items: center;
-  flex-shrink: 0;
-  transition: all 140ms ease;
-}
-.fin-tx-actions .mini-button:hover {
-  transform: scale(1.1);
-}
 
 /* ─── Gráfico 6 meses ───────────────────────────────────────── */
 .fin-chart6m {
@@ -4227,183 +2670,18 @@ align-items:stretch;
 .fin-chart6m svg { display: block; }
 
 /* ─── Metas por categoria ────────────────────────────────────── */
-.fin-goals-list { display: grid; gap: 10px; }
-.fin-goal-row {
-  background: var(--surface2);
-  border: 1.5px solid var(--line);
-  border-radius: 12px;
-  padding: 12px 14px;
-  display: grid;
-  gap: 4px;
-}
-.fin-goal-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-.fin-goal-label { font-size: 0.88rem; font-weight: 700; color: var(--text); flex: 1; }
-.fin-goal-val   { font-size: 0.82rem; font-weight: 700; white-space: nowrap; }
 
 /* ─── Meses fechados ───────────────────────────────────────────── */
-.fin-closures-list { display: grid; gap: 10px; margin-top: 4px; }
-.fin-closure-row {
-  background: var(--surface2);
-  border: 1.5px solid var(--line);
-  border-radius: 12px;
-  padding: 12px 14px;
-  display: grid;
-  gap: 8px;
-}
-.fin-closure-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-.fin-closure-label { font-size: 0.88rem; font-weight: 700; color: var(--text); text-transform: capitalize; }
-.fin-closure-val   { font-size: 0.88rem; font-weight: 700; white-space: nowrap; }
-.fin-closure-actions { display: flex; gap: 8px; }
-.fin-closure-actions .mini-button { flex: 1; text-align: center; }
 
 /* ─── Recorrentes ─────────────────────────────────────────────── */
-.fin-recurring-suggestions {
-  margin-bottom: 14px;
-  overflow: hidden;
-}
-.fin-recurring-suggestions-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  padding-bottom: 14px;
-  border-bottom: 1px solid var(--line);
-}
-.fin-recurring-suggestions-head h2 { margin: 2px 0 5px; }
-.fin-recurring-suggestions-head p:not(.eyebrow) {
-  margin: 0;
-  max-width: 620px;
-  color: var(--muted);
-  font-size: 0.84rem;
-  line-height: 1.5;
-}
-.fin-recurring-suggestions-count {
-  display: grid;
-  place-items: center;
-  min-width: 30px;
-  height: 30px;
-  padding: 0 9px;
-  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--line));
-  border-radius: 999px;
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-size: 0.78rem;
-  font-weight: 800;
-}
-.fin-recurring-suggestions-list { display: grid; gap: 0; }
-.fin-recurring-suggestion-row {
-  display: grid;
-  grid-template-columns: 38px minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 12px;
-  padding: 13px 0;
-  border-bottom: 1px solid var(--line);
-}
-.fin-recurring-suggestion-row:last-child { border-bottom: 0; padding-bottom: 0; }
-.fin-recurring-suggestion-mark {
-  display: grid;
-  place-items: center;
-  width: 38px;
-  height: 38px;
-  border-radius: 12px;
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-.fin-recurring-suggestion-mark svg { width: 18px; height: 18px; }
-.fin-recurring-suggestion-copy { min-width: 0; }
-.fin-recurring-suggestion-copy strong,
-.fin-recurring-suggestion-copy span { display: block; }
-.fin-recurring-suggestion-copy strong {
-  overflow: hidden;
-  color: var(--text);
-  font-size: 0.9rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.fin-recurring-suggestion-copy span {
-  margin-top: 3px;
-  color: var(--muted);
-  font-size: 0.76rem;
-}
-.fin-recurring-suggestion-amount {
-  color: var(--text);
-  font-size: 0.86rem;
-  white-space: nowrap;
-}
-.fin-recurring-suggestion-row .mini-button {
-  min-height: 34px;
-  transition: transform 140ms cubic-bezier(0.23, 1, 0.32, 1), border-color 140ms ease, background-color 140ms ease;
-}
-.fin-recurring-suggestion-row .mini-button:active { transform: scale(0.97); }
-
-.fin-recur-list { display: grid; gap: 8px; min-width: 0; overflow: hidden; }
-.fin-recur-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px;
-  background: var(--surface2);
-  border: 1.5px solid var(--line);
-  border-radius: 14px;
-  transition: border-color 160ms ease, transform 160ms ease;
-  min-width: 0;
-  max-width: 100%;
-}
-.fin-recur-row:hover { border-color: var(--line); transform: translateY(-1px); }
-.fin-recur-row.is-skipped { opacity: 0.55; }
-.fin-recur-icon {
-  width: 40px; height: 40px;
-  border-radius: 12px;
-  display: grid; place-items: center;
-  font-size: 1.1rem; flex-shrink: 0;
-}
-.fin-recur-info { flex: 1; min-width: 0; }
-.fin-recur-info strong {
-  display: block; font-size: 0.9rem; font-weight: 700;
-  color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.fin-recur-amount { font-size: 0.88rem; font-weight: 800; white-space: nowrap; flex-shrink: 0; }
-.fin-recur-amount.receita { color: var(--green); }
-.fin-recur-amount.despesa { color: var(--red); }
 
 /* Indicador discreto de status (ativo/pulado neste mês) — some no lugar
    dos textos extras, um ponto colorido já comunica o estado de relance. */
-.fin-recur-status { flex-shrink: 0; display: flex; align-items: center; }
-.fin-recur-status-dot {
-  width: 7px; height: 7px; border-radius: 50%;
-  background: var(--green);
-}
-.fin-recur-status-dot.skipped { background: var(--muted); }
 
 /* Os antigos 3 botões de ação (▶ ⏭ ✕) lado a lado ocupavam espaço demais,
    poluíam o card e quebravam alinhamento em telas estreitas. Agora existe
    apenas UM botão "•••" por card, que abre um menu contextual flutuante
    com as mesmas ações — lista muito mais limpa e sem risco de overflow. */
-.fin-recur-menu-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: 10px;
-  border: none;
-  background: transparent;
-  color: var(--muted);
-  display: grid;
-  place-items: center;
-  flex-shrink: 0;
-  cursor: pointer;
-  transition: all 140ms ease;
-}
-.fin-recur-menu-btn svg { width: 18px; height: 18px; }
-.fin-recur-menu-btn:hover { background: var(--line); color: var(--text); }
 
 .fin-recur-menu {
   position: absolute;
@@ -4436,21 +2714,6 @@ align-items:stretch;
 }
 .fin-recur-menu button:hover { background: var(--accent-soft); color: var(--accent); }
 .fin-recur-menu button.danger:hover { background: var(--red-soft); color: var(--red); }
-
-@media (max-width: 380px) {
-  .fin-recurring-suggestion-row {
-    grid-template-columns: 34px minmax(0, 1fr) auto;
-    gap: 9px;
-  }
-  .fin-recurring-suggestion-mark { width: 34px; height: 34px; }
-  .fin-recurring-suggestion-amount { grid-column: 2; }
-  .fin-recurring-suggestion-row .mini-button { grid-column: 3; grid-row: 1 / span 2; }
-  .fin-recur-row { gap: 6px; padding: 10px; }
-  .fin-recur-icon { width: 34px; height: 34px; font-size: 0.95rem; }
-  .fin-recur-amount { font-size: 0.8rem; }
-  .fin-recur-menu-btn { width: 26px; height: 26px; }
-  .fin-recur-status { display: none; }
-}
 
 /* ─── Modais genéricos ────────────────────────────────────────── */
 .modal-backdrop {
@@ -4562,22 +2825,6 @@ align-items:stretch;
 }
 
 /* ---------- SETTINGS VIEW ---------- */
-.settings-layout {
-  display: grid;
-  gap: 16px;
-  max-width: 640px;
-  margin: 0 auto;
-}
-
-.settings-section-label {
-  font-size: 0.72rem;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--muted);
-  margin: 6px 4px -6px;
-}
-.settings-section-label:first-child { margin-top: 0; }
 
 .avatar-upload {
   display: flex;
@@ -4718,7 +2965,6 @@ align-items:stretch;
 .verify-gate-card p strong { color: var(--text); }
 
 @media (max-width: 720px) {
-  .settings-layout { max-width: none; }
 
   /* Perfil/Configurações no celular: os botões de ação (Salvar nome,
      Alterar senha, Exportar/Importar backup) ocupam a largura toda em
@@ -4793,34 +3039,6 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
    "lentes" sobre os mesmos dados (Lista / Dia / Semana / Mês).
    ============================================================ */
 
-.planner-shell { display: grid; gap: 16px; }
-
-.planner-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 14px;
-}
-.planner-header-title h2 { font-size: 1.15rem; font-weight: 800; color: var(--text); margin-top: 2px; }
-.planner-header-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-
-.planner-progress-ring {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-.planner-progress-ring svg { flex-shrink: 0; }
-.planner-ring-label { display: flex; flex-direction: column; line-height: 1.15; }
-.planner-ring-label strong { font-size: 1rem; font-weight: 800; color: var(--text); }
-.planner-ring-label span { font-size: 0.68rem; color: var(--text2); }
-.planner-ring-empty {
-  font-size: 0.7rem;
-  color: var(--text2);
-  line-height: 1.3;
-}
-
 .planner-tabs {
   max-width: 100%;
   overflow-x: auto;
@@ -4843,19 +3061,6 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
 @media (min-width: 640px) {
   .planner-goals-strip { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
 }
-.planner-goal-chip {
-  width: auto;
-  background: var(--surface2);
-  border: 1.5px solid var(--line);
-  border-radius: 16px;
-  padding: 14px 16px;
-  display: grid;
-  gap: 10px;
-  box-shadow: var(--shadow-card);
-  transition: transform 160ms, box-shadow 160ms;
-}
-.planner-goal-chip:hover { transform: translateY(-2px); box-shadow: var(--shadow-card-hover); }
-.planner-goal-chip.is-complete { border-color: var(--green); background: var(--green-soft); }
 .planner-goal-chip-top {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
 }
@@ -4863,22 +3068,10 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
   font-size: 0.92rem; font-weight: 700; color: var(--text);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.planner-goal-chip-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.planner-goal-stepper { display: flex; align-items: center; gap: 6px; }
 
 /* ---------- Sub-visões (Lista / Dia / Semana / Mês / Notas) ---------- */
 .planner-subview { display: none; }
 .planner-subview.active { display: grid; gap: 14px; animation: fadeUp 200ms ease; }
-
-.planner-list-body { display: grid; gap: 18px; }
-
-.planner-section { display: grid; gap: 8px; }
-.planner-section-title {
-  display: flex; align-items: center; justify-content: space-between;
-  font-size: 0.82rem; font-weight: 800; color: var(--text2);
-  padding: 0 2px;
-}
-.planner-section-body { display: grid; gap: 10px; }
 
 /* .planner-row é o cartão de cada tarefa/compromisso no Planner.
    Fica em coluna (não em linha) de propósito: a "cabeça" sempre
@@ -4888,40 +3081,9 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
    flex row sem quebra — quando a checklist abria, ela virava só mais
    um item espremido na mesma linha dos botões, causando a sobreposição
    visual reportada ("elementos quebrados ao adicionar tarefas"). */
-.planner-row {
-  display: flex;
-  flex-direction: column;
-  padding: 12px 14px;
-  background: var(--surface2);
-  border: 1.5px solid var(--line);
-  border-radius: 16px;
-  box-shadow: var(--shadow-card);
-  transition: box-shadow 160ms, border-color 160ms;
-}
-.planner-row:hover { box-shadow: var(--shadow-card-hover); }
-.planner-row-head { display: flex; align-items: center; gap: 10px; }
-.planner-row-main { flex: 1; min-width: 0; display: grid; gap: 4px; cursor: pointer; }
-.planner-row-main strong { font-size: 0.92rem; color: var(--text); overflow-wrap: anywhere; }
-.planner-row-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 
 /* Botão único de "mais opções" — substitui os 3 botões separados
    (repetir / mudar status / excluir) que existiam antes na linha. */
-.planner-row-kebab {
-  width: 34px; height: 34px; flex-shrink: 0;
-  border-radius: 10px;
-  background: var(--surface);
-  border: 1.5px solid var(--line);
-  color: var(--muted);
-  display: grid; place-items: center;
-  position: relative;
-  transition: all 150ms;
-}
-.planner-row-kebab:hover, .planner-row-kebab:active {
-  background: var(--accent-soft); color: var(--accent); border-color: var(--accent);
-}
-@media (max-width: 720px) {
-  .planner-row-kebab::after { content: ""; position: absolute; inset: -6px; }
-}
 
 /* Formulário inline de "adicionar item" (checklist da tarefa / marco da
    meta) — substitui o antigo window.prompt(), que não funciona (fica
@@ -4939,28 +3101,9 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
 .planner-inline-add-form input:focus { outline: none; border-color: var(--accent); }
 .planner-inline-add-form button { flex-shrink: 0; width: 34px; height: 34px; padding: 0; display: grid; place-items: center; }
 
-.planner-row-time {
-  flex-shrink: 0;
-  min-width: 52px;
-  text-align: center;
-  padding: 5px 8px;
-  border-radius: 10px;
-  font-size: 0.78rem;
-  font-weight: 800;
-}
-
 /* ---------- Dia: navegador + checklist + timeline ---------- */
-.planner-day-nav {
-  display: flex; align-items: center; justify-content: space-between; gap: 10px;
-}
-.planner-day-nav-label { display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; }
-.planner-day-nav-label strong { font-size: 1rem; color: var(--text); }
-
-.planner-day-allday-panel, .planner-day-timeline-panel { display: grid; gap: 10px; }
 
 .planner-day-notime { display: grid; gap: 8px; margin-bottom: 10px; }
-
-.planner-day-timeline-panel .planner-timeline { max-height: 62vh; overflow-y: auto; padding-right: 2px; }
 
 .planner-timeline-wrap { position: relative; }
 .planner-timeline-hours { display: grid; }
@@ -4996,27 +3139,11 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
 .planner-event-block strong { font-size: 0.84rem; color: var(--text); overflow-wrap: anywhere; }
 .planner-event-block span, .planner-event-block small { font-size: 0.72rem; color: var(--text2); overflow-wrap: anywhere; }
 .planner-event-block small { line-height: 1.35; }
-.planner-event-actions { display: flex; gap: 5px; flex-shrink: 0; }
-.planner-event-actions .mini-button { width: 30px; height: 30px; display: grid; place-items: center; padding: 0; }
 .planner-timeline-section-label { font-size: 0.72rem; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
 
 /* ---------- Placeholder das visões que chegam nas próximas etapas ---------- */
-.planner-placeholder {
-  padding: 40px 24px;
-  border-radius: 20px;
-  border: 2px dashed var(--line);
-  text-align: center;
-  display: grid;
-  gap: 8px;
-  justify-items: center;
-}
-.planner-placeholder-icon { font-size: 2rem; }
-.planner-placeholder h3 { font-size: 1rem; font-weight: 800; color: var(--text); }
-.planner-placeholder p { font-size: 0.85rem; color: var(--muted); max-width: 360px; }
 
 @media (max-width: 720px) {
-  .planner-header { flex-direction: column; align-items: stretch; }
-  .planner-header-actions { justify-content: stretch; }
 
   /* As 5 abas (Lista/Dia/Semana/Mês/Notas) não cabem numa linha só em
      390px sem cortar texto ou rolar horizontalmente — então em vez de
@@ -5055,23 +3182,11 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
   .planner-timeline-hour { grid-template-columns: 42px 1fr; min-height: 50px; }
 
   /* Áreas de toque reais de 44px sem sacrificar os controles do desktop. */
-  #plannerView .planner-header-actions > button,
-  #plannerView .planner-day-nav > button,
-  .note-card .card-actions button,
-  .fin-action-btn { min-height: 44px; }
   .planner-inline-add-form input,
   .planner-inline-add-form button { min-height: 40px; height: 40px; }
   .reminder-custom-field { align-items: stretch; }
   .reminder-custom-field input { flex: 1 1 76px; }
   .planner-event-block { padding: 8px 9px 8px 10px; gap: 8px; }
-  .planner-event-actions { gap: 4px; }
-  .planner-event-actions .mini-button { width: 34px; height: 34px; }
-}
-
-@media (max-width: 460px) {
-  .fin-month-actions .fin-action-btn { flex: 1 1 100%; }
-  .fin-chart-metrics small { width: 100%; margin-left: 0; }
-  .note-card { padding: 14px; }
 }
 
 @media (max-width: 360px) {
@@ -5135,38 +3250,12 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
 
 /* ---------- Metas: card expansível com marcos ---------- */
 .planner-goal-chip-top { cursor: pointer; }
-.planner-goal-ms-toggle {
-  display: flex; align-items: center; gap: 6px; justify-content: center;
-  flex: 1;
-  background: var(--surface);
-  border: 1.5px solid var(--line);
-  border-radius: 10px;
-  padding: 7px 10px;
-  font-size: 0.78rem; font-weight: 700; color: var(--text2);
-  cursor: pointer;
-  min-height: 34px;
-}
-.planner-goal-ms-toggle .planner-goal-chevron { margin-left: 2px; transition: transform 180ms ease; }
-.planner-goal-chip.is-expanded .planner-goal-chevron { transform: rotate(90deg); }
-
-.planner-goal-milestones {
-  display: grid; gap: 6px;
-  margin-top: 4px;
-  padding-top: 10px;
-  border-top: 1px dashed var(--line);
-  animation: fadeUp 180ms ease both;
-}
 .planner-goal-milestones-empty { font-size: 0.76rem; color: var(--muted); padding: 2px 0; }
-.planner-goal-milestones .goal-milestone-row { display: flex; align-items: center; gap: 8px; }
-.planner-ms-remove { width: 22px; height: 22px; padding: 0; margin-left: auto; display: grid; place-items: center; flex-shrink: 0; }
 
 /* ---------- Linhas: micro polimento + feedback de toque ---------- */
-.planner-row { animation: fadeUp 200ms ease both; }
 .is-done-text { text-decoration: line-through; opacity: 0.5; }
-.planner-row-delete:active,
 .mini-button:active,
 .icon-button:active { transform: scale(0.93); }
-.planner-row-delete,
 .mini-button,
 .icon-button { transition: transform 140ms ease, background 160ms ease; }
 
@@ -5271,140 +3360,6 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
    PERFIL (NOVO) — avatar, nível/XP, sequência, estatísticas,
    conquistas.
    ============================================================ */
-.profile-shell { display: grid; gap: 14px; max-width: 640px; margin: 0 auto; }
-
-.profile-hero {
-  display: grid;
-  justify-items: center;
-  text-align: center;
-  gap: 6px;
-  padding: 28px 20px;
-}
-.profile-avatar-wrap { position: relative; margin-bottom: 6px; }
-.profile-avatar-lg {
-  width: 92px;
-  height: 92px;
-  border-radius: 50%;
-  background:
-    radial-gradient(circle at 20% 20%, rgba(255,159,10,0.55), transparent 55%),
-    radial-gradient(circle at 85% 85%, rgba(191,90,242,0.5), transparent 60%),
-    linear-gradient(135deg, var(--accent), var(--purple));
-  color: #fff;
-  font-size: 2.1rem;
-  font-weight: 800;
-  display: grid;
-  place-items: center;
-  overflow: hidden;
-  box-shadow: 0 12px 28px color-mix(in srgb, var(--accent) 35%, transparent);
-}
-.profile-avatar-lg img { width: 100%; height: 100%; object-fit: cover; }
-.profile-avatar-edit {
-  position: absolute;
-  right: -2px;
-  bottom: -2px;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: var(--surface);
-  border: 2.5px solid var(--bg);
-  color: var(--text);
-  display: grid;
-  place-items: center;
-  box-shadow: var(--shadow-card);
-  transition: transform 140ms ease;
-}
-.profile-avatar-edit:active { transform: scale(0.9); }
-.profile-hero h2 { font-size: 1.15rem; font-weight: 800; color: var(--text); margin-top: 4px; }
-.profile-hero .ghost-button { margin-top: 8px; }
-
-.profile-level-card { display: grid; gap: 10px; }
-.profile-level-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.profile-level-badge {
-  width: 44px;
-  height: 44px;
-  border-radius: 14px;
-  background: linear-gradient(135deg, var(--accent), var(--teal));
-  color: #fff;
-  font-weight: 800;
-  font-size: 1.1rem;
-  display: grid;
-  place-items: center;
-  flex-shrink: 0;
-}
-.profile-level-card .progress-track > div { background: linear-gradient(90deg, var(--accent), var(--teal), var(--purple)); }
-
-.profile-stats-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 10px;
-}
-.profile-stat-tile {
-  background: var(--surface2);
-  border: 1.5px solid var(--line);
-  border-radius: 16px;
-  padding: 14px 8px;
-  display: grid;
-  justify-items: center;
-  gap: 6px;
-  text-align: center;
-}
-.profile-stat-icon {
-  width: 32px;
-  height: 32px;
-  border-radius: 10px;
-  display: grid;
-  place-items: center;
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-.profile-stat-icon.tone-orange { background: var(--orange-soft); color: var(--orange); }
-.profile-stat-icon.tone-green { background: var(--green-soft); color: var(--green); }
-.profile-stat-icon.tone-yellow { background: color-mix(in srgb, #f5b400 18%, var(--surface2)); color: #f5b400; }
-.profile-stat-tile strong { font-size: 1.15rem; font-weight: 800; color: var(--text); }
-.profile-stat-tile span { font-size: 0.7rem; color: var(--muted); font-weight: 600; line-height: 1.3; }
-
-.profile-achievements-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
-}
-.profile-badge {
-  display: grid;
-  justify-items: center;
-  text-align: center;
-  gap: 5px;
-  padding: 14px 8px;
-  border-radius: 16px;
-  background: var(--surface2);
-  border: 1.5px solid var(--line);
-  transition: transform 160ms ease;
-}
-.profile-badge:hover { transform: translateY(-2px); }
-.profile-badge-icon {
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-}
-.profile-badge.is-unlocked {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-}
-.profile-badge.is-unlocked .profile-badge-icon {
-  background: var(--accent);
-  color: #fff;
-  box-shadow: 0 6px 16px color-mix(in srgb, var(--accent) 35%, transparent);
-}
-.profile-badge.is-locked { opacity: 0.55; }
-.profile-badge.is-locked .profile-badge-icon { background: var(--surface); color: var(--muted); }
-.profile-badge strong { font-size: 0.76rem; font-weight: 700; color: var(--text); line-height: 1.25; }
-.profile-badge span { font-size: 0.68rem; color: var(--muted); line-height: 1.25; }
-
-@media (max-width: 720px) {
-  .profile-stats-grid { grid-template-columns: repeat(2, 1fr); }
-  .profile-achievements-grid { grid-template-columns: repeat(2, 1fr); }
-}
 
 /* ============================================================
    MASCOTE — "Pulsinho"
@@ -5535,8 +3490,6 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
    Generalizado: nasceu no painel de Finanças ("Uso do orçamento") mas
    qualquer .pulsinho pode usar essas classes — por exemplo o recap de
    fechamento de mês reaproveita exatamente as mesmas. */
-.fin-mood-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
-.fin-mood-text { font-size: 0.84rem; font-weight: 700; color: var(--text2); line-height: 1.3; }
 
 .pulsinho.mood-happy {
   background: linear-gradient(155deg, var(--green), var(--accent));
@@ -5559,9 +3512,6 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
 @keyframes pulsinhoDroop {
   0%, 100% { transform: translateY(0) rotate(0deg); }
   50% { transform: translateY(3px) rotate(-2deg); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .fin-mood-pulsinho { animation: none !important; }
 }
 
 /* ---------- Recap de fechamento de mês (Finanças) ---------- */
@@ -5617,50 +3567,11 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
    IMPORTANTE: esta linha (.topbar-greeting) não pode ter overflow:hidden.
    A truncagem de texto (title/data compridos) já é resolvida no elemento
    de texto logo abaixo, então o corte não é necessário na linha toda. */
-.topbar-greeting { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.topbar-greeting > div:last-child { min-width: 0; overflow: hidden; }
-.pulsinho--greeting {
-  width: 34px;
-  height: 34px;
-  flex-shrink: 0;
-  margin: 4px 0;
-  /* O mascote do header usa uma animação própria — só um flutuar bem
-     sutil (translateY). O componente base (.pulsinho, usado na tela de
-     carregamento e no "pensando" da IA) combina bob + morph de forma
-     (border-radius mudando de forma junto com a posição), o que nesse
-     contexto pequeno, ao lado de texto, parecia "travado"/dessincronizado
-     — duas animações concorrentes com durações diferentes (3.2s e 6s)
-     competindo por atenção. Uma única animação simples fica muito mais
-     fluida e discreta — um gesto, não uma performance. */
-  animation: pulsinhoGreetingFloat 4.4s ease-in-out infinite;
-  will-change: transform;
-}
-@keyframes pulsinhoGreetingFloat {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-2.5px); }
-}
 
 /* Noite: mesma calma que o estado "sonolento" já usa em outros lugares
    do app (olhos semicerrados, movimento mais lento) — a ideia não é
    assustar ninguém que abre o app de madrugada, é combinar com o
    "Boa noite" que já aparece no texto. */
-.pulsinho--greeting.mood-night {
-  animation: pulsinhoGreetingFloat 6.5s ease-in-out infinite;
-}
-.pulsinho--greeting.mood-night .pulsinho__eye { height: 3px; border-radius: 3px; animation: none; }
-.pulsinho--greeting.mood-night .pulsinho__pulse path { opacity: 0.55; }
-
-@media (prefers-reduced-motion: reduce) {
-  .pulsinho--greeting { animation: none !important; }
-}
-
-@media (max-width: 720px) {
-  .topbar-greeting { gap: 8px; }
-  /* Tamanho do mascote no mobile é definido junto com o resto do topbar
-     (ver bloco principal do cabeçalho, mais acima no arquivo) — não
-     duplicar aqui de novo pra não repetir a mesma armadilha de duas
-     regras divergindo por ordem no arquivo. */
-}
 
 /* ─── Nota em tela cheia (estilo iPhone Notes) ───────────────────
    Editor rápido que abre ao tocar numa nota da lista: título +
@@ -5679,115 +3590,6 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
       "estourava" o cartão e empurrava o rodapé (botão Salvar) pra
       fora da tela, cortado pelo overflow:hidden do cartão — exatamente
       o bug relatado de "sem botão de salvar". */
-.note-detail-backdrop { padding: 0; }
-.note-detail-card {
-  position: fixed;
-  inset: 0;
-  width: auto;
-  max-width: none;
-  height: auto;
-  max-height: none;
-  border-radius: 0;
-  padding: 0;
-  min-height: 0;
-  min-width: 0;
-}
-@media (min-width: 721px) {
-  .note-detail-backdrop { padding: 20px; }
-  .note-detail-card {
-    position: static;
-    inset: auto;
-    max-width: 720px;
-    width: min(720px, calc(100vw - 40px));
-    height: min(88dvh, 760px);
-    max-height: calc(100dvh - 40px);
-    border-radius: 20px;
-  }
-}
-
-.note-detail-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 14px 8px;
-  padding-top: max(14px, env(safe-area-inset-top));
-  flex-shrink: 0;
-}
-.note-detail-header-actions { display: flex; gap: 6px; }
-.note-detail-header-actions .is-fav { color: var(--accent); }
-
-.note-detail-title-input {
-  border: none;
-  background: transparent;
-  font-size: 1.35rem;
-  font-weight: 800;
-  color: var(--text);
-  padding: 4px 20px;
-  width: 100%;
-  flex-shrink: 0;
-}
-.note-detail-title-input:focus { outline: none; }
-.note-detail-meta {
-  padding: 0 20px 8px;
-  font-size: 0.76rem;
-  color: var(--muted);
-  flex-shrink: 0;
-}
-.note-detail-meta-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 0 20px 8px;
-  flex-shrink: 0;
-}
-.note-detail-meta-row .note-detail-meta { padding: 0; }
-.note-detail-more-link {
-  font-size: 0.74rem;
-  font-weight: 700;
-  color: var(--accent);
-  flex-shrink: 0;
-  white-space: nowrap;
-}
-
-.note-detail-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 16px;
-  margin: 0 16px;
-  border-radius: 14px;
-  background: var(--surface2);
-  overflow-x: auto;
-  flex-shrink: 0;
-}
-.nd-toolbar-sep { width: 1px; height: 20px; background: var(--line); flex-shrink: 0; }
-.nd-tool-btn {
-  width: 34px; height: 34px; flex-shrink: 0;
-  border-radius: 9px;
-  border: 1.5px solid var(--line);
-  background: var(--surface);
-  color: var(--text);
-  display: grid; place-items: center;
-  font-size: 0.85rem;
-}
-.nd-tool-btn:active { transform: scale(0.94); }
-.nd-color-group {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-  padding: 3px 8px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--surface) 70%, transparent);
-}
-.nd-color-label {
-  color: var(--muted);
-  font-size: 0.68rem;
-  font-weight: 700;
-  white-space: nowrap;
-}
 .nd-swatch {
   width: 28px; height: 28px; flex-shrink: 0;
   border-radius: 50%;
@@ -5801,105 +3603,10 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
   border-color: var(--text);
   box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent);
 }
-
-.note-detail-scroll {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
-}
-.note-detail-body {
-  min-height: 132px;
-  padding: 16px 20px 20px;
-  font-size: 0.95rem;
-  line-height: 1.55;
-  color: var(--text);
-  overflow-wrap: anywhere;
-}
-.note-detail-scroll .note-detail-checklist { margin: 0 20px 20px; }
-.note-detail-body:focus { outline: none; }
-.note-detail-body:empty::before {
-  content: attr(data-placeholder);
-  color: var(--muted);
-}
 /* Os "highlights" (execCommand backColor) já chegam com a cor em
    formato translúcido (rgba, calculado no JS na hora de marcar),
    então funcionam igual em qualquer tema sem precisar detectar
    claro/escuro aqui no CSS — só arredonda e dá um respiro. */
-.note-detail-body mark,
-.note-detail-body span[style*="background-color"],
-.note-detail-body font[style*="background-color"] {
-  border-radius: 4px;
-  padding: 1px 3px;
-}
-
-.note-detail-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 12px 16px;
-  padding-bottom: max(12px, env(safe-area-inset-bottom));
-  border-top: 1px solid var(--line);
-  flex-shrink: 0;
-  flex-wrap: wrap;
-}
-.note-detail-footer .ghost-button,
-.note-detail-footer .primary-button {
-  width: auto;
-  min-width: 0;
-  flex: 1 1 0;
-  justify-content: center;
-}
-.note-detail-footer .primary-button { margin-left: 0; }
-
-@media (max-width: 720px) {
-  body.note-detail-open .bottom-nav { display: none; }
-  body.note-detail-open .app-shell { z-index: 200; }
-
-  .note-detail-card { width: 100vw; max-width: 100vw; }
-  .note-detail-body { font-size: 1rem; }
-  .note-detail-meta-row { align-items: flex-start; flex-wrap: wrap; min-width: 0; }
-  .note-detail-meta-row .note-detail-meta { min-width: 0; overflow-wrap: anywhere; }
-  .note-detail-more-link { white-space: normal; text-align: left; }
-  .note-detail-toolbar {
-    margin: 0 12px;
-    padding: 8px 10px;
-    gap: 8px;
-    flex-wrap: wrap;
-    overflow-x: hidden;
-  }
-  .nd-color-group {
-    order: 2;
-    flex: 1 1 100%;
-    justify-content: center;
-    gap: 10px;
-    padding: 6px 8px;
-  }
-  .nd-color-label { display: none; }
-  .note-detail-check-item { min-width: 0; }
-  .note-detail-check-item > span:last-child { min-width: 0; overflow-wrap: anywhere; }
-
-  .note-detail-footer {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
-    padding-inline: 12px;
-  }
-  .note-detail-footer .ghost-button,
-  .note-detail-footer .primary-button {
-    width: 100%;
-    max-width: 100%;
-    padding-inline: 8px;
-    white-space: nowrap;
-  }
-}
-
-@media (max-width: 380px) {
-  .note-detail-footer .ghost-button,
-  .note-detail-footer .primary-button { font-size: 0.78rem; }
-}
 
 /* ─── Planner: paleta vibrante (referência TaskifyAI) ────────────
    Só aqui, escopado com o prefixo #plannerView — não muda a cara do
@@ -5908,18 +3615,6 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
    .segmented, .mini-button de sempre) — não mexi em layout/flex/
    overflow nenhum aqui, só cor/sombra/gradiente, exatamente pra não
    correr o risco de um bug estrutural como o da nota em tela cheia. */
-#plannerView .planner-header {
-  padding: 20px 22px;
-  border-radius: 20px;
-  background:
-    radial-gradient(circle at 10% 0%, color-mix(in srgb, var(--teal) 28%, transparent), transparent 42%),
-    radial-gradient(circle at 92% 8%, color-mix(in srgb, var(--purple) 30%, transparent), transparent 44%),
-    linear-gradient(110deg, color-mix(in srgb, var(--surface) 74%, var(--teal-soft)), color-mix(in srgb, var(--surface) 70%, var(--accent-soft)));
-  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--line));
-  box-shadow: 0 12px 28px color-mix(in srgb, var(--accent) 12%, transparent);
-}
-#plannerView .planner-header-title .eyebrow { color: var(--text2); }
-#plannerView .planner-header-title h2 { color: var(--text); }
 
 #plannerView .planner-tabs.segmented {
   background: color-mix(in srgb, var(--surface) 78%, transparent);
@@ -5949,16 +3644,6 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
    prioridade (as tarefas não tinham border-left nenhum antes; os
    compromissos já usavam, então só completei o padrão) + fundo um
    pouco mais escuro/contrastado que o resto do app. */
-#plannerView .planner-row {
-  background: var(--surface);
-  border-color: transparent;
-  border-left: 4px solid var(--line);
-  border-radius: 18px;
-}
-#plannerView .planner-row--task[data-priority="Urgente"] { border-left-color: #ff375f; }
-#plannerView .planner-row--task[data-priority="Alta"] { border-left-color: var(--purple); }
-#plannerView .planner-row--task[data-priority="Media"] { border-left-color: #5ac8fa; }
-#plannerView .planner-row--task[data-priority="Baixa"] { border-left-color: #30d158; }
 
 /* Pills de prioridade/status dentro do Planner viram preenchimento
    sólido (a referência usa isso) em vez do tom pastel suave que o
@@ -5974,28 +3659,7 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
 #plannerView .status-Concluida    { background: #30d158; color: #fff; }
 #plannerView .status-Em-andamento { background: #0a84ff; color: #fff; }
 #plannerView .status-Cancelada    { background: #ff375f; color: #fff; }
-
-#plannerView .planner-goal-chip {
-  background: linear-gradient(145deg, var(--surface), color-mix(in srgb, var(--surface) 82%, var(--purple-soft)));
-  border-color: color-mix(in srgb, var(--purple) 18%, var(--line));
-  border-top: 4px solid var(--purple);
-  border-radius: 18px;
-}
-
-#plannerView .planner-goal-progress-control {
-  display: grid;
-  grid-template-columns: auto minmax(72px, 1fr) 58px auto;
-  align-items: center;
-  gap: 8px;
-  color: var(--text2);
-  font-size: .76rem;
-  font-weight: 700;
-}
-#plannerView .planner-goal-progress-control input[type="range"] { accent-color: var(--purple); min-width: 0; }
-#plannerView .planner-goal-number { min-width: 0; width: 58px; padding: 6px 5px; text-align: center; }
-#plannerView .planner-row--interactive,
 #plannerView .planner-event-block--interactive { cursor: pointer; }
-#plannerView .planner-row--interactive:hover { box-shadow: 0 9px 20px rgba(36, 35, 70, .09); }
 #plannerView .planner-event-block--interactive:hover { filter: saturate(1.15); transform: translateX(2px); }
 .whatsapp-quick-card .dash-panel-body { display: grid; gap: 12px; }
 .whatsapp-quick-card .ghost-button { justify-self: start; }
@@ -6012,70 +3676,14 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
   padding-bottom: 10px;
   border-bottom: 1px solid color-mix(in srgb, var(--accent) 10%, var(--line));
 }
-#plannerView .planner-goal-chip .progress-track {
-  background: color-mix(in srgb, var(--purple) 14%, var(--line));
-}
-#plannerView .planner-goal-chip .progress-track > div {
-  background: linear-gradient(90deg, var(--accent), var(--purple), var(--teal)) !important;
-}
-#plannerView .planner-goal-stepper,
-#plannerView .planner-goal-ms-toggle {
-  min-height: 38px;
-}
 
 /* Planner mobile: uma hierarquia curta e previsível. O desktop continua
    usando a composição horizontal; abaixo de 720px, cada região recebe um
    lugar fixo para que textos longos, metas e ações nunca disputem largura. */
 @media (max-width: 720px) {
   #plannerView,
-  #plannerView .planner-shell,
-  #plannerView .planner-header,
-  #plannerView .planner-header-actions,
-  #plannerView .planner-goals-panel,
-  #plannerView .planner-goal-chip,
-  #plannerView .planner-subview,
-  #plannerView .planner-list-body,
-  #plannerView .planner-section,
-  #plannerView .planner-section-body { min-width: 0; }
-
-  #plannerView .planner-shell { gap: 12px; }
-  #plannerView .planner-header {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas:
-      "title progress"
-      "actions actions";
-    align-items: center;
-    padding: 13px;
-    border-radius: 17px;
-    gap: 10px 12px;
-  }
-  #plannerView .planner-header-title { grid-area: title; min-width: 0; }
-  #plannerView .planner-header-title .eyebrow { margin-bottom: 2px; font-size: .67rem; }
-  #plannerView .planner-header-title h2 {
-    font-size: 1rem;
-    line-height: 1.24;
-    overflow-wrap: anywhere;
-  }
-  #plannerView .planner-progress-ring {
-    grid-area: progress;
-    justify-self: end;
-    gap: 6px;
-  }
-  #plannerView .planner-progress-ring svg { width: 42px; height: 42px; }
-  #plannerView .planner-ring-label strong { font-size: .86rem; }
-  #plannerView .planner-ring-label span,
-  #plannerView .planner-ring-empty { font-size: .63rem; }
-  #plannerView .planner-ring-empty { text-align: right; }
-
-  #plannerView .planner-header-actions {
-    grid-area: actions;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    align-items: stretch;
-    gap: 7px;
-    width: 100%;
-  }
+#plannerView .planner-goals-panel,
+#plannerView .planner-subview { min-width: 0; }
   #plannerView #plannerNewTaskBtn {
     width: 100%;
     min-height: 38px;
@@ -6135,13 +3743,6 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
     white-space: nowrap;
   }
   #plannerView .planner-goals-strip { gap: 8px; }
-  #plannerView .planner-goal-chip {
-    width: 100%;
-    padding: 10px 11px;
-    gap: 8px;
-    border-top-width: 3px;
-    border-radius: 15px;
-  }
   #plannerView .planner-goal-chip-top { min-width: 0; align-items: flex-start; }
   #plannerView .planner-goal-chip-top strong {
     min-width: 0;
@@ -6150,113 +3751,7 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
     overflow-wrap: anywhere;
   }
   #plannerView .planner-goal-chip-top .pill { flex: 0 0 auto; }
-  #plannerView .planner-goal-chip .progress-track { height: 6px; min-width: 0; }
-  #plannerView .planner-goal-progress-control {
-    grid-template-columns: minmax(72px, 1fr) 52px auto;
-    gap: 6px;
-    min-width: 0;
-  }
-  #plannerView .planner-goal-progress-control > span:first-child { display: none; }
-  #plannerView .planner-goal-progress-control input[type="range"] { width: 100%; }
-  #plannerView .planner-goal-number {
-    width: 52px;
-    min-height: 36px;
-    padding: 5px 4px;
-  }
-  #plannerView .planner-goal-progress-control .task-meta {
-    white-space: nowrap;
-    font-size: .7rem;
-  }
-  #plannerView .planner-goal-chip-controls {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) 38px;
-    align-items: center;
-    gap: 6px;
-  }
-  #plannerView .planner-goal-stepper {
-    display: grid;
-    grid-template-columns: repeat(2, 36px);
-    gap: 5px;
-  }
-  #plannerView .planner-goal-stepper .task-meta { display: none; }
-  #plannerView .planner-goal-stepper .mini-button,
-  #plannerView .planner-goal-chip-controls > .planner-row-delete {
-    width: 36px;
-    min-width: 36px;
-    height: 36px;
-    min-height: 36px;
-    padding: 0;
-    flex: none;
-  }
-  #plannerView .planner-goal-chip-controls > .planner-row-delete {
-    width: 38px;
-    min-width: 38px;
-  }
-  #plannerView .planner-goal-ms-toggle {
-    width: 100%;
-    min-width: 0;
-    min-height: 36px;
-    padding-inline: 8px;
-  }
-  #plannerView .planner-goal-ms-toggle span {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  #plannerView .planner-goal-milestones { min-width: 0; }
-  #plannerView .planner-goal-milestones .goal-milestone-row { min-width: 0; }
-  #plannerView .planner-goal-milestones .goal-milestone-row > span {
-    flex: 1;
-    min-width: 0;
-    overflow-wrap: anywhere;
-  }
   #plannerView .planner-goals-strip > .empty-state-pro { padding: 24px 12px; }
-
-  #plannerView .planner-list-body { gap: 14px; }
-  #plannerView .planner-section { gap: 7px; }
-  #plannerView .planner-section-title { min-width: 0; font-size: .77rem; }
-  #plannerView .planner-section-title-label {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    min-width: 0;
-  }
-  #plannerView .planner-section-body { gap: 8px; }
-  #plannerView .planner-row {
-    width: 100%;
-    min-width: 0;
-    padding: 10px;
-    border-radius: 14px;
-  }
-  #plannerView .planner-row-head { min-width: 0; gap: 8px; align-items: flex-start; }
-  #plannerView .planner-row-main { min-width: 0; gap: 5px; padding-top: 2px; }
-  #plannerView .planner-row-main strong {
-    min-width: 0;
-    font-size: .88rem;
-    line-height: 1.28;
-    overflow-wrap: anywhere;
-  }
-  #plannerView .planner-row-meta { min-width: 0; gap: 4px 5px; }
-  #plannerView .planner-row-meta > * { max-width: 100%; min-width: 0; }
-  #plannerView .planner-row-meta .priority-pill,
-  #plannerView .planner-row-meta .status-pill {
-    padding: 3px 8px;
-    font-size: .68rem;
-  }
-  #plannerView .planner-row-meta .task-meta {
-    display: inline-flex;
-    align-items: center;
-    font-size: .7rem;
-    line-height: 1.25;
-    overflow-wrap: anywhere;
-  }
-  #plannerView .planner-row-kebab {
-    width: 36px;
-    height: 36px;
-    min-width: 36px;
-    border-radius: 10px;
-  }
   #plannerView .task-subtasks { min-width: 0; }
   #plannerView .task-subtask-row { min-width: 0; }
   #plannerView .task-subtask-row > span {
@@ -6267,59 +3762,17 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
 
   /* Compromissos têm editar e excluir. Empilhar as duas ações preserva
      alvos de toque de 36px sem reduzir o espaço reservado ao título. */
-  #plannerView .planner-row--event .planner-row-head {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) 36px;
-    grid-template-rows: repeat(2, 36px);
-    align-items: start;
-  }
-  #plannerView .planner-row--event .planner-row-time {
-    grid-column: 1;
-    grid-row: 1 / span 2;
-    min-width: 44px;
-    padding-inline: 6px;
-  }
-  #plannerView .planner-row--event .planner-row-main {
-    grid-column: 2;
-    grid-row: 1 / span 2;
-  }
-  #plannerView .planner-row--event .planner-row-head > .mini-button {
-    grid-column: 3;
-    grid-row: 1;
-    width: 36px;
-    min-width: 36px;
-    height: 36px;
-    min-height: 36px;
-    padding: 0;
-    flex: none;
-  }
-  #plannerView .planner-row--event .planner-row-head > .planner-row-delete { grid-row: 2; }
-
-  #plannerView .planner-day-nav-label { min-width: 0; }
-  #plannerView .planner-day-nav-label strong {
-    max-width: min(58vw, 280px);
-    font-size: .88rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  #plannerView .planner-day-allday-panel,
-  #plannerView .planner-day-timeline-panel { padding: 12px; }
   #plannerView .planner-event-block { min-width: 0; }
-  #plannerView .planner-event-actions { flex-direction: column; }
   #plannerView .planner-week-day { padding: 10px; border-radius: 15px; }
 
   .whatsapp-quick-card .ghost-button { width: 100%; justify-content: center; }
 }
 
 @media (max-width: 360px) {
-  #plannerView .planner-header { padding: 11px; }
   #plannerView .planner-tabs.segmented button { font-size: .63rem; }
   #plannerView .planner-tabs.segmented button svg { width: 13px; height: 13px; }
   #plannerView .planner-goals-panel { padding: 10px; }
   #plannerView #plannerNewGoalBtn { padding-inline: 8px; font-size: .72rem; }
-  #plannerView .planner-goal-progress-control { grid-template-columns: minmax(56px, 1fr) 48px auto; gap: 5px; }
-  #plannerView .planner-goal-number { width: 48px; }
 }
 
 /* Faixa horizontal de dias na visão "Dia" do Planner (referência
@@ -6407,13 +3860,6 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
    cartões de Receita/Despesa/Saldo já tinham lógica de cor própria
    (inclusive dinâmica via --saldo-color, setada no JS) — não mexi
    nisso, só acrescentei uma barra colorida no topo do cartão. */
-#financesView .fin-month-nav {
-  background:
-    radial-gradient(circle at 10% 20%, rgba(255,159,10,0.35), transparent 55%),
-    radial-gradient(circle at 90% 15%, rgba(191,90,242,0.3), transparent 55%),
-    var(--surface2);
-  border-color: transparent;
-}
 
 #financesView .fin-tab-btn.active {
   background: linear-gradient(135deg, var(--accent), var(--teal));
@@ -6421,19 +3867,3 @@ mark.pn-highlight { background: var(--accent-soft); color: var(--accent); border
   box-shadow: 0 4px 14px rgba(255,55,95,0.3);
 }
 #financesView .fin-tab-btn.active::after { display: none; }
-
-#financesView .fin-action-btn.export {
-  background: linear-gradient(135deg, #30d158, #5ac8fa);
-  color: #fff;
-  border-color: transparent;
-}
-#financesView .fin-action-btn.export:hover {
-  background: linear-gradient(135deg, #3ee06a, #74d4ff);
-  color: #fff;
-  box-shadow: 0 6px 16px rgba(48,209,88,0.35);
-}
-
-#financesView .fin-summary-card { border-top: 3px solid transparent; }
-#financesView .fin-summary-card.receita { border-top-color: #30d158; }
-#financesView .fin-summary-card.despesa { border-top-color: #ff375f; }
-#financesView .fin-summary-card.saldo   { border-top-color: var(--saldo-color, #30d158); }

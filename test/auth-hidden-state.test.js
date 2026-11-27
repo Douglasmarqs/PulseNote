@@ -20,6 +20,6 @@ test("alertas vazios de login e cadastro permanecem ocultos", () => {
   // Recuperar senha usa o mesmo layout do login; o alerta de erro nasce oculto.
   assert.match(recoveryHtml, /auth-boards\.css\?v=\d+/);
   assert.match(recoveryHtml, /id="forgotError" class="auth-error" hidden/);
-  assert.match(appHtml, /auth\.css\?v=37/);
+  assert.match(appHtml, /auth\.css\?v=\d+/);
 });
 

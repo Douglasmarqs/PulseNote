@@ -59,7 +59,6 @@
 /* ---------- Pulsinho ----------
    Sem a mãozinha 👋: a saudação agora é o próprio "pulso" do mascote,
    um anel que bate em volta do avatar. */
-.bd-chat-wave { display: none !important; }
 .bd-chat-beat { position: absolute; inset: 0; border-radius: 50%; pointer-events: none; opacity: 0; }
 .bd-chat.is-greeting .bd-chat-beat { animation: pnAvatarBeat 1.6s cubic-bezier(.2,.7,.3,1) .35s 2 both; }
 @keyframes pnAvatarBeat {
@@ -477,7 +476,6 @@
 .bd-donut-center strong { font-size: 17px; }
 .bd-dc-ico { display: grid; place-items: center; width: 26px; height: 26px; margin-bottom: 2px; border-radius: 8px; color: var(--seg); background: color-mix(in srgb, var(--seg) 16%, transparent); }
 .bd-dc-ico .i { width: 14px; height: 14px; }
-.bd-dc-ico .fin-emoji-ico { font-size: 13px; }
 .bd-donut-center .bd-dc-pct { padding: 1px 7px; border-radius: 999px; font-size: 10.5px; font-weight: 700; color: var(--seg); background: color-mix(in srgb, var(--seg) 14%, transparent); }
 /* Legenda: linhas tocáveis, a escolhida fica marcada pela cor da categoria. */
 .bd-cat-row { cursor: pointer; -webkit-tap-highlight-color: transparent; position: relative; }

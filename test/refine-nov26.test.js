@@ -88,7 +88,7 @@ test("Pulsinho: balão com chamada própria, sem a mãozinha, abre a conversa", 
   assert.match(app, /clipPath: pulsinhoClipFor\(from, to, 22\)/, "o balão se abre até virar a tela de conversa");
   assert.match(app, /if \(pulsinhoIntroState === "pending"\) playPulsinhoIntro\(\);/);
   assert.match(refine, /#dashboardView \.bd-chat:not\(\.is-convo\) > :not\(\.bd-chat-teaser\) \{ display: none !important; \}/);
-  assert.match(refine, /\.bd-chat-wave \{ display: none !important; \}/);
+  assert.doesNotMatch(html, /bd-chat-wave/, "a mãozinha saiu de vez (e a regra que a escondia também)");
 });
 
 test("Planner: sem botão flutuante, foco compacto e vivo, mês com agenda do dia", () => {

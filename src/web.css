@@ -139,17 +139,12 @@
   .bd-nav.has-ink .bd-nav-item:not(.active):hover { background: color-mix(in srgb, var(--bd-card-2) 70%, transparent); }
 
   /* Atalho de teclado que aparece ao passar o mouse */
-  .pn-kbd {
-    margin-left: auto; display: inline-flex; gap: 3px; opacity: 0; transform: translateX(-4px);
-    transition: opacity .18s, transform .25s var(--pn-ease-out);
-  }
-  .pn-kbd kbd, .pn-kbd-chip kbd {
+  .pn-kbd-chip kbd {
     display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 4px;
     border: 1px solid var(--bd-line); border-bottom-width: 2px; border-radius: 5px;
     background: var(--bd-card); color: var(--bd-text-3);
     font: 600 10.5px/1 var(--bd-font); text-transform: uppercase;
   }
-  .bd-nav-item:hover .pn-kbd, .bd-nav-item:focus-visible .pn-kbd { opacity: 1; transform: none; }
 
   /* Botão de recolher a barra */
   .pn-side-toggle {
@@ -298,11 +293,10 @@
   html.pn-side-collapsed .bd-shell { --bd-side-w: 80px; }
   html.pn-side-collapsed .bd-sidebar { padding: 22px 12px 16px; align-items: center; }
   html.pn-side-collapsed .bd-brand strong,
-  html.pn-side-collapsed .bd-nav-item span,
-  html.pn-side-collapsed .bd-side-pulsinho,
-  html.pn-side-collapsed .bd-user-meta,
-  html.pn-side-collapsed .bd-user-chev,
-  html.pn-side-collapsed .pn-kbd { display: none; }
+html.pn-side-collapsed .bd-nav-item span,
+html.pn-side-collapsed .bd-side-pulsinho,
+html.pn-side-collapsed .bd-user-meta,
+html.pn-side-collapsed .bd-user-chev { display: none; }
   html.pn-side-collapsed .bd-brand { padding: 2px 0 22px; }
   html.pn-side-collapsed .bd-nav { width: 52px; }
   html.pn-side-collapsed .bd-nav-item { justify-content: center; padding: 0; width: 52px; }
@@ -322,7 +316,6 @@
 }
 @media (max-width: 1180px) {
   .pn-side-toggle { display: none !important; }
-  .pn-kbd { display: none !important; }
 }
 
 /* ==========================================================================
@@ -451,7 +444,6 @@ body.pn-scrolled .bd-topbar::after { content: none !important; }
 .pn-scroll-line { transition: opacity .45s ease !important; }
 body.pn-scrolled:not(.pn-scrolling) .pn-scroll-line { opacity: 0 !important; }
 /* Letrinhas de atalho na barra lateral: removidas */
-.pn-kbd { display: none !important; }
 
 @media (min-width: 761px) {
   /* Barra lateral: sem a risca vertical. O vidro deixa o fundo do app
@@ -487,31 +479,13 @@ body.pn-scrolled:not(.pn-scrolling) .pn-scroll-line { opacity: 0 !important; }
   -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 22px), transparent);
           mask-image: linear-gradient(90deg, #000 calc(100% - 22px), transparent);
 }
-.pn-tool-toggle {
-  display: inline-flex; align-items: center; justify-content: center; gap: 7px; flex: none;
-  width: 36px; height: 36px; padding: 0; border: 0; border-radius: 12px;
-  background: color-mix(in srgb, var(--bd-primary) 12%, transparent); color: var(--bd-primary-ink);
-  font: inherit; font-size: 13px; font-weight: 650; white-space: nowrap; cursor: pointer;
-  transition: background .2s, color .2s;
-}
-.pn-tool-toggle:hover { background: color-mix(in srgb, var(--bd-primary) 20%, transparent); }
 /* No celular os botões da barra são grade (ícone centralizado); a setinha
    precisa ficar em linha, senão "Aa" e "Formatar texto" empilham. */
-.bn-detail .bn-toolbar > .pn-tool-toggle { display: inline-flex !important; flex-direction: row; place-items: center; width: 36px !important; height: 36px !important; }
-.bn-detail .bn-toolbar.is-collapsed > .pn-tool-toggle { width: auto !important; }
-.pn-tool-toggle:focus-visible { outline: 0; box-shadow: var(--bd-focus); }
-.pn-tool-aa { display: none; font-weight: 800; color: var(--bd-violet); letter-spacing: -.02em; }
-.pn-tool-label { display: none; }
-.pn-tool-chev { width: 17px; height: 17px; stroke-width: 2.2; transform: rotate(180deg); transition: transform .35s cubic-bezier(.34, 1.4, .5, 1); }
 /* Recolhida: só a pílula */
 .bn-detail .bn-toolbar.is-collapsed { grid-template-columns: auto; width: fit-content; max-width: calc(100% - 28px); padding: 3px; border-radius: 14px; }
 .bn-toolbar.is-collapsed > .bn-tool-row,
 .bn-toolbar.is-collapsed > .bn-tool-panel { display: none !important; }
 .bn-toolbar.is-collapsed + .bn-link-form { display: none !important; }
-.bn-toolbar.is-collapsed .pn-tool-toggle { width: auto; padding: 0 14px 0 12px; background: transparent; color: var(--bd-text); }
-.bn-toolbar.is-collapsed .pn-tool-toggle:hover { background: color-mix(in srgb, var(--bd-primary) 10%, transparent); }
-.bn-toolbar.is-collapsed .pn-tool-aa, .bn-toolbar.is-collapsed .pn-tool-label { display: inline; }
-.bn-toolbar.is-collapsed .pn-tool-chev { transform: none; }
 
 /* Abas da nota: Anotação | Checklist (campos separados) */
 .bn-nd-tabs {
@@ -772,7 +746,6 @@ body.pn-scrolled:not(.pn-scrolling) .pn-scroll-line { opacity: 0 !important; }
 }
 
 /* Formatação */
-.bn-detail .pn-tool-toggle { display: none !important; }
 .bn-detail .bn-toolbar.is-collapsed > .bn-tool-row { display: flex !important; }
 /* Computador: barra fina, sempre visível, só ícones */
 @media (min-width: 761px) {

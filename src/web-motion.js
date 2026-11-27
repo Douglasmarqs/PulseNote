@@ -815,11 +815,19 @@
     const dashMain = dash?.querySelector(".bd-dash-main");
     const dashKpis = dash?.querySelector(".bd-kpis");
     if (dash && dashMain && dashKpis && typeof ResizeObserver === "function") {
+      // Só escreve quando a medida muda: reescrever o mesmo valor invalidava
+      // o estilo e fazia a página recalcular de novo (inclusive no meio do
+      // voo da abertura).
+      let lastFit = "";
       const fitChat = () => {
         if (!dashMain.offsetHeight) return;
-        const top = dashKpis.offsetTop - dashMain.offsetTop;
-        dash.style.setProperty("--pn-chat-top", `${Math.max(0, top)}px`);
-        dash.style.setProperty("--pn-chat-h", `${Math.max(0, dashMain.offsetHeight - top)}px`);
+        const top = Math.max(0, dashKpis.offsetTop - dashMain.offsetTop);
+        const h = Math.max(0, dashMain.offsetHeight - top);
+        const key = `${top}|${h}`;
+        if (key === lastFit) return;
+        lastFit = key;
+        dash.style.setProperty("--pn-chat-top", `${top}px`);
+        dash.style.setProperty("--pn-chat-h", `${h}px`);
       };
       new ResizeObserver(fitChat).observe(dashMain);
       fitChat();

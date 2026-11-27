@@ -846,21 +846,67 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Com movimento reduzido (comum no Windows com "Efeitos de animação"
   // desligado) a abertura sumia na hora e parecia não existir no computador.
   // Agora ela toca a versão suave (ver index.html) pelo mesmo tempo mínimo.
+  //
+  // Ordem (fluidez): o app inteiro é montado ENQUANTO a abertura ainda está
+  // parada na tela — no tempo mínimo que ela já esperava de qualquer jeito —
+  // e o voo do Pulsinho só começa depois, num quadro livre. Antes o voo
+  // começava e, no mesmo instante, a montagem de todas as telas travava o
+  // processador por meio segundo (no celular): a saída nascia congelada.
   const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
   const minShow = reduceMotion ? 1100 : 1400;
-  const shownFor = performance.now();
-  if (shownFor < minShow) await new Promise((resolve) => setTimeout(resolve, minShow - shownFor));
-  overlay.classList.add("is-leaving");
-  if (reduceMotion || !playSplashExit(overlay)) {
-    setTimeout(() => {
-      overlay.style.transition = "opacity 300ms ease";
-      overlay.style.opacity = "0";
-      setTimeout(() => overlay.remove(), 320);
-    }, reduceMotion ? 200 : 260);
-  }
+  let splashLeaving = false;
+  const leaveSplash = async () => {
+    if (splashLeaving) return;
+    splashLeaving = true;
+    const shownFor = performance.now();
+    if (shownFor < minShow) await new Promise((resolve) => setTimeout(resolve, minShow - shownFor));
+    // Dois quadros: o que a montagem deixou para pintar sai antes do voo.
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    overlay.classList.add("is-leaving");
+    if (reduceMotion || !playSplashExit(overlay)) {
+      setTimeout(() => {
+        overlay.style.transition = "opacity 300ms ease";
+        overlay.style.opacity = "0";
+        setTimeout(() => overlay.remove(), 320);
+      }, reduceMotion ? 200 : 260);
+    }
+  };
 
-  if (!currentUser) return; // já foi redirecionado para login.html
-  if (!currentUser.emailVerified) return; // gate de verificação já está sendo exibido
+  if (!currentUser || !currentUser.emailVerified) { leaveSplash(); return; } // login.html ou tela de verificação
+  // Rede lenta (ex.: espaços compartilhados demorando): a abertura não espera
+  // a montagem para sempre — sai no tempo de antes, no máximo.
+  setTimeout(leaveSplash, Math.max(0, minShow - performance.now()) + 1500);
+  try {
+    await mountAppAfterSplashData();
+  } finally {
+    leaveSplash();
+  }
+});
+
+// Devolve o processador ao navegador entre um pedaço e outro da montagem:
+// a abertura (batimento do Pulsinho) continua andando enquanto o app monta.
+const yieldToBrowser = () => (globalThis.scheduler?.yield ? globalThis.scheduler.yield() : new Promise((resolve) => setTimeout(resolve, 0)));
+
+// Mesmo que renderAll(), em pedaços (só na abertura).
+async function renderAllInSteps() {
+  setDefaultDates();
+  renderDashboard();
+  await yieldToBrowser();
+  renderPlanner();
+  renderNotes();
+  await yieldToBrowser();
+  renderTasks();
+  renderCalendar();
+  renderGoals();
+  await yieldToBrowser();
+  renderFinances();
+  await yieldToBrowser();
+  renderProfile();
+  renderSettings();
+  refreshProfileAvatar();
+}
+
+async function mountAppAfterSplashData() {
   mountDesignPreviewToggle();
 
   const now = new Date();
@@ -896,15 +942,18 @@ document.addEventListener("DOMContentLoaded", async () => {
   startLiveClock();
 
   bindNavigation();
+  await yieldToBrowser();
   bindPremiumDashboard();
   await loadFinanceSpaces({ silent: true });
   autopilotUi.bind();
   bindPlannerNav();
   bindPlannerQuickAdd();
   bindNoteDetail();
+  await yieldToBrowser();
   bindForms();
   bindActions();
   bindSettingsView();
+  await yieldToBrowser();
 
   // Configuração inicial: só abre para conta nova (sem dados). O QA visual pode
   // forçar um passo com ?designPreview=1&onboarding=1|2|3|done.
@@ -936,10 +985,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   } else {
     history.replaceState({ ...(history.state || {}), pnView: activeView, noteDetail: false }, "");
   }
-  renderAll();
+  await yieldToBrowser();
+  await renderAllInSteps();
   autopilotUi.load();
   handlePwaShortcutAction();
-});
+}
 
 // Tela de bloqueio exibida quando o usuário ainda não confirmou o e-mail.
 // Sem isso, qualquer pessoa poderia criar uma conta com um e-mail que não

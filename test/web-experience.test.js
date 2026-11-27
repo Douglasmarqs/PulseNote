@@ -364,3 +364,31 @@ test("fluidez: Configurações e janelas abrem e fecham com movimento", () => {
   assert.match(css, /\.modal-backdrop\[hidden\] \{ opacity: 0; pointer-events: none;/);
   assert.match(css, /@starting-style \{\s*\.modal-backdrop:not\(\[hidden\]\) \{ opacity: 0; \}/);
 });
+
+test("abertura lisa: app monta em pedaços antes do voo do Pulsinho", () => {
+  const app = read("src/app.js");
+  const js = read("src/web-motion.js");
+  // a montagem roda com a abertura parada; o voo só começa depois
+  assert.match(app, /try \{\s*await mountAppAfterSplashData\(\);\s*\} finally \{\s*leaveSplash\(\);\s*\}/);
+  assert.match(app, /setTimeout\(leaveSplash, Math\.max\(0, minShow - performance\.now\(\)\) \+ 1500\);/);
+  assert.match(app, /if \(!currentUser \|\| !currentUser\.emailVerified\) \{ leaveSplash\(\); return; \}/);
+  // voo nasce num quadro livre
+  assert.match(app, /requestAnimationFrame\(\(\) => requestAnimationFrame\(resolve\)\)\);\s*overlay\.classList\.add\("is-leaving"\);/);
+  // montagem em pedaços, devolvendo o processador entre eles
+  assert.match(app, /const yieldToBrowser = \(\) =>/);
+  assert.match(app, /async function renderAllInSteps\(\)/);
+  assert.match(app, /await renderAllInSteps\(\);/);
+  // ajuste do chat do Início só escreve quando a medida muda
+  assert.match(js, /if \(key === lastFit\) return;/);
+});
+
+test("CSS sem regras mortas das telas antigas", () => {
+  // classes de versões antigas que nenhum HTML/JS cria mais
+  for (const [file, dead] of [["src/styles.css", ".toast-mascot"], ["src/web.css", ".pn-kbd"], ["src/web.css", ".pn-tool-toggle"], ["src/refine.css", ".bd-chat-wave"]]) {
+    assert.ok(!new RegExp(`${dead.replace(".", "\\.")}(?![\\w-])`).test(read(file)), `${file} ainda tem ${dead}`);
+  }
+  // a limpeza tirou ~200 KB do que o app baixa e lê na abertura
+  const total = ["styles", "auth", "mobile", "autopilot", "premium", "product-system", "experience", "boards", "refine", "finance-v2", "profile-v3", "web"]
+    .reduce((sum, f) => sum + read(`src/${f}.css`).length, 0);
+  assert.ok(total < 720000, `CSS do app: ${total} bytes`);
+});

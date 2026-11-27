@@ -168,7 +168,6 @@ html { scrollbar-color: color-mix(in srgb, var(--bd-text, #9aa3c7) 22%, transpar
   transition: background .2s;
 }
 .toast.t-toast .toast-action:hover { background: color-mix(in srgb, var(--tone) 34%, rgba(255, 255, 255, .08)); }
-.toast.t-toast .toast-mascot { display: none; }
 
 /* transitions.dev — Success check (aparece desenhando o traço) */
 .t-success-check { display: inline-block; transform-origin: center; opacity: 0; will-change: transform, opacity, filter; }
@@ -280,7 +279,6 @@ html { scrollbar-color: color-mix(in srgb, var(--bd-text, #9aa3c7) 22%, transpar
 
 /* Barra do "Uso do orçamento" um pouco mais encorpada */
 #finProgressBar { --bar-h: 10px; }
-.fin-budget-bar, .bf-budget-bar { --bar-h: 10px; }
 
 /* Entrada encenada (só ao abrir Finanças ou trocar de aba) */
 .bf.bf-anim .bf-bar i,
@@ -700,7 +698,7 @@ html { scrollbar-color: color-mix(in srgb, var(--bd-text, #9aa3c7) 22%, transpar
 .verify-gate-icon { display: grid; place-items: center; }
 .verify-gate-icon .i { width: 30px; height: 30px; }
 /* Fechamento: cadeado ao lado do título */
-.fin-closure-summary h2 .i, .bf-closure h2 .i { width: 18px; height: 18px; vertical-align: -2px; color: var(--bd-primary-ink); }
+.bf-closure h2 .i { width: 18px; height: 18px; vertical-align: -2px; color: var(--bd-primary-ink); }
 /* Metas antigas: ícones nos botões pequenos */
 .goal-controls .mini-button .i, .goal-milestone-row .i { width: 14px; height: 14px; }
 
