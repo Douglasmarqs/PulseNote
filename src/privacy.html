@@ -59,7 +59,7 @@
     <a href="/login" class="back">← Voltar</a>
 
     <h1>Privacidade e Termos de Uso</h1>
-    <p class="updated">Última atualização: novembro de 2026</p>
+    <p class="updated">Última atualização: 27 de novembro de 2026</p>
 
     <div class="summary">
       <strong>Resumo em poucas linhas</strong>
@@ -69,6 +69,7 @@
         <li>Você controla o que a IA pode ler das suas notas e qual modelo prefere, em Configurações → Inteligência.</li>
         <li>Nada é excluído pelo Pulsinho sem a sua confirmação.</li>
         <li>Você pode baixar uma cópia dos seus dados ou excluir sua conta quando quiser.</li>
+        <li>Seus dados trafegam só por conexão segura (HTTPS) e cada conta só enxerga os próprios dados.</li>
       </ul>
     </div>
 
@@ -81,6 +82,7 @@
       <li><a href="#whatsapp">WhatsApp</a></li>
       <li><a href="#pagamentos">Pagamentos</a></li>
       <li><a href="#notificacoes">Notificações</a></li>
+      <li><a href="#seguranca">Segurança</a></li>
       <li><a href="#direitos">Seus direitos</a></li>
       <li><a href="#termos">Termos de uso</a></li>
     </ul>
@@ -104,7 +106,8 @@
           <li><em>No app:</em> a conversa fica salva <strong>apenas no seu aparelho</strong> (armazenamento local do navegador), para continuar de onde parou. O botão de limpar conversa apaga esse histórico.</li>
         </ul>
       </li>
-      <li><strong>Áudios, fotos e PDFs enviados ao Pulsinho:</strong> são usados apenas para transcrever ou ler o conteúdo (por exemplo, o valor de um cupom). O PulseNote não guarda o arquivo; fica salvo só o que você confirmar (o lançamento ou a nota).</li>
+      <li><strong>Áudios, fotos e PDFs enviados ao Pulsinho ou em Finanças</strong> (“Foto / PDF do comprovante” e “Importar por áudio”): são usados apenas para transcrever ou ler o conteúdo (por exemplo, o valor de um cupom). O PulseNote não guarda o arquivo; fica salvo só o que você confirmar (o lançamento ou a nota).</li>
+      <li><strong>Cópia no aparelho:</strong> para funcionar sem internet e abrir mais rápido, o app guarda uma cópia dos seus dados no próprio aparelho. Em aparelhos compartilhados, saia da conta ao terminar.</li>
       <li><strong>Registros técnicos:</strong> identificadores de mensagens e operações do WhatsApp, usados para não registrar o mesmo gasto duas vezes quando uma mensagem chega repetida.</li>
       <li><strong>Uso operacional:</strong> a última área acessada e contagens agregadas de navegação entre áreas (por exemplo, Planner → Notas). Não registramos nesses indicadores pesquisas, valores, textos de notas ou títulos.</li>
     </ul>
@@ -155,7 +158,7 @@
         <tbody>
           <tr><td><strong>Vercel AI Gateway</strong></td><td>Encaminha as conversas ao modelo escolhido.</td></tr>
           <tr><td><strong>OpenAI (GPT)</strong> e <strong>Anthropic (Claude)</strong></td><td>Entender a mensagem, conversar e propor as ações. Você pode preferir um deles em Configurações → Inteligência; o outro é usado como reserva.</td></tr>
-          <tr><td><strong>Google (Gemini)</strong></td><td>Leitura de fotos e PDFs de comprovantes e transcrição de áudios enviados pelo WhatsApp. Também pode servir de reserva da conversa quando os outros modelos estiverem indisponíveis.</td></tr>
+          <tr><td><strong>Google (Gemini)</strong></td><td>“Lançar por texto” em Finanças, leitura de fotos e PDFs de comprovantes e transcrição de áudios (pelo WhatsApp ou em Finanças). Também pode servir de reserva da conversa quando os outros modelos estiverem indisponíveis.</td></tr>
           <tr><td><strong>Google Search (via Gemini)</strong></td><td>Só quando você pergunta algo atual (notícias, cotações, clima): a pergunta é pesquisada na internet e a resposta cita as fontes. Seus dados pessoais não são enviados nessa pesquisa.</td></tr>
         </tbody>
       </table>
@@ -194,6 +197,33 @@
       pode chegar por mensagem. Cada canal pode ser desativado quando quiser.
     </p>
 
+    <h2 id="seguranca">Segurança</h2>
+    <h3>Como protegemos seus dados</h3>
+    <ul>
+      <li><strong>Conexão sempre segura:</strong> todo o tráfego usa HTTPS, e o navegador é instruído a nunca abrir o PulseNote sem criptografia.</li>
+      <li><strong>Isolamento por conta:</strong> as regras do banco de dados só deixam cada conta ler e gravar os próprios dados; todo o resto é bloqueado por padrão.</li>
+      <li><strong>Verificação no servidor:</strong> cada pedido ao servidor (Pulsinho, leitura de comprovantes, espaços compartilhados, exclusão de conta) confere a sua sessão antes de fazer qualquer coisa. As chaves de IA, pagamento e WhatsApp ficam só no servidor, nunca no app.</li>
+      <li><strong>Mensagens do WhatsApp e da Stripe</strong> só são aceitas com a assinatura digital de quem as enviou.</li>
+      <li><strong>Proteção contra golpes no navegador:</strong> o PulseNote não pode ser embutido em outros sites (evita telas falsas por cima do app), e o texto que você digita é sempre exibido como texto — nunca executado como código.</li>
+      <li><strong>Acesso e senha:</strong> o e-mail precisa ser confirmado antes do primeiro uso; senhas novas têm pelo menos 8 caracteres e as mais óbvias são recusadas. A recuperação de senha não revela se um e-mail tem conta.</li>
+      <li><strong>Limites contra abuso:</strong> os recursos de IA têm limites diários por conta. Para isso guardamos apenas contadores do dia, sem o conteúdo das mensagens, fotos ou áudios.</li>
+      <li><strong>Administração:</strong> o painel administrativo exige conta autorizada e confirmada, valida cada ação no servidor conforme o papel de cada administrador e registra as alterações num histórico de auditoria. Ele não mostra o conteúdo das suas notas, tarefas ou lançamentos.</li>
+    </ul>
+    <h3>O que você pode fazer</h3>
+    <ul>
+      <li>Use uma senha que você não usa em outros sites, ou entre com o Google.</li>
+      <li>Em aparelho compartilhado, saia da conta ao terminar.</li>
+      <li>Se suspeitar que alguém acessou sua conta, troque a senha em Configurações → Segurança e dados e fale com o suporte.</li>
+      <li>Evite guardar senhas e números completos de documentos em notas, principalmente com a leitura de notas pela IA ligada.</li>
+    </ul>
+    <h3>Incidentes e vulnerabilidades</h3>
+    <p>
+      Se acontecer um incidente de segurança que possa trazer risco ou dano relevante a você, avisaremos as pessoas
+      afetadas e a Autoridade Nacional de Proteção de Dados (ANPD), como prevê a LGPD. Encontrou uma falha de
+      segurança? Fale com a gente pelo contato de suporte indicado no app — investigamos todo relato, e pedimos que
+      a falha não seja divulgada nem explorada antes da correção.
+    </p>
+
     <h2 id="direitos">Seus direitos (LGPD)</h2>
     <p>De acordo com a Lei Geral de Proteção de Dados (Lei nº 13.709/2018), você pode:</p>
     <ul>
@@ -209,7 +239,8 @@
       <li>O PulseNote é oferecido para uso pessoal. Você é responsável pelo conteúdo que registra e por manter seu acesso seguro.</li>
       <li>Não use o app ou o Pulsinho para atividades ilegais, para tentar acessar dados de outras pessoas ou para sobrecarregar o serviço.</li>
       <li>Os cálculos, projeções e respostas do Pulsinho são ferramentas de apoio baseadas nos dados que você registrou e podem conter erros; decisões financeiras são suas.</li>
-      <li>Recursos podem variar conforme o plano e podem ser atualizados com a evolução do app. As conversas com IA do Pulsinho têm um limite diário que depende do plano; cumprimentos e comandos simples não contam, e o limite renova todo dia. Para registrar esse uso, guardamos apenas um contador diário, sem o conteúdo das mensagens.</li>
+      <li>Recursos podem variar conforme o plano e podem ser atualizados com a evolução do app. As conversas com IA do Pulsinho têm um limite diário que depende do plano; cumprimentos e comandos simples não contam, e o limite renova todo dia. A leitura de lançamentos por IA em Finanças (texto, foto/PDF e áudio) tem um limite diário próprio, generoso, que existe só para evitar abuso e não gasta as conversas. Para registrar esse uso, guardamos apenas contadores diários, sem o conteúdo das mensagens.</li>
+      <li>Não tente burlar os limites, as regras de segurança ou o acesso de outras contas. Encontrou uma falha? Avise o suporte em vez de explorá-la.</li>
     </ul>
 
     <h2>Não compartilhamos seus dados</h2>
