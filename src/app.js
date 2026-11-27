@@ -2183,14 +2183,22 @@ async function forceAppUpdate() {
 async function checkAdminAccess() {
   const card = document.getElementById("adminAccessCard");
   const dropdownEntry = document.getElementById("dropdownAdmin");
-  const isPrimaryOwner = (currentUser?.email || "").trim().toLowerCase() === "douglas1201.santos@gmail.com";
+  // Sem e-mail de administrador no código público (expunha o e-mail do dono
+  // a qualquer visitante e indicava qual conta atacar). O atalho lembra a
+  // última resposta do servidor para esta conta neste aparelho, para não
+  // sumir se a consulta falhar; quem decide de verdade é sempre o servidor
+  // (/api/admin valida a cada chamada).
+  const adminMemoKey = `pn_admin_shortcut_${currentUser?.uid || ""}`;
+  let isPrimaryOwner = false;
+  try { isPrimaryOwner = localStorage.getItem(adminMemoKey) === "1"; } catch { /* sem storage */ }
+  const rememberAdmin = (yes) => { try { if (yes) localStorage.setItem(adminMemoKey, "1"); else localStorage.removeItem(adminMemoKey); } catch { /* sem storage */ } };
   if (!currentUser?.emailVerified) {
     if (card) card.hidden = true;
     if (dropdownEntry) dropdownEntry.hidden = true;
     return;
   }
-  // Mantém o atalho visível para a conta proprietária mesmo se a consulta
-  // transitória falhar. A página /admin ainda valida a autorização no servidor.
+  // Mantém o atalho visível para quem já foi confirmado como admin, mesmo se
+  // a consulta transitória falhar. A página /admin valida no servidor.
   if (isPrimaryOwner) {
     if (card) card.hidden = false;
     if (dropdownEntry) dropdownEntry.hidden = false;
@@ -2201,6 +2209,9 @@ async function checkAdminAccess() {
       headers: { Authorization: `Bearer ${token}` },
     });
     const allowed = response.status === 200;
+    // Só uma resposta definitiva muda a lembrança (403 = não é admin).
+    if (allowed) rememberAdmin(true);
+    else if (response.status === 401 || response.status === 403) { rememberAdmin(false); isPrimaryOwner = false; }
     if (card) card.hidden = !(allowed || isPrimaryOwner); renderSettingsBoard();
     if (dropdownEntry) dropdownEntry.hidden = !(allowed || isPrimaryOwner);
   } catch {
@@ -2324,10 +2335,15 @@ function bindSettingsView() {
       showSettingsMsg("Informe a senha atual.", "error");
       return;
     }
-    if (!newPw || newPw.length < 6) {
+    // Mesma regra das contas novas (auth.js → passwordProblem).
+    const obvious = ["12345678", "123456789", "1234567890", "87654321", "11111111", "00000000", "password", "password1", "senha123", "senha1234", "qwerty123", "abc12345", "abcd1234", "pulsenote", "iloveyou", "brasil123", "mudar123"];
+    const newPwProblem = !newPw || newPw.length < 8 ? "A nova senha deve ter pelo menos 8 caracteres."
+      : obvious.includes(newPw.toLowerCase()) || /^(.)\1+$/.test(newPw) ? "Essa senha é fácil demais de adivinhar. Misture letras e números."
+      : newPw === currentPw ? "A nova senha precisa ser diferente da atual." : "";
+    if (newPwProblem) {
       newPwField.classList.add("has-error");
       newPwField.focus();
-      showSettingsMsg("A nova senha deve ter pelo menos 6 caracteres.", "error");
+      showSettingsMsg(newPwProblem, "error");
       return;
     }
 
@@ -12893,6 +12909,7 @@ function bindAiQuickEntry() {
     ai_not_configured: "A IA ainda não foi configurada neste servidor.",
     unauthorized: "Sua sessão expirou. Recarregue a página e faça login novamente.",
     ai_rate_limited: "O limite gratuito da IA foi atingido por agora.",
+    daily_limit: "Você atingiu o limite diário de leituras pela IA.",
   };
 
   function showAiQuickMascot(mode) {
@@ -14047,6 +14064,7 @@ const FIN_MEDIA_ERRORS = {
   ai_not_configured: "A leitura por IA ainda não foi configurada no servidor.",
   feature_disabled: "A leitura de comprovantes e áudios está desligada no momento.",
   maintenance: "O PulseNote está em manutenção. Tente de novo em instantes.",
+  daily_limit: "Você atingiu o limite diário de leituras de comprovantes e áudios. Amanhã libera de novo — ou preencha manualmente.",
   unauthorized: "Sua sessão expirou. Recarregue a página e entre de novo.",
   media_too_large: "Arquivo grande demais. Use uma foto ou um PDF de até 2,5 MB.",
   unsupported_media: "Formato não suportado. Use foto (JPG, PNG, WEBP), PDF ou áudio.",

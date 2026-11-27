@@ -39,7 +39,7 @@ function translateAuthError(code) {
     // Cadastro
     "auth/email-already-in-use":        "Este e-mail já está cadastrado. Tente fazer login.",
     "auth/invalid-email":               "E-mail inválido. Verifique o formato.",
-    "auth/weak-password":               "Senha muito fraca. Use pelo menos 6 caracteres.",
+    "auth/weak-password":               "Senha muito fraca. Use pelo menos 8 caracteres, com letras e números.",
     "auth/operation-not-allowed":       "Cadastro por e-mail não está ativado. Fale com o administrador.",
     // Login
     "auth/user-not-found":              "E-mail não encontrado. Verifique ou crie uma conta.",
@@ -183,6 +183,20 @@ document.querySelectorAll(".toggle-pw").forEach((btn) => {
   });
 });
 
+// ── Regra de senha (contas novas) ──────────────────────────────
+// Mínimo de 8 caracteres e fora da lista das senhas mais óbvias. Mesma
+// regra em Configurações → trocar senha (app.js). Quem já tem conta com
+// senha antiga continua entrando normalmente.
+const OBVIOUS_PASSWORDS = new Set(["12345678", "123456789", "1234567890", "87654321", "11111111", "00000000", "password", "password1", "senha123", "senha1234", "qwerty123", "abc12345", "abcd1234", "pulsenote", "iloveyou", "brasil123", "mudar123"]);
+function passwordProblem(pw, email = "") {
+  if (pw.length < 8) return "A senha deve ter pelo menos 8 caracteres.";
+  const lower = pw.toLowerCase();
+  if (OBVIOUS_PASSWORDS.has(lower) || /^(.)\1+$/.test(pw)) return "Essa senha é fácil demais de adivinhar. Misture letras e números.";
+  const user = String(email).split("@")[0].toLowerCase();
+  if (user.length >= 4 && lower.includes(user)) return "A senha não pode conter o seu e-mail.";
+  return "";
+}
+
 // ── Medidor de força da senha ──────────────────────────────────
 const pwInput = document.getElementById("regPassword");
 if (pwInput) pwInput.addEventListener("input", () => updateStrength(pwInput.value));
@@ -192,7 +206,7 @@ function updateStrength(pw) {
   const label = document.getElementById("pwStrengthLabel");
   if (!fill || !label) return;
   let score = 0;
-  if (pw.length >= 6)            score++;
+  if (pw.length >= 8)            score++;
   if (pw.length >= 10)           score++;
   if (/[A-Z]/.test(pw))         score++;
   if (/[0-9]/.test(pw))         score++;
@@ -252,8 +266,9 @@ if (registerForm) {
       showError("registerError", "Informe um e-mail válido.");
       return;
     }
-    if (pw.length < 6) {
-      showError("registerError", "A senha deve ter pelo menos 6 caracteres.");
+    const pwProblem = passwordProblem(pw, email);
+    if (pwProblem) {
+      showError("registerError", pwProblem);
       return;
     }
     if (pw !== confirm) {

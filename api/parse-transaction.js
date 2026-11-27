@@ -36,6 +36,39 @@ const { getFirebaseAdmin } = require("./_lib/firebaseAdmin");
 const { parseTransactionText, parseTransactionImage, transcribeAudio } = require("./_lib/parseTransactionAI");
 const { checkUserFeature } = require("./_lib/admin");
 
+// ── Limite diário contra abuso (custo da IA) ─────────────────────
+// Separado da cota de conversas do Pulsinho: lançar por texto/foto/áudio não
+// gasta as conversas da pessoa. Folgado para uso real; só barra robôs/abuso.
+// Ajustável por PARSE_DAILY_LIMIT_TEXT / PARSE_DAILY_LIMIT_MEDIA (0 = sem
+// limite). Se o contador falhar, a leitura segue (nunca derruba o recurso).
+function parseDailyLimit(kind) {
+  const raw = String(process.env[kind === "media" ? "PARSE_DAILY_LIMIT_MEDIA" : "PARSE_DAILY_LIMIT_TEXT"] ?? "").trim();
+  const value = Number(raw);
+  if (raw && Number.isInteger(value) && value >= 0 && value <= 100000) return value;
+  return kind === "media" ? 60 : 300;
+}
+
+async function consumeParseQuota(uid, kind) {
+  const limit = parseDailyLimit(kind);
+  if (!limit) return true;
+  try {
+    const db = getFirebaseAdmin().firestore();
+    const day = new Date().toISOString().slice(0, 10);
+    const ref = db.collection("aiParseUsage").doc(uid);
+    return await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      const data = snap.exists ? snap.data() || {} : {};
+      const used = data.day === day ? Math.max(0, Number(data[kind]) || 0) : 0;
+      if (used >= limit) return false;
+      tx.set(ref, data.day === day ? { [kind]: used + 1, updatedAt: new Date().toISOString() } : { day, [kind]: 1, updatedAt: new Date().toISOString() }, { merge: data.day === day });
+      return true;
+    });
+  } catch (err) {
+    console.error("Falha no limite diário de leitura por IA:", err?.message || err);
+    return true;
+  }
+}
+
 async function verifyUser(req) {
   const authHeader = req.headers.authorization || "";
   const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
@@ -87,6 +120,8 @@ module.exports = async (req, res) => {
     return handleMedia(req, res, uid);
   }
 
+  if (!(await consumeParseQuota(uid, "text"))) return res.status(429).json({ error: "daily_limit" });
+
   let result;
   try {
     result = await parseTransactionText({ text, categories, today });
@@ -130,6 +165,7 @@ async function handleMedia(req, res, uid) {
     console.error("Falha ao verificar acesso à leitura de mídia:", err?.message || err);
     return res.status(503).json({ error: "service_unavailable" });
   }
+  if (!(await consumeParseQuota(uid, "media"))) return res.status(429).json({ error: "daily_limit" });
 
   try {
     if (mode === "image") {

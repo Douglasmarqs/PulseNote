@@ -43,7 +43,9 @@ test("the same signed-in account can switch between the personal app and adminis
   assert.match(html, /Abrir meu PulseNote/);
   assert.match(appJs, /id="dropdownAdmin" hidden/);
   assert.match(appJs, /window\.location\.assign\("\/admin"\)/);
-  assert.match(appJs, /douglas1201\.santos@gmail\.com/);
+  // sem e-mail de admin no código público: o atalho lembra a resposta do servidor
+  assert.doesNotMatch(appJs, /@gmail\.com/);
+  assert.match(appJs, /const adminMemoKey = `pn_admin_shortcut_\$\{currentUser\?\.uid \|\| ""\}`;/);
   assert.match(appJs, /dropdownEntry\.hidden = !\(allowed \|\| isPrimaryOwner\)/);
 });
 

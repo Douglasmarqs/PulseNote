@@ -15,11 +15,16 @@ service firebase.storage {
 
     // Avatars de perfil: avatars/{userId}/profile
     match /avatars/{userId}/{fileName} {
-      // Só o próprio usuário pode fazer upload/deletar
-      allow write: if request.auth != null
+      // Só o próprio usuário pode enviar: até 5 MB e só formatos de foto
+      // (SVG fica de fora — ele pode carregar código).
+      allow create, update: if request.auth != null
                    && request.auth.uid == userId
                    && request.resource.size <= 5 * 1024 * 1024
-                   && request.resource.contentType.matches('image/.*');
+                   && request.resource.contentType.matches('image/(jpeg|png|webp|gif|heic|heif)');
+
+      // Apagar a própria foto (no delete não há request.resource; a regra
+      // antiga exigia tamanho/tipo e acabava bloqueando).
+      allow delete: if request.auth != null && request.auth.uid == userId;
 
       // Qualquer pessoa autenticada pode ver o avatar
       // (necessário para exibir a foto para outros usuários no futuro)

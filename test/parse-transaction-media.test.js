@@ -4,13 +4,13 @@ const assert = require("node:assert/strict");
 const path = require("node:path");
 
 // Carrega api/parse-transaction.js com Firebase, IA e painel admin simulados.
-function loadRoute({ feature = { allowed: true }, ai = {} } = {}) {
+function loadRoute({ feature = { allowed: true }, ai = {}, firestore = () => ({}) } = {}) {
   const calls = { features: [], image: [], audio: [], text: [] };
   const stub = (rel, exports) => {
     const file = require.resolve(path.join(__dirname, "..", "api", rel));
     require.cache[file] = { id: file, filename: file, loaded: true, exports };
   };
-  stub("_lib/firebaseAdmin.js", { getFirebaseAdmin: () => ({ auth: () => ({ verifyIdToken: async () => ({ uid: "u1" }) }), firestore: () => ({}) }) });
+  stub("_lib/firebaseAdmin.js", { getFirebaseAdmin: () => ({ auth: () => ({ verifyIdToken: async () => ({ uid: "u1" }) }), firestore }) });
   stub("_lib/admin.js", { checkUserFeature: async (_db, _uid, name) => { calls.features.push(name); return name === "aiParsing" ? { allowed: true } : feature; } });
   stub("_lib/parseTransactionAI.js", {
     parseTransactionText: async (args) => { calls.text.push(args); return ai.text || { ok: true, entry: { amount: 32, type: "despesa", categoryId: "alimentacao", description: "Almoço", date: "2025-01-24" } }; },
@@ -83,4 +83,46 @@ test("texto continua funcionando como antes", async () => {
   const res = await call(handler, { text: "almoço 32 reais", categories: [], today: "2025-01-24" });
   assert.equal(res.statusCode, 200);
   assert.deepEqual(calls.features, ["aiParsing"]);
+});
+
+// Banco simulado só com o necessário para o contador diário.
+function fakeFirestore() {
+  const docs = new Map();
+  const ref = (id) => ({ id });
+  const db = {
+    docs,
+    collection: (name) => ({ doc: (id) => ref(`${name}/${id}`) }),
+    runTransaction: async (fn) => fn({
+      get: async (r) => ({ exists: docs.has(r.id), data: () => docs.get(r.id) }),
+      set: (r, value, opts) => docs.set(r.id, opts?.merge ? { ...(docs.get(r.id) || {}), ...value } : value),
+    }),
+  };
+  return db;
+}
+
+test("limite diário contra abuso: barra depois do limite sem chamar a IA (texto e mídia separados)", async () => {
+  const db = fakeFirestore();
+  process.env.PARSE_DAILY_LIMIT_TEXT = "2";
+  process.env.PARSE_DAILY_LIMIT_MEDIA = "1";
+  try {
+    const { handler, calls } = loadRoute({ firestore: () => db });
+    assert.equal((await call(handler, { text: "almoço 32" })).statusCode, 200);
+    assert.equal((await call(handler, { text: "almoço 32" })).statusCode, 200);
+    const blocked = await call(handler, { text: "almoço 32" });
+    assert.equal(blocked.statusCode, 429);
+    assert.equal(blocked.body.error, "daily_limit");
+    assert.equal(calls.text.length, 2, "a terceira não chega à IA");
+    // mídia tem contador próprio
+    assert.equal((await call(handler, { mode: "image", imageBase64: tinyB64, mimeType: "image/png" })).statusCode, 200);
+    assert.equal((await call(handler, { mode: "image", imageBase64: tinyB64, mimeType: "image/png" })).statusCode, 429);
+    assert.equal(calls.image.length, 1);
+  } finally {
+    delete process.env.PARSE_DAILY_LIMIT_TEXT;
+    delete process.env.PARSE_DAILY_LIMIT_MEDIA;
+  }
+});
+
+test("limite diário: se o contador falhar, a leitura segue (nunca derruba o recurso)", async () => {
+  const { handler } = loadRoute({ firestore: () => ({ collection: () => ({ doc: () => ({}) }), runTransaction: async () => { throw new Error("offline"); } }) });
+  assert.equal((await call(handler, { text: "almoço 32" })).statusCode, 200);
 });
