@@ -342,6 +342,16 @@ test("fluidez: trocar de tela não força recálculo de layout nem anima sem par
   assert.match(css, /touch-action: manipulation;/);
 });
 
+test("fluidez: odômetro mede tudo antes de montar e usa uma coluna de texto", () => {
+  const js = read("src/web-motion.js");
+  const css = read("src/web.css");
+  assert.match(js, /function odoMeasure\(el\)/);
+  assert.match(js, /const measured = ready\.map\(\(el\) => \[el, odoMeasure\(el\)\]\); \/\/ só leituras/);
+  assert.match(js, /const ODO_COLUMN = Array\.from\(\{ length: 20 \}, \(_, n\) => n % 10\)\.join\("\\n"\);/);
+  assert.doesNotMatch(js, /`<i>\$\{n % 10\}<\/i>`/);
+  assert.match(css, /\.pn-odo-s \{ display: block; white-space: pre;/);
+});
+
 test("fluidez: Configurações e janelas abrem e fecham com movimento", () => {
   const app = read("src/app.js");
   const css = read("src/web.css");

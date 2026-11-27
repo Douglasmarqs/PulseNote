@@ -230,15 +230,29 @@
       odoLast.set(el, text);
       el.textContent = text;
     }
-    function odoRoll(el, fromText) {
+    // Leitura separada da escrita: ao abrir uma área, todos os valores são
+    // medidos de uma vez (um só cálculo de layout) e só depois montados —
+    // antes cada valor medido depois do anterior montado forçava a página
+    // a recalcular de novo, bem no meio da entrada da tela.
+    function odoMeasure(el) {
       const to = el.textContent.replace(/\s+/g, " ").trim();
       if (odoRolling.has(el)) odoFinish(el, to);
       odoLast.set(el, to);
-      if (calm() || !ODO_MONEY.test(to) || !el.offsetWidth) return;
+      if (calm() || !ODO_MONEY.test(to) || !el.offsetWidth) return null;
       const cs = getComputedStyle(el);
       const fontPx = parseFloat(cs.fontSize) || 16;
       const lh = parseFloat(cs.lineHeight) || fontPx * 1.2;
-      if (el.scrollHeight > lh * 1.5) return; // quebrou em duas linhas: deixa quieto
+      if (el.scrollHeight > lh * 1.5) return null; // quebrou em duas linhas: deixa quieto
+      return { to, lh };
+    }
+    // Coluna de dígitos 0–9 duas vezes, como texto puro (uma linha por
+    // dígito): 1 elemento por casa em vez de 20 — bem menos estilo a calcular.
+    const ODO_COLUMN = Array.from({ length: 20 }, (_, n) => n % 10).join("\n");
+    function odoRoll(el, fromText) {
+      const m = odoMeasure(el);
+      if (m) odoBuild(el, fromText, m);
+    }
+    function odoBuild(el, fromText, { to, lh }) {
       const toDigits = [...to].filter((c) => /\d/.test(c));
       const fromDigits = [...String(fromText || "")].filter((c) => /\d/.test(c));
       const offset = toDigits.length - fromDigits.length; // alinha pela direita
@@ -251,8 +265,7 @@
         const f = fromText == null ? 0 : (fromIdx >= 0 && fromDigits[fromIdx] != null ? Number(fromDigits[fromIdx]) : 0);
         const start = f;
         const end = fromText == null ? 10 + t : (t >= f ? t : t + 10);
-        const rows = Array.from({ length: 20 }, (_, n) => `<i>${n % 10}</i>`).join("");
-        return `<span class="pn-odo-d" data-s="${start}" data-e="${end}"><span class="pn-odo-s">${rows}</span></span>`;
+        return `<span class="pn-odo-d" data-s="${start}" data-e="${end}"><span class="pn-odo-s">${ODO_COLUMN}</span></span>`;
       });
       el.classList.add("pn-odo-host");
       el.innerHTML = `<span class="pn-odo" aria-hidden="true" style="--lh:${lh}px">${cells.join("")}</span><span class="sr-only">${escHtml(to)}</span>`;
@@ -271,7 +284,11 @@
     function odoEnter(section) {
       if (calm() || !section) return;
       // Depois do ajuste de tamanho da fonte do app (2 quadros).
-      setTimeout(() => section.querySelectorAll(ODO_SEL).forEach((el) => { if (el.getClientRects().length) odoRoll(el, null); }), 90);
+      setTimeout(() => {
+        const ready = [...section.querySelectorAll(ODO_SEL)].filter((el) => el.getClientRects().length);
+        const measured = ready.map((el) => [el, odoMeasure(el)]); // só leituras
+        measured.forEach(([el, m]) => { if (m) odoBuild(el, null, m); }); // só escritas
+      }, 90);
     }
     const odoObserver = new MutationObserver((records) => {
       const touched = new Set();
