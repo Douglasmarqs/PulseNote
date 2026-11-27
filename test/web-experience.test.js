@@ -386,9 +386,8 @@ test("sem 'voltar' arrastando a tela: trocar de área não cria histórico", () 
   const app = read("src/app.js");
   assert.match(app, /if \(!fromHistory && previousView !== view\) \{\s*history\.replaceState\(\{ \.\.\.\(history\.state \|\| \{\}\), pnView: view, noteDetail: false \}, ""\);/);
   assert.doesNotMatch(app, /history\.pushState\(\{ \.\.\.\(history\.state \|\| \{\}\), pnView: view, noteDetail: false \}/);
-  // nota aberta: no iPhone/iPad sem entrada (só existe o gesto); no Android o voltar fecha a nota
-  assert.match(app, /const IS_APPLE_TOUCH = /);
-  assert.match(app, /if \(!IS_APPLE_TOUCH\) history\.pushState\(\{ \.\.\.\(history\.state \|\| \{\}\), pnView: activeView, noteDetail: true \}, ""\);/);
+  // nota aberta também não cria entrada, em nenhum aparelho
+  assert.doesNotMatch(app, /history\.pushState\(/);
 });
 
 test("odômetro pousa direto no valor: casas juntas, sem parada antes de fixar", () => {

@@ -5056,15 +5056,6 @@ function setView(view, { fromHistory = false } = {}) {
   }
 }
 
-// iPhone/iPad: o "voltar" é só o gesto de arrastar a tela pela borda (não há
-// botão físico) — lá nem a nota aberta ganha entrada no histórico. No
-// Android a entrada continua: é ela que faz o botão/gesto voltar fechar a
-// nota em vez de sair do app.
-const IS_APPLE_TOUCH = (() => {
-  const ua = navigator.userAgent || "";
-  return /iPhone|iPad|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-})();
-
 // ── Troca de telas fluida ───────────────────────────────────────
 // Ordem das abas do celular: a tela nova entra pelo lado para onde a
 // pessoa "andou" (direita ao avançar, esquerda ao voltar). Telas fora da
@@ -10324,7 +10315,9 @@ function openNoteDetail(id) {
   // "voltar" do celular (ou o botão físico/gesto de voltar do
   // Android) também fecha a nota, em vez de sair do app inteiro ou
   // deixar a pessoa sem uma saída óbvia se algum toque não registrar.
-  if (!IS_APPLE_TOUCH) history.pushState({ ...(history.state || {}), pnView: activeView, noteDetail: true }, "");
+  // Sem entrada no histórico (pedido 27/11, todos os aparelhos): com ela o
+  // gesto do sistema de puxar da borda esquerda arrastava a tela. A nota
+  // fecha pelos botões dela.
 }
 
 function renderNoteDetailChecklist(note) {
