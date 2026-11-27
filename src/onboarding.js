@@ -188,19 +188,93 @@ export function createOnboarding(ctx) {
     </div>`;
   }
 
-  function render() {
+  // ── Movimento (fluidez) ─────────────────────────────────────────
+  // Antes, todo toque redesenhava a tela inteira: o interruptor "pulava",
+  // as animações de entrada recomeçavam e cada sincronização do app
+  // reconstruía tudo. Agora: escolha e interruptores mudam só o próprio
+  // item; trocar de passo desliza o cartão novo; abrir/fechar têm entrada e
+  // saída; e o redesenho por sincronização só acontece se algo mudou.
+  const calm = () => Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
+  const EASE = "cubic-bezier(.16, 1, .3, 1)";
+  const play = (el, frames, options) => (el && !calm() && typeof el.animate === "function" ? el.animate(frames, { easing: EASE, ...options }) : null);
+  let leaving = null;
+  let lastSyncSig = "";
+  const syncSig = () => { const p = pendingCode(); return `${linkedPhone()}|${p ? `${p.code}|${p.expiresAt}` : ""}`; };
+
+  function render({ motion = null } = {}) {
     if (!view.open) { root.hidden = true; root.innerHTML = ""; document.body.classList.remove("bdo-open"); return; }
+    leaving?.cancel(); leaving = null;
     const focusKey = document.activeElement?.dataset?.obSpace || document.activeElement?.dataset?.obPref || document.activeElement?.dataset?.ob || "";
+    const wasHidden = root.hidden || !root.firstElementChild;
     root.hidden = false;
     document.body.classList.add("bdo-open");
     root.innerHTML = view.done ? renderDone() : renderWizard();
+    lastSyncSig = syncSig();
     if (focusKey) {
       const next = root.querySelector(`[data-ob-space="${focusKey}"], [data-ob-pref="${focusKey}"], .is-active [data-ob="${focusKey}"]`);
       next?.focus({ preventScroll: true });
     }
+    const panel = root.querySelector(".bdo-panel");
+    if (wasHidden) {
+      // Abertura: o fundo esmaece e o painel sobe de leve.
+      play(root, [{ opacity: 0 }, { opacity: 1 }], { duration: 260 });
+      play(panel, [{ opacity: 0, transform: "translateY(14px) scale(.985)" }, { opacity: 1, transform: "none" }], { duration: 420, delay: 40, fill: "backwards" });
+    } else if (motion === "done") {
+      // Sucesso: o painel troca com leve crescimento e o ✓ dá um pulinho.
+      play(panel, [{ opacity: 0, transform: "scale(.96)" }, { opacity: 1, transform: "none" }], { duration: 380 });
+      play(root.querySelector(".bdo-done-ico"), [{ transform: "scale(.4) rotate(-12deg)", opacity: 0 }, { transform: "scale(1.12) rotate(4deg)", opacity: 1, offset: 0.6 }, { transform: "none", opacity: 1 }], { duration: 560, delay: 120, easing: "cubic-bezier(.34, 1.56, .64, 1)", fill: "backwards" });
+      root.querySelectorAll(".bdo-summary li").forEach((li, i) => play(li, [{ opacity: 0, transform: "translateY(8px)" }, { opacity: 1, transform: "none" }], { duration: 360, delay: 260 + i * 70, fill: "backwards" }));
+    } else if (motion === "forward" || motion === "back") {
+      animateStep(motion);
+    }
   }
 
-  function goTo(step) { view.step = Math.min(3, Math.max(1, step)); render(); }
+  // Troca de passo: o cartão novo entra pelo lado para onde a pessoa andou,
+  // a barra de progresso enche e o número da etapa dá um "pop".
+  function animateStep(direction) {
+    const dx = direction === "forward" ? 28 : -28;
+    const active = root.querySelector(".bdo-card.is-active");
+    const single = active && getComputedStyle(root.querySelector(".bdo-card:not(.is-active)") || active).display === "none";
+    if (single) {
+      play(active, [{ opacity: 0, transform: `translateX(${dx}px)` }, { opacity: 1, transform: "none" }], { duration: 380 });
+    } else {
+      // Computador: os três cartões ficam lado a lado — o ativo ganha destaque.
+      play(active, [{ transform: "translateY(6px) scale(.985)", boxShadow: "none" }, { transform: "none" }], { duration: 420 });
+    }
+    if (direction === "forward") {
+      const bar = root.querySelectorAll(".bdo-bars i.on")[view.step - 1];
+      play(bar, [{ transform: "scaleX(0)", transformOrigin: "left" }, { transform: "scaleX(1)", transformOrigin: "left" }], { duration: 460 });
+    }
+    root.querySelectorAll(".bdo-top-steps li.active > span, .bdo-card.is-active .bdo-mini li.active > span").forEach((dot) =>
+      play(dot, [{ transform: "scale(.6)" }, { transform: "scale(1.15)", offset: 0.6 }, { transform: "none" }], { duration: 420, easing: "cubic-bezier(.34, 1.56, .64, 1)" }));
+  }
+
+  function goTo(step) {
+    const next = Math.min(3, Math.max(1, step));
+    if (next === view.step) return;
+    const direction = next > view.step ? "forward" : "back";
+    view.step = next;
+    render({ motion: direction });
+    if (root.scrollTop > 0) root.scrollTo?.({ top: 0, behavior: calm() ? "auto" : "smooth" });
+  }
+
+  // Escolha do espaço e interruptores: muda só o item (a transição do CSS
+  // anda de verdade — o interruptor desliza em vez de pular).
+  function selectSpace(id) {
+    view.space = id;
+    root.querySelectorAll("[data-ob-space]").forEach((btn) => {
+      const on = btn.dataset.obSpace === id;
+      btn.classList.toggle("selected", on);
+      btn.setAttribute("aria-checked", String(on));
+      if (on) play(btn.querySelector(".bdo-radio"), [{ transform: "scale(.6)" }, { transform: "scale(1.15)", offset: 0.6 }, { transform: "none" }], { duration: 360, easing: "cubic-bezier(.34, 1.56, .64, 1)" });
+    });
+  }
+  function togglePref(btn) {
+    const key = btn.dataset.obPref;
+    view.prefs[key] = !view.prefs[key];
+    btn.classList.toggle("on", view.prefs[key]);
+    btn.setAttribute("aria-checked", String(view.prefs[key]));
+  }
 
   async function finish() {
     const anyOn = NOTIFICATION_PREF_KEYS.some((key) => view.prefs[key]);
@@ -214,7 +288,7 @@ export function createOnboarding(ctx) {
     ctx.setWorkspace(view.space);
     ctx.patchState(patch);
     view.done = true;
-    render();
+    render({ motion: "done" });
   }
 
   function skip() {
@@ -223,13 +297,28 @@ export function createOnboarding(ctx) {
     close();
   }
 
-  function close() { view.open = false; view.done = false; render(); }
+  // Fechar: o painel recua e esmaece com o fundo, e só então some. O app por
+  // baixo já pode ser trocado de tela (then) enquanto isso acontece.
+  function close(then) {
+    view.open = false;
+    view.done = false;
+    const panel = root.querySelector(".bdo-panel");
+    const out = !root.hidden && root.firstElementChild && !calm() && typeof root.animate === "function";
+    then?.();
+    if (!out) { render(); return; }
+    root.style.pointerEvents = "none";
+    play(panel, [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(10px) scale(.97)" }], { duration: 240, easing: "cubic-bezier(.4, 0, .9, .6)", fill: "forwards" });
+    leaving = play(root, [{ opacity: 1 }, { opacity: 0 }], { duration: 300, easing: "ease", fill: "forwards" });
+    const finishClose = () => { root.style.pointerEvents = ""; if (view.open) return; leaving = null; root.getAnimations?.({ subtree: true }).forEach((a) => a.cancel()); render(); };
+    if (leaving) leaving.finished.then(finishClose, () => { root.style.pointerEvents = ""; });
+    else finishClose();
+  }
 
   function onClick(event) {
     const spaceBtn = event.target.closest("[data-ob-space]");
-    if (spaceBtn) { view.space = spaceBtn.dataset.obSpace; render(); return; }
+    if (spaceBtn) { selectSpace(spaceBtn.dataset.obSpace); return; }
     const prefBtn = event.target.closest("[data-ob-pref]");
-    if (prefBtn) { const key = prefBtn.dataset.obPref; view.prefs[key] = !view.prefs[key]; render(); return; }
+    if (prefBtn) { togglePref(prefBtn); return; }
     const action = event.target.closest("[data-ob]")?.dataset.ob;
     if (!action) return;
     if (action === "next") goTo(view.step + 1);
@@ -237,9 +326,9 @@ export function createOnboarding(ctx) {
     else if (action === "whatsapp") { ctx.startWhatsappLink(); render(); }
     else if (action === "finish") finish();
     else if (action === "skip") skip();
-    else if (action === "enter") { close(); ctx.openView("dashboard"); }
-    else if (action === "invite") { close(); ctx.openView("finances", { focus: "#finSharedSpacesList" }); }
-    else if (action === "settings") { close(); ctx.openView("settings"); }
+    else if (action === "enter") close(() => ctx.openView("dashboard"));
+    else if (action === "invite") close(() => ctx.openView("finances", { focus: "#finSharedSpacesList" }));
+    else if (action === "settings") close(() => ctx.openView("settings"));
   }
 
   function bind() {
@@ -266,7 +355,9 @@ export function createOnboarding(ctx) {
         render();
         return;
       }
-      if (!view.done) render();
+      // Só redesenha se o que a tela mostra do app mudou (vínculo do WhatsApp
+      // confirmado, código novo). Antes, cada sincronização reconstruía tudo.
+      if (!view.done && syncSig() !== lastSyncSig) render();
     },
     // Somente QA visual (?designPreview=1&onboarding=1|2|3|done)
     preview(step) {

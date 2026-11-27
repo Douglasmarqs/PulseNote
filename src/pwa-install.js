@@ -247,12 +247,31 @@
   }
 
   // ── Banner dispensável (aparece uma vez, pode ser fechado) ──────
+  // Nunca por cima da abertura, da configuração inicial (introdução) ou da
+  // tela de confirmar e-mail: o banner cobria o botão "Próximo" de quem
+  // acabou de criar a conta. Espera essas telas saírem e aparece depois.
+  const blockingScreenOpen = () => document.body.classList.contains("bdo-open")
+    || Boolean(document.getElementById("appLoadingOverlay") || document.getElementById("verifyEmailGate"));
+  let waitingForFreeScreen = false;
+  function whenScreenFree(fn) {
+    if (waitingForFreeScreen) return;
+    waitingForFreeScreen = true;
+    const observer = new MutationObserver(() => {
+      if (blockingScreenOpen()) return;
+      observer.disconnect();
+      waitingForFreeScreen = false;
+      setTimeout(fn, 1500);
+    });
+    observer.observe(document.body, { attributes: true, attributeFilter: ["class"], childList: true });
+  }
+
   function maybeShowDismissableBanner(platform) {
     const DISMISS_KEY = "pn_install_banner_dismissed_at";
     let dismissedAt = null;
     try { dismissedAt = localStorage.getItem(DISMISS_KEY); } catch { /* sem storage */ }
     if (dismissedAt && Date.now() - Number(dismissedAt) < 7 * 24 * 60 * 60 * 1000) return;
     if (document.getElementById("pwaInstallBanner")) return;
+    if (blockingScreenOpen()) { whenScreenFree(() => maybeShowDismissableBanner(platform)); return; }
     ensureStyles();
 
     const banner = document.createElement("div");

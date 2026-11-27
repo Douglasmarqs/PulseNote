@@ -177,7 +177,7 @@
     <!-- Perfil v3 -->
     <link rel="stylesheet" href="/src/profile-v3.css?v=4" />
     <!-- Experiência no navegador: profundidade, barra lateral viva, movimento -->
-    <link rel="stylesheet" href="/src/web.css?v=18" />
+    <link rel="stylesheet" href="/src/web.css?v=19" />
   </head>
   <body class="bd">
     <!-- Tela de abertura já no HTML: aparece na primeira pintura, antes de
@@ -1398,7 +1398,7 @@
                     <label class="bf-field bf-wide"><span>Descrição <i>*</i></span>
                       <span class="bf-input"><input id="expenseDescription" placeholder="Ex.: Almoço no restaurante" autocomplete="off" /></span>
                     </label>
-                    <div class="bf-field"><span>Categoria <i>*</i></span>
+                    <div class="bf-field bf-field--cat"><span>Categoria <i>*</i></span>
                       <div class="bf-catpick">
                         <button type="button" id="expenseCategoryTrigger" class="bf-input bf-cat-trigger fin-cat-trigger" aria-haspopup="true">
                           <span id="expenseCategoryTriggerIcon" class="fin-cat-trigger-icon"><svg class="i" aria-hidden="true"><use href="#i-fork"/></svg></span>
@@ -1409,7 +1409,7 @@
                         <button type="button" id="newCategoryBtn" class="bd-icon-btn bf-cat-add" title="Nova categoria" aria-label="Nova categoria"><svg class="i"><use href="#i-plus"/></svg></button>
                       </div>
                     </div>
-                    <label class="bf-field"><span>Conta</span>
+                    <label class="bf-field bf-field--acct"><span>Conta</span>
                       <span class="bf-input bf-select"><svg class="i"><use href="#i-card"/></svg><select id="expenseAccount" class="fin-account-select" aria-label="Conta"><option value="">Sem conta</option></select><svg class="i bf-chev"><use href="#i-chev-down"/></svg></span>
                     </label>
                     <div class="bf-form-foot bf-wide">
@@ -1945,7 +1945,7 @@
                     <h3 class="st-block-title"><svg class="i"><use href="#i-whatsapp"/></svg>Pulsinho no WhatsApp</h3>
                     <div id="whatsappLinkedBlock" hidden>
                 <p class="task-meta" style="margin-bottom:10px">
-                  <span style="display:inline-flex;align-items:center;gap:4px;color:var(--green)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Assistente ativo</span> no número <strong id="whatsappLinkedPhoneLabel"></strong>. Mande uma mensagem tipo
+                  <span style="color:var(--green);white-space:nowrap"><svg width="13" height="13" style="vertical-align:-1px;margin-right:4px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Assistente ativo</span> no número <strong id="whatsappLinkedPhoneLabel"></strong>. Mande uma mensagem tipo
                   <em>"gastei 45 no mercado"</em> ou <em>"me lembra de pagar o boleto sexta"</em> que o Pulsinho cuida do resto.
                 </p>
                 <label style="display:flex;align-items:center;gap:8px;margin-bottom:14px;cursor:pointer">

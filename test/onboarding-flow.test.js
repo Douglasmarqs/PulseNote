@@ -24,7 +24,10 @@ function load(file) {
 // Elemento mínimo para simular cliques no assistente sem precisar de DOM.
 function click(root, selectorMap) {
   const handler = root.listeners.get("click");
-  const target = { closest: (selector) => selectorMap[selector] || null };
+  // Os alvos ganham o mínimo de um elemento real (classe e atributos), já que
+  // escolha e interruptores agora mudam só o próprio item.
+  const asEl = (el) => el && { classList: { toggle() {}, add() {}, remove() {}, contains: () => false }, setAttribute() {}, ...el };
+  const target = { closest: (selector) => asEl(selectorMap[selector]) || null };
   handler({ target });
 }
 
@@ -35,6 +38,7 @@ function harness(onboarding, initial = {}) {
     hidden: true, innerHTML: "", listeners: new Map(),
     addEventListener(name, fn) { this.listeners.set(name, fn); },
     querySelector() { return null; },
+    querySelectorAll() { return []; },
   };
   const g = global;
   g.document = { body: { classList: { add() {}, remove() {} } }, activeElement: null };
@@ -212,4 +216,27 @@ test("login mantém todos os campos e botões usados pelo auth.js", () => {
   assert.match(html, /href="\/forgot-password"/);
   assert.match(html, /Continuar com o Google/);
   assert.match(html, /Sua vida, organizada/);
+});
+
+test("introdução fluida: toques mudam só o item, passos deslizam e sync não redesenha à toa", () => {
+  const src = require("node:fs").readFileSync(require("node:path").join(__dirname, "../src/onboarding.js"), "utf8");
+  // escolha e interruptores não redesenham a tela inteira
+  assert.match(src, /if \(spaceBtn\) \{ selectSpace\(spaceBtn\.dataset\.obSpace\); return; \}/);
+  assert.match(src, /if \(prefBtn\) \{ togglePref\(prefBtn\); return; \}/);
+  // troca de passo com direção, sucesso e abertura animados
+  assert.match(src, /render\(\{ motion: direction \}\);/);
+  assert.match(src, /render\(\{ motion: "done" \}\);/);
+  assert.match(src, /function animateStep\(direction\)/);
+  // fechar tem saída e o app por baixo já troca de tela
+  assert.match(src, /else if \(action === "enter"\) close\(\(\) => ctx\.openView\("dashboard"\)\);/);
+  // sincronização só redesenha se o que aparece mudou
+  assert.match(src, /if \(!view\.done && syncSig\(\) !== lastSyncSig\) render\(\);/);
+  // respeita "movimento reduzido"
+  assert.match(src, /const calm = \(\) => Boolean\(window\.matchMedia\?\.\("\(prefers-reduced-motion: reduce\)"\)\.matches\);/);
+});
+
+test("banner de instalar não aparece por cima da abertura nem da introdução", () => {
+  const src = require("node:fs").readFileSync(require("node:path").join(__dirname, "../src/pwa-install.js"), "utf8");
+  assert.match(src, /const blockingScreenOpen = \(\) => document\.body\.classList\.contains\("bdo-open"\)/);
+  assert.match(src, /if \(blockingScreenOpen\(\)\) \{ whenScreenFree\(\(\) => maybeShowDismissableBanner\(platform\)\); return; \}/);
 });

@@ -887,6 +887,44 @@ button, a, [role="button"], [role="tab"], .bd-tab, .bd-nav-item, .bn-card, .bf-t
 }
 @media (prefers-reduced-motion: reduce) { .modal-backdrop, .modal-backdrop .modal-card { transition: none !important; } }
 
+/* ---------- Alinhamento (verificação completa 27/11) ---------- */
+/* Configurações (tablet): nome/e-mail encolhem com reticências em vez de
+   passar por baixo do botão "Editar perfil". */
+.st-profile-copy { grid-template-columns: minmax(0, 1fr); }
+.st-profile-copy strong { min-width: 0; }
+.st-profile-copy strong #stName { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.st-profile-copy strong .st-badge { flex: none; }
+.st-profile-row > .st-btn { flex: none; }
+/* Tablet: o cartão é estreito — o botão vira só o lápis e o nome cabe. */
+@media (min-width: 761px) and (max-width: 1180px) {
+  #stEditProfileBtn { width: 38px; padding: 0; justify-content: center; gap: 0; font-size: 0; }
+  #stEditProfileBtn .i { width: 17px; height: 17px; }
+}
+/* Finanças → novo lançamento em celular pequeno: Categoria e Conta em linha
+   inteira (lado a lado, o "+" da categoria ia parar atrás do campo Conta e
+   "Sem conta" era cortado). */
+#financesView .bf-catpick { min-width: 0; }
+#financesView .bf-catpick > .bf-cat-trigger { min-width: 0; }
+@media (max-width: 400px) {
+  #financesView .bf-fields > .bf-field--cat, #financesView .bf-fields > .bf-field--acct { grid-column: 1 / -1; }
+}
+
+/* ---------- Configuração inicial (introdução): toques fluidos ---------- */
+/* Interruptor desliza com leve mola; opções respondem ao toque. */
+.bdo-switch { transition: background-color .22s ease; }
+.bdo-switch i { transition: transform .28s cubic-bezier(.34, 1.4, .64, 1), width .18s ease; }
+.bdo-switch:active i { width: 24px; }
+.bdo-switch.on:active i { transform: translateX(14px); }
+.bdo-option { transition: border-color .2s ease, background-color .2s ease, box-shadow .2s ease, transform .18s ease; }
+.bdo-option:active { transform: scale(.985); }
+.bdo-radio { transition: border-width .22s cubic-bezier(.34, 1.4, .64, 1), border-color .2s ease; }
+.bdo-bars i { transition: background-color .3s ease; }
+.bdo-card { transition: opacity .25s ease, border-color .25s ease, box-shadow .25s ease; }
+@media (prefers-reduced-motion: reduce) {
+  .bdo-switch, .bdo-switch i, .bdo-option, .bdo-radio, .bdo-bars i, .bdo-card { transition: none; }
+  .bdo-option:active { transform: none; }
+}
+
 /* ---------- Configurações: escolha de movimento ---------- */
 .pn-motion-row {
   display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;
