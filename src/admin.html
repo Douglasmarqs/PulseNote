@@ -213,7 +213,7 @@
               <div class="ad-maintenance-card"><div><strong>Modo de manutenção</strong><small>Tira o app do ar com uma mensagem até você liberar.</small></div><span class="ad-pill" id="adMaintenanceStatus">Carregando…</span><button type="button" class="ad-subtle-button" data-go="settings">Configurar operação</button></div>
             </details>
 
-            <aside class="ad-user-drawer ad-audit-drawer" id="adAuditDrawer" aria-labelledby="adAuditDrawerTitle" aria-hidden="true"><button class="ad-drawer-close" id="adAuditDrawerClose" type="button" aria-label="Fechar auditoria"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button><span class="ad-card-kicker">AUDITORIA</span><h2 id="adAuditDrawerTitle">Todas as ações administrativas</h2><label class="ac-search ac-search--drawer"><svg class="i" aria-hidden="true"><use href="#i-search"/></svg><input id="adAuditSearch" type="search" placeholder="Filtrar por ação, e-mail ou administrador" autocomplete="off" /></label><div id="adAuditFull" class="ad-audit-list"></div></aside>
+            <aside class="ad-user-drawer ad-audit-drawer" id="adAuditDrawer" aria-labelledby="adAuditDrawerTitle" aria-hidden="true" inert><button class="ad-drawer-close" id="adAuditDrawerClose" type="button" aria-label="Fechar auditoria"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button><span class="ad-card-kicker">AUDITORIA</span><h2 id="adAuditDrawerTitle">Todas as ações administrativas</h2><label class="ac-search ac-search--drawer"><svg class="i" aria-hidden="true"><use href="#i-search"/></svg><input id="adAuditSearch" type="search" placeholder="Filtrar por ação, e-mail ou administrador" autocomplete="off" /></label><div id="adAuditFull" class="ad-audit-list"></div></aside>
           </section>
 
           <!-- USUÁRIOS -->
@@ -389,7 +389,7 @@
     </div>
   </div>
 
-  <aside class="ad-user-drawer" id="adUserDrawer" aria-labelledby="adUserDrawerTitle" aria-hidden="true"><button class="ad-drawer-close" id="adUserDrawerClose" type="button" aria-label="Fechar detalhes"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button><div id="adUserDrawerContent"></div></aside>
+  <aside class="ad-user-drawer" id="adUserDrawer" aria-labelledby="adUserDrawerTitle" aria-hidden="true" inert><button class="ad-drawer-close" id="adUserDrawerClose" type="button" aria-label="Fechar detalhes"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button><div id="adUserDrawerContent"></div></aside>
   <div class="ac-modal" id="adModal" hidden><div class="ac-modal-backdrop" data-modal-close></div><div class="ac-modal-card" role="dialog" aria-modal="true" aria-labelledby="adModalTitle"><header class="ac-modal-head"><div><span class="ad-card-kicker" id="adModalKicker"></span><h2 id="adModalTitle" tabindex="-1">—</h2></div><button type="button" class="ac-modal-x" data-modal-close aria-label="Fechar"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button></header><div class="ac-modal-body" id="adModalBody"></div><footer class="ac-modal-foot" id="adModalFoot"></footer></div></div>
   <div class="st-cmd" id="adCmd" hidden>
     <div class="st-cmd-backdrop" data-cmd-close></div>
@@ -400,6 +400,6 @@
     </div>
   </div>
   <div id="adToast" class="ad-toast" role="status" aria-live="polite" hidden></div>
-  <script type="module" src="/src/admin.js?v=40"></script>
+  <script type="module" src="/src/admin.js?v=41"></script>
 </body>
 </html>

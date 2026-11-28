@@ -672,6 +672,8 @@ async function openAuditDrawer() {
   if (drawer.parentElement !== document.body && document.body) document.body.appendChild(drawer);
   drawer.classList.add("is-open");
   drawer.setAttribute("aria-hidden", "false");
+  drawer.inert = false;
+  drawerFocusIn(drawer, "#adAuditDrawerClose");
   try {
     const data = await request("audit");
     state.audit = data.events || [];
@@ -684,6 +686,8 @@ async function openAuditDrawer() {
 function closeAuditDrawer() {
   $("#adAuditDrawer")?.classList.remove("is-open");
   $("#adAuditDrawer")?.setAttribute("aria-hidden", "true");
+  if ($("#adAuditDrawer")) $("#adAuditDrawer").inert = true;
+  drawerFocusBack();
 }
 
 function renderIntegrationRows(data, selector, compact = false) {
@@ -845,6 +849,20 @@ function exportUsersCsv() {
   setTimeout(() => URL.revokeObjectURL(link.href), 2000);
 }
 
+// Foco do teclado: entra na gaveta ao abrir e volta para quem abriu ao fechar.
+let drawerOpener = null;
+function drawerFocusIn(drawer, closeSelector) {
+  const active = globalThis.document?.activeElement;
+  if (active && drawer.contains?.(active)) return; // já aberta (recarga): não rouba o foco
+  if (active) drawerOpener = active;
+  $(closeSelector)?.focus?.({ preventScroll: true });
+}
+function drawerFocusBack() {
+  const opener = drawerOpener;
+  drawerOpener = null;
+  if (opener?.isConnected) opener.focus?.({ preventScroll: true });
+}
+
 // ── Gaveta do usuário ────────────────────────────────────────────────
 async function openUserDrawer(uid) {
   const user = state.directory.find((item) => item.uid === uid);
@@ -853,6 +871,8 @@ async function openUserDrawer(uid) {
   renderUserDrawer(user, null);
   drawer.classList.add("is-open");
   drawer.setAttribute("aria-hidden", "false");
+  drawer.inert = false;
+  drawerFocusIn(drawer, "#adUserDrawerClose");
   drawer.dataset.uid = uid;
   try {
     const detail = await request("user-detail", undefined, { uid });
@@ -899,7 +919,9 @@ function closeUserDrawer() {
   const drawer = $("#adUserDrawer");
   drawer?.classList.remove("is-open");
   drawer?.setAttribute("aria-hidden", "true");
+  if (drawer) drawer.inert = true;
   if (drawer) delete drawer.dataset.uid;
+  drawerFocusBack();
 }
 
 // ── Ações de acesso (individual ou em lote) ──────────────────────────

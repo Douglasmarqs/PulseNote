@@ -69,3 +69,11 @@ test("prévia: dados fictícios respondem às leituras e às mudanças de plano"
   assert.equal(events[0].action, "plan_saved");
   for (const user of (await preview.previewRequest("directory")).users) assert.match(user.email, /@exemplo\.com$/);
 });
+
+test("gavetas fechadas ficam inertes e o foco entra e volta com o teclado", () => {
+  assert.match(html, /id="adUserDrawer"[^>]*aria-hidden="true" inert>/);
+  assert.match(html, /id="adAuditDrawer"[^>]*aria-hidden="true" inert>/);
+  assert.match(js, /function drawerFocusIn\(/);
+  assert.match(js, /function drawerFocusBack\(/);
+  assert.equal((js.match(/\.inert = true/g) || []).length, 2);
+});
