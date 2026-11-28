@@ -177,7 +177,8 @@
     <!-- Perfil v3 -->
     <link rel="stylesheet" href="/src/profile-v3.css?v=4" />
     <!-- Experiência no navegador: profundidade, barra lateral viva, movimento -->
-    <link rel="stylesheet" href="/src/web.css?v=19" />
+    <link rel="stylesheet" href="/src/plan-cards.css?v=1" />
+    <link rel="stylesheet" href="/src/web.css?v=20" />
   </head>
   <body class="bd">
     <!-- Tela de abertura já no HTML: aparece na primeira pintura, antes de
@@ -1682,7 +1683,7 @@
                 <h2 id="profileNameLabel">Usuário</h2>
                 <p id="profileEmailLabel"></p>
                 <div class="pfx-chips">
-                  <span class="pfx-chip is-plan" id="profilePlanChip"><svg class="i"><use href="#i-crown"/></svg><span>Seu plano</span></span>
+                  <button type="button" class="pfx-chip is-plan" id="profilePlanChip" title="Ver planos"><svg class="i"><use href="#i-crown"/></svg><span>Seu plano</span></button>
                   <span class="pfx-chip is-streak" id="profileStreakChip"><svg class="i"><use href="#i-flame"/></svg><span>0 dias seguidos</span></span>
                   <span class="pfx-chip" id="profileSinceChip" hidden><svg class="i"><use href="#i-calendar"/></svg><span></span></span>
                 </div>
@@ -1933,7 +1934,11 @@
               </div>
               <p class="task-meta" id="billingStatusText">Consultando os planos disponíveis e o estado da sua assinatura.</p>
               <div class="billing-charges" id="billingChargesList" hidden aria-live="polite"></div>
-              <div class="billing-plan-grid" id="billingPlanGrid" aria-live="polite"></div>
+              <div class="billing-plan-tools pc-scope" id="billingPlanTools" hidden>
+                <div id="billingIntervalHost"></div>
+                <button type="button" class="ghost-button billing-compare-btn" id="billingCompareBtn"><svg class="i"><use href="#i-layers"/></svg>Comparar planos</button>
+              </div>
+              <div class="billing-plan-grid pc-scope" id="billingPlanGrid" aria-live="polite"></div>
               <div class="form-actions billing-actions" id="billingActions" hidden>
                 <button id="billingPortalButton" type="button" class="ghost-button">Gerenciar pagamento e assinatura</button>
               </div>
@@ -2270,7 +2275,7 @@
     <script src="/src/card-installments.js?v=1"></script>
     <script src="/src/notifications.js?v=36" defer></script>
     <script src="/src/web-motion.js?v=15" defer></script>
-    <script type="module" src="/src/app.js?v=71"></script>
+    <script type="module" src="/src/app.js?v=72"></script>
     <script type="module" src="/src/push-notifications.js?v=35"></script>
     <!-- Configuração inicial (primeiro acesso) — ver src/onboarding.js -->
   <div id="onboardingRoot" class="bdo" role="dialog" aria-modal="true" aria-labelledby="bdoTitle" hidden></div>

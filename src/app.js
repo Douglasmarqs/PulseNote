@@ -7,6 +7,7 @@ import { defaultNotificationPrefs, normalizeNotificationPrefs } from "./notifica
 import { createAutopilotUI } from "./autopilot-ui.js";
 import { deleteAccountDataAndIdentity } from "./account-deletion.mjs";
 import { cloneState, changedStateKeys, mergeDirtyState } from "./state-sync.js";
+import { renderPlanCards, renderIntervalToggle, renderComparison, renderFaq, DEMO_PLANS } from "./plan-cards.js";
 import {
   onAuthStateChanged,
   signOut,
@@ -1953,6 +1954,136 @@ async function billingApi(action, method = "GET", body) {
   return payload;
 }
 
+// ── Vitrine de planos (Configurações → Plano e página "Planos") ───────
+// Os cartões vêm de plan-cards.js — o mesmo componente da prévia ao vivo
+// do Estúdio de planos no painel. O administrador controla tudo o que
+// aparece aqui (preço, anual, vantagens, selo, destaque, cor, botão, ordem).
+let billingView = { plans: [], currentPlanId: null, interval: "month", trialEligible: true, preview: false };
+
+function renderBillingPlans() {
+  const grid = document.getElementById("billingPlanGrid");
+  const tools = document.getElementById("billingPlanTools");
+  if (!grid) return;
+  const { plans, interval } = billingView;
+  const options = { interval, currentPlanId: billingView.currentPlanId, trialEligible: billingView.trialEligible };
+  grid.hidden = !plans.length;
+  grid.innerHTML = plans.length ? renderPlanCards(plans, options) : "";
+  if (tools) {
+    tools.hidden = !plans.length;
+    const host = document.getElementById("billingIntervalHost");
+    if (host) host.innerHTML = renderIntervalToggle(plans, interval);
+    const compare = document.getElementById("billingCompareBtn");
+    if (compare) compare.hidden = plans.length < 2;
+  }
+  const sheet = document.getElementById("pnPlansSheet");
+  if (sheet && !sheet.hidden) fillPlansSheet(sheet);
+}
+
+function setBillingInterval(interval) {
+  if (interval !== "month" && interval !== "year") return;
+  if (billingView.interval === interval) return;
+  billingView.interval = interval;
+  // Troca o ciclo sem redesenhar a seleção (a pílula desliza) e atualiza os preços.
+  document.querySelectorAll("[data-plan-interval]").forEach((button) => {
+    const on = button.dataset.planInterval === interval;
+    button.classList.toggle("is-on", on);
+    button.setAttribute("aria-checked", String(on));
+  });
+  const options = { interval, currentPlanId: billingView.currentPlanId, trialEligible: billingView.trialEligible };
+  document.querySelectorAll(".pn-plans-cards, #billingPlanGrid").forEach((host) => {
+    host.innerHTML = renderPlanCards(billingView.plans, options);
+    if (!prefersReducedMotion()) host.querySelectorAll(".pc-price strong").forEach((el) => el.animate?.([{ opacity: 0, transform: "translateY(6px)" }, { opacity: 1, transform: "none" }], { duration: 260, easing: "cubic-bezier(.16, 1, .3, 1)" }));
+  });
+}
+
+async function choosePlan(planId, button) {
+  const plan = billingView.plans.find((item) => item.id === planId);
+  if (!plan || button?.disabled) return;
+  if (billingView.preview) { showToast(`Prévia: o pagamento do plano ${plan.name} não abre aqui.`); return; }
+  const original = button?.innerHTML;
+  if (button) { button.disabled = true; button.textContent = "Abrindo pagamento seguro…"; }
+  try {
+    const result = await billingApi("checkout", "POST", { planId, interval: billingView.interval });
+    window.location.assign(result.url);
+  } catch (error) {
+    console.error("Falha ao iniciar checkout:", error.code || error.message);
+    if (button) { button.disabled = false; button.innerHTML = original; }
+    showToast("Não foi possível abrir o pagamento agora.");
+  }
+}
+
+// Página cheia "Planos": vitrine + comparação + perguntas frequentes.
+function fillPlansSheet(sheet) {
+  const { plans, interval } = billingView;
+  const options = { interval, currentPlanId: billingView.currentPlanId, trialEligible: billingView.trialEligible };
+  sheet.querySelector(".pn-plans-interval").innerHTML = renderIntervalToggle(plans, interval);
+  sheet.querySelector(".pn-plans-cards").innerHTML = renderPlanCards(plans, options);
+  const compare = renderComparison(plans);
+  sheet.querySelector(".pn-plans-compare").innerHTML = compare;
+  sheet.querySelector(".pn-plans-compare-block").hidden = !compare;
+}
+
+function openPlansSheet() {
+  if (!billingView.plans.length) { openSettingsSection("plano"); loadBillingSettings(true); return; }
+  let sheet = document.getElementById("pnPlansSheet");
+  if (!sheet) {
+    sheet = document.createElement("div");
+    sheet.id = "pnPlansSheet";
+    sheet.className = "pn-plans pc-scope";
+    sheet.hidden = true;
+    sheet.setAttribute("role", "dialog");
+    sheet.setAttribute("aria-modal", "true");
+    sheet.setAttribute("aria-labelledby", "pnPlansTitle");
+    sheet.innerHTML = `<div class="pn-plans-scroll">
+      <header class="pn-plans-top"><span class="pn-plans-brand"><span class="bd-mascot" aria-hidden="true"><span class="bd-mascot__eyes"><i></i><i></i></span><svg class="bd-mascot__pulse" viewBox="0 0 120 26"><path d="M0,13 L28,13 L36,3 L44,23 L52,13 L64,13 L70,6 L76,20 L82,13 L120,13"/></svg></span>PulseNote</span><button type="button" class="pn-plans-close" data-plans-close aria-label="Fechar planos"><svg class="i"><use href="#i-x"/></svg></button></header>
+      <section class="pn-plans-hero">
+        <span class="pn-plans-kicker">Planos PulseNote</span>
+        <h1 id="pnPlansTitle">Escolha o plano ideal<br/>para a sua rotina</h1>
+        <p>Comece grátis e evolua quando quiser. Sem fidelidade, sem letras miúdas.</p>
+        <div class="pn-plans-interval"></div>
+      </section>
+      <div class="pn-plans-cards"></div>
+      <ul class="pn-plans-trust">
+        <li><svg class="i"><use href="#i-lock"/></svg>Pagamento seguro pelo Stripe</li>
+        <li><svg class="i"><use href="#i-check"/></svg>Cancele quando quiser</li>
+        <li><svg class="i"><use href="#i-shield"/></svg>Seus dados sempre seus</li>
+      </ul>
+      <section class="pn-plans-compare-block"><h2>Compare os planos</h2><div class="pn-plans-compare"></div></section>
+      <section class="pn-plans-faq"><h2>Perguntas frequentes</h2>${renderFaq()}</section>
+    </div>`;
+    document.body.appendChild(sheet);
+    sheet.addEventListener("click", (event) => { if (event.target.closest("[data-plans-close]")) closePlansSheet(); });
+    sheet.addEventListener("keydown", (event) => { if (event.key === "Escape") closePlansSheet(); });
+  }
+  fillPlansSheet(sheet);
+  sheet.hidden = false;
+  document.documentElement.classList.add("pn-plans-open");
+  sheet.querySelector(".pn-plans-scroll").scrollTop = 0;
+  if (!prefersReducedMotion()) {
+    sheet.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 260, easing: "ease" });
+    sheet.querySelector(".pn-plans-hero").animate([{ opacity: 0, transform: "translateY(14px)" }, { opacity: 1, transform: "none" }], { duration: 480, delay: 60, easing: "cubic-bezier(.16, 1, .3, 1)", fill: "backwards" });
+    sheet.querySelectorAll(".pn-plans-cards .pc-card").forEach((card, index) => card.animate([{ opacity: 0, transform: "translateY(22px)" }, { opacity: 1, transform: "none" }], { duration: 520, delay: 140 + index * 80, easing: "cubic-bezier(.16, 1, .3, 1)", fill: "backwards" }));
+  }
+  requestAnimationFrame(() => sheet.querySelector(".pn-plans-close")?.focus({ preventScroll: true }));
+}
+
+function closePlansSheet() {
+  const sheet = document.getElementById("pnPlansSheet");
+  if (!sheet || sheet.hidden) return;
+  const done = () => { sheet.hidden = true; document.documentElement.classList.remove("pn-plans-open"); };
+  if (prefersReducedMotion() || !sheet.animate) { done(); return; }
+  sheet.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 200, easing: "ease", fill: "forwards" }).finished.then(() => { done(); sheet.getAnimations().forEach((a) => a.cancel()); }, done);
+}
+
+// Cliques da vitrine (Configurações e página "Planos"), ligados uma vez.
+document.addEventListener("click", (event) => {
+  const interval = event.target.closest?.(".pc-scope [data-plan-interval]");
+  if (interval) { setBillingInterval(interval.dataset.planInterval); return; }
+  const choose = event.target.closest?.(".pc-scope [data-plan-choose]");
+  if (choose) { choosePlan(choose.dataset.planChoose, choose); return; }
+  if (event.target.closest?.("#billingCompareBtn, #profilePlanChip, [data-open-plans]")) openPlansSheet();
+});
+
 async function loadBillingSettings(force = false) {
   const grid = document.getElementById("billingPlanGrid");
   if (!grid || !currentUser) return;
@@ -1962,10 +2093,12 @@ async function loadBillingSettings(force = false) {
   // autenticadas. Além de evitar ruído no console, isto reforça que o QA não
   // cria assinatura, checkout ou qualquer alteração financeira real.
   if (isLocalDesignPreview) {
+    // Vitrine de demonstração (planos fictícios, nenhum pagamento real).
     statusBadge.textContent = "Prévia visual";
     statusBadge.className = "billing-status-badge";
-    statusText.textContent = "Planos e pagamentos não são simulados neste preview seguro.";
-    grid.innerHTML = '<div class="empty-state">Entre com uma conta real para consultar assinatura e cobrança.</div>';
+    statusText.textContent = "Vitrine de demonstração: os botões não abrem pagamento neste preview seguro.";
+    billingView = { ...billingView, plans: DEMO_PLANS, currentPlanId: "gratis", trialEligible: true, preview: true };
+    renderBillingPlans();
     const actions = document.getElementById("billingActions");
     if (actions) actions.hidden = true;
     return null;
@@ -2001,39 +2134,11 @@ async function loadBillingSettings(force = false) {
         ? "Os pagamentos ainda não foram ativados pelo administrador. Seus recursos atuais continuam funcionando normalmente."
         : active ? "Seu acesso é atualizado automaticamente após cada confirmação do provedor de pagamento."
           : "Escolha um plano para ativar os recursos correspondentes.";
-    if (!data.plans.length && onFree) {
-      grid.innerHTML = "";
-      grid.hidden = true;
-      const billingActions = document.getElementById("billingActions");
-      if (billingActions) billingActions.hidden = true;
-      return data;
-    }
-    grid.hidden = false;
-    grid.innerHTML = data.plans.length ? data.plans.map((plan) => {
-      const isCurrent = current.planId === plan.id;
-      const disabled = isCurrent || !plan.checkoutAvailable;
-      return `<article class="billing-plan-card ${isCurrent ? "is-current" : ""}">
-        <h3>${escapeHtml(plan.name)}</h3><p>${escapeHtml(plan.description || "Recursos definidos pelo administrador.")}</p>
-        <div class="billing-plan-price">${billingMoney(plan.priceCents)} <small>/${plan.billingInterval === "year" ? "ano" : "mês"}</small></div>
-        <button type="button" class="${isCurrent ? "ghost-button" : "primary-button"}" data-billing-plan="${escapeHtml(plan.id)}" ${disabled ? "disabled" : ""}>${isCurrent ? "Plano atual" : plan.checkoutAvailable ? "Assinar plano" : "Indisponível"}</button>
-      </article>`;
-    }).join("") : `<div class="empty-state">Nenhum plano público está disponível no momento.</div>`;
+    // Vitrine: mesmos cartões da prévia do Estúdio de planos do painel.
+    billingView = { ...billingView, plans: data.plans || [], currentPlanId: active ? current.planId : (onFree ? (data.plans || []).find((plan) => !plan.priceCents)?.id || null : null),
+      trialEligible: data.trialEligible !== false, preview: false };
+    renderBillingPlans();
     document.getElementById("billingActions").hidden = current.provider !== "stripe";
-    grid.querySelectorAll("[data-billing-plan]").forEach((button) => button.addEventListener("click", async () => {
-      if (button.disabled) return;
-      const original = button.textContent;
-      button.disabled = true;
-      button.textContent = "Abrindo pagamento…";
-      try {
-        const result = await billingApi("checkout", "POST", { planId: button.dataset.billingPlan });
-        window.location.assign(result.url);
-      } catch (error) {
-        console.error("Falha ao iniciar checkout:", error.code || error.message);
-        button.disabled = false;
-        button.textContent = original;
-        showToast("Não foi possível abrir o pagamento agora.");
-      }
-    }));
     return data;
   }).catch((error) => {
     console.error("Falha ao carregar cobrança:", error.code || error.message);

@@ -1111,3 +1111,53 @@ button, a, [role="button"], [role="tab"], .bd-tab, .bd-nav-item, .bn-card, .bf-t
   .bn-card:hover, .bd-kpi:hover, .bf-kpi:hover, .pfx-stat:hover, .bd-side-pulsinho:hover { transform: none; }
   .bd-btn--primary::after, .primary-button::after { display: none; }
 }
+
+/* ==========================================================================
+   PLANOS — vitrine em Configurações e página cheia "Planos"
+   (cartões: plan-cards.css, compartilhado com o Estúdio de planos do painel)
+   ========================================================================== */
+.billing-plan-tools { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 14px 0 4px; }
+.billing-plan-tools[hidden], .billing-plan-grid[hidden] { display: none; }
+.billing-plan-tools #billingIntervalHost:empty { display: none; }
+.billing-compare-btn { display: inline-flex; align-items: center; gap: 7px; }
+.billing-compare-btn[hidden] { display: none; }
+.billing-compare-btn .i { width: 16px; height: 16px; }
+.billing-plan-grid.pc-scope { display: block; margin-top: 6px; }
+.billing-plan-grid .pc-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 14px; }
+.st-drawer-body .billing-plan-grid .pc-grid { grid-template-columns: minmax(0, 1fr); }
+button.pfx-chip.is-plan { cursor: pointer; font-family: inherit; transition: transform .18s ease, box-shadow .2s ease; }
+button.pfx-chip.is-plan:hover { box-shadow: 0 0 0 3px var(--bd-primary-soft); }
+button.pfx-chip.is-plan:active { transform: scale(.97); }
+
+.pn-plans { position: fixed; inset: 0; z-index: 420; background: var(--bd-bg, #f6f7fc); background-image: radial-gradient(1100px 520px at 50% -180px, color-mix(in srgb, #7c6cff 24%, transparent), transparent 70%), radial-gradient(700px 400px at 100% 0%, color-mix(in srgb, #22d3ee 12%, transparent), transparent 70%); }
+.pn-plans[hidden] { display: none; }
+html.pn-plans-open, html.pn-plans-open body { overflow: hidden; }
+.pn-plans-scroll { height: 100%; overflow-y: auto; overscroll-behavior: contain; padding: 0 20px calc(48px + env(safe-area-inset-bottom, 0px)); -webkit-overflow-scrolling: touch; }
+.pn-plans-top { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; margin: 0 -20px; padding: calc(14px + env(safe-area-inset-top, 0px)) max(20px, calc(50% - 560px)) 12px; background: color-mix(in srgb, var(--pc-surface-2) 78%, transparent); -webkit-backdrop-filter: saturate(1.4) blur(14px); backdrop-filter: saturate(1.4) blur(14px); border-bottom: 1px solid color-mix(in srgb, var(--pc-line) 60%, transparent); }
+.pn-plans-brand { display: inline-flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 750; color: var(--pc-text); }
+.pn-plans-brand .bd-mascot { width: 32px; height: 32px; }
+.pn-plans-close { display: grid; place-items: center; width: 40px; height: 40px; border: 1px solid var(--pc-line); border-radius: 12px; background: var(--pc-surface); color: var(--pc-text); cursor: pointer; transition: transform .15s ease, background-color .2s ease; }
+.pn-plans-close:hover { background: var(--pc-surface-2); }
+.pn-plans-close:active { transform: scale(.94); }
+.pn-plans-close .i { width: 18px; height: 18px; }
+.pn-plans-hero { max-width: 720px; margin: 18px auto 30px; text-align: center; }
+.pn-plans-kicker { display: inline-flex; padding: 5px 12px; border-radius: 99px; background: color-mix(in srgb, #7c6cff 14%, transparent); color: #6d5dfc; font-size: 12.5px; font-weight: 750; letter-spacing: .02em; }
+:root[data-theme="aurora"] .pn-plans-kicker, :root[data-theme="eclipse"] .pn-plans-kicker { color: #b3a9ff; }
+.pn-plans-hero h1 { margin: 16px 0 10px; font-size: clamp(30px, 5vw, 46px); font-weight: 820; line-height: 1.08; letter-spacing: -.035em; color: var(--pc-text); }
+.pn-plans-hero p { margin: 0 auto 24px; max-width: 520px; font-size: 16px; line-height: 1.5; color: var(--pc-muted); }
+.pn-plans-cards { max-width: 1120px; margin: 0 auto; }
+.pn-plans-cards .pc-grid { gap: 22px; }
+@media (min-width: 900px) { .pn-plans-cards .pc-card.is-highlight { transform: translateY(-10px); } .pn-plans-cards .pc-card.is-highlight:hover { transform: translateY(-14px); } }
+.pn-plans-trust { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 26px; max-width: 1120px; margin: 30px auto 0; padding: 0; list-style: none; font-size: 13.5px; font-weight: 600; color: var(--pc-muted); }
+.pn-plans-trust li { display: inline-flex; align-items: center; gap: 8px; }
+.pn-plans-trust .i { width: 17px; height: 17px; color: var(--pc-good); }
+.pn-plans-compare-block, .pn-plans-faq { max-width: 880px; margin: 56px auto 0; }
+.pn-plans-compare-block[hidden] { display: none; }
+.pn-plans-compare-block h2, .pn-plans-faq h2 { margin: 0 0 16px; text-align: center; font-size: 24px; font-weight: 780; letter-spacing: -.02em; color: var(--pc-text); }
+@media (max-width: 640px) {
+  .pn-plans-scroll { padding-inline: 16px; }
+  .pn-plans-top { margin: 0 -16px; padding-inline: 16px; }
+  .pn-plans-hero { margin: 6px auto 22px; }
+  .pn-plans-hero p { font-size: 15px; }
+  .pn-plans-compare-block, .pn-plans-faq { margin-top: 40px; }
+}
