@@ -21,7 +21,7 @@ async function loadPreview() {
 }
 
 test("estúdio: estrutura de três colunas (ordem, editor, prévia ao vivo)", () => {
-  assert.match(html, /admin-studio\.css\?v=2/);
+  assert.match(html, /admin-studio\.css\?v=3/);
   assert.match(html, /plan-cards\.css\?v=\d+/);
   assert.match(js, /from "\.\/plan-cards\.js"/);
   for (const fn of ["function bindPlanStudio", "function syncDirty", "function savePlanDraft", "function startNewPlan", "studioDirty("]) assert.ok(js.includes(fn), fn);

@@ -63,7 +63,7 @@
 .ps-move .i { width: 14px; height: 14px; }
 
 /* Editor */
-.ps-editor { min-height: 560px; display: flex; flex-direction: column; }
+.ps-editor { min-height: 560px; display: flex; flex-direction: column; container: ps-editor / inline-size; }
 .ps-editor-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 20px 22px 4px; }
 .ps-kicker { font-size: 10.5px; font-weight: 800; letter-spacing: .14em; color: var(--ad-cyan); }
 .ps-editor-head h3 { margin: 4px 0 3px; font-size: 22px; font-weight: 800; letter-spacing: -.03em; color: var(--ad-text); }
@@ -169,6 +169,18 @@
 .ps-dirty.is-dirty { color: var(--ad-yellow); } .ps-dirty.is-dirty i { background: var(--ad-yellow); box-shadow: 0 0 0 4px color-mix(in srgb, var(--ad-yellow) 20%, transparent); animation: psPulse 1.8s ease-in-out 3; }
 @keyframes psPulse { 50% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--ad-yellow) 6%, transparent); } }
 .ps-savebar .ad-primary-button { display: inline-flex; align-items: center; gap: 7px; }
+.ps-savebar .ad-primary-button, .ps-savebar .ad-subtle-button { flex: none; white-space: nowrap; }
+.ps-tabs { overflow-x: auto; scrollbar-width: none; }
+.ps-tabs::-webkit-scrollbar { display: none; }
+.ps-tabs button { flex: none; white-space: nowrap; }
+/* Editor estreito (coluna do meio em notebooks): abas compactas e barra em duas linhas */
+@container ps-editor (max-width: 520px) {
+  .ps-tabs { gap: 0; margin-left: 16px; margin-right: 16px; }
+  .ps-tabs button { padding: 0 10px; gap: 6px; }
+  .ps-savebar { flex-wrap: wrap; row-gap: 8px; }
+  .ps-dirty { flex-basis: 100%; margin: 0; }
+  .ps-savebar .ad-primary-button { flex: 1; }
+}
 .ps-savebar .ad-primary-button .i { width: 16px; height: 16px; }
 
 /* Prévia ao vivo */
