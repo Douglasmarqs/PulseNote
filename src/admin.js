@@ -287,8 +287,13 @@ function toast(message, isError = false) {
   element.classList.remove("is-in");
   void element.offsetWidth;
   element.classList.add("is-in");
+  element.classList.remove("is-out");
   clearTimeout(toast.timer);
-  toast.timer = setTimeout(() => { element.hidden = true; }, 5500);
+  clearTimeout(toast.outTimer);
+  toast.timer = setTimeout(() => {
+    element.classList.add("is-out");
+    toast.outTimer = setTimeout(() => { element.hidden = true; element.classList.remove("is-out"); }, 260);
+  }, 5000);
 }
 
 function setLoadError(message = "") {
@@ -386,6 +391,8 @@ function openModal({ kicker = "", title, body, actions = [], wide = false, onOpe
       }
     });
   }
+  clearTimeout(closeModal.timer);
+  modal.classList.remove("is-leaving");
   modal.hidden = false;
   if ($("#adToast")) $("#adToast").hidden = true;
   document.documentElement.classList.add("ac-modal-open");
@@ -398,11 +405,14 @@ function openModal({ kicker = "", title, body, actions = [], wide = false, onOpe
 
 function closeModal() {
   const modal = $("#adModal");
-  if (!modal || modal.hidden) return;
-  modal.hidden = true;
-  document.documentElement.classList.remove("ac-modal-open");
+  if (!modal || modal.hidden || modal.classList?.contains?.("is-leaving")) return;
   if (typeof modalCleanup === "function") modalCleanup();
   modalCleanup = null;
+  const finish = () => { modal.hidden = true; modal.classList.remove("is-leaving"); document.documentElement.classList.remove("ac-modal-open"); };
+  if (prefersReducedMotionAdmin() || typeof modal.classList?.add !== "function") return finish();
+  modal.classList.add("is-leaving");
+  clearTimeout(closeModal.timer);
+  closeModal.timer = setTimeout(finish, 200);
 }
 
 function confirmDialog({ title, message, confirmLabel = "Confirmar", danger = false }) {
@@ -761,8 +771,7 @@ async function openAuditDrawer() {
   drawer.classList.add("is-open");
   drawer.setAttribute("aria-hidden", "false");
   drawer.inert = false;
-  const scrim = $("#adDrawerScrim");
-  if (scrim) scrim.hidden = false;
+  showScrim();
   drawerFocusIn(drawer, "#adAuditDrawerClose");
   try {
     const [data] = await Promise.all([request("audit"), state.directory.length ? null : loadDirectory().catch(() => {})]);
@@ -780,7 +789,7 @@ function closeAuditDrawer() {
   drawer?.classList.remove("is-open");
   drawer?.setAttribute("aria-hidden", "true");
   if (drawer) drawer.inert = true;
-  if (!$("#adUserDrawer")?.classList.contains("is-open") && $("#adDrawerScrim")) $("#adDrawerScrim").hidden = true;
+  if (!$("#adUserDrawer")?.classList.contains("is-open")) hideScrim();
   drawerFocusBack();
 }
 
@@ -791,7 +800,7 @@ function bindAuditDrawer() {
     const target = event.target;
     if (typeof target?.closest !== "function") return;
     const filter = target.closest("[data-audit-filter]");
-    if (filter) { state.auditFilter = filter.dataset.auditFilter; renderAuditFull(); return; }
+    if (filter) { state.auditFilter = filter.dataset.auditFilter; renderAuditFull(); swapIn($("#adAuditFull .pf-timeline")); return; }
     const person = target.closest("[data-audit-user]");
     if (person) { closeAuditDrawer(); openUserDrawer(person.dataset.auditUser); }
   });
@@ -864,7 +873,7 @@ function statusInfo(user) {
 function avatarHtml(user, size = "") {
   const label = user.displayName || user.email || "?";
   return user.photoURL
-    ? `<span class="ac-avatar ${size}"><img src="${escapeHtml(user.photoURL)}" alt="" referrerpolicy="no-referrer" loading="lazy" /></span>`
+    ? `<span class="ac-avatar ${size}"><img src="${escapeHtml(user.photoURL)}" alt="" referrerpolicy="no-referrer" decoding="sync" /></span>`
     : `<span class="ac-avatar ${size}">${escapeHtml(initials(label))}</span>`;
 }
 
@@ -967,13 +976,30 @@ function exportUsersCsv() {
   setTimeout(() => URL.revokeObjectURL(link.href), 2000);
 }
 
+function showScrim() {
+  const scrim = $("#adDrawerScrim");
+  if (!scrim) return;
+  clearTimeout(showScrim.timer);
+  scrim.classList.remove("is-leaving");
+  scrim.hidden = false;
+}
+function hideScrim() {
+  const scrim = $("#adDrawerScrim");
+  if (!scrim || scrim.hidden) return;
+  if (prefersReducedMotionAdmin() || typeof scrim.classList?.add !== "function") { scrim.hidden = true; return; }
+  scrim.classList.add("is-leaving");
+  clearTimeout(showScrim.timer);
+  showScrim.timer = setTimeout(() => { scrim.hidden = true; scrim.classList.remove("is-leaving"); }, 320);
+}
+
 // Foco do teclado: entra na gaveta ao abrir e volta para quem abriu ao fechar.
 let drawerOpener = null;
 function drawerFocusIn(drawer, closeSelector) {
   const active = globalThis.document?.activeElement;
   if (active && drawer.contains?.(active)) return; // já aberta (recarga): não rouba o foco
   if (active) drawerOpener = active;
-  $(closeSelector)?.focus?.({ preventScroll: true });
+  if (isTouchDevice()) drawer.focus?.({ preventScroll: true });
+  else $(closeSelector)?.focus?.({ preventScroll: true });
 }
 function drawerFocusBack() {
   const opener = drawerOpener;
@@ -994,32 +1020,43 @@ function drawerList() {
   return list.length ? list : state.directory;
 }
 
-async function openUserDrawer(uid, { keepTab = false } = {}) {
+async function openUserDrawer(uid, { keepTab = false, quiet = false } = {}) {
   const user = state.directory.find((item) => item.uid === uid);
   if (!user) return;
   if ($("#adAuditDrawer")?.classList.contains("is-open")) closeAuditDrawer();
   const drawer = $("#adUserDrawer");
   const switching = state.drawer.uid !== uid;
-  if (switching) { state.drawer.detail = null; state.drawer.fresh = true; if (!keepTab) state.drawer.tab = "summary"; }
+  if (switching) { state.drawer.detail = null; state.drawer.fresh = !quiet; if (!keepTab) state.drawer.tab = "summary"; }
   state.drawer.uid = uid;
   drawer.dataset.uid = uid;
   renderUserDrawer(user, state.drawer.detail);
-  if (!drawer.classList.contains("is-open")) {
-    drawer.classList.add("is-open");
+  if (!drawer.classList.contains("is-open") && !state.drawer.opening) {
+    state.drawer.openedAt = Date.now();
     drawer.setAttribute("aria-hidden", "false");
     drawer.inert = false;
-    const scrim = $("#adDrawerScrim");
-    if (scrim) scrim.hidden = false;
-    drawerFocusIn(drawer, "#adUserDrawerClose");
+    showScrim();
+    // Monta primeiro e só desliza no quadro seguinte (montar e mover não disputam).
+    const reveal = () => {
+      state.drawer.opening = false;
+      if (state.drawer.uid !== uid) return;
+      drawer.classList.add("is-open");
+      drawerFocusIn(drawer, "#adUserDrawerClose");
+    };
+    if (typeof globalThis.requestAnimationFrame === "function") { state.drawer.opening = true; void drawer.offsetWidth; requestAnimationFrame(reveal); }
+    else reveal();
   }
   if (!state.plans.length) loadPlans().then(() => { if (state.drawer.uid === uid) renderUserDrawer(user, state.drawer.detail); }).catch(() => {});
   try {
     const detail = await request("user-detail", undefined, { uid });
     if (state.drawer.uid !== uid) return;
+    // Não monta o conteúdo no meio da animação de abrir (evita tranco).
+    const settle = 470 - (Date.now() - (state.drawer.openedAt || 0));
+    if (settle > 0 && !prefersReducedMotionAdmin()) await new Promise((resolve) => setTimeout(resolve, settle));
+    if (state.drawer.uid !== uid) return;
     state.drawer.detail = detail;
     renderUserDrawer(state.directory.find((item) => item.uid === uid) || user, detail);
   } catch (error) {
-    if (state.drawer.uid === uid) $("#adDrawerDetail").innerHTML = `<div class="pf-error">${icon("alert")}<strong>Não foi possível carregar a ficha</strong><span>${escapeHtml(errorText(error))}</span><button type="button" class="ad-subtle-button" data-drawer-retry>Tentar de novo</button></div>`;
+    if (state.drawer.uid === uid && $("#pfPanel")) $("#pfPanel").innerHTML = `<div class="pf-error">${icon("alert")}<strong>Não foi possível carregar a ficha</strong><span>${escapeHtml(errorText(error))}</span><button type="button" class="ad-subtle-button" data-drawer-retry>Tentar de novo</button></div>`;
   }
 }
 
@@ -1028,11 +1065,8 @@ function stepUserDrawer(delta) {
   const index = list.findIndex((item) => item.uid === state.drawer.uid);
   const next = list[index + delta];
   if (!next) return;
-  const body = $("#adDrawerDetail");
-  body?.classList.remove("pf-slide-up", "pf-slide-down");
-  openUserDrawer(next.uid, { keepTab: true });
-  const fresh = $("#adDrawerDetail");
-  if (fresh) { void fresh.offsetWidth; fresh.classList.add(delta > 0 ? "pf-slide-up" : "pf-slide-down"); }
+  openUserDrawer(next.uid, { keepTab: true, quiet: true });
+  replayClass($("#adDrawerDetail"), delta > 0 ? "pf-slide-up" : "pf-slide-down");
 }
 
 function userPlanInfo(user, detail) {
@@ -1233,59 +1267,115 @@ function drawerJourney(user, detail) {
   </div>`;
 }
 
-function renderUserDrawer(user, detail) {
+// A ficha é montada uma vez por pessoa; depois só as partes que mudam são
+// trocadas (foto e cabeçalho ficam parados: nada pisca ao trocar de aba).
+function drawerNavHtml(list, index) {
+  if (list.length <= 1) return "";
+  return `<button type="button" class="pf-icon" data-drawer-step="-1" ${index <= 0 ? "disabled" : ""} aria-label="Pessoa anterior" title="Anterior (K)">${icon("chev-up")}</button><button type="button" class="pf-icon" data-drawer-step="1" ${index < 0 || index >= list.length - 1 ? "disabled" : ""} aria-label="Próxima pessoa" title="Próxima (J)">${icon("chev-down")}</button><span>${index >= 0 ? `${(index + 1).toLocaleString("pt-BR")} de ${list.length.toLocaleString("pt-BR")}` : ""}</span>`;
+}
+
+function drawerWhoHtml(user, detail) {
   const [tone, label] = statusInfo(user);
   const fresh = freshness(detail?.lastActiveAt || user.lastActiveAt);
+  return `<h2 id="adUserDrawerTitle">${escapeHtml(user.displayName || user.email || "Usuário")}</h2>
+    ${user.email ? `<button type="button" class="pf-mail" data-copy-text="${escapeHtml(user.email)}" title="Copiar e-mail"><span>${escapeHtml(user.email)}</span>${icon("copy")}</button>` : ""}
+    <div class="pf-chips"><span class="ac-status ${tone}"><i></i>${escapeHtml(label)}</span><span class="pf-fresh ${fresh.tone}"><i></i>${escapeHtml(fresh.label)}</span>${user.admin ? `<span class="pf-tag">${icon("shield")}Equipe</span>` : ""}${user.disabled ? `<span class="pf-tag is-danger">${icon("lock")}Desativada</span>` : ""}${user.pending?.count ? `<span class="pf-tag is-warn">${icon("receipt")}${money(user.pending.cents)} a receber</span>` : ""}</div>`;
+}
+
+function drawerPanelHtml(user, detail) {
+  if (!detail) return drawerSkeleton();
+  const tab = state.drawer.tab;
+  return tab === "charges" ? drawerCharges(user, detail)
+    : tab === "history" ? drawerHistory(user, detail)
+      : tab === "account" ? drawerAccount(user, detail)
+        : drawerSummary(user, detail);
+}
+
+// Troca de filtro: as linhas novas entram suaves (só nessa hora, não ao digitar).
+function swapIn(element) {
+  if (!element || prefersReducedMotionAdmin()) return;
+  replayClass(element, "ux-swap");
+  clearTimeout(element.swapTimer);
+  element.swapTimer = setTimeout(() => element.classList.remove("ux-swap"), 520);
+}
+
+function replayClass(element, name) {
+  if (!element) return;
+  element.classList.remove(name);
+  void element.offsetWidth;
+  element.classList.add(name);
+}
+
+function renderUserDrawer(user, detail) {
+  const root = $("#adUserDrawerContent");
+  if (!root) return;
+  const [tone] = statusInfo(user);
   const list = drawerList();
   const index = list.findIndex((item) => item.uid === user.uid);
   const tab = state.drawer.tab;
   const counts = { charges: detail?.charges?.length || 0, history: detail ? drawerHistoryItems(user, detail).length : 0 };
-  const root = $("#adUserDrawerContent");
-  if (!root) return;
-  const panel = !detail ? drawerSkeleton()
-    : tab === "charges" ? drawerCharges(user, detail)
-      : tab === "history" ? drawerHistory(user, detail)
-        : tab === "account" ? drawerAccount(user, detail)
-          : drawerSummary(user, detail);
   const signature = `${user.planId}|${user.status}|${user.validUntil}|${user.segment}`;
-  const changed = state.drawer.lastSig && state.drawer.lastSig.split("#")[0] === user.uid && state.drawer.lastSig.split("#")[1] !== signature;
-  const scroller = root.querySelector(".pf-body");
-  const keepScroll = scroller && !state.drawer.fresh ? scroller.scrollTop : 0;
-  root.innerHTML = `<div class="pf ${state.drawer.fresh && detail ? "is-entering" : ""}">
-    <header class="pf-head">
+  const [lastUid, lastSig] = (state.drawer.lastSig || "#").split("#");
+  const changed = lastUid === user.uid && lastSig && lastSig !== signature;
+  const existing = [...root.children].find((element) => element.classList?.contains("pf") && element.dataset.uid === user.uid);
+
+  if (!existing) {
+    root.innerHTML = `<div class="pf pf-user" data-uid="${escapeHtml(user.uid)}">
       <div class="pf-bar">
-        <div class="pf-nav">${list.length > 1 ? `<button type="button" class="pf-icon" data-drawer-step="-1" ${index <= 0 ? "disabled" : ""} aria-label="Pessoa anterior" title="Anterior (K)">${icon("chev-up")}</button><button type="button" class="pf-icon" data-drawer-step="1" ${index < 0 || index >= list.length - 1 ? "disabled" : ""} aria-label="Próxima pessoa" title="Próxima (J)">${icon("chev-down")}</button><span>${index >= 0 ? `${(index + 1).toLocaleString("pt-BR")} de ${list.length.toLocaleString("pt-BR")}` : ""}</span>` : ""}</div>
+        <div class="pf-nav">${drawerNavHtml(list, index)}</div>
+        <div class="pf-mini" aria-hidden="true">${avatarHtml(user, "is-sm")}<strong>${escapeHtml(user.displayName || user.email || "")}</strong></div>
         <button type="button" class="pf-icon pf-close" id="adUserDrawerClose" aria-label="Fechar ficha">${icon("x")}</button>
       </div>
-      <div class="pf-id">
-        <span class="pf-avatar ${tone}">${avatarHtml(user, "is-lg")}</span>
-        <div class="pf-who">
-          <h2 id="adUserDrawerTitle">${escapeHtml(user.displayName || user.email || "Usuário")}</h2>
-          ${user.email ? `<button type="button" class="pf-mail" data-copy-text="${escapeHtml(user.email)}" title="Copiar e-mail"><span>${escapeHtml(user.email)}</span>${icon("copy")}</button>` : ""}
-          <div class="pf-chips"><span class="ac-status ${tone}"><i></i>${escapeHtml(label)}</span><span class="pf-fresh ${fresh.tone}"><i></i>${escapeHtml(fresh.label)}</span>${user.admin ? `<span class="pf-tag">${icon("shield")}Equipe</span>` : ""}${user.disabled ? `<span class="pf-tag is-danger">${icon("lock")}Desativada</span>` : ""}${user.pending?.count ? `<span class="pf-tag is-warn">${icon("receipt")}${money(user.pending.cents)} a receber</span>` : ""}</div>
+      <div class="pf-body" id="adDrawerDetail">
+        <div class="pf-hero">
+          <div class="pf-id"><span class="pf-avatar ${tone}">${avatarHtml(user, "is-lg")}</span><div class="pf-who">${drawerWhoHtml(user, detail)}</div></div>
+          <div class="pf-vitals-slot">${drawerVitals(user, detail)}</div>
         </div>
+        <nav class="pf-tabs" role="tablist" aria-label="Seções da ficha">${DRAWER_TABS.map(([key, text]) => `<button type="button" role="tab" id="pf-tab-${key}" aria-selected="${key === tab}" aria-controls="pfPanel" tabindex="${key === tab ? 0 : -1}" data-drawer-tab="${key}">${text}<em ${counts[key] ? "" : "hidden"}>${counts[key] || ""}</em></button>`).join("")}<i class="pf-ink" aria-hidden="true"></i></nav>
+        <div class="pf-panel" id="pfPanel" role="tabpanel" aria-labelledby="pf-tab-${tab}">${drawerPanelHtml(user, detail)}</div>
       </div>
-      ${drawerVitals(user, detail)}
-      <nav class="pf-tabs" role="tablist" aria-label="Seções da ficha">${DRAWER_TABS.map(([key, text]) => `<button type="button" role="tab" id="pf-tab-${key}" aria-selected="${key === tab}" aria-controls="adDrawerDetail" tabindex="${key === tab ? 0 : -1}" data-drawer-tab="${key}">${text}${counts[key] ? `<em>${counts[key]}</em>` : ""}</button>`).join("")}<i class="pf-ink" aria-hidden="true"></i></nav>
-    </header>
-    <div class="pf-body" id="adDrawerDetail" role="tabpanel" aria-labelledby="pf-tab-${tab}"><div class="pf-panel ${changed ? "is-updated" : ""}">${panel}</div></div>
-  </div>`;
-  const body = root.querySelector(".pf-body");
-  if (keepScroll) body.scrollTop = keepScroll;
-  placeDrawerInk();
-  if (detail && state.drawer.fresh) { if (typeof globalThis.requestAnimationFrame === "function") animateCounts(root); state.drawer.fresh = false; }
+    </div>`;
+    placeDrawerInk(false);
+  } else {
+    existing.querySelector(".pf-nav").innerHTML = drawerNavHtml(list, index);
+    existing.querySelector(".pf-avatar").className = `pf-avatar ${tone}`;
+    existing.querySelector(".pf-who").innerHTML = drawerWhoHtml(user, detail);
+    existing.querySelector(".pf-vitals-slot").innerHTML = drawerVitals(user, detail);
+    for (const button of existing.querySelectorAll("[data-drawer-tab]")) {
+      const key = button.dataset.drawerTab;
+      button.setAttribute("aria-selected", String(key === tab));
+      button.tabIndex = key === tab ? 0 : -1;
+      const badge = button.querySelector("em");
+      if (badge) { badge.textContent = counts[key] || ""; badge.hidden = !counts[key]; }
+    }
+    const panel = existing.querySelector(".pf-panel");
+    panel.setAttribute("aria-labelledby", `pf-tab-${tab}`);
+    panel.innerHTML = drawerPanelHtml(user, detail);
+    if (changed) replayClass(panel, "is-updated");
+    placeDrawerInk(true);
+  }
+  const pf = root.querySelector(".pf");
+  if (detail && state.drawer.fresh) {
+    replayClass(pf, "is-entering");
+    clearTimeout(renderUserDrawer.enterTimer);
+    renderUserDrawer.enterTimer = setTimeout(() => pf?.classList.remove("is-entering"), 1100);
+    if (typeof globalThis.requestAnimationFrame === "function") animateCounts(root);
+    state.drawer.fresh = false;
+  }
   state.drawer.lastSig = `${user.uid}#${signature}`;
 }
 
-function placeDrawerInk() {
+function placeDrawerInk(animate = true) {
   const nav = $("#adUserDrawer .pf-tabs");
   const active = nav?.querySelector("[aria-selected=true]");
   const ink = nav?.querySelector(".pf-ink");
   if (!active || !ink || typeof active.getBoundingClientRect !== "function") return;
   const a = active.getBoundingClientRect();
   const n = nav.getBoundingClientRect();
+  if (!animate) ink.style.transition = "none";
   ink.style.width = `${a.width}px`;
   ink.style.transform = `translateX(${a.left - n.left + nav.scrollLeft}px)`;
+  if (!animate) { void ink.offsetWidth; ink.style.transition = ""; }
 }
 
 function animateCounts(root) {
@@ -1310,9 +1400,11 @@ function setDrawerTab(tab, { focus = false } = {}) {
   state.drawer.tab = tab;
   const user = state.directory.find((item) => item.uid === state.drawer.uid);
   if (!user) return;
-  renderUserDrawer(user, state.drawer.detail);
   const body = $("#adDrawerDetail");
-  if (body) { body.scrollTop = 0; body.querySelector(".pf-panel")?.classList.add(forward ? "pf-tab-next" : "pf-tab-prev"); }
+  const hero = body?.querySelector(".pf-hero");
+  renderUserDrawer(user, state.drawer.detail);
+  if (body && hero && body.scrollTop > hero.offsetHeight) body.scrollTop = hero.offsetHeight;
+  replayClass($("#pfPanel"), forward ? "pf-tab-next" : "pf-tab-prev");
   if (focus) $(`#pf-tab-${tab}`)?.focus({ preventScroll: true });
 }
 
@@ -1322,8 +1414,8 @@ function closeUserDrawer() {
   drawer?.setAttribute("aria-hidden", "true");
   if (drawer) drawer.inert = true;
   if (drawer) delete drawer.dataset.uid;
-  const scrim = $("#adDrawerScrim");
-  if (scrim) scrim.hidden = true;
+  hideScrim();
+  state.drawer.opening = false;
   state.drawer.uid = null;
   state.drawer.lastSig = "";
   drawerFocusBack();
@@ -1359,10 +1451,14 @@ function bindUserDrawer() {
     if (event.key === "k" || event.key === "K") { event.preventDefault(); stepUserDrawer(-1); }
   });
   drawer.addEventListener("scroll", (event) => {
-    if (!event.target.classList?.contains("pf-body")) return;
-    drawer.querySelector(".pf")?.classList.toggle("is-scrolled", event.target.scrollTop > 24);
+    const body = event.target;
+    if (!body.classList?.contains("pf-body")) return;
+    const pf = drawer.querySelector(".pf");
+    const hero = body.querySelector(".pf-hero");
+    const past = body.scrollTop > (hero ? hero.offsetHeight - 56 : 24);
+    if (pf && pf.classList.contains("is-scrolled") !== past) pf.classList.toggle("is-scrolled", past);
   }, { capture: true, passive: true });
-  if (typeof window?.addEventListener === "function") window.addEventListener("resize", placeDrawerInk, { passive: true });
+  if (typeof window?.addEventListener === "function") window.addEventListener("resize", () => placeDrawerInk(false), { passive: true });
 }
 
 // ── Ações de acesso (individual ou em lote) ──────────────────────────
@@ -2561,13 +2657,12 @@ async function showSection(section) {
   const sequence = ++state.loadSequence;
   $("#adPageTitle").textContent = section === "overview" ? (isCompact() ? "Administração" : "Visão geral") : SECTION_LABELS[section];
   $("#adPageSubtitle").textContent = section === "overview" && isCompact() ? "Gerencie a operação do PulseNote." : SECTION_SUBTITLES[section];
-  document.querySelectorAll(".pn-console-view").forEach((element) => element.classList.toggle("is-active", element.id === `pn-console-${section}`));
   document.querySelectorAll("[data-section]").forEach((button) => button.classList.toggle("is-active", button.dataset.section === section));
   closeMenu();
   syncMobileTabs();
   setLoadError();
   renderBulkBar();
-  globalThis.scrollTo?.({ top: 0, behavior: "smooth" });
+  if ((globalThis.scrollY || 0) > 0) globalThis.scrollTo?.({ top: 0, behavior: "instant" });
   const loads = {
     overview: [loadDashboard, loadDirectory, loadIntegrations, loadConfig],
     users: [loadPlans, loadDirectory],
@@ -2579,7 +2674,14 @@ async function showSection(section) {
     security: [loadAdmins],
     settings: [loadConfig],
   };
-  const results = await Promise.allSettled(loads[section].map((load) => load()));
+  const pending = Promise.allSettled(loads[section].map((load) => load()));
+  // Com dados em cache, a tela já entra pronta; sem eles, entra com o "carregando".
+  await Promise.race([pending, new Promise((resolve) => setTimeout(resolve, 140))]);
+  if (sequence !== state.loadSequence) return;
+  document.querySelectorAll(".pn-console-view").forEach((element) => element.classList.toggle("is-active", element.id === `pn-console-${section}`));
+  if (section === "plans") positionTabInk(false);
+  if (section === "overview" && state.dashboard) renderGrowth();
+  const results = await pending;
   if (sequence !== state.loadSequence) return;
   if (section === "subscriptions") renderAccessTracking();
   const failed = results.find((result) => result.status === "rejected");
@@ -2618,7 +2720,7 @@ function bindNavigation() {
     const accessTab = target.closest("[data-access-tab]")?.dataset.accessTab;
     if (accessTab) {
       state.accessTab = accessTab;
-      if (state.currentSection !== "subscriptions") showSection("subscriptions"); else renderAccessTracking();
+      if (state.currentSection !== "subscriptions") showSection("subscriptions"); else { renderAccessTracking(); swapIn($("#adSubscriptionsList")); }
     }
   });
   $("#adMenuButton").addEventListener("click", () => {
@@ -2656,6 +2758,7 @@ function bindActions() {
     state.userFilter = button.dataset.userFilter;
     state.userLimit = 30;
     renderUsers();
+    swapIn($("#adUsersList"));
   });
   $("#adUsersList")?.addEventListener("change", (event) => {
     if (event.target.id === "adSelectAll") {
@@ -2769,7 +2872,7 @@ function bindActions() {
       return;
     }
     const chargeFilter = target.closest("[data-charge-filter]");
-    if (chargeFilter) { state.chargeFilter = chargeFilter.dataset.chargeFilter; renderCharges(); return; }
+    if (chargeFilter) { state.chargeFilter = chargeFilter.dataset.chargeFilter; renderCharges(); swapIn($("#adChargesList")); return; }
     const revokeAdmin = target.closest("[data-revoke-admin]");
     if (revokeAdmin) {
       const admin = state.admins.find((item) => item.uid === revokeAdmin.dataset.revokeAdmin);

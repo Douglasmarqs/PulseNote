@@ -123,3 +123,16 @@ test("datas em destaque: último acesso com atividade, conta criada e linha da c
   // datas no futuro (relógio adiantado) não viram "em 9 horas"
   assert.match(js, /Math\.min\(0, Math\.round\(\(date\.getTime\(\) - Date\.now\(\)\) \/ 1000\)\)/);
 });
+
+test("ficha sem piscar: monta uma vez por pessoa e só troca as partes que mudam", () => {
+  const block = js.slice(js.indexOf("function renderUserDrawer"), js.indexOf("function placeDrawerInk"));
+  assert.match(block, /element\.dataset\.uid === user\.uid/);
+  assert.match(block, /existing\.querySelector\("\.pf-panel"\)/);
+  assert.match(block, /existing\.querySelector\("\.pf-avatar"\)\.className/, "a foto não é recriada, só a classe");
+  assert.doesNotMatch(js, /referrerpolicy="no-referrer" loading="lazy"/, "avatar sem lazy (lazy pisca ao recriar)");
+  const sheets = read("src/admin-sheets.css");
+  assert.doesNotMatch(sheets, /\.is-scrolled \.pf-vitals \{ max-height: 0/, "nada muda de tamanho durante a rolagem");
+  assert.match(sheets, /backdrop-filter: none !important/, "sem desfoque caro atrás da gaveta");
+  assert.match(js, /function hideScrim\(/);
+  assert.match(js, /modal\.classList\.add\("is-leaving"\)/);
+});
