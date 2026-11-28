@@ -38,5 +38,5 @@ test("admin: tabela de permissões com abreviações e legenda no celular", () =
 
 test("admin: versões novas dos arquivos para furar o cache", () => {
   assert.match(html, /admin-console\.css\?v=4/);
-  assert.match(html, /admin\.js\?v=41/);
+  assert.match(html, /admin\.js\?v=42/);
 });

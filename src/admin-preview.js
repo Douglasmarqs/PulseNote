@@ -168,10 +168,22 @@ export async function previewRequest(action, body, query = {}) {
     case "admins": return { admins: clone(admins), isOwner: true };
     case "user-detail": {
       const user = users.find((u) => u.uid === query.uid) || fail("user_not_found", 404);
-      return { user: clone(user), entitlement: user.planId ? { planId: user.planId, status: user.status, source: user.source, validUntil: user.validUntil } : null,
-        activity: { tasks: Math.round(rand() * 90), notes: Math.round(rand() * 40), events: Math.round(rand() * 25), goals: Math.round(rand() * 6), finances: Math.round(rand() * 160) },
-        whatsappLinked: rand() < 0.5, whatsappReminderEnabled: rand() < 0.4, pushEnabled: rand() < 0.6, lastActiveAt: user.lastActiveAt, lastArea: pick(["dashboard", "finances", "planner", "notes"]),
-        aiToday: Math.round(rand() * 12), charges: clone(charges.filter((c) => c.uid === user.uid)) };
+      // Números estáveis por pessoa (não mudam a cada recarga da ficha).
+      let seed = [...user.uid].reduce((sum, ch) => (sum * 31 + ch.charCodeAt(0)) % 2147483647, 7);
+      const r = () => ((seed = (seed * 48271) % 2147483647) / 2147483647);
+      const seeded = [];
+      const adm = ["lucas.martins@exemplo.com", "marina.financeiro@exemplo.com"];
+      if (user.source === "trial") seeded.push({ action: "access_trial", at: user.createdAt, details: { planId: user.planId, days: 7 } });
+      if (user.source === "manual" && user.planId) seeded.push({ action: "access_assign", at: iso(Math.round(10 + r() * 40), 11), details: { planId: user.planId } });
+      if (user.source === "manual" && user.validUntil && r() < 0.6) seeded.push({ action: "access_extend", at: iso(Math.round(1 + r() * 9), 16), details: { days: 30, validUntil: user.validUntil } });
+      if (user.status === "paused") seeded.push({ action: "access_pause", at: iso(Math.round(1 + r() * 5), 15), details: {} });
+      if (user.disabled) seeded.push({ action: "user_disabled", at: iso(2, 10), details: {} });
+      const history = [...audit.filter((e) => e.target === user.uid), ...seeded.map((e, i) => ({ id: `h-${i}`, actorEmail: adm[i % 2], ...e }))]
+        .sort((a, b) => String(b.at).localeCompare(String(a.at)));
+      return { user: clone(user), entitlement: user.planId ? { planId: user.planId, status: user.status, source: user.source, validUntil: user.validUntil, trialStartedAt: user.source === "trial" ? user.createdAt : undefined } : null,
+        activity: { tasks: Math.round(r() * 90), notes: Math.round(r() * 40), events: Math.round(r() * 25), goals: Math.round(r() * 6), finances: Math.round(r() * 160) },
+        whatsappLinked: r() < 0.5, whatsappReminderEnabled: r() < 0.4, pushEnabled: r() < 0.6, lastActiveAt: user.lastActiveAt, lastArea: ["dashboard", "finances", "planner", "notes"][Math.floor(r() * 4)],
+        aiToday: Math.round(r() * 12), history: clone(history), charges: clone(charges.filter((c) => c.uid === user.uid)) };
     }
     case "plan-save": {
       const existing = plans.find((p) => p.id === body.id);
@@ -197,6 +209,7 @@ export async function previewRequest(action, body, query = {}) {
         if (body.op === "resume") Object.assign(user, { status: "active", segment: "plan" });
         if (body.op === "remove") Object.assign(user, { planId: null, planName: null, segment: "none", status: "none", validUntil: null, daysLeft: null });
         applied.push(uid);
+        audit.unshift({ id: `aud-${audit.length}`, at: new Date().toISOString(), actorUid: "demo-001", actorEmail: users[0].email, action: `access_${body.op}`, target: uid, details: { email: user.email, planId: user.planId || null, validUntil: user.validUntil || null, days: body.days || null } });
       }
       return { applied, skipped: [] };
     }

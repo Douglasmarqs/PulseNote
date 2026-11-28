@@ -49,6 +49,7 @@ const AUDIT_LABELS = {
   maintenance_enabled: ["Manutenção ativada", "wrench"],
   maintenance_disabled: ["Manutenção encerrada", "wrench"],
   plan_saved: ["Plano salvo", "layers"],
+  plans_reordered: ["Ordem da vitrine alterada", "grip"],
   entitlement_set: ["Plano de usuário alterado", "repeat"],
   access_assign: ["Plano atribuído", "layers"],
   access_trial: ["Teste grátis concedido", "gift"],
@@ -242,9 +243,12 @@ function can(permission) {
 function toast(message, isError = false) {
   const element = $("#adToast");
   if (!element) return;
-  element.textContent = message;
+  element.innerHTML = `<span class="ad-toast-ico">${icon(isError ? "alert" : "check")}</span><span>${escapeHtml(message)}</span>`;
   element.classList.toggle("is-error", isError);
   element.hidden = false;
+  element.classList.remove("is-in");
+  void element.offsetWidth;
+  element.classList.add("is-in");
   clearTimeout(toast.timer);
   toast.timer = setTimeout(() => { element.hidden = true; }, 5500);
 }
@@ -316,14 +320,16 @@ function applyPermissions() {
 
 // ── Modal e confirmação ──────────────────────────────────────────────
 let modalCleanup = null;
-function openModal({ kicker = "", title, body, actions = [], wide = false, onOpen }) {
+function openModal({ kicker = "", title, body, actions = [], wide = false, onOpen, icon: iconName = "", tone = "" }) {
   const modal = $("#adModal");
   $("#adModalKicker").textContent = kicker;
+  const badge = $("#adModalIco");
+  if (badge) { badge.className = `ac-modal-ico ${tone}`; badge.innerHTML = iconName ? icon(iconName) : ""; badge.hidden = !iconName; }
   $("#adModalTitle").textContent = title;
   $("#adModalBody").innerHTML = body;
   modal.classList.toggle("is-wide", wide);
   const foot = $("#adModalFoot");
-  foot.innerHTML = actions.map((action, index) => `<button type="button" class="${action.kind === "primary" ? "ad-primary-button" : action.kind === "danger" ? "ad-primary-button is-danger" : "ad-subtle-button"}" data-modal-action="${index}">${action.label}</button>`).join("");
+  foot.innerHTML = actions.map((action, index) => `<button type="button" class="${action.kind === "primary" ? "ad-primary-button" : action.kind === "danger" ? "ad-primary-button is-danger" : "ad-subtle-button"}" data-modal-action="${index}" ${action.primary || (action.kind && index === actions.length - 1) ? "data-modal-primary" : ""}>${action.label}</button>`).join("");
   for (const button of $$("[data-modal-action]", foot)) {
     button.addEventListener("click", async () => {
       const action = actions[Number(button.dataset.modalAction)];
@@ -343,6 +349,7 @@ function openModal({ kicker = "", title, body, actions = [], wide = false, onOpe
     });
   }
   modal.hidden = false;
+  if ($("#adToast")) $("#adToast").hidden = true;
   document.documentElement.classList.add("ac-modal-open");
   modalCleanup = onOpen?.($("#adModalBody")) || null;
   // No celular não abre o teclado sozinho (no iPhone isso também dava zoom
@@ -364,7 +371,7 @@ function confirmDialog({ title, message, confirmLabel = "Confirmar", danger = fa
   return new Promise((resolve) => {
     let answered = false;
     openModal({
-      kicker: "CONFIRMAÇÃO", title,
+      kicker: "CONFIRMAÇÃO", title, icon: danger ? "alert" : "check-circle", tone: danger ? "is-red" : "is-accent",
       body: `<p class="ac-confirm-text">${message}</p>`,
       actions: [
         { label: "Cancelar", onClick: () => { answered = true; resolve(false); } },
@@ -656,38 +663,104 @@ function renderAudit(events) {
   root.innerHTML = events.slice(0, 6).map(auditRow).join("");
 }
 
+const AUDIT_GROUPS = [
+  ["all", "Tudo", () => true],
+  ["access", "Acessos", (action) => /^access_|^entitlement_|^user_/.test(action)],
+  ["charges", "Cobranças", (action) => /charge/.test(action)],
+  ["plans", "Planos", (action) => /^plan/.test(action)],
+  ["team", "Equipe", (action) => /^admin_access/.test(action)],
+  ["system", "Sistema", (action) => /^config_|^maintenance_/.test(action)],
+];
+state.auditFilter = "all";
+
+function auditTone(action = "") {
+  if (/remove|pause|disabled|revoked|maintenance_enabled/.test(action)) return "is-danger";
+  if (/trial/.test(action)) return "is-trial";
+  if (/charge/.test(action)) return "is-money";
+  if (/granted|enabled|resume|maintenance_disabled/.test(action)) return "is-good";
+  return "is-plan";
+}
+
+function auditEventHtml(event, order) {
+  const [label, iconName] = AUDIT_LABELS[event.action] || [String(event.action || "Ação administrativa").replace(/_/g, " "), "list"];
+  const person = state.directory.find((user) => (event.target && user.uid === event.target) || (event.details?.email && user.email === event.details.email));
+  const who = event.details?.email || person?.email || (event.target && !["global", "plans"].includes(event.target) && event.target.length < 40 ? (state.plans.find((plan) => plan.id === event.target)?.name || event.target) : "");
+  const planName = event.details?.planId ? (state.plans.find((plan) => plan.id === event.details.planId)?.name || event.details.planId) : "";
+  const bits = [planName && planName !== who ? planName : "", event.details?.days ? `${event.details.days} dias` : "", event.details?.validUntil ? `até ${shortDate(event.details.validUntil)}` : "", event.details?.amountCents ? money(event.details.amountCents) : ""].filter(Boolean).join(" · ");
+  const time = new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" }).format(new Date(event.at));
+  const tag = person ? "button" : "div";
+  return `<li style="--i:${order}"><${tag} ${person ? `type="button" data-audit-user="${escapeHtml(person.uid)}" title="Abrir a ficha"` : ""} class="pf-event au-event ${auditTone(event.action)}"><span class="pf-event-dot">${icon(iconName)}</span><div><strong>${escapeHtml(label)}${who ? ` <em>${escapeHtml(who)}</em>` : ""}</strong><small>${escapeHtml([bits, `por ${event.actorEmail || "Administrador"}`].filter(Boolean).join(" — "))}</small></div><time datetime="${escapeHtml(event.at || "")}">${escapeHtml(time)}</time></${tag}></li>`;
+}
+
 function renderAuditFull() {
   const list = $("#adAuditFull");
   if (!list) return;
   const query = String($("#adAuditSearch")?.value || "").trim().toLowerCase();
-  const events = state.audit.filter((event) => !query || [AUDIT_LABELS[event.action]?.[0], event.action, event.actorEmail, event.details?.email, event.target].some((value) => String(value || "").toLowerCase().includes(query)));
-  list.innerHTML = events.length ? events.map(auditRow).join("") : `<div class="ad-empty">Nenhuma ação encontrada.</div>`;
+  const matchesQuery = (event) => !query || [AUDIT_LABELS[event.action]?.[0], event.action, event.actorEmail, event.details?.email, event.target].some((value) => String(value || "").toLowerCase().includes(query));
+  const filters = $("#adAuditFilters");
+  if (filters) filters.innerHTML = AUDIT_GROUPS.map(([key, text, test]) => {
+    const count = state.audit.filter((event) => matchesQuery(event) && test(event.action || "")).length;
+    return `<button type="button" class="${state.auditFilter === key ? "is-on" : ""}" aria-pressed="${state.auditFilter === key}" data-audit-filter="${key}">${text}<em>${count}</em></button>`;
+  }).join("");
+  const test = AUDIT_GROUPS.find(([key]) => key === state.auditFilter)?.[2] || (() => true);
+  const events = state.audit.filter((event) => matchesQuery(event) && test(event.action || ""));
+  if (!events.length) { list.innerHTML = `<div class="pf-empty">${icon("search")}<strong>Nada encontrado</strong><span>Tente outro filtro ou outra busca.</span></div>`; return; }
+  let current = "";
+  let order = 0;
+  list.innerHTML = `<ol class="pf-timeline au-timeline">${events.map((event) => {
+    const dayLabel = historyDayLabel(event.at);
+    const header = dayLabel !== current ? `<li class="pf-day" style="--i:${Math.min(order++, 12)}">${escapeHtml((current = dayLabel))}</li>` : "";
+    return header + auditEventHtml(event, Math.min(order++, 12));
+  }).join("")}</ol>`;
 }
 
 async function openAuditDrawer() {
   const drawer = $("#adAuditDrawer");
   const list = $("#adAuditFull");
   if (!drawer || !list) return;
-  list.innerHTML = `<div class="ad-empty">Carregando…</div>`;
+  list.innerHTML = `<div class="pf-skel"><i></i><i></i><i></i><i></i></div>`;
   if (drawer.parentElement !== document.body && document.body) document.body.appendChild(drawer);
   drawer.classList.add("is-open");
   drawer.setAttribute("aria-hidden", "false");
   drawer.inert = false;
+  const scrim = $("#adDrawerScrim");
+  if (scrim) scrim.hidden = false;
   drawerFocusIn(drawer, "#adAuditDrawerClose");
   try {
-    const data = await request("audit");
+    const [data] = await Promise.all([request("audit"), state.directory.length ? null : loadDirectory().catch(() => {})]);
     state.audit = data.events || [];
+    drawer.querySelector(".pf")?.classList.add("is-entering");
     renderAuditFull();
+    setTimeout(() => drawer.querySelector(".pf")?.classList.remove("is-entering"), 1200);
   } catch (error) {
-    list.innerHTML = `<div class="ad-empty">Não foi possível carregar a auditoria: ${escapeHtml(errorText(error))}</div>`;
+    list.innerHTML = `<div class="pf-error">${icon("alert")}<strong>Não foi possível carregar a auditoria</strong><span>${escapeHtml(errorText(error))}</span></div>`;
   }
 }
 
 function closeAuditDrawer() {
-  $("#adAuditDrawer")?.classList.remove("is-open");
-  $("#adAuditDrawer")?.setAttribute("aria-hidden", "true");
-  if ($("#adAuditDrawer")) $("#adAuditDrawer").inert = true;
+  const drawer = $("#adAuditDrawer");
+  drawer?.classList.remove("is-open");
+  drawer?.setAttribute("aria-hidden", "true");
+  if (drawer) drawer.inert = true;
+  if (!$("#adUserDrawer")?.classList.contains("is-open") && $("#adDrawerScrim")) $("#adDrawerScrim").hidden = true;
   drawerFocusBack();
+}
+
+function bindAuditDrawer() {
+  const drawer = $("#adAuditDrawer");
+  if (!drawer || typeof drawer.addEventListener !== "function") return;
+  drawer.addEventListener("click", (event) => {
+    const target = event.target;
+    if (typeof target?.closest !== "function") return;
+    const filter = target.closest("[data-audit-filter]");
+    if (filter) { state.auditFilter = filter.dataset.auditFilter; renderAuditFull(); return; }
+    const person = target.closest("[data-audit-user]");
+    if (person) { closeAuditDrawer(); openUserDrawer(person.dataset.auditUser); }
+  });
+  drawer.addEventListener("scroll", (event) => {
+    if (!event.target.classList?.contains("pf-body")) return;
+    drawer.querySelector(".pf")?.classList.toggle("is-scrolled", event.target.scrollTop > 24);
+  }, { capture: true, passive: true });
 }
 
 function renderIntegrationRows(data, selector, compact = false) {
@@ -863,56 +936,302 @@ function drawerFocusBack() {
   if (opener?.isConnected) opener.focus?.({ preventScroll: true });
 }
 
-// ── Gaveta do usuário ────────────────────────────────────────────────
-async function openUserDrawer(uid) {
+// ── Ficha da pessoa (gaveta) ─────────────────────────────────────────
+// Cabeçalho fixo que encolhe ao rolar, cartão do plano, ações com motivo
+// quando indisponíveis, abas (Resumo, Cobranças, Histórico, Conta) e
+// navegação para a pessoa anterior/próxima sem fechar.
+const DRAWER_TABS = [["summary", "Resumo"], ["charges", "Cobranças"], ["history", "Histórico"], ["account", "Conta"]];
+const SOURCE_LABELS = { manual: "Atribuído pela equipe", trial: "Teste grátis", stripe: "Assinatura Stripe", charge: "Cobrança paga" };
+state.drawer = { uid: null, tab: "summary", detail: null, fresh: false, lastSig: "" };
+
+function drawerList() {
+  const list = state.currentSection === "users" ? filteredUsers() : state.directory;
+  return list.length ? list : state.directory;
+}
+
+async function openUserDrawer(uid, { keepTab = false } = {}) {
   const user = state.directory.find((item) => item.uid === uid);
   if (!user) return;
+  if ($("#adAuditDrawer")?.classList.contains("is-open")) closeAuditDrawer();
   const drawer = $("#adUserDrawer");
-  renderUserDrawer(user, null);
-  drawer.classList.add("is-open");
-  drawer.setAttribute("aria-hidden", "false");
-  drawer.inert = false;
-  drawerFocusIn(drawer, "#adUserDrawerClose");
+  const switching = state.drawer.uid !== uid;
+  if (switching) { state.drawer.detail = null; state.drawer.fresh = true; if (!keepTab) state.drawer.tab = "summary"; }
+  state.drawer.uid = uid;
   drawer.dataset.uid = uid;
+  renderUserDrawer(user, state.drawer.detail);
+  if (!drawer.classList.contains("is-open")) {
+    drawer.classList.add("is-open");
+    drawer.setAttribute("aria-hidden", "false");
+    drawer.inert = false;
+    const scrim = $("#adDrawerScrim");
+    if (scrim) scrim.hidden = false;
+    drawerFocusIn(drawer, "#adUserDrawerClose");
+  }
+  if (!state.plans.length) loadPlans().then(() => { if (state.drawer.uid === uid) renderUserDrawer(user, state.drawer.detail); }).catch(() => {});
   try {
     const detail = await request("user-detail", undefined, { uid });
-    if (drawer.dataset.uid === uid) renderUserDrawer(user, detail);
+    if (state.drawer.uid !== uid) return;
+    state.drawer.detail = detail;
+    renderUserDrawer(state.directory.find((item) => item.uid === uid) || user, detail);
   } catch (error) {
-    if (drawer.dataset.uid === uid) $("#adDrawerDetail").innerHTML = `<div class="ad-empty">Não foi possível carregar os detalhes: ${escapeHtml(errorText(error))}</div>`;
+    if (state.drawer.uid === uid) $("#adDrawerDetail").innerHTML = `<div class="pf-error">${icon("alert")}<strong>Não foi possível carregar a ficha</strong><span>${escapeHtml(errorText(error))}</span><button type="button" class="ad-subtle-button" data-drawer-retry>Tentar de novo</button></div>`;
   }
+}
+
+function stepUserDrawer(delta) {
+  const list = drawerList();
+  const index = list.findIndex((item) => item.uid === state.drawer.uid);
+  const next = list[index + delta];
+  if (!next) return;
+  const body = $("#adDrawerDetail");
+  body?.classList.remove("pf-slide-up", "pf-slide-down");
+  openUserDrawer(next.uid, { keepTab: true });
+  const fresh = $("#adDrawerDetail");
+  if (fresh) { void fresh.offsetWidth; fresh.classList.add(delta > 0 ? "pf-slide-up" : "pf-slide-down"); }
+}
+
+function userPlanInfo(user, detail) {
+  const plan = state.plans.find((item) => item.id === user.planId) || null;
+  const entitlement = detail?.entitlement || null;
+  const left = Number.isInteger(user.daysLeft) ? user.daysLeft : null;
+  let progress = null;
+  const start = entitlement?.trialStartedAt && user.source === "trial" ? new Date(entitlement.trialStartedAt) : null;
+  if (start && user.validUntil) {
+    const end = new Date(`${user.validUntil}T23:59:59`);
+    const total = Math.max(1, Math.round((end - start) / 86400000));
+    const used = Math.min(total, Math.max(0, total - Math.max(0, left ?? 0)));
+    progress = { pct: Math.round((used / total) * 100), label: `Dia ${Math.min(total, used + 1)} de ${total}` };
+  }
+  return { plan, entitlement, left, progress };
+}
+
+function planPriceText(plan) {
+  if (!plan) return "";
+  if (!plan.priceCents) return "Grátis";
+  return `${money(plan.priceCents)}${plan.billingInterval === "year" ? "/ano" : "/mês"}`;
+}
+
+function drawerPlanCard(user, detail) {
+  const { plan, left, progress } = userPlanInfo(user, detail);
+  const accent = plan?.accent || "slate";
+  if (!user.planId) {
+    const rule = state.config?.access?.noPlan === "plan" ? state.plans.find((item) => item.id === state.config.access.noPlanPlanId) : null;
+    return `<div class="pf-plan is-free pc-accent-slate" style="--i:0"><div class="pf-plan-top"><span class="pf-kicker">Plano atual</span>${rule ? `<span class="pf-plan-price">${escapeHtml(planPriceText(rule))}</span>` : ""}</div>
+      <strong class="pf-plan-name">${rule ? escapeHtml(rule.name) : "Acesso completo"}</strong>
+      <p class="pf-plan-line">${icon("info")}${rule ? "Sem plano próprio: segue a regra padrão de quem está sem plano." : "Sem plano próprio: a regra padrão libera tudo para quem está sem plano."}</p></div>`;
+  }
+  const when = user.validUntil
+    ? left === null ? `Vale até ${readableDate(user.validUntil)}`
+      : left >= 0 ? `${left === 0 ? "Vence hoje" : `Faltam ${plural(left, "dia", "dias")}`} · até ${shortDate(user.validUntil)}`
+        : `Venceu há ${plural(-left, "dia", "dias")} · em ${shortDate(user.validUntil)}`
+    : "Sem data de fim";
+  return `<div class="pf-plan pc-accent-${escapeHtml(accent)} ${user.status === "paused" ? "is-paused" : ""}" style="--i:0">
+    <div class="pf-plan-top"><span class="pf-kicker">${user.source === "trial" ? "Em teste grátis" : "Plano atual"}</span>${plan ? `<span class="pf-plan-price">${escapeHtml(planPriceText(plan))}</span>` : ""}</div>
+    <strong class="pf-plan-name">${escapeHtml(user.planName || plan?.name || user.planId)}</strong>
+    <p class="pf-plan-line">${icon("clock")}${escapeHtml(when)}</p>
+    ${progress ? `<div class="pf-meter" role="img" aria-label="${escapeHtml(progress.label)}"><i style="--to:${progress.pct}%"></i></div><small class="pf-meter-label">${escapeHtml(progress.label)} do teste</small>` : ""}
+    <div class="pf-plan-foot"><span>${icon(user.source === "stripe" ? "card" : user.source === "trial" ? "gift" : user.source === "charge" ? "receipt" : "user")}${escapeHtml(SOURCE_LABELS[detail?.entitlement?.source || user.source] || "Origem não registrada")}</span>${plan ? `<span>${icon("sparkle")}${escapeHtml(aiLimitLabel(plan))}</span>` : ""}</div>
+    ${user.source === "stripe" ? `<p class="pf-note">${icon("info")}Cobrado pelo Stripe: mudar o plano aqui não cancela a assinatura lá.</p>` : ""}
+  </div>`;
+}
+
+function drawerActions(user) {
+  const paused = user.status === "paused";
+  const items = [
+    ["assign", "layers", user.planId ? "Trocar plano" : "Atribuir plano", "Plano e prazo", "users.access"],
+    ["trial", "gift", "Dar teste", "7, 14 ou 30 dias", "users.access"],
+    user.planId && ["extend", "hourglass", "Estender prazo", user.validUntil ? `Vence em ${shortDate(user.validUntil)}` : "Definir um vencimento", "users.access"],
+    user.planId && [paused ? "resume" : "pause", paused ? "play" : "pause", paused ? "Retomar" : "Pausar", paused ? "Volta a valer na hora" : "Bloqueia sem apagar", "users.access"],
+    ["charge", "receipt", "Cobrar", user.pending?.count ? `${money(user.pending.cents)} já a receber` : "Pix ou cartão no app", "charges.manage"],
+  ].filter((item) => item && can(item[4]));
+  if (!items.length) return "";
+  return `<div class="pf-block" style="--i:1"><div class="pf-block-head"><span>Ações</span></div><div class="pf-actions">${items.map(([op, iconName, text, hint, , blocked]) => `<button type="button" class="pf-action" data-user-op="${op}" ${blocked ? `disabled title="${escapeHtml(blocked)}"` : ""}><span class="pf-action-ico">${icon(iconName)}</span><span class="pf-action-copy"><strong>${escapeHtml(text)}</strong><small>${escapeHtml(blocked || hint)}</small></span>${blocked ? icon("lock") : icon("chev-right")}</button>`).join("")}</div></div>`;
+}
+
+function drawerSummary(user, detail) {
+  const activity = detail.activity || {};
+  const { plan } = userPlanInfo(user, detail);
+  const aiLimit = plan ? (Number.isInteger(plan.aiDailyLimit) ? plan.aiDailyLimit : plan.priceCents ? 200 : 10) : 10;
+  const aiToday = Number(detail.aiToday) || 0;
+  const aiPct = aiLimit ? Math.min(100, Math.round((aiToday / aiLimit) * 100)) : 0;
+  const stat = (iconName, value, name) => `<div class="pf-stat"><span class="pf-stat-ico">${icon(iconName)}</span><strong data-count="${Number(value) || 0}">${(Number(value) || 0).toLocaleString("pt-BR")}</strong><small>${name}</small></div>`;
+  const channel = (on, iconName, text) => `<span class="pf-channel ${on ? "is-on" : ""}">${icon(iconName)}${escapeHtml(text)}<i>${on ? "ligado" : "desligado"}</i></span>`;
+  const last = detail.lastActiveAt || user.lastActiveAt;
+  return `${drawerPlanCard(user, detail)}${drawerActions(user)}
+    <div class="pf-block" style="--i:2"><div class="pf-block-head"><span>Uso no app</span><small>Só totais · conteúdo pessoal fica privado</small></div>
+      <div class="pf-stats">${stat("check-circle", activity.tasks, "Tarefas")}${stat("note", activity.notes, "Notas")}${stat("calendar", activity.events, "Compromissos")}${stat("trend", activity.goals, "Metas")}${stat("wallet", activity.finances, "Lançamentos")}${stat("sparkle", aiToday, "Conversas IA hoje")}</div>
+      <div class="pf-ai"><div><strong>Pulsinho hoje</strong><small>${aiLimit ? `${aiToday.toLocaleString("pt-BR")} de ${aiLimit.toLocaleString("pt-BR")} conversas` : `${aiToday.toLocaleString("pt-BR")} conversas · sem limite`}</small></div><div class="pf-meter ${aiPct >= 90 ? "is-hot" : ""}"><i style="--to:${aiLimit ? aiPct : 4}%"></i></div></div>
+    </div>
+    <div class="pf-block" style="--i:3"><div class="pf-block-head"><span>Atividade e canais</span></div>
+      <p class="pf-last">${icon("clock")}${last ? `Usou o app ${escapeHtml(relativeTime(last))}${detail.lastArea ? ` · em <strong>${escapeHtml(AREA_LABELS[detail.lastArea] || detail.lastArea)}</strong>` : ""}` : "Ainda não usou o app"}</p>
+      <div class="pf-channels">${channel(detail.whatsappLinked, "whatsapp", "WhatsApp")}${channel(detail.whatsappReminderEnabled, "clock", "Lembretes no WhatsApp")}${channel(detail.pushEnabled, "phone", "Notificações push")}</div>
+    </div>
+    ${drawerDanger(user, 4)}`;
+}
+
+function drawerDanger(user, order) {
+  const items = [];
+  if (user.planId && can("users.access")) items.push(`<button type="button" class="pf-danger-btn" data-user-op="remove">${icon("trash")}<span><strong>Remover plano</strong><small>Volta para a regra de quem está sem plano</small></span></button>`);
+  if (can("users.status") && !user.admin) items.push(`<button type="button" class="pf-danger-btn" data-action="status" data-disabled="${!user.disabled}" data-direct-uid="${escapeHtml(user.uid)}">${icon(user.disabled ? "play" : "lock")}<span><strong>${user.disabled ? "Reativar conta" : "Desativar conta"}</strong><small>${user.disabled ? "O acesso volta na hora" : "Bloqueia app e WhatsApp sem apagar dados"}</small></span></button>`);
+  return items.length ? `<div class="pf-block pf-danger" style="--i:${order}"><div class="pf-block-head"><span>Zona de cuidado</span></div>${items.join("")}</div>` : "";
+}
+
+function drawerCharges(user, detail) {
+  const charges = detail.charges || [];
+  const manage = can("charges.manage");
+  const pending = charges.filter((charge) => charge.status === "manual_pending");
+  const paid = charges.filter((charge) => ["manual_received", "paid"].includes(charge.status));
+  const sum = (list) => list.reduce((total, charge) => total + (Number(charge.amountCents) || 0), 0);
+  const head = `<div class="pf-totals" style="--i:0"><div><small>A receber</small><strong>${money(sum(pending))}</strong><span>${plural(pending.length, "cobrança", "cobranças")}</span></div><div><small>Recebido</small><strong>${money(sum(paid))}</strong><span>${plural(paid.length, "pagamento", "pagamentos")}</span></div>${manage ? `<button type="button" class="ad-primary-button" data-user-op="charge">${icon("plus")}Nova cobrança</button>` : ""}</div>`;
+  if (!charges.length) return `${head}<div class="pf-empty" style="--i:1">${icon("receipt")}<strong>Nenhuma cobrança ainda</strong><span>Quando você cobrar, a pessoa vê em Configurações → Plano e paga por Pix ou cartão.</span></div>`;
+  return `${head}<div class="pf-charges">${charges.map((charge, index) => {
+    const open = charge.status === "manual_pending";
+    const overdue = open && charge.dueDate && charge.dueDate < todayIso();
+    return `<article class="pf-charge ${overdue ? "is-overdue" : ""}" data-charge-id="${escapeHtml(charge.id)}" style="--i:${Math.min(index + 1, 8)}">
+      <div class="pf-charge-main"><strong>${money(charge.amountCents)}</strong>${chargeStatusChip(charge)}</div>
+      <p>${escapeHtml(charge.note || "Cobrança")}</p>
+      <small>${charge.createdAt ? `Criada ${escapeHtml(shortDate(charge.createdAt))}` : ""}${charge.dueDate ? ` · vence ${escapeHtml(shortDate(charge.dueDate))}` : ""}${charge.paidAt ? ` · paga ${escapeHtml(shortDate(charge.paidAt))}` : ""}${charge.planId && charge.grantDays ? ` · libera ${escapeHtml(state.plans.find((plan) => plan.id === charge.planId)?.name || charge.planId)} por ${charge.grantDays} dias` : ""}</small>
+      ${open ? `<div class="pf-charge-acts"><button type="button" class="ad-subtle-button" data-copy-pay="${escapeHtml(charge.id)}">${icon("copy")}Copiar link</button>${manage ? `<button type="button" class="ad-subtle-button" data-charge-status="manual_received">${icon("check")}Recebida</button><button type="button" class="ad-subtle-button is-danger-text" data-charge-status="manual_cancelled">Cancelar</button>` : ""}</div>` : ""}
+    </article>`;
+  }).join("")}</div>`;
+}
+
+function historyDayLabel(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Sem data";
+  const key = (item) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(item);
+  if (key(date) === key(new Date())) return "Hoje";
+  if (key(date) === key(new Date(Date.now() - 86400000))) return "Ontem";
+  const text = new Intl.DateTimeFormat("pt-BR", { weekday: "short", day: "2-digit", month: "short", year: date.getFullYear() === new Date().getFullYear() ? undefined : "numeric", timeZone: "America/Sao_Paulo" }).format(date).replace(/\./g, "");
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+function drawerHistoryItems(user, detail) {
+  const planName = (id) => state.plans.find((plan) => plan.id === id)?.name || id;
+  const items = (detail.history || []).map((event) => {
+    const [label, iconName] = AUDIT_LABELS[event.action] || [String(event.action || "Ação").replace(/_/g, " "), "list"];
+    const bits = [event.details?.planId ? planName(event.details.planId) : "", event.details?.days ? `${event.details.days} dias` : "", event.details?.validUntil ? `até ${shortDate(event.details.validUntil)}` : ""].filter(Boolean);
+    const tone = /remove|pause|disabled|revoked/.test(event.action) ? "is-danger" : /trial/.test(event.action) ? "is-trial" : /charge/.test(event.action) ? "is-money" : "is-plan";
+    return { at: event.at, icon: iconName, tone, title: label, sub: [bits.join(" · "), event.actorEmail ? `por ${event.actorEmail}` : ""].filter(Boolean).join(" — ") };
+  });
+  for (const charge of detail.charges || []) {
+    if (charge.createdAt) items.push({ at: charge.createdAt, icon: "receipt", tone: "is-money", title: `Cobrança de ${money(charge.amountCents)} criada`, sub: charge.note || "" });
+    if (charge.paidAt) items.push({ at: charge.paidAt, icon: "check-circle", tone: "is-good", title: `Pagamento de ${money(charge.amountCents)} recebido`, sub: charge.note || "" });
+  }
+  if (user.createdAt) items.push({ at: user.createdAt, icon: "user-plus", tone: "is-good", title: "Conta criada", sub: user.provider === "google" ? "Entrou com Google" : "Entrou com e-mail e senha" });
+  return items.filter((item) => item.at).sort((a, b) => String(b.at).localeCompare(String(a.at)));
+}
+
+function drawerHistory(user, detail) {
+  const items = drawerHistoryItems(user, detail);
+  if (!items.length) return `<div class="pf-empty" style="--i:0">${icon("list")}<strong>Sem histórico</strong><span>As ações da equipe nesta conta aparecem aqui.</span></div>`;
+  let current = "";
+  let order = 0;
+  return `<ol class="pf-timeline">${items.map((item) => {
+    const dayLabel = historyDayLabel(item.at);
+    const header = dayLabel !== current ? `<li class="pf-day" style="--i:${Math.min(order++, 10)}">${escapeHtml((current = dayLabel))}</li>` : "";
+    const time = new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" }).format(new Date(item.at));
+    return `${header}<li class="pf-event ${item.tone}" style="--i:${Math.min(order++, 10)}"><span class="pf-event-dot">${icon(item.icon)}</span><div><strong>${escapeHtml(item.title)}</strong>${item.sub ? `<small>${escapeHtml(item.sub)}</small>` : ""}</div><time datetime="${escapeHtml(item.at)}">${escapeHtml(time)}</time></li>`;
+  }).join("")}</ol>`;
+}
+
+function drawerAccount(user, detail) {
+  const row = (label, value, copy = "") => `<div class="pf-kv"><dt>${label}</dt><dd>${value}${copy ? `<button type="button" class="pf-copy" data-copy-text="${escapeHtml(copy)}" aria-label="Copiar ${escapeHtml(label.toLowerCase())}">${icon("copy")}</button>` : ""}</dd></div>`;
+  const last = detail.lastActiveAt || user.lastActiveAt;
+  return `<div class="pf-block" style="--i:0"><div class="pf-block-head"><span>Dados da conta</span></div><dl class="pf-kvs">
+      ${row("E-mail", escapeHtml(user.email || "—"), user.email || "")}
+      ${row("Entrada", user.provider === "google" ? "Google" : "E-mail e senha")}
+      ${row("E-mail confirmado", user.emailVerified ? `<span class="ac-status is-on"><i></i>Sim</span>` : `<span class="ac-status is-warn"><i></i>Não</span>`)}
+      ${row("Criada em", escapeHtml(readableTimestamp(user.createdAt)))}
+      ${row("Último login", escapeHtml(readableTimestamp(user.lastSignInAt)))}
+      ${row("Último uso", last ? `${escapeHtml(readableTimestamp(last))}${detail.lastArea ? ` · ${escapeHtml(AREA_LABELS[detail.lastArea] || detail.lastArea)}` : ""}` : "—")}
+      ${row("ID da conta", `<code>${escapeHtml(user.uid)}</code>`, user.uid)}
+    </dl></div>${drawerDanger(user, 1)}`;
+}
+
+function drawerSkeleton() {
+  return `<div class="pf-skel"><i class="is-card"></i><i></i><i></i><i class="is-short"></i><i></i></div>`;
 }
 
 function renderUserDrawer(user, detail) {
   const [tone, label] = statusInfo(user);
-  const entitlement = detail?.entitlement;
-  const activity = detail?.activity || {};
-  const sourceLabel = { manual: "Atribuído pela equipe", trial: "Teste grátis", stripe: "Assinatura Stripe", charge: "Cobrança paga" };
-  const quick = [
-    ["assign", "layers", user.planId ? "Trocar plano" : "Atribuir plano", "users.access"],
-    ["trial", "gift", "Dar teste", "users.access"],
-    ["extend", "hourglass", "Estender prazo", "users.access", !user.planId],
-    [user.status === "paused" ? "resume" : "pause", user.status === "paused" ? "play" : "pause", user.status === "paused" ? "Retomar" : "Pausar", "users.access", !user.planId],
-    ["charge", "receipt", "Cobrar", "charges.manage"],
-    ["remove", "trash", "Remover plano", "users.access", !user.planId],
-  ].filter(([, , , permission]) => can(permission));
-  const stat = (name, value) => `<div class="ad-detail-stat"><strong>${Number(value || 0).toLocaleString("pt-BR")}</strong><span>${name}</span></div>`;
-  const charges = detail?.charges || [];
-  $("#adUserDrawerContent").innerHTML = `
-    <div class="ac-drawer-head">${avatarHtml(user, "is-lg")}<div><h2 id="adUserDrawerTitle">${escapeHtml(user.displayName || user.email || "Usuário")}</h2><p>${escapeHtml(user.email || user.uid)}</p><div class="ac-drawer-chips"><span class="ac-status ${tone}"><i></i>${escapeHtml(label)}</span>${user.planName ? `<span class="ac-chip">${escapeHtml(user.planName)}</span>` : ""}${user.admin ? `<span class="ac-chip">Equipe</span>` : ""}</div></div></div>
-    ${quick.length ? `<div class="ac-quick">${quick.map(([op, iconName, text, , disabled]) => `<button type="button" class="ac-quick-btn ${op === "remove" ? "is-danger" : ""}" data-user-op="${op}" ${disabled ? "disabled" : ""}>${icon(iconName)}<span>${escapeHtml(text)}</span></button>`).join("")}</div>` : ""}
-    <section><h3>Acesso</h3><dl class="ad-detail-list">
-      <div><dt>Plano</dt><dd>${escapeHtml(user.planName || "Plano gratuito (regra padrão)")}</dd></div>
-      <div><dt>Situação</dt><dd>${escapeHtml(label)}</dd></div>
-      <div><dt>Válido até</dt><dd>${user.validUntil ? `${escapeHtml(readableDate(user.validUntil))}${Number.isInteger(user.daysLeft) ? ` <small>(${user.daysLeft >= 0 ? `faltam ${plural(user.daysLeft, "dia", "dias")}` : `venceu há ${plural(-user.daysLeft, "dia", "dias")}`})</small>` : ""}` : user.planId ? "Sem data de fim" : "—"}</dd></div>
-      <div><dt>Origem</dt><dd>${escapeHtml(sourceLabel[entitlement?.source || user.source] || "—")}</dd></div>
-    </dl></section>
-    <div id="adDrawerDetail">${detail ? `
-      <section><h3>Cobranças</h3>${charges.length ? `<div class="ac-mini-list">${charges.map((charge) => `<div class="ac-mini-row"><span><strong>${money(charge.amountCents)}</strong><small>${escapeHtml(charge.note || "Cobrança")}${charge.dueDate ? ` · vence ${escapeHtml(shortDate(charge.dueDate))}` : ""}</small></span>${chargeStatusChip(charge)}${charge.status === "manual_pending" ? `<button type="button" class="ac-icon-btn" data-copy-pay="${escapeHtml(charge.id)}" title="Copiar link de pagamento" aria-label="Copiar link de pagamento">${icon("copy")}</button>` : ""}</div>`).join("")}</div>` : `<p class="ac-muted">Nenhuma cobrança para esta conta.</p>`}</section>
-      <section><h3>Uso (totais)</h3><div class="ad-detail-grid">${stat("Tarefas", activity.tasks)}${stat("Notas", activity.notes)}${stat("Compromissos", activity.events)}${stat("Metas", activity.goals)}${stat("Lançamentos", activity.finances)}${stat("Conversas IA hoje", detail.aiToday)}</div><p class="ad-data-note">Só totais. O conteúdo pessoal continua privado.</p></section>
-      <section><h3>Canais</h3><div class="ad-channel-list"><span class="${detail.whatsappLinked ? "is-on" : ""}"><i></i>WhatsApp ${detail.whatsappLinked ? "vinculado" : "não vinculado"}</span><span class="${detail.whatsappReminderEnabled ? "is-on" : ""}"><i></i>Lembretes no WhatsApp</span><span class="${detail.pushEnabled ? "is-on" : ""}"><i></i>Notificações push</span></div></section>
-      <section><h3>Conta</h3><dl class="ad-detail-list"><div><dt>Criada em</dt><dd>${escapeHtml(readableTimestamp(user.createdAt))}</dd></div><div><dt>Último uso do app</dt><dd>${escapeHtml(readableTimestamp(detail.lastActiveAt || user.lastActiveAt))}${detail.lastArea ? ` <small>· ${escapeHtml(AREA_LABELS[detail.lastArea] || detail.lastArea)}</small>` : ""}</dd></div><div><dt>Último login</dt><dd>${escapeHtml(readableTimestamp(user.lastSignInAt))}</dd></div><div><dt>Entrada</dt><dd>${user.provider === "google" ? "Google" : "E-mail e senha"}${user.emailVerified ? " · e-mail confirmado" : " · e-mail não confirmado"}</dd></div></dl></section>
-      ${can("users.status") && !user.admin ? `<div class="ad-drawer-actions"><button class="ad-subtle-button ${user.disabled ? "" : "is-danger-text"}" type="button" data-action="status" data-disabled="${!user.disabled}" data-direct-uid="${escapeHtml(user.uid)}">${user.disabled ? "Reativar conta" : "Desativar conta"}</button></div>` : ""}
-    ` : `<div class="ac-skeleton"><i></i><i></i><i></i></div>`}</div>`;
+  const list = drawerList();
+  const index = list.findIndex((item) => item.uid === user.uid);
+  const tab = state.drawer.tab;
+  const counts = { charges: detail?.charges?.length || 0, history: detail ? drawerHistoryItems(user, detail).length : 0 };
+  const root = $("#adUserDrawerContent");
+  if (!root) return;
+  const panel = !detail ? drawerSkeleton()
+    : tab === "charges" ? drawerCharges(user, detail)
+      : tab === "history" ? drawerHistory(user, detail)
+        : tab === "account" ? drawerAccount(user, detail)
+          : drawerSummary(user, detail);
+  const signature = `${user.planId}|${user.status}|${user.validUntil}|${user.segment}`;
+  const changed = state.drawer.lastSig && state.drawer.lastSig.split("#")[0] === user.uid && state.drawer.lastSig.split("#")[1] !== signature;
+  const scroller = root.querySelector(".pf-body");
+  const keepScroll = scroller && !state.drawer.fresh ? scroller.scrollTop : 0;
+  root.innerHTML = `<div class="pf ${state.drawer.fresh && detail ? "is-entering" : ""}">
+    <header class="pf-head">
+      <div class="pf-bar">
+        <div class="pf-nav">${list.length > 1 ? `<button type="button" class="pf-icon" data-drawer-step="-1" ${index <= 0 ? "disabled" : ""} aria-label="Pessoa anterior" title="Anterior (K)">${icon("chev-up")}</button><button type="button" class="pf-icon" data-drawer-step="1" ${index < 0 || index >= list.length - 1 ? "disabled" : ""} aria-label="Próxima pessoa" title="Próxima (J)">${icon("chev-down")}</button><span>${index >= 0 ? `${(index + 1).toLocaleString("pt-BR")} de ${list.length.toLocaleString("pt-BR")}` : ""}</span>` : ""}</div>
+        <button type="button" class="pf-icon pf-close" id="adUserDrawerClose" aria-label="Fechar ficha">${icon("x")}</button>
+      </div>
+      <div class="pf-id">
+        <span class="pf-avatar ${tone}">${avatarHtml(user, "is-lg")}</span>
+        <div class="pf-who">
+          <h2 id="adUserDrawerTitle">${escapeHtml(user.displayName || user.email || "Usuário")}</h2>
+          ${user.email ? `<button type="button" class="pf-mail" data-copy-text="${escapeHtml(user.email)}" title="Copiar e-mail"><span>${escapeHtml(user.email)}</span>${icon("copy")}</button>` : ""}
+          <div class="pf-chips"><span class="ac-status ${tone}"><i></i>${escapeHtml(label)}</span>${user.admin ? `<span class="pf-tag">${icon("shield")}Equipe</span>` : ""}${user.disabled ? `<span class="pf-tag is-danger">${icon("lock")}Desativada</span>` : ""}${user.pending?.count ? `<span class="pf-tag is-warn">${icon("receipt")}${money(user.pending.cents)} a receber</span>` : ""}</div>
+        </div>
+      </div>
+      <nav class="pf-tabs" role="tablist" aria-label="Seções da ficha">${DRAWER_TABS.map(([key, text]) => `<button type="button" role="tab" id="pf-tab-${key}" aria-selected="${key === tab}" aria-controls="adDrawerDetail" tabindex="${key === tab ? 0 : -1}" data-drawer-tab="${key}">${text}${counts[key] ? `<em>${counts[key]}</em>` : ""}</button>`).join("")}<i class="pf-ink" aria-hidden="true"></i></nav>
+    </header>
+    <div class="pf-body" id="adDrawerDetail" role="tabpanel" aria-labelledby="pf-tab-${tab}"><div class="pf-panel ${changed ? "is-updated" : ""}">${panel}</div></div>
+  </div>`;
+  const body = root.querySelector(".pf-body");
+  if (keepScroll) body.scrollTop = keepScroll;
+  placeDrawerInk();
+  if (detail && state.drawer.fresh) { if (typeof globalThis.requestAnimationFrame === "function") animateCounts(root); state.drawer.fresh = false; }
+  state.drawer.lastSig = `${user.uid}#${signature}`;
+}
+
+function placeDrawerInk() {
+  const nav = $("#adUserDrawer .pf-tabs");
+  const active = nav?.querySelector("[aria-selected=true]");
+  const ink = nav?.querySelector(".pf-ink");
+  if (!active || !ink || typeof active.getBoundingClientRect !== "function") return;
+  const a = active.getBoundingClientRect();
+  const n = nav.getBoundingClientRect();
+  ink.style.width = `${a.width}px`;
+  ink.style.transform = `translateX(${a.left - n.left + nav.scrollLeft}px)`;
+}
+
+function animateCounts(root) {
+  if (globalThis.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+  for (const element of $$("[data-count]", root)) {
+    const target = Number(element.dataset.count) || 0;
+    if (target < 2) continue;
+    const start = performance.now();
+    const step = (now) => {
+      const t = Math.min(1, (now - start) / 650);
+      element.textContent = Math.round(target * (1 - Math.pow(1 - t, 3))).toLocaleString("pt-BR");
+      if (t < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+}
+
+function setDrawerTab(tab) {
+  if (!DRAWER_TABS.some(([key]) => key === tab) || tab === state.drawer.tab) return;
+  const order = DRAWER_TABS.map(([key]) => key);
+  const forward = order.indexOf(tab) > order.indexOf(state.drawer.tab);
+  state.drawer.tab = tab;
+  const user = state.directory.find((item) => item.uid === state.drawer.uid);
+  if (!user) return;
+  renderUserDrawer(user, state.drawer.detail);
+  const body = $("#adDrawerDetail");
+  if (body) { body.scrollTop = 0; body.querySelector(".pf-panel")?.classList.add(forward ? "pf-tab-next" : "pf-tab-prev"); }
+  $(`#pf-tab-${tab}`)?.focus({ preventScroll: true });
 }
 
 function closeUserDrawer() {
@@ -921,7 +1240,47 @@ function closeUserDrawer() {
   drawer?.setAttribute("aria-hidden", "true");
   if (drawer) drawer.inert = true;
   if (drawer) delete drawer.dataset.uid;
+  const scrim = $("#adDrawerScrim");
+  if (scrim) scrim.hidden = true;
+  state.drawer.uid = null;
+  state.drawer.lastSig = "";
   drawerFocusBack();
+}
+
+function bindUserDrawer() {
+  const drawer = $("#adUserDrawer");
+  if (!drawer || typeof drawer.addEventListener !== "function") return;
+  $("#adDrawerScrim")?.addEventListener("click", () => { closeUserDrawer(); closeAuditDrawer(); });
+  drawer.addEventListener("click", (event) => {
+    const target = event.target;
+    if (typeof target?.closest !== "function") return;
+    if (target.closest("#adUserDrawerClose")) { closeUserDrawer(); return; }
+    const tab = target.closest("[data-drawer-tab]");
+    if (tab) { setDrawerTab(tab.dataset.drawerTab); return; }
+    const step = target.closest("[data-drawer-step]");
+    if (step && !step.disabled) { stepUserDrawer(Number(step.dataset.drawerStep)); return; }
+    const copy = target.closest("[data-copy-text]");
+    if (copy) { copyText(copy.dataset.copyText, "Copiado."); return; }
+    if (target.closest("[data-drawer-retry]") && state.drawer.uid) openUserDrawer(state.drawer.uid, { keepTab: true });
+  });
+  drawer.addEventListener("keydown", (event) => {
+    const tab = event.target.closest?.("[data-drawer-tab]");
+    if (tab && (event.key === "ArrowRight" || event.key === "ArrowLeft")) {
+      event.preventDefault();
+      const keys = DRAWER_TABS.map(([key]) => key);
+      const next = keys[(keys.indexOf(state.drawer.tab) + (event.key === "ArrowRight" ? 1 : keys.length - 1)) % keys.length];
+      setDrawerTab(next);
+      return;
+    }
+    if (/^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName || "") || event.metaKey || event.ctrlKey || event.altKey) return;
+    if (event.key === "j" || event.key === "J") { event.preventDefault(); stepUserDrawer(1); }
+    if (event.key === "k" || event.key === "K") { event.preventDefault(); stepUserDrawer(-1); }
+  });
+  drawer.addEventListener("scroll", (event) => {
+    if (!event.target.classList?.contains("pf-body")) return;
+    drawer.querySelector(".pf")?.classList.toggle("is-scrolled", event.target.scrollTop > 24);
+  }, { capture: true, passive: true });
+  if (typeof window?.addEventListener === "function") window.addEventListener("resize", placeDrawerInk, { passive: true });
 }
 
 // ── Ações de acesso (individual ou em lote) ──────────────────────────
@@ -930,21 +1289,13 @@ function planOptions(selected = "", { includePrivate = true, placeholder = "Esco
   return `<option value="">${escapeHtml(placeholder)}</option>${plans.map((plan) => `<option value="${escapeHtml(plan.id)}" ${plan.id === selected ? "selected" : ""}>${escapeHtml(plan.name)} · ${plan.priceCents ? money(plan.priceCents) : "grátis"}${plan.visibility === "private" ? " · privado" : ""}</option>`).join("")}`;
 }
 
-function whoLabel(uids) {
-  if (uids.length === 1) {
-    const user = state.directory.find((item) => item.uid === uids[0]);
-    return escapeHtml(user?.email || user?.displayName || "esta conta");
-  }
-  return `${uids.length.toLocaleString("pt-BR")} pessoas`;
-}
-
 const ACCESS_COPY = {
-  assign: ["ATRIBUIR PLANO", "Atribuir plano", "Atribuir"],
-  trial: ["TESTE GRÁTIS", "Dar teste grátis", "Dar teste"],
-  extend: ["PRAZO", "Estender prazo", "Estender"],
-  pause: ["PAUSAR", "Pausar acesso", "Pausar"],
-  resume: ["RETOMAR", "Retomar acesso", "Retomar"],
-  remove: ["REMOVER", "Remover plano", "Remover plano"],
+  assign: ["ATRIBUIR PLANO", "Atribuir plano", "Atribuir", "layers", "is-accent"],
+  trial: ["TESTE GRÁTIS", "Dar teste grátis", "Dar teste", "gift", "is-cyan"],
+  extend: ["PRAZO", "Estender prazo", "Estender", "hourglass", "is-green"],
+  pause: ["PAUSAR", "Pausar acesso", "Pausar", "pause", "is-yellow"],
+  resume: ["RETOMAR", "Retomar acesso", "Retomar", "play", "is-green"],
+  remove: ["REMOVER", "Remover plano", "Remover plano", "trash", "is-red"],
 };
 
 function dayChips(name, values, selected) {
@@ -956,38 +1307,93 @@ function readDays(body, name) {
   return choice === "custom" ? Number(body.querySelector(`input[name="${name}Custom"]`)?.value) : Number(choice);
 }
 
+// Quem recebe a ação: uma pessoa (com plano atual) ou um grupo empilhado.
+function whoCard(users) {
+  if (users.length === 1) {
+    const [user] = users;
+    const [tone, label] = statusInfo(user);
+    return `<div class="mx-who">${avatarHtml(user)}<span><strong>${escapeHtml(user.displayName || user.email || "Conta")}</strong><small>${escapeHtml(user.email || "")}</small></span><span class="ac-status ${tone}"><i></i>${escapeHtml(label)}</span></div>`;
+  }
+  return `<div class="mx-who is-many"><span class="mx-stack">${users.slice(0, 5).map((user) => avatarHtml(user, "is-sm")).join("")}${users.length > 5 ? `<span class="ac-avatar is-sm mx-more">+${users.length - 5}</span>` : ""}</span><span><strong>${users.length.toLocaleString("pt-BR")} pessoas</strong><small>${escapeHtml(users.slice(0, 2).map((user) => user.displayName || user.email).join(", "))}${users.length > 2 ? " e outras" : ""}</small></span></div>`;
+}
+
+// Planos em cartões (cor, preço, privado, atual) no lugar da lista suspensa.
+function planPicker(selected, currentId = "") {
+  const plans = state.plans.filter((plan) => plan.active !== false);
+  if (!plans.length) return `<p class="ac-warn">${icon("alert")}Nenhum plano ativo. Crie um no Estúdio de planos.</p>`;
+  return `<div class="mx-plans" role="radiogroup" aria-label="Plano">${plans.map((plan) => `<label class="mx-plan pc-accent-${escapeHtml(plan.accent || "violet")}"><input type="radio" name="planId" value="${escapeHtml(plan.id)}" ${plan.id === selected ? "checked" : ""} /><span><i class="mx-swatch" aria-hidden="true"></i><strong>${escapeHtml(plan.name)}</strong><small>${plan.priceCents ? escapeHtml(planPriceText(plan)) : "Grátis"}</small>${plan.id === currentId ? `<em>Atual</em>` : plan.visibility === "private" ? `<em>Privado</em>` : ""}</span></label>`).join("")}</div>`;
+}
+
+function addDaysIso(baseIso, days) {
+  const base = baseIso && baseIso >= todayIso() ? new Date(`${baseIso}T12:00:00`) : new Date(`${todayIso()}T12:00:00`);
+  base.setDate(base.getDate() + days);
+  return base.toISOString().slice(0, 10);
+}
+
 function openAccessModal(op, uids) {
   if (!uids.length) return toast("Selecione ao menos uma pessoa.", true);
-  const [kicker, title, confirmLabel] = ACCESS_COPY[op];
+  const [kicker, title, confirmLabel, iconName, tone] = ACCESS_COPY[op];
   const users = uids.map((uid) => state.directory.find((item) => item.uid === uid)).filter(Boolean);
+  const single = users.length === 1 ? users[0] : null;
   const stripeCount = users.filter((user) => user.source === "stripe").length;
   const withoutPlan = users.filter((user) => !user.planId).length;
-  let body = `<p class="ac-modal-who">Para <strong>${whoLabel(uids)}</strong></p>`;
-  if (op === "assign") body += `<label class="ac-field">Plano<select name="planId">${planOptions(users.length === 1 ? users[0].planId || "" : "")}</select></label>
-    <fieldset class="ac-field"><legend>Duração</legend><label class="ac-radio-inline"><input type="radio" name="until" value="none" checked /> Sem data de fim</label><label class="ac-radio-inline"><input type="radio" name="until" value="date" /> Até <input type="date" name="validUntil" min="${todayIso()}" /></label></fieldset>
-    <p class="ac-hint">${icon("info")}O acesso muda na hora. Use "Cobrar" se quiser que a pessoa pague por este plano.</p>`;
-  if (op === "trial") body += `<label class="ac-field">Plano do teste<select name="planId">${planOptions(state.config?.trial?.planId || "")}</select></label><div class="ac-field"><span class="ac-label">Duração</span>${dayChips("days", [7, 14, 30], 7)}</div>
-    <p class="ac-hint">${icon("info")}Quando o teste acabar, a pessoa volta para a regra de quem está sem plano — automaticamente.</p>`;
-  if (op === "extend") body += `<div class="ac-field"><span class="ac-label">Adicionar</span>${dayChips("days", [7, 30, 90, 365], 30)}</div>
-    <p class="ac-hint">${icon("info")}Soma ao prazo atual (ou a partir de hoje, se já venceu).${withoutPlan ? ` ${plural(withoutPlan, "pessoa sem plano será ignorada", "pessoas sem plano serão ignoradas")}.` : ""}</p>`;
+  const noPlanRule = state.config?.access?.noPlan === "plan" ? `o plano gratuito "${escapeHtml(state.plans.find((plan) => plan.id === state.config.access.noPlanPlanId)?.name || state.config.access.noPlanPlanId)}"` : "o acesso completo";
+  let body = whoCard(users);
+  if (op === "assign") body += `<div class="ac-field"><span class="ac-label">Plano</span>${planPicker(single?.planId || "", single?.planId || "")}</div>
+    <div class="ac-field"><span class="ac-label">Duração</span><div class="ac-daychips" role="group"><label><input type="radio" name="until" value="none" checked /><span>Sem data de fim</span></label><label><input type="radio" name="until" value="30" /><span>30 dias</span></label><label><input type="radio" name="until" value="90" /><span>90 dias</span></label><label><input type="radio" name="until" value="365" /><span>1 ano</span></label><label class="ac-daychips-custom"><input type="radio" name="until" value="date" /><span>Até</span><input type="date" name="validUntil" min="${todayIso()}" aria-label="Data de fim" /></label></div></div>`;
+  if (op === "trial") body += `<div class="ac-field"><span class="ac-label">Plano do teste</span>${planPicker(state.config?.trial?.planId || state.plans.find((plan) => plan.priceCents)?.id || "")}</div><div class="ac-field"><span class="ac-label">Duração</span>${dayChips("days", [7, 14, 30], 7)}</div>`;
+  if (op === "extend") body += `<div class="ac-field"><span class="ac-label">Adicionar</span>${dayChips("days", [7, 30, 90, 365], 30)}</div>`;
   if (op === "pause") body += `<p class="ac-confirm-text">Os recursos do plano ficam bloqueados até você retomar. Nada é apagado.</p>`;
-  if (op === "resume") body += `<p class="ac-confirm-text">O plano volta a valer imediatamente.</p>`;
-  if (op === "remove") body += `<p class="ac-confirm-text">A pessoa volta para a regra de quem está sem plano (${state.config?.access?.noPlan === "plan" ? `plano gratuito "${escapeHtml(state.plans.find((plan) => plan.id === state.config.access.noPlanPlanId)?.name || state.config.access.noPlanPlanId)}"` : "acesso completo"}).</p>`;
-  if (stripeCount && ["remove", "pause", "assign"].includes(op)) body += `<p class="ac-warn">${icon("alert")}${plural(stripeCount, "pessoa paga", "pessoas pagam")} pelo Stripe. Isso não cancela a assinatura lá — cancele também no painel do Stripe para parar a cobrança.</p>`;
+  if (op === "resume") body += `<p class="ac-confirm-text">O plano volta a valer imediatamente, com o mesmo prazo de antes.</p>`;
+  if (op === "remove") body += `<p class="ac-confirm-text">${single ? "A pessoa volta" : "As pessoas voltam"} para a regra de quem está sem plano: ${noPlanRule}.</p>`;
+  body += `<div class="mx-result" id="adAccessResult" aria-live="polite"></div>`;
+  if (op === "extend" && withoutPlan) body += `<p class="ac-hint">${icon("info")}${plural(withoutPlan, "pessoa sem plano será ignorada", "pessoas sem plano serão ignoradas")}.</p>`;
+  if (stripeCount && ["remove", "pause", "assign"].includes(op)) body += `<p class="ac-warn">${icon("alert")}${plural(stripeCount, "pessoa paga", "pessoas pagam")} pelo Stripe. Isso não cancela a assinatura lá: cancele também no painel do Stripe para parar a cobrança.</p>`;
+
+  const readPlan = (form) => state.plans.find((plan) => plan.id === form.querySelector("input[name=planId]:checked")?.value) || null;
+  const readUntil = (form) => {
+    const choice = form.querySelector("input[name=until]:checked")?.value || "none";
+    if (choice === "none") return null;
+    if (choice === "date") return form.querySelector("input[name=validUntil]").value || "";
+    return addDaysIso(todayIso(), Number(choice));
+  };
+  const describe = (form) => {
+    const who = single ? "" : ` para ${users.length.toLocaleString("pt-BR")} pessoas`;
+    if (op === "assign") {
+      const plan = readPlan(form);
+      if (!plan) return ["", "Escolha um plano para ver o resultado."];
+      const until = readUntil(form);
+      return [`Atribuir ${plan.name}`, `${escapeHtml(plan.name)}${until ? ` até <strong>${escapeHtml(readableDate(until))}</strong>` : " <strong>sem data de fim</strong>"}${who}. O acesso muda na hora.`];
+    }
+    if (op === "trial") {
+      const plan = readPlan(form);
+      const days = readDays(form, "days");
+      if (!plan || !(days > 0)) return ["", "Escolha o plano e os dias."];
+      return [`Dar ${plural(days, "dia", "dias")} de ${plan.name}`, `Teste do ${escapeHtml(plan.name)} até <strong>${escapeHtml(readableDate(addDaysIso(todayIso(), days)))}</strong>${who}. Depois volta para ${noPlanRule} automaticamente.`];
+    }
+    if (op === "extend") {
+      const days = readDays(form, "days");
+      if (!(days > 0)) return ["", "Informe a quantidade de dias."];
+      if (single?.validUntil) return [`Estender +${days} dias`, `Vencimento: ${escapeHtml(readableDate(single.validUntil))} → <strong>${escapeHtml(readableDate(addDaysIso(single.validUntil, days)))}</strong>`];
+      return [`Estender +${days} dias`, `Soma <strong>${plural(days, "dia", "dias")}</strong> ao prazo atual${who} (a partir de hoje para quem já venceu).`];
+    }
+    return [confirmLabel, ""];
+  };
   openModal({
-    kicker, title, body,
+    kicker, title, body, icon: iconName, tone,
     actions: [
       { label: "Cancelar" },
-      { label: confirmLabel, kind: op === "remove" ? "danger" : "primary", busy: "Aplicando…", onClick: async () => {
+      { label: confirmLabel, kind: op === "remove" ? "danger" : "primary", busy: "Aplicando…", primary: true, onClick: async () => {
         const form = $("#adModalBody");
         const payload = { op, uids };
         if (op === "assign" || op === "trial") {
-          payload.planId = form.querySelector("select[name=planId]").value;
+          payload.planId = form.querySelector("input[name=planId]:checked")?.value || "";
           if (!payload.planId) { toast("Escolha um plano.", true); return true; }
         }
-        if (op === "assign" && form.querySelector("input[name=until]:checked")?.value === "date") {
-          payload.validUntil = form.querySelector("input[name=validUntil]").value;
-          if (!payload.validUntil) { toast("Escolha a data de fim.", true); return true; }
+        if (op === "assign") {
+          const until = readUntil(form);
+          if (until === "") { toast("Escolha a data de fim.", true); return true; }
+          if (until) payload.validUntil = until;
         }
         if (op === "trial" || op === "extend") {
           payload.days = readDays(form, "days");
@@ -1001,13 +1407,34 @@ function openAccessModal(op, uids) {
         return false;
       } },
     ],
+    onOpen: (modalBody) => {
+      const update = () => {
+        const [label, text] = describe(modalBody);
+        const result = modalBody.querySelector("#adAccessResult");
+        if (result) { result.innerHTML = text ? `${icon("arrow-right")}<span>${text}</span>` : ""; result.hidden = !text; }
+        const button = $("#adModalFoot [data-modal-primary]");
+        if (button && label) button.textContent = label;
+      };
+      modalBody.addEventListener("change", (event) => {
+        if (event.target.name === "validUntil" || event.target.name === "daysCustom") {
+          const radio = event.target.closest("label")?.querySelector("input[type=radio]");
+          if (radio) radio.checked = true;
+        }
+        update();
+      });
+      modalBody.addEventListener("input", (event) => {
+        if (event.target.name === "daysCustom") { const radio = event.target.closest("label")?.querySelector("input[type=radio]"); if (radio) radio.checked = true; }
+        update();
+      });
+      update();
+    },
   });
 }
 
 async function refreshAfterChange() {
   await Promise.allSettled([loadDirectory(true), state.currentSection === "overview" ? loadDashboard() : null, state.currentSection === "plans" ? loadPlans() : null]);
   const drawer = $("#adUserDrawer");
-  if (drawer?.classList.contains("is-open") && drawer.dataset.uid) openUserDrawer(drawer.dataset.uid);
+  if (drawer?.classList.contains("is-open") && drawer.dataset.uid) openUserDrawer(drawer.dataset.uid, { keepTab: true });
   if (state.currentSection === "subscriptions") renderAccessTracking();
 }
 
@@ -1051,14 +1478,14 @@ async function openChargeModal(initialUids = []) {
   if (!state.directory.length) await loadDirectory().catch(() => {});
   const picked = new Set(initialUids);
   const requestId = newRequestId();
-  const body = `${initialUids.length ? `<p class="ac-modal-who">Para <strong>${whoLabel(initialUids)}</strong></p>` : userPickerHtml()}
+  const body = `${initialUids.length ? whoCard(initialUids.map((uid) => state.directory.find((item) => item.uid === uid)).filter(Boolean)) : userPickerHtml()}
     <div class="ac-seg" role="radiogroup" aria-label="Tipo de cobrança"><label><input type="radio" name="kind" value="plan" checked /><span>${icon("layers")}Plano</span></label><label><input type="radio" name="kind" value="custom" /><span>${icon("receipt")}Valor avulso</span></label></div>
-    <div data-kind="plan" class="ac-kind"><label class="ac-field">Plano<select name="planId">${planOptions("", { placeholder: "Escolha o plano a cobrar" })}</select></label><div class="ad-form-row"><label class="ac-field">Valor (R$)<input name="planAmount" inputmode="decimal" placeholder="preço do plano" /></label><label class="ac-field">Libera quantos dias<input name="grantDays" type="number" min="1" max="730" step="1" placeholder="30" /></label></div><p class="ac-hint">${icon("info")}Quando a cobrança for paga, o plano é liberado (ou estendido) automaticamente por esse número de dias.</p></div>
+    <div data-kind="plan" class="ac-kind"><div class="ac-field"><span class="ac-label">Plano</span>${planPicker("")}</div><div class="ad-form-row"><label class="ac-field">Valor (R$)<input name="planAmount" inputmode="decimal" placeholder="preço do plano" /></label><label class="ac-field">Libera quantos dias<input name="grantDays" type="number" min="1" max="730" step="1" placeholder="30" /></label></div><p class="ac-hint">${icon("info")}Quando a cobrança for paga, o plano é liberado (ou estendido) automaticamente por esse número de dias.</p></div>
     <div data-kind="custom" class="ac-kind" hidden><label class="ac-field">Valor (R$)<input name="amount" inputmode="decimal" placeholder="0,00" /></label></div>
     <div class="ad-form-row"><label class="ac-field">Descrição<input name="note" maxlength="300" placeholder="Ex.: Plano Pro · dezembro" /></label><label class="ac-field">Vencimento<input name="dueDate" type="date" min="${todayIso()}" /></label></div>
     <p class="ac-summary" id="adChargeSummary"></p>`;
   openModal({
-    kicker: "NOVA COBRANÇA", title: "Cobrar", body, wide: !initialUids.length,
+    kicker: "NOVA COBRANÇA", title: "Cobrar", body, wide: !initialUids.length, icon: "receipt", tone: "is-pink",
     actions: [
       { label: "Cancelar" },
       { label: "Criar cobrança", kind: "primary", busy: "Criando…", onClick: async () => {
@@ -1068,7 +1495,7 @@ async function openChargeModal(initialUids = []) {
         const kind = form.querySelector("input[name=kind]:checked").value;
         const payload = { uids, requestId, note: form.querySelector("input[name=note]").value.trim(), dueDate: form.querySelector("input[name=dueDate]").value || null };
         if (kind === "plan") {
-          payload.planId = form.querySelector("select[name=planId]").value;
+          payload.planId = form.querySelector("input[name=planId]:checked")?.value || "";
           if (!payload.planId) { toast("Escolha o plano.", true); return true; }
           const amount = parseMoney(form.querySelector("input[name=planAmount]").value);
           if (Number.isNaN(amount)) { toast("Valor inválido.", true); return true; }
@@ -1093,7 +1520,7 @@ async function openChargeModal(initialUids = []) {
       const summary = () => {
         const kind = modalBody.querySelector("input[name=kind]:checked").value;
         for (const element of $$("[data-kind]", modalBody)) element.hidden = element.dataset.kind !== kind;
-        const plan = state.plans.find((item) => item.id === modalBody.querySelector("select[name=planId]").value);
+        const plan = state.plans.find((item) => item.id === modalBody.querySelector("input[name=planId]:checked")?.value);
         const amountInput = modalBody.querySelector("input[name=planAmount]");
         if (plan && !amountInput.dataset.touched) amountInput.value = plan.priceCents ? (plan.priceCents / 100).toFixed(2).replace(".", ",") : "";
         const grantInput = modalBody.querySelector("input[name=grantDays]");
@@ -1115,7 +1542,7 @@ function showChargeCreated(result) {
   const created = result.created || [];
   const rows = created.slice(0, 8).map((item) => `<div class="ac-mini-row"><span><strong>${escapeHtml(userLabelByUid(item.uid))}</strong><small>${escapeHtml(payLink(item.id))}</small></span><button type="button" class="ac-icon-btn" data-copy-pay="${escapeHtml(item.id)}" aria-label="Copiar link">${icon("copy")}</button></div>`).join("");
   openModal({
-    kicker: "PRONTO", title: `${plural(created.length, "cobrança criada", "cobranças criadas")}`,
+    kicker: "PRONTO", icon: "check-circle", tone: "is-green", title: `${plural(created.length, "cobrança criada", "cobranças criadas")}`,
     body: `<p class="ac-confirm-text">Cada pessoa já vê a cobrança no app, em <strong>Configurações → Plano</strong>, com o botão de pagar. Se quiser avisar por WhatsApp ou e-mail, envie o link:</p>${rows ? `<div class="ac-mini-list">${rows}</div>` : ""}${created.length > 8 ? `<p class="ac-muted">E mais ${created.length - 8}. Os links também ficam na lista de cobranças.</p>` : ""}${result.skipped?.length ? `<p class="ac-warn">${icon("alert")}${plural(result.skipped.length, "pessoa ignorada", "pessoas ignoradas")} (conta inexistente ou cobrança repetida).</p>` : ""}`,
     actions: [{ label: "Fechar", kind: "primary" }],
   });
@@ -2202,7 +2629,6 @@ function bindActions() {
     const index = Math.round((el.scrollLeft / Math.max(1, el.scrollWidth - el.clientWidth)) * 2);
     for (const [dotIndex, dot] of $$("i", $("#adKpiDots")).entries()) dot.classList.toggle("is-on", dotIndex === index);
   }, { passive: true });
-  $("#adUserDrawerClose")?.addEventListener("click", closeUserDrawer);
   $("#adModal")?.addEventListener("click", (event) => { if (event.target.closest?.("[data-modal-close]")) closeModal(); });
 
   // Cliques gerais (detalhes, ações individuais, cobranças, equipe)
@@ -2245,7 +2671,7 @@ function bindActions() {
     const chargeButton = target.closest("[data-charge-status]");
     if (chargeButton) {
       const id = chargeButton.closest("[data-charge-id]")?.dataset.chargeId;
-      const charge = state.charges.find((item) => item.id === id);
+      const charge = state.charges.find((item) => item.id === id) || state.drawer.detail?.charges?.find((item) => item.id === id);
       if (!charge) return;
       const received = chargeButton.dataset.chargeStatus === "manual_received";
       const ok = await confirmDialog(received
@@ -2256,6 +2682,7 @@ function bindActions() {
         const result = await request("charge-update", { id, status: chargeButton.dataset.chargeStatus });
         toast(received ? (result.granted ? `Recebida. Plano liberado até ${shortDate(result.granted.validUntil)}.` : "Cobrança marcada como recebida.") : "Cobrança cancelada.");
         await Promise.allSettled([loadCharges(), loadDirectory(true)]);
+        if (chargeButton.closest("#adUserDrawer") && state.drawer.uid) openUserDrawer(state.drawer.uid, { keepTab: true });
       } catch (error) { toast(errorText(error), true); }
       return;
     }
@@ -2363,6 +2790,8 @@ function bindActions() {
 bindNavigation();
 bindActions();
 bindPlanStudio();
+bindUserDrawer();
+bindAuditDrawer();
 bindCommandPalette();
 bindQuickActions();
 bindGrowthCrosshair();

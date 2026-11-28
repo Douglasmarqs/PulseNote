@@ -40,7 +40,7 @@ test("paleta de comandos e ações rápidas ligadas na inicialização", () => {
   assert.match(html, /id="adCmdTrigger"/);
   assert.match(html, /id="adCmd"/);
   assert.match(html, /id="adQuick"/);
-  assert.match(js, /bindPlanStudio\(\);\s*bindCommandPalette\(\);\s*bindQuickActions\(\);\s*bindGrowthCrosshair\(\);/);
+  assert.match(js, /bindPlanStudio\(\);\s*bindUserDrawer\(\);\s*bindAuditDrawer\(\);\s*bindCommandPalette\(\);\s*bindQuickActions\(\);\s*bindGrowthCrosshair\(\);/);
 });
 
 test("prévia local só liga com a flag em localhost ou prévia do projeto", () => {
@@ -76,4 +76,42 @@ test("gavetas fechadas ficam inertes e o foco entra e volta com o teclado", () =
   assert.match(js, /function drawerFocusIn\(/);
   assert.match(js, /function drawerFocusBack\(/);
   assert.equal((js.match(/\.inert = true/g) || []).length, 2);
+});
+
+test("ficha da pessoa: abas, navegação, histórico e zona de cuidado", () => {
+  const sheets = read("src/admin-sheets.css");
+  assert.match(html, /admin-sheets\.css\?v=\d+/);
+  assert.match(html, /id="adDrawerScrim"/);
+  for (const tab of ["summary", "charges", "history", "account"]) assert.ok(js.includes(`["${tab}",`), tab);
+  for (const fn of ["function drawerPlanCard", "function drawerHistory", "function stepUserDrawer", "function setDrawerTab", "function bindUserDrawer", "function drawerDanger"]) assert.ok(js.includes(fn), fn);
+  assert.match(sheets, /@media \(prefers-reduced-motion: reduce\)/);
+  assert.match(sheets, /translateY\(102%\)/, "no celular a ficha sobe como folha");
+});
+
+test("servidor: ficha traz o histórico da conta sem exigir índice composto", () => {
+  const api = read("api/admin.js");
+  const block = api.slice(api.indexOf("async function userDetail"), api.indexOf("function pick("));
+  assert.match(block, /collection\("adminAudit"\)\.where\("target", "==", uid\)\.limit\(40\)/);
+  assert.doesNotMatch(block, /where\("target"[^;]*orderBy/);
+  assert.match(block, /\.catch\(\(\) => \[\]\)/);
+});
+
+test("janelas de ação: planos em cartões, resultado ao vivo e auditoria com filtros", () => {
+  assert.match(js, /function planPicker\(/);
+  assert.match(js, /id="adAccessResult"/);
+  assert.match(js, /data-modal-primary/);
+  assert.match(html, /id="adModalIco"/);
+  assert.match(js, /const AUDIT_GROUPS = \[/);
+  assert.match(html, /id="adAuditFilters"/);
+});
+
+test("prévia: histórico da ficha registra ações aplicadas", async () => {
+  const preview = await loadPreview();
+  const { users } = await preview.previewRequest("directory");
+  const target = users.find((user) => user.planId) || users[1];
+  await preview.previewRequest("access-apply", { op: "extend", uids: [target.uid], days: 30 });
+  const detail = await preview.previewRequest("user-detail", undefined, { uid: target.uid });
+  assert.ok(detail.history.some((event) => event.action === "access_extend"));
+  const again = await preview.previewRequest("user-detail", undefined, { uid: target.uid });
+  assert.deepEqual(again.activity, detail.activity, "números estáveis entre recargas");
 });

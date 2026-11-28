@@ -493,7 +493,17 @@ async function userDetail(firebase, db, query) {
     db.collection("aiUsage").doc(uid).get(),
   ]);
   const ai = aiUsage.data() || {};
+  // Histórico do que a equipe fez nesta conta (só igualdade: dispensa índice
+  // composto). Falha aqui não derruba a ficha.
+  const history = await db.collection("adminAudit").where("target", "==", uid).limit(40).get()
+    .then((snapshot) => snapshot.docs.map((entry) => {
+      const data = entry.data() || {};
+      return { id: entry.id, at: data.at || "", action: text(data.action, 60), actorEmail: text(data.actorEmail, 200),
+        details: pick(data.details || {}, ["planId", "validUntil", "days", "status", "role"]) };
+    }).sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, 20))
+    .catch(() => []);
   return {
+    history,
     user: { uid, email: user.email || "", displayName: user.displayName || "", disabled: user.disabled === true,
       emailVerified: user.emailVerified === true, createdAt: timestampValue(user.metadata?.creationTime),
       lastSignInAt: timestampValue(user.metadata?.lastSignInTime) },
