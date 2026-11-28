@@ -11,6 +11,8 @@
   <link rel="stylesheet" href="/src/admin.css?v=35" />
   <link rel="stylesheet" href="/src/admin-boards.css?v=5" />
   <link rel="stylesheet" href="/src/admin-console.css?v=4" />
+  <link rel="stylesheet" href="/src/plan-cards.css?v=2" />
+  <link rel="stylesheet" href="/src/admin-studio.css?v=2" />
 </head>
 <body>
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
@@ -69,13 +71,22 @@
 <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M16 7l2.500 2.500M18.500 4.500L21 7"/></symbol>
 <symbol id="i-chev-down" viewBox="0 0 24 24"><path d="M6 9.500l6 6 6-6"/></symbol>
 <symbol id="i-hourglass" viewBox="0 0 24 24"><path d="M6.500 3.500h11M6.500 20.500h11M7.500 3.500c0 5 4.500 5.500 4.500 8.500s-4.500 3.500-4.500 8.500M16.500 3.500c0 5-4.500 5.500-4.500 8.500s4.500 3.500 4.500 8.500"/></symbol>
+<symbol id="i-phone" viewBox="0 0 24 24"><rect x="6.5" y="2.5" width="11" height="19" rx="2.800"/><path d="M10.500 18.500h3"/></symbol>
+<symbol id="i-monitor" viewBox="0 0 24 24"><rect x="2.500" y="4" width="19" height="12.500" rx="2.200"/><path d="M8.500 20.500h7M12 16.500v4"/></symbol>
+<symbol id="i-grip" viewBox="0 0 24 24"><circle cx="9" cy="6.500" r="1.200" fill="currentColor"/><circle cx="15" cy="6.500" r="1.200" fill="currentColor"/><circle cx="9" cy="12" r="1.200" fill="currentColor"/><circle cx="15" cy="12" r="1.200" fill="currentColor"/><circle cx="9" cy="17.500" r="1.200" fill="currentColor"/><circle cx="15" cy="17.500" r="1.200" fill="currentColor"/></symbol>
+<symbol id="i-chev-up" viewBox="0 0 24 24"><path d="M6 14.500l6-6 6 6"/></symbol>
+<symbol id="i-command" viewBox="0 0 24 24"><path d="M9 6.500A2.500 2.500 0 106.500 9H9zM15 6.500A2.500 2.500 0 1117.500 9H15zM9 17.500A2.500 2.500 0 116.500 15H9zM15 17.500a2.500 2.500 0 102.500-2.500H15zM9 9h6v6H9z"/></symbol>
+<symbol id="i-palette" viewBox="0 0 24 24"><path d="M12 3.500a8.500 8.500 0 000 17c1.200 0 1.800-.8 1.800-1.700 0-1.300-1-1.600-1-2.600 0-1 .8-1.700 1.800-1.700h2A3.900 3.900 0 0020.500 10.600C20.500 6.700 16.700 3.500 12 3.500z"/><circle cx="7.800" cy="11" r="1.100" fill="currentColor"/><circle cx="10.500" cy="7.300" r="1.100" fill="currentColor"/><circle cx="15" cy="7.600" r="1.100" fill="currentColor"/></symbol>
+<symbol id="i-tag" viewBox="0 0 24 24"><path d="M3.500 12.200V4.500a1 1 0 011-1h7.700l8.300 8.300a1.500 1.500 0 010 2.100l-6.600 6.600a1.500 1.500 0 01-2.100 0z"/><circle cx="8" cy="8" r="1.500"/></symbol>
+<symbol id="i-dup" viewBox="0 0 24 24"><rect x="8.500" y="8.500" width="12" height="12" rx="2.500"/><path d="M15.500 8.500V6a2.500 2.500 0 00-2.500-2.500H6A2.500 2.500 0 003.500 6v7A2.500 2.500 0 006 15.500h2.500M14.500 11.500v6M11.500 14.500h6"/></symbol>
+<symbol id="i-rocket" viewBox="0 0 24 24"><path d="M5 19c0-2.500 1-4 2.500-4.500M9.500 14.500l-2-2c1.500-5 5-8.500 11-9 -.5 6-4 9.500-9 11z"/><circle cx="14.500" cy="9.500" r="1.700"/><path d="M7.500 12.500H4.500l3-3.500h3M11.500 16.500v3l3.500-3v-3"/></symbol>
 </svg>
   <div class="ad-shell is-locked">
     <aside class="pn-rail" id="pnRail" aria-label="Seções administrativas">
       <a class="ad-brand" href="/app" aria-label="PulseNote, voltar ao aplicativo"><span class="ad-brand-mark" aria-hidden="true"><span class="bd-mascot" aria-hidden="true"><span class="bd-mascot__eyes"><i></i><i></i></span><svg class="bd-mascot__pulse" viewBox="0 0 120 26"><path d="M0,13 L28,13 L36,3 L44,23 L52,13 L64,13 L70,6 L76,20 L82,13 L120,13"/></svg></span></span><span><strong>PulseNote</strong><small>Administração</small></span></a>
       <nav class="ad-nav" id="adNav" aria-label="Navegação do painel">
         <button type="button" class="is-active" data-section="overview"><svg class="i" aria-hidden="true"><use href="#i-home"/></svg>Visão geral</button>
-        <span class="ac-nav-group">Pessoas</span>
+        <span class="ac-nav-group">Clientes</span>
         <button type="button" data-section="users"><svg class="i" aria-hidden="true"><use href="#i-users"/></svg>Usuários<span class="ac-nav-badge" id="adNavUsersBadge" hidden></span></button>
         <button type="button" data-section="subscriptions"><svg class="i" aria-hidden="true"><use href="#i-gift"/></svg>Acessos e testes<span class="ac-nav-badge is-warn" id="adNavTrialBadge" hidden></span></button>
         <span class="ac-nav-group">Receita</span>
@@ -84,7 +95,7 @@
         <span class="ac-nav-group">Produto</span>
         <button type="button" data-section="features"><svg class="i" aria-hidden="true"><use href="#i-sliders"/></svg>Recursos</button>
         <button type="button" data-section="integrations"><svg class="i" aria-hidden="true"><use href="#i-link"/></svg>Integrações</button>
-        <span class="ac-nav-group">Administração</span>
+        <span class="ac-nav-group">Sistema</span>
         <button type="button" data-section="security"><svg class="i" aria-hidden="true"><use href="#i-shield"/></svg>Equipe e segurança</button>
         <button type="button" data-section="settings"><svg class="i" aria-hidden="true"><use href="#i-wrench"/></svg>Operação<span class="ac-nav-badge is-danger" id="adNavMaintenanceBadge" hidden>Ativa</span></button>
       </nav>
@@ -99,8 +110,9 @@
       <header class="ad-topbar">
         <button class="ad-menu-button" id="adMenuButton" type="button" aria-expanded="false" aria-controls="pnRail" aria-label="Abrir menu"><svg class="i" aria-hidden="true"><use href="#i-menu"/></svg></button>
         <span class="ad-topbar-title"><span class="bd-mascot" aria-hidden="true"><span class="bd-mascot__eyes"><i></i><i></i></span><svg class="bd-mascot__pulse" viewBox="0 0 120 26"><path d="M0,13 L28,13 L36,3 L44,23 L52,13 L64,13 L70,6 L76,20 L82,13 L120,13"/></svg></span><span><strong>PulseNote</strong><small>Administração</small></span></span>
-        <div class="ad-heading"><div><h1 id="adPageTitle">Administração do PulseNote</h1><p id="adPageSubtitle">Usuários, planos, cobranças e a operação do PulseNote em um só lugar.</p></div></div>
+        <div class="ad-heading"><div><h1 id="adPageTitle">Visão geral</h1><p id="adPageSubtitle">Usuários, planos, cobranças e a operação do PulseNote em um só lugar.</p></div></div>
         <div class="ad-topbar-actions">
+          <button type="button" class="st-cmd-trigger" id="adCmdTrigger" aria-label="Buscar ou executar (Ctrl K)" aria-keyshortcuts="Control+K Meta+K"><svg class="i" aria-hidden="true"><use href="#i-search"/></svg><span>Buscar pessoas, planos, ações…</span><kbd>⌘K</kbd></button>
           <span class="ad-date-pill"><svg class="i" aria-hidden="true"><use href="#i-calendar"/></svg><span id="adCurrentDate">Hoje</span></span>
           <span class="ad-environment" id="adEnvironment">Ambiente de prévia</span>
           <button class="ad-icon-button" id="adRefreshButton" type="button" aria-label="Atualizar dados" title="Atualizar dados"><svg class="i" aria-hidden="true"><use href="#i-repeat"/></svg></button>
@@ -122,7 +134,18 @@
           <!-- VISÃO GERAL -->
           <section class="pn-console-view is-active" id="pn-console-overview" aria-labelledby="ad-overview-title">
             <h2 class="ac-greeting" id="ad-overview-title"><span id="adGreeting">Visão geral</span></h2>
-            <div class="ac-alerts" id="adAlerts" aria-label="Avisos importantes"></div>
+            <div class="st-top">
+              <section class="st-attn ad-card" id="adAlerts" aria-label="Atenção hoje"></section>
+              <section class="st-quick ad-card" aria-labelledby="adQuickTitle">
+                <h3 id="adQuickTitle">Ações rápidas</h3>
+                <div class="st-quick-grid" id="adQuick">
+                  <button type="button" data-quick="charge" data-perm="charges.manage"><span class="st-q-ico is-amber"><svg class="i" aria-hidden="true"><use href="#i-receipt"/></svg></span><strong>Nova cobrança</strong><small>Pix ou cartão</small></button>
+                  <button type="button" data-quick="plan" data-perm="plans.manage"><span class="st-q-ico is-violet"><svg class="i" aria-hidden="true"><use href="#i-layers"/></svg></span><strong>Novo plano</strong><small>No estúdio</small></button>
+                  <button type="button" data-quick="trial" data-perm="users.access"><span class="st-q-ico is-green"><svg class="i" aria-hidden="true"><use href="#i-gift"/></svg></span><strong>Dar teste</strong><small>Para pessoas</small></button>
+                  <button type="button" data-quick="showcase"><span class="st-q-ico is-cyan"><svg class="i" aria-hidden="true"><use href="#i-eye"/></svg></span><strong>Ver vitrine</strong><small>Como no app</small></button>
+                </div>
+              </section>
+            </div>
             <div class="ad-kpis" id="adKpis" aria-label="Indicadores principais">
               <article class="ad-kpi"><span class="ad-kpi-ico is-green"><svg class="i" aria-hidden="true"><use href="#i-users"/></svg></span><div class="ad-kpi-copy"><span>Usuários</span><strong id="adKpi1Value">—</strong><small id="adKpi1Sub"></small></div><svg class="ad-kpi-spark" id="adKpi1Spark" viewBox="0 0 120 44" preserveAspectRatio="none" aria-hidden="true"></svg></article>
               <article class="ad-kpi"><span class="ad-kpi-ico is-violet"><svg class="i" aria-hidden="true"><use href="#i-layers"/></svg></span><div class="ad-kpi-copy"><span>Com plano</span><strong id="adKpi2Value">—</strong><small id="adKpi2Sub"></small></div><svg class="ad-kpi-spark" id="adKpi2Spark" viewBox="0 0 120 44" preserveAspectRatio="none" aria-hidden="true"></svg></article>
@@ -253,9 +276,32 @@
 
           <!-- PLANOS -->
           <section class="pn-console-view" id="pn-console-plans" aria-labelledby="ad-plans-title">
-            <div class="ad-card">
-              <div class="ad-card-head"><div><h2 id="ad-plans-title">Planos</h2><p>Públicos aparecem para os usuários assinarem. Privados só podem ser atribuídos por aqui (parcerias, cortesias, testes).</p></div><button class="ad-primary-button" type="button" id="adNewPlan" data-perm="plans.manage"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg>Novo plano</button></div>
-              <div id="adPlansList" class="ac-plan-grid"></div>
+            <header class="ps-hero">
+              <h2 class="ad-sr" id="ad-plans-title">Estúdio de planos</h2>
+              <div class="ps-hero-stats" id="adPlansStats" aria-label="Resumo dos planos"></div>
+              <div class="ps-hero-actions">
+                <button class="ad-subtle-button" type="button" id="adPlansShowcase"><svg class="i" aria-hidden="true"><use href="#i-eye"/></svg>Ver vitrine</button>
+                <button class="ad-primary-button" type="button" id="adNewPlan" data-perm="plans.manage"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg>Novo plano</button>
+              </div>
+            </header>
+            <div class="ps-layout">
+              <aside class="ps-list ad-card" aria-labelledby="adPlansListTitle">
+                <div class="ps-list-head"><strong id="adPlansListTitle">Ordem na vitrine</strong><small>Arraste ou use as setas</small></div>
+                <ol id="adPlansList" class="ps-plan-list"></ol>
+              </aside>
+              <div class="ps-editor ad-card" id="adPlanEditor" aria-live="polite"></div>
+              <aside class="ps-preview ad-card" aria-label="Prévia ao vivo">
+                <div class="ps-preview-head">
+                  <span class="ps-live"><i></i>Prévia ao vivo</span>
+                  <div class="ps-seg" role="group" aria-label="O que mostrar"><button type="button" class="is-on" data-preview-mode="plan">Este plano</button><button type="button" data-preview-mode="all">Vitrine</button></div>
+                </div>
+                <div class="ps-preview-tools">
+                  <div class="ps-seg" role="group" aria-label="Aparelho"><button type="button" class="is-on" data-preview-device="phone" aria-label="Celular"><svg class="i" aria-hidden="true"><use href="#i-phone"/></svg></button><button type="button" data-preview-device="desktop" aria-label="Computador"><svg class="i" aria-hidden="true"><use href="#i-monitor"/></svg></button></div>
+                  <div class="ps-seg" role="group" aria-label="Ciclo"><button type="button" class="is-on" data-preview-interval="month">Mensal</button><button type="button" data-preview-interval="year">Anual</button></div>
+                </div>
+                <div class="ps-stage" data-device="phone"><div class="ps-frame pc-scope" id="adPlanPreview"></div></div>
+                <p class="ps-preview-note" id="adPlanPreviewNote"></p>
+              </aside>
             </div>
           </section>
 
@@ -345,7 +391,15 @@
 
   <aside class="ad-user-drawer" id="adUserDrawer" aria-labelledby="adUserDrawerTitle" aria-hidden="true"><button class="ad-drawer-close" id="adUserDrawerClose" type="button" aria-label="Fechar detalhes"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button><div id="adUserDrawerContent"></div></aside>
   <div class="ac-modal" id="adModal" hidden><div class="ac-modal-backdrop" data-modal-close></div><div class="ac-modal-card" role="dialog" aria-modal="true" aria-labelledby="adModalTitle"><header class="ac-modal-head"><div><span class="ad-card-kicker" id="adModalKicker"></span><h2 id="adModalTitle" tabindex="-1">—</h2></div><button type="button" class="ac-modal-x" data-modal-close aria-label="Fechar"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button></header><div class="ac-modal-body" id="adModalBody"></div><footer class="ac-modal-foot" id="adModalFoot"></footer></div></div>
+  <div class="st-cmd" id="adCmd" hidden>
+    <div class="st-cmd-backdrop" data-cmd-close></div>
+    <div class="st-cmd-card" role="dialog" aria-modal="true" aria-label="Buscar ou executar">
+      <label class="st-cmd-input"><svg class="i" aria-hidden="true"><use href="#i-search"/></svg><input id="adCmdInput" type="search" autocomplete="off" spellcheck="false" placeholder="Buscar pessoas, planos, telas ou ações" aria-controls="adCmdList" aria-activedescendant="" role="combobox" aria-expanded="true" /><kbd>Esc</kbd></label>
+      <div class="st-cmd-list" id="adCmdList" role="listbox" aria-label="Resultados"></div>
+      <footer class="st-cmd-foot"><span><kbd>↑</kbd><kbd>↓</kbd> navegar</span><span><kbd>Enter</kbd> abrir</span><span><kbd>Esc</kbd> fechar</span></footer>
+    </div>
+  </div>
   <div id="adToast" class="ad-toast" role="status" aria-live="polite" hidden></div>
-  <script type="module" src="/src/admin.js?v=39"></script>
+  <script type="module" src="/src/admin.js?v=40"></script>
 </body>
 </html>

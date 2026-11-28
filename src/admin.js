@@ -1,5 +1,6 @@
 import { auth } from "./firebase-init.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { renderPlanCards, renderIntervalToggle, PLAN_ACCENTS } from "./plan-cards.js";
 
 // ════════════════════════════════════════════════════════════════════
 // PulseNote · Painel administrativo
@@ -27,14 +28,14 @@ const AREA_LABELS = { dashboard: "Início", planner: "Planner", notes: "Notas", 
 const ROLE_SHORT = { owner: "Prop.", admin: "Adm.", finance: "Fin.", support: "Sup.", viewer: "Leit." };
 
 const SECTION_LABELS = {
-  overview: "Visão geral", users: "Usuários", subscriptions: "Acessos e testes", plans: "Planos", charges: "Cobranças",
+  overview: "Visão geral", users: "Usuários", subscriptions: "Acessos e testes", plans: "Estúdio de planos", charges: "Cobranças",
   features: "Recursos", integrations: "Integrações", security: "Equipe e segurança", settings: "Operação",
 };
 const SECTION_SUBTITLES = {
   overview: "Usuários, planos, cobranças e a operação do PulseNote em um só lugar.",
   users: "Busque, selecione e gerencie o acesso de cada pessoa.",
   subscriptions: "Teste grátis, regra de quem está sem plano e prazos acabando.",
-  plans: "Preços, recursos e quem pode ver cada oferta.",
+  plans: "Crie, precifique e publique. A prévia mostra exatamente o que a pessoa vê no app para assinar.",
   charges: "Cobranças, recebimentos e como o dinheiro chega até você.",
   features: "Ligue ou desligue recursos para todos os usuários.",
   integrations: "Credenciais, eventos e saúde dos serviços.",
@@ -261,7 +262,23 @@ function closeMenu() {
   $("#adMenuButton").setAttribute("aria-label", "Abrir menu");
 }
 
+// Prévia local (QA visual): só com ?designPreview=1 em localhost ou nas
+// prévias do projeto — o domínio oficial não corresponde, então em produção
+// isto é sempre falso. Usa dados inventados (admin-preview.js), sem login.
+const PREVIEW = (() => {
+  try {
+    const host = globalThis.location?.hostname || "";
+    const flag = new URLSearchParams(globalThis.location?.search || "").get("designPreview") === "1";
+    return flag && (/^(?:localhost|127\.0\.0\.1)$/.test(host) || /^pulse-note-5erj-[a-z0-9-]+-douglas-projects-c831a9fc\.vercel\.app$/i.test(host));
+  } catch { return false; }
+})();
+let previewModule = null;
+
 async function request(action, body, query = {}) {
+  if (PREVIEW) {
+    previewModule ||= await import("./admin-preview.js");
+    return previewModule.previewRequest(action, body, query);
+  }
   const token = await state.user.getIdToken();
   const params = new URLSearchParams({ action, ...query });
   const response = await fetch(`/api/admin?${params}`, {
@@ -425,8 +442,12 @@ function renderAlerts() {
   if (segments.expiringSoon) alerts.push(["is-warn", "hourglass", `${plural(segments.expiringSoon, "plano vence", "planos vencem")} nos próximos 7 dias.`, "Ver prazos", "data-access-tab=\"ending\""]);
   const pendingIntegrations = (state.dashboard?.integrations || []).filter((item) => !item.configured).length;
   if (pendingIntegrations) alerts.push(["is-info", "link", `${plural(pendingIntegrations, "integração pendente", "integrações pendentes")} de configuração.`, "Ver integrações", "data-go=\"integrations\""]);
-  root.innerHTML = alerts.map(([tone, iconName, text, label, attr]) => `<div class="ac-alert ${tone}">${icon(iconName)}<span>${escapeHtml(text)}</span><button type="button" class="ac-alert-btn" ${attr}>${escapeHtml(label)} ${icon("arrow-right")}</button></div>`).join("");
-  root.hidden = !alerts.length;
+  // "Atenção hoje": um cartão só, com cada pendência e o atalho para resolver
+  // (antes eram faixas largas empilhadas que empurravam o painel para baixo).
+  root.innerHTML = `<header class="st-attn-head"><h3>Atenção hoje</h3>${alerts.length ? `<span class="st-attn-count">${alerts.length}</span>` : ""}</header>
+    ${alerts.length ? `<ul class="st-attn-list">${alerts.map(([tone, iconName, text, label, attr]) => `<li class="st-attn-item ${tone}"><span class="st-attn-ico">${icon(iconName)}</span><span class="st-attn-text">${escapeHtml(text)}</span><button type="button" class="st-attn-btn" aria-label="${escapeHtml(label)}" ${attr}><span>${escapeHtml(label)}</span>${icon("arrow-right")}</button></li>`).join("")}</ul>`
+      : `<div class="st-attn-ok">${icon("check-circle")}<span><strong>Tudo em dia</strong><small>Nenhuma cobrança vencida, teste acabando ou integração pendente.</small></span></div>`}`;
+  root.hidden = false;
 }
 
 function segmentCounts() {
@@ -497,7 +518,65 @@ function renderGrowth(range = state.growthRange) {
   const last = values[values.length - 1];
   const lx = x(values.length - 1);
   const ly = y(last);
+  state.growthGeom = { xs: values.map((_, index) => x(index)), ys: values.map((value) => y(value)), values, dates: entries.map((entry) => entry.date), width, height, top: pad.top, bottom: height - pad.bottom };
   root.innerHTML = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" class="ad-growth-svg"><defs><linearGradient id="adGrowthFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#22d3ee" stop-opacity=".32"/><stop offset="1" stop-color="#22d3ee" stop-opacity="0"/></linearGradient><linearGradient id="adGrowthLine" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#2f80ff"/><stop offset="1" stop-color="#22d3ee"/></linearGradient></defs><g class="ad-grid">${grid}</g><path d="${line} L${lx.toFixed(1)} ${height - pad.bottom} L${pad.left} ${height - pad.bottom} Z" fill="url(#adGrowthFill)"/><path d="${line}" fill="none" stroke="url(#adGrowthLine)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/><g class="ad-axis">${labels}</g></svg><span class="ad-growth-dot" style="left:${((lx / width) * 100).toFixed(2)}%;top:${((ly / height) * 100).toFixed(2)}%"></span><span class="ad-growth-tip" style="left:${((lx / width) * 100).toFixed(2)}%;top:${((ly / height) * 100).toFixed(2)}%">${last.toLocaleString("pt-BR")}</span>`;
+}
+
+// Leitura do gráfico: linha vertical que acompanha o ponteiro, ponto e caixa
+// com data e total do dia mais próximo (mouse, toque e teclado ←/→).
+function bindGrowthCrosshair() {
+  const root = $("#adGrowthChart");
+  if (!root?.dataset || typeof root.addEventListener !== "function" || root.dataset.crosshair) return;
+  root.dataset.crosshair = "1";
+  root.tabIndex = 0;
+  let focusIndex = -1;
+  const show = (index) => {
+    const geom = state.growthGeom;
+    if (!geom || index < 0 || index >= geom.values.length) return;
+    focusIndex = index;
+    let layer = root.querySelector(".st-cross");
+    if (!layer) {
+      layer = document.createElement("div");
+      layer.className = "st-cross";
+      layer.innerHTML = `<i class="st-cross-line"></i><b class="st-cross-dot"></b><span class="st-cross-tip"><strong></strong><small></small></span>`;
+      root.appendChild(layer);
+    }
+    const left = (geom.xs[index] / geom.width) * 100;
+    const top = (geom.ys[index] / geom.height) * 100;
+    layer.style.setProperty("--x", `${left}%`);
+    layer.style.setProperty("--y", `${top}%`);
+    layer.style.setProperty("--t", `${(geom.top / geom.height) * 100}%`);
+    layer.style.setProperty("--b", `${100 - (geom.bottom / geom.height) * 100}%`);
+    layer.classList.toggle("is-right", left > 62);
+    const date = new Intl.DateTimeFormat("pt-BR", { weekday: "short", day: "numeric", month: "short" }).format(new Date(`${geom.dates[index]}T12:00:00`));
+    layer.querySelector("strong").textContent = `${geom.values[index].toLocaleString("pt-BR")} contas`;
+    const clean = date.replace(/\./g, "");
+    layer.querySelector("small").textContent = clean.charAt(0).toUpperCase() + clean.slice(1);
+    layer.hidden = false;
+    root.classList.add("is-reading");
+  };
+  const hide = () => { const layer = root.querySelector(".st-cross"); if (layer) layer.hidden = true; root.classList.remove("is-reading"); };
+  const nearest = (clientX) => {
+    const geom = state.growthGeom;
+    const rect = root.querySelector("svg")?.getBoundingClientRect();
+    if (!geom || !rect) return -1;
+    const px = ((clientX - rect.left) / rect.width) * geom.width;
+    let best = 0;
+    geom.xs.forEach((value, index) => { if (Math.abs(value - px) < Math.abs(geom.xs[best] - px)) best = index; });
+    return best;
+  };
+  root.addEventListener("pointermove", (event) => show(nearest(event.clientX)));
+  root.addEventListener("pointerdown", (event) => show(nearest(event.clientX)));
+  root.addEventListener("pointerleave", (event) => { if (event.pointerType === "mouse") hide(); });
+  root.addEventListener("keydown", (event) => {
+    const geom = state.growthGeom;
+    if (!geom || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const last = geom.values.length - 1;
+    const start = focusIndex < 0 ? last : focusIndex;
+    show(event.key === "Home" ? 0 : event.key === "End" ? last : Math.max(0, Math.min(last, start + (event.key === "ArrowRight" ? 1 : -1))));
+  });
+  root.addEventListener("blur", hide);
 }
 
 function renderPlanBreakdown(data = state.dashboard) {
@@ -1104,7 +1183,16 @@ function renderAccessTracking() {
     : `<div class="ad-empty">Ninguém nesta lista agora.</div>`;
 }
 
-// ── Planos ───────────────────────────────────────────────────────────
+// ── Planos · Estúdio ─────────────────────────────────────────────────
+// Lista na ordem da vitrine (arrastar ou setas), editor em abas e prévia
+// ao vivo com o MESMO componente do app (plan-cards.js). Nada é gravado
+// até "Salvar plano"; trocar de plano com alterações pede confirmação.
+const ACCENT_LABELS = { violet: "Violeta", blue: "Azul", green: "Verde", amber: "Âmbar", rose: "Rosa", slate: "Grafite" };
+const BADGE_SUGGESTIONS = ["Mais popular", "Melhor custo-benefício", "Recomendado", "Novo"];
+const PLAN_TABS = [["showcase", "Vitrine", "palette"], ["price", "Preço", "tag"], ["features", "Recursos", "sliders"], ["publish", "Publicação", "rocket"]];
+const MAX_BENEFITS = 12;
+state.studio = { id: null, draft: null, original: "", tab: "showcase", mode: "plan", device: "phone", interval: "month", dragId: null, orderTimer: null };
+
 function aiLimitLabel(plan) {
   if (Number.isInteger(plan.aiDailyLimit)) return plan.aiDailyLimit === 0 ? "IA sem limite" : `IA ${plan.aiDailyLimit}/dia`;
   return plan.priceCents ? "IA 200/dia" : "IA 10/dia";
@@ -1119,77 +1207,536 @@ function planFeatureEnabled(plan, key) {
   return false;
 }
 
-function renderPlans() {
+const centsToField = (cents) => (Number(cents) > 0 ? (Number(cents) / 100).toFixed(2).replace(".", ",") : "");
+const slugify = (value) => String(value || "").trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
+
+function planToDraft(plan) {
+  const features = Object.fromEntries(Object.keys(FEATURE_LABELS).map((key) => [key, plan ? planFeatureEnabled(plan, key) : true]));
+  return {
+    id: plan?.id || "", isNew: !plan, name: plan?.name || "", description: plan?.description || "", tagline: plan?.tagline || "",
+    benefits: Array.isArray(plan?.benefits) ? [...plan.benefits] : [], badge: plan?.badge || "", highlight: plan?.highlight === true,
+    accent: plan?.accent || "violet", ctaLabel: plan?.ctaLabel || "", order: Number.isInteger(plan?.order) ? plan.order : (Math.max(0, ...state.plans.map((item) => Number(item.order) || 0)) + 10),
+    priceCents: Number(plan?.priceCents) || 0, billingInterval: plan?.billingInterval === "year" ? "year" : "month",
+    yearlyPriceCents: Number(plan?.yearlyPriceCents) || 0, stripePriceId: plan?.stripePriceId || "", stripePriceIdYear: plan?.stripePriceIdYear || "",
+    trialDays: Number(plan?.trialDays) || 0, aiDailyLimit: Number.isInteger(plan?.aiDailyLimit) ? plan.aiDailyLimit : null,
+    visibility: plan?.visibility === "private" ? "private" : "public", active: plan?.active !== false, features,
+    subscribers: plan?.subscribers || { active: 0, trial: 0 }, updatedAt: plan?.updatedAt || null,
+  };
+}
+const draftSignature = (draft) => JSON.stringify({ ...draft, subscribers: undefined, updatedAt: undefined, isNew: undefined, benefits: draft.benefits.map((item) => item.trim()).filter(Boolean) });
+const studioDirty = () => Boolean(state.studio.draft) && draftSignature(state.studio.draft) !== state.studio.original;
+
+function yearlySavings(draft) {
+  if (draft.billingInterval === "year" || !draft.priceCents || !draft.yearlyPriceCents) return 0;
+  const full = draft.priceCents * 12;
+  return draft.yearlyPriceCents < full ? Math.round(((full - draft.yearlyPriceCents) / full) * 100) : 0;
+}
+
+// Como o app vai receber este rascunho (mesma forma do /api/billing).
+function draftAsPublic(draft) {
+  const yearly = draft.billingInterval === "month" && draft.yearlyPriceCents > 0 ? draft.yearlyPriceCents : null;
+  return {
+    id: draft.id || "novo", name: draft.name || "Novo plano", description: draft.description, tagline: draft.tagline,
+    benefits: draft.benefits.map((item) => item.trim()).filter(Boolean), badge: draft.badge, highlight: draft.highlight, accent: draft.accent,
+    ctaLabel: draft.ctaLabel, order: draft.order, priceCents: draft.priceCents, yearlyPriceCents: yearly, yearlySavingsPct: yearlySavings(draft),
+    billingInterval: draft.billingInterval, trialDays: draft.trialDays, aiDailyLimit: draft.aiDailyLimit, features: draft.features,
+    checkoutAvailable: Boolean(draft.stripePriceId), checkoutAvailableYear: Boolean(yearly && draft.stripePriceIdYear),
+  };
+}
+
+function renderPlansStats() {
+  const root = $("#adPlansStats");
+  if (!root) return;
+  const pub = state.plans.filter((plan) => plan.active !== false && plan.visibility !== "private").length;
+  const priv = state.plans.filter((plan) => plan.visibility === "private").length;
+  const subs = state.plans.reduce((sum, plan) => sum + (plan.subscribers?.active || 0), 0);
+  const trial = state.plans.reduce((sum, plan) => sum + (plan.subscribers?.trial || 0), 0);
+  const mrr = state.dashboard?.metrics?.mrrCents;
+  root.innerHTML = [[pub, "na vitrine"], [priv, priv === 1 ? "privado" : "privados"], [subs, "assinantes"], [trial, "em teste"], ...(Number.isFinite(mrr) ? [[money(mrr), "MRR"]] : [])]
+    .map(([value, label]) => `<div><strong>${typeof value === "number" ? value.toLocaleString("pt-BR") : escapeHtml(value)}</strong><span>${escapeHtml(label)}</span></div>`).join("");
+}
+
+function renderPlanList() {
   const root = $("#adPlansList");
   if (!root) return;
-  root.innerHTML = state.plans.length ? state.plans.map((plan) => {
-    const enabled = Object.keys(FEATURE_LABELS).filter((key) => planFeatureEnabled(plan, key));
+  const manage = can("plans.manage");
+  const list = state.plans.map((plan, index) => {
     const subs = plan.subscribers || { active: 0, trial: 0 };
-    const isDefault = state.config?.access?.noPlan === "plan" && state.config.access.noPlanPlanId === plan.id;
-    const isTrial = state.config?.trial?.enabled && state.config.trial.planId === plan.id;
-    return `<article class="ac-plan ${plan.active === false ? "is-inactive" : ""}">
-      <header><div><h3>${escapeHtml(plan.name)}</h3><small>${escapeHtml(plan.id)}</small></div><div class="ac-plan-pills"><span class="ac-chip ${plan.visibility === "private" ? "is-muted" : "is-on"}">${icon(plan.visibility === "private" ? "lock" : "eye")}${plan.visibility === "private" ? "Privado" : "Público"}</span>${plan.active === false ? `<span class="ac-chip is-off">Inativo</span>` : ""}</div></header>
-      <div class="ac-plan-price"><strong>${plan.priceCents ? money(plan.priceCents) : "Grátis"}</strong>${plan.priceCents ? `<small>/${plan.billingInterval === "year" ? "ano" : "mês"}</small>` : ""}</div>
-      <p>${escapeHtml(plan.description || "Sem descrição.")}</p>
-      <div class="ac-plan-stats"><span><strong>${subs.active}</strong> ativos</span><span><strong>${subs.trial}</strong> em teste</span></div>
-      <ul class="ac-plan-features">${enabled.slice(0, 5).map((key) => `<li>${icon("check")}${escapeHtml(FEATURE_LABELS[key][0])}</li>`).join("")}${enabled.length > 5 ? `<li class="ac-muted">+${enabled.length - 5} recursos</li>` : ""}${!enabled.length ? `<li class="ac-muted">Só o essencial (planner, notas, finanças)</li>` : ""}</ul>
-      <div class="ac-plan-meta"><span>${aiLimitLabel(plan)}</span><span>${plan.stripePriceId ? "Checkout Stripe" : "Sem checkout"}</span>${isDefault ? "<span>Plano dos sem plano</span>" : ""}${isTrial ? "<span>Plano do teste</span>" : ""}</div>
-      ${can("plans.manage") ? `<button type="button" class="ad-outline-button" data-edit-plan="${escapeHtml(plan.id)}">Editar</button>` : ""}
-    </article>`;
-  }).join("") : `<div class="ad-empty">Nenhum plano criado ainda. Crie o primeiro em "Novo plano".</div>`;
+    const price = plan.priceCents ? `${money(plan.priceCents)}/${plan.billingInterval === "year" ? "ano" : "mês"}` : "Grátis";
+    const active = state.studio.id === plan.id;
+    return `<li class="ps-item${active ? " is-active" : ""}${plan.active === false ? " is-inactive" : ""}" data-plan-id="${escapeHtml(plan.id)}" ${manage ? 'draggable="true"' : ""}>
+      ${manage ? `<span class="ps-grip" aria-hidden="true">${icon("grip")}</span>` : ""}
+      <button type="button" class="ps-item-main" data-select-plan="${escapeHtml(plan.id)}" aria-current="${active}">
+        <span class="ps-swatch pc-accent-${escapeHtml(plan.accent || "violet")}" aria-hidden="true"></span>
+        <span class="ps-item-copy"><strong>${escapeHtml(plan.name)}${plan.highlight ? `<em class="ps-star" title="Em destaque">${icon("sparkle")}</em>` : ""}</strong><small>${escapeHtml(price)} · ${subs.active} ${subs.active === 1 ? "ativo" : "ativos"}${subs.trial ? ` · ${subs.trial} em teste` : ""}</small></span>
+        <span class="ps-item-tags">${plan.active === false ? `<span class="ac-chip is-off">Inativo</span>` : plan.visibility === "private" ? `<span class="ac-chip is-muted">${icon("lock")}Privado</span>` : `<span class="ac-chip is-on">${icon("eye")}Público</span>`}</span>
+      </button>
+      ${manage ? `<span class="ps-move"><button type="button" data-move-plan="up" aria-label="Subir ${escapeHtml(plan.name)}" ${index === 0 ? "disabled" : ""}>${icon("chev-up")}</button><button type="button" data-move-plan="down" aria-label="Descer ${escapeHtml(plan.name)}" ${index === state.plans.length - 1 ? "disabled" : ""}>${icon("chev-down")}</button></span>` : ""}
+    </li>`;
+  }).join("");
+  const draftItem = state.studio.draft?.isNew ? `<li class="ps-item is-active is-new"><span class="ps-grip" aria-hidden="true">${icon("plus")}</span><span class="ps-item-main"><span class="ps-swatch pc-accent-${escapeHtml(state.studio.draft.accent)}" aria-hidden="true"></span><span class="ps-item-copy"><strong>${escapeHtml(state.studio.draft.name || "Novo plano")}</strong><small>Rascunho · ainda não salvo</small></span></span></li>` : "";
+  root.innerHTML = list || draftItem ? `${list}${draftItem}` : `<li class="ad-empty">Nenhum plano ainda. Crie o primeiro em “Novo plano”.</li>`;
+}
+
+function field(label, control, hint = "") {
+  return `<label class="ps-field"><span class="ps-label">${label}</span>${control}${hint ? `<small class="ps-hint">${hint}</small>` : ""}</label>`;
+}
+
+function benefitsEditor(draft) {
+  return `<div class="ps-benefits" id="psBenefits">${draft.benefits.map((item, index) => `<div class="ps-benefit" data-benefit-row="${index}">
+      <span class="ps-benefit-tick" aria-hidden="true">${icon("check")}</span>
+      <input type="text" maxlength="90" value="${escapeHtml(item)}" data-benefit="${index}" aria-label="Vantagem ${index + 1}" placeholder="Ex.: Pulsinho no WhatsApp" />
+      <button type="button" class="ps-mini" data-benefit-move="up" data-index="${index}" aria-label="Subir vantagem" ${index === 0 ? "disabled" : ""}>${icon("chev-up")}</button>
+      <button type="button" class="ps-mini" data-benefit-move="down" data-index="${index}" aria-label="Descer vantagem" ${index === draft.benefits.length - 1 ? "disabled" : ""}>${icon("chev-down")}</button>
+      <button type="button" class="ps-mini is-danger" data-benefit-remove="${index}" aria-label="Remover vantagem">${icon("x")}</button>
+    </div>`).join("")}
+    ${draft.benefits.length < MAX_BENEFITS ? `<button type="button" class="ps-add" data-benefit-add>${icon("plus")}Adicionar vantagem<small>${draft.benefits.length}/${MAX_BENEFITS}</small></button>` : `<small class="ps-hint">Limite de ${MAX_BENEFITS} vantagens.</small>`}
+    ${!draft.benefits.length ? `<small class="ps-hint">${icon("info")}Sem vantagens escritas, a vitrine lista os recursos ligados na aba Recursos.</small>` : ""}
+  </div>`;
+}
+
+function editorPanel(tab, draft) {
+  if (tab === "showcase") return `
+    <div class="ps-grid-2">${field("Nome do plano", `<input name="name" maxlength="80" value="${escapeHtml(draft.name)}" placeholder="Pro" required />`)}
+      ${field("Texto do botão", `<input name="ctaLabel" maxlength="28" value="${escapeHtml(draft.ctaLabel)}" placeholder="Assinar ${escapeHtml(draft.name || "o plano")}" />`, "Vazio usa “Assinar” + nome.")}</div>
+    ${field("Chamada", `<input name="tagline" maxlength="90" value="${escapeHtml(draft.tagline)}" placeholder="Tudo para quem quer ir além" />`, "Uma frase curta abaixo do nome.")}
+    ${field("Descrição interna", `<input name="description" maxlength="300" value="${escapeHtml(draft.description)}" placeholder="Usada quando não há chamada e na lista de planos" />`)}
+    <div class="ps-field"><span class="ps-label">Vantagens <small>na ordem em que aparecem</small></span>${benefitsEditor(draft)}</div>
+    <div class="ps-grid-2">
+      <div class="ps-field"><span class="ps-label">Selo</span><input name="badge" maxlength="24" value="${escapeHtml(draft.badge)}" placeholder="Sem selo" /><div class="ps-suggest">${BADGE_SUGGESTIONS.map((text) => `<button type="button" data-badge-pick="${escapeHtml(text)}" class="${draft.badge === text ? "is-on" : ""}">${escapeHtml(text)}</button>`).join("")}</div></div>
+      <div class="ps-field"><span class="ps-label">Cor do plano</span><div class="ps-swatches" role="radiogroup" aria-label="Cor do plano">${PLAN_ACCENTS.map((accent) => `<label class="ps-swatch-pick pc-accent-${accent}" title="${ACCENT_LABELS[accent]}"><input type="radio" name="accent" value="${accent}" ${draft.accent === accent ? "checked" : ""} /><span aria-hidden="true"></span><em>${ACCENT_LABELS[accent]}</em></label>`).join("")}</div></div>
+    </div>
+    <label class="ac-switch ac-switch--row ps-switch"><input type="checkbox" name="highlight" ${draft.highlight ? "checked" : ""} /><span class="ac-switch-ui" aria-hidden="true"></span><span><strong>Destacar na vitrine</strong><small>Borda em degradê, botão cheio e leve elevação. Use em um plano só.</small></span></label>`;
+  if (tab === "price") {
+    const savings = yearlySavings(draft);
+    return `
+    <div class="ps-grid-2">${field("Preço", `<span class="ps-money"><em>R$</em><input name="price" inputmode="decimal" value="${centsToField(draft.priceCents)}" placeholder="0,00 = grátis" /></span>`)}
+      <div class="ps-field"><span class="ps-label">Ciclo do preço</span><div class="ps-seg ps-seg--field" role="radiogroup"><label><input type="radio" name="billingInterval" value="month" ${draft.billingInterval === "month" ? "checked" : ""} /><span>Mensal</span></label><label><input type="radio" name="billingInterval" value="year" ${draft.billingInterval === "year" ? "checked" : ""} /><span>Anual</span></label></div></div></div>
+    <div class="ps-callout${draft.billingInterval === "year" ? " is-muted" : ""}" id="psYearlyBox">
+      <div class="ps-grid-2">${field("Preço do plano anual (opcional)", `<span class="ps-money"><em>R$</em><input name="yearlyPrice" inputmode="decimal" value="${centsToField(draft.yearlyPriceCents)}" placeholder="ex.: 299,00" ${draft.billingInterval === "year" ? "disabled" : ""} /></span>`, "Ativa a opção Mensal/Anual na vitrine.")}
+        <div class="ps-savings" id="psSavings">${savings ? `<strong>−${savings}%</strong><span>de economia no anual</span>` : draft.yearlyPriceCents && draft.billingInterval === "month" ? `<strong class="is-warn">0%</strong><span>o anual não está mais barato que 12 meses</span>` : `<strong>—</strong><span>sem preço anual</span>`}</div></div>
+    </div>
+    <div class="ps-grid-2">${field("Dias grátis no checkout", `<input name="trialDays" type="number" min="0" max="60" step="1" value="${draft.trialDays || ""}" placeholder="0" />`, "Só para quem nunca assinou. A cobrança começa depois.")}
+      ${field("Conversas com IA por dia", `<input name="aiDailyLimit" type="number" min="0" max="5000" step="1" value="${Number.isInteger(draft.aiDailyLimit) ? draft.aiDailyLimit : ""}" placeholder="padrão (10 grátis · 200 pago)" />`, "0 = sem limite.")}</div>
+    <div class="ps-field"><span class="ps-label">Stripe (pagamento automático)</span>
+      <div class="ps-grid-2">${field("Price ID mensal", `<input name="stripePriceId" maxlength="128" value="${escapeHtml(draft.stripePriceId)}" placeholder="price_…" autocomplete="off" spellcheck="false" />`)}
+        ${field("Price ID anual", `<input name="stripePriceIdYear" maxlength="128" value="${escapeHtml(draft.stripePriceIdYear)}" placeholder="price_…" autocomplete="off" spellcheck="false" ${draft.billingInterval === "year" || !draft.yearlyPriceCents ? "disabled" : ""} />`)}</div>
+      <div class="ps-checklist" id="psStripeCheck"></div></div>`;
+  }
+  if (tab === "features") return `
+    <div class="ad-core-features"><strong>Sempre incluído</strong><span>Planner e tarefas</span><span>Notas</span><span>Finanças</span><span>Metas</span></div>
+    ${FEATURE_GROUPS.map(([group, keys]) => `<fieldset class="ac-feature-group"><legend>${escapeHtml(group)}</legend>${keys.map((key) => `<label class="ac-switch ac-switch--row"><input type="checkbox" name="feature-${key}" ${draft.features[key] ? "checked" : ""} /><span class="ac-switch-ui" aria-hidden="true"></span><span><strong>${escapeHtml(FEATURE_LABELS[key][0])}</strong><small>${escapeHtml(FEATURE_LABELS[key][1])}</small></span></label>`).join("")}</fieldset>`).join("")}
+    <p class="ps-hint">${icon("info")}Um recurso desligado em Produto → Recursos fica desligado para todos, mesmo marcado aqui.</p>`;
+  const usedAs = [
+    state.config?.trial?.enabled && state.config.trial.planId === draft.id ? "Plano do teste automático de novas contas" : "",
+    state.config?.access?.noPlan === "plan" && state.config.access.noPlanPlanId === draft.id ? "Plano de quem está sem plano" : "",
+  ].filter(Boolean);
+  return `
+    <div class="ps-cards" role="radiogroup" aria-label="Visibilidade">
+      <label class="ps-choice"><input type="radio" name="visibility" value="public" ${draft.visibility === "public" ? "checked" : ""} /><span>${icon("eye")}<strong>Público</strong><small>Aparece na vitrine do app para assinar.</small></span></label>
+      <label class="ps-choice"><input type="radio" name="visibility" value="private" ${draft.visibility === "private" ? "checked" : ""} /><span>${icon("lock")}<strong>Privado</strong><small>Só a equipe atribui (parcerias, cortesias).</small></span></label>
+    </div>
+    <label class="ac-switch ac-switch--row ps-switch"><input type="checkbox" name="active" ${draft.active ? "checked" : ""} /><span class="ac-switch-ui" aria-hidden="true"></span><span><strong>Plano ativo</strong><small>Desligado, ninguém novo recebe e quem tem perde os recursos do plano.</small></span></label>
+    <div class="ps-grid-2">${field("Identificador", `<input name="id" maxlength="40" value="${escapeHtml(draft.id)}" placeholder="gerado pelo nome" pattern="[a-z0-9_-]{2,40}" ${draft.isNew ? "" : "readonly"} spellcheck="false" />`, draft.isNew ? "Letras minúsculas, números e hífen. Não muda depois." : "Fixo: é como o sistema reconhece o plano.")}
+      <div class="ps-field"><span class="ps-label">Quem usa hoje</span><div class="ps-usage"><div><strong>${(draft.subscribers.active || 0).toLocaleString("pt-BR")}</strong><span>ativos</span></div><div><strong>${(draft.subscribers.trial || 0).toLocaleString("pt-BR")}</strong><span>em teste</span></div></div></div></div>
+    ${usedAs.length ? `<ul class="ps-usedas">${usedAs.map((text) => `<li>${icon("link")}${escapeHtml(text)}</li>`).join("")}</ul>` : ""}
+    ${draft.updatedAt ? `<p class="ps-hint">${icon("clock")}Atualizado ${escapeHtml(relativeTime(draft.updatedAt))}.</p>` : ""}`;
+}
+
+function renderStripeChecklist() {
+  const root = $("#psStripeCheck");
+  const draft = state.studio.draft;
+  if (!root || !draft) return;
+  const stripe = state.integrations?.integrations?.find((item) => item.id === "stripe");
+  const items = draft.priceCents || draft.yearlyPriceCents ? [
+    [Boolean(stripe?.configured), stripe?.configured ? "Stripe conectado ao servidor" : "Stripe ainda não conectado (Integrações)"],
+    [Boolean(draft.stripePriceId) || !draft.priceCents, draft.stripePriceId ? "Botão Assinar ativo (mensal)" : "Sem Price ID mensal: o app mostra “Em breve”"],
+    ...(draft.billingInterval === "month" && draft.yearlyPriceCents ? [[Boolean(draft.stripePriceIdYear), draft.stripePriceIdYear ? "Anual pronto para assinar" : "Sem Price ID anual: “Em breve” no anual"]] : []),
+  ] : [[true, "Plano gratuito: não precisa de Stripe"]];
+  root.innerHTML = items.map(([ok, text]) => `<span class="${ok ? "is-ok" : "is-warn"}">${icon(ok ? "check-circle" : "alert")}${escapeHtml(text)}</span>`).join("");
+}
+
+function renderPlanEditor() {
+  const root = $("#adPlanEditor");
+  if (!root) return;
+  const draft = state.studio.draft;
+  if (!draft) {
+    root.innerHTML = `<div class="ps-empty">${icon("layers")}<strong>Selecione um plano</strong><span>Ou crie um novo para começar a vender.</span></div>`;
+    return;
+  }
+  const manage = can("plans.manage");
+  root.innerHTML = `
+    <div class="ps-editor-head">
+      <div><span class="ps-kicker">${draft.isNew ? "NOVO PLANO" : "EDITANDO"}</span><h3>${escapeHtml(draft.name || "Novo plano")}</h3><small>${draft.isNew ? "Rascunho — só passa a existir ao salvar" : `${escapeHtml(draft.id)} · ${draft.visibility === "private" ? "privado" : "público"}${draft.active ? "" : " · inativo"}`}</small></div>
+      ${manage && !draft.isNew ? `<button type="button" class="ad-subtle-button ps-dup" data-plan-dup>${icon("dup")}Duplicar</button>` : ""}
+    </div>
+    <div class="ps-tabs" role="tablist" aria-label="Partes do plano">${PLAN_TABS.map(([key, label, iconName]) => `<button type="button" role="tab" id="psTab-${key}" aria-controls="psPanel-${key}" aria-selected="${state.studio.tab === key}" class="${state.studio.tab === key ? "is-active" : ""}" data-plan-tab="${key}">${icon(iconName)}<span>${label}</span></button>`).join("")}<i class="ps-tab-ink" aria-hidden="true"></i></div>
+    <form class="ps-form${manage ? "" : " is-readonly"}" id="adPlanForm" novalidate>
+      ${manage ? "" : `<p class="ac-readonly-note">${icon("lock")}Seu papel permite só visualizar os planos.</p>`}
+      ${PLAN_TABS.map(([key]) => `<section class="ps-panel" role="tabpanel" id="psPanel-${key}" aria-labelledby="psTab-${key}" ${state.studio.tab === key ? "" : "hidden"}>${editorPanel(key, draft)}</section>`).join("")}
+    </form>
+    ${manage ? `<footer class="ps-savebar"><span class="ps-dirty" id="psDirty"></span><button type="button" class="ad-subtle-button" data-plan-discard>Descartar</button><button type="button" class="ad-primary-button" data-plan-save>${icon("check")}Salvar plano</button></footer>` : ""}`;
+  if (!manage) for (const element of $$("input, select, textarea, button:not([data-plan-tab])", root.querySelector("#adPlanForm"))) element.disabled = true;
+  positionTabInk(false);
+  renderStripeChecklist();
+  syncDirty();
+}
+
+function positionTabInk(animate = true) {
+  const tabs = $(".ps-tabs");
+  const active = tabs?.querySelector(".is-active");
+  const ink = tabs?.querySelector(".ps-tab-ink");
+  if (!active || !ink) return;
+  if (!animate) ink.style.transition = "none";
+  ink.style.width = `${active.offsetWidth}px`;
+  ink.style.transform = `translateX(${active.offsetLeft}px)`;
+  if (!animate) requestAnimationFrame(() => { ink.style.transition = ""; });
+}
+
+function syncDirty() {
+  const dirty = studioDirty();
+  const badge = $("#psDirty");
+  if (badge) {
+    badge.className = `ps-dirty${dirty ? " is-dirty" : ""}`;
+    badge.innerHTML = dirty ? `<i></i>Alterações não salvas` : state.studio.draft?.isNew ? `<i></i>Rascunho` : `${icon("check")}Tudo salvo`;
+  }
+  $("[data-plan-discard]")?.toggleAttribute("disabled", !dirty);
+  $(".ps-savebar")?.classList.toggle("is-dirty", dirty);
+}
+
+let previewFrame = 0;
+function renderPlanPreview() {
+  cancelAnimationFrame(previewFrame);
+  previewFrame = requestAnimationFrame(() => {
+    const root = $("#adPlanPreview");
+    if (!root) return;
+    const { draft, mode, interval } = state.studio;
+    const current = draft ? draftAsPublic(draft) : null;
+    let list = [];
+    if (mode === "all") {
+      list = state.plans.filter((plan) => plan.active !== false && plan.visibility !== "private" && plan.id !== draft?.id).map((plan) => draftAsPublic(planToDraft(plan)));
+      if (current && draft.active && draft.visibility !== "private") list.push(current);
+      list.sort((a, b) => (a.order - b.order) || (a.priceCents - b.priceCents));
+    } else if (current) list = [current];
+    const toggle = mode === "all" ? renderIntervalToggle(list, interval) : "";
+    root.innerHTML = list.length
+      ? `${toggle ? `<div class="ps-frame-toggle">${toggle}</div>` : ""}${renderPlanCards(list, { interval, preview: true, focusId: mode === "all" ? current?.id : null })}`
+      : `<div class="pc-empty">${draft && (draft.visibility === "private" || !draft.active) ? "Este plano não aparece na vitrine (privado ou inativo)." : "Nada para mostrar."}</div>`;
+    const note = $("#adPlanPreviewNote");
+    if (note) note.innerHTML = draft && draft.visibility === "private" ? `${icon("lock")}Privado: só aparece para quem já tem este plano.` : draft && !draft.active ? `${icon("pause")}Inativo: fora da vitrine.` : `${icon("eye")}Como aparece no app em Configurações → Plano e na página Planos.`;
+  });
+}
+
+function selectPlan(id, { force = false } = {}) {
+  const plan = state.plans.find((item) => item.id === id) || null;
+  const go = () => {
+    state.studio.id = plan?.id || null;
+    state.studio.draft = plan ? planToDraft(plan) : null;
+    state.studio.original = state.studio.draft ? draftSignature(state.studio.draft) : "";
+    renderPlanList();
+    renderPlanEditor();
+    renderPlanPreview();
+  };
+  if (!force && studioDirty() && id !== state.studio.id) {
+    return confirmDialog({ title: "Descartar alterações?", message: `As mudanças em <strong>${escapeHtml(state.studio.draft.name || "este plano")}</strong> ainda não foram salvas.`, confirmLabel: "Descartar e trocar", danger: true }).then((ok) => { if (ok) go(); });
+  }
+  go();
+  return Promise.resolve();
+}
+
+async function startNewPlan(from = null) {
+  if (studioDirty()) {
+    const ok = await confirmDialog({ title: "Descartar alterações?", message: "Há mudanças não salvas no plano aberto.", confirmLabel: "Descartar", danger: true });
+    if (!ok) return;
+  }
+  const draft = planToDraft(from);
+  draft.isNew = true;
+  draft.subscribers = { active: 0, trial: 0 };
+  draft.updatedAt = null;
+  if (from) { draft.name = `${from.name} (cópia)`; draft.id = slugify(`${from.id}-copia`); draft.highlight = false; draft.order = Math.max(0, ...state.plans.map((item) => Number(item.order) || 0)) + 10; }
+  else { draft.id = ""; }
+  state.studio.id = null;
+  state.studio.draft = draft;
+  state.studio.original = "";
+  state.studio.tab = "showcase";
+  renderPlanList();
+  renderPlanEditor();
+  renderPlanPreview();
+  if (state.currentSection !== "plans") showSection("plans");
+  setTimeout(() => $("#adPlanForm [name=name]")?.focus(), 60);
+}
+
+// Lê um campo do editor para o rascunho.
+function readDraftField(target) {
+  const draft = state.studio.draft;
+  if (!draft || !target?.name && !target?.dataset?.benefit) return;
+  if (target.dataset.benefit !== undefined) { draft.benefits[Number(target.dataset.benefit)] = target.value; return; }
+  const name = target.name;
+  if (name === "price") { const cents = parseMoney(target.value); target.classList.toggle("is-invalid", Number.isNaN(cents)); if (!Number.isNaN(cents)) draft.priceCents = cents; }
+  else if (name === "yearlyPrice") { const cents = parseMoney(target.value); target.classList.toggle("is-invalid", Number.isNaN(cents)); if (!Number.isNaN(cents)) draft.yearlyPriceCents = cents; }
+  else if (name === "trialDays") draft.trialDays = Math.max(0, Math.min(60, Number(target.value) || 0));
+  else if (name === "aiDailyLimit") draft.aiDailyLimit = target.value.trim() === "" ? null : Number(target.value);
+  else if (name.startsWith("feature-")) draft.features[name.slice(8)] = target.checked;
+  else if (["highlight", "active"].includes(name)) draft[name] = target.checked;
+  else if (name === "id") { draft.id = slugify(target.value); }
+  else if (name === "name") { draft.name = target.value; if (draft.isNew && !$("#adPlanForm [name=id]")?.dataset.touched) { draft.id = slugify(target.value); const idInput = $("#adPlanForm [name=id]"); if (idInput) idInput.value = draft.id; } }
+  else if (["tagline", "description", "badge", "ctaLabel", "stripePriceId", "stripePriceIdYear"].includes(name)) draft[name] = target.value;
+  else if (["accent", "visibility", "billingInterval"].includes(name)) draft[name] = target.value;
+}
+
+function refreshPriceDerived() {
+  const draft = state.studio.draft;
+  const box = $("#psSavings");
+  if (box) {
+    const savings = yearlySavings(draft);
+    box.innerHTML = savings ? `<strong>−${savings}%</strong><span>de economia no anual</span>` : draft.yearlyPriceCents && draft.billingInterval === "month" ? `<strong class="is-warn">0%</strong><span>o anual não está mais barato que 12 meses</span>` : `<strong>—</strong><span>sem preço anual</span>`;
+  }
+  const yearlyOn = draft.billingInterval === "month";
+  $("#psYearlyBox")?.classList.toggle("is-muted", !yearlyOn);
+  const yearlyInput = $("#adPlanForm [name=yearlyPrice]");
+  if (yearlyInput) yearlyInput.disabled = !yearlyOn;
+  const yearlyPrice = $("#adPlanForm [name=stripePriceIdYear]");
+  if (yearlyPrice) yearlyPrice.disabled = !yearlyOn || !draft.yearlyPriceCents;
+  renderStripeChecklist();
+}
+
+async function savePlanDraft() {
+  const draft = state.studio.draft;
+  if (!draft) return;
+  const id = slugify(draft.id || draft.name);
+  const benefits = draft.benefits.map((item) => item.trim()).filter(Boolean);
+  const problems = [];
+  if (!draft.name.trim()) problems.push(["showcase", "Dê um nome ao plano."]);
+  if (id.length < 2) problems.push(["publish", "Identificador precisa de 2 a 40 letras/números."]);
+  if ($$("#adPlanForm input.is-invalid").length) problems.push(["price", "Confira os valores (use até duas casas decimais)."]);
+  if (draft.aiDailyLimit !== null && (!Number.isInteger(draft.aiDailyLimit) || draft.aiDailyLimit < 0 || draft.aiDailyLimit > 5000)) problems.push(["price", "Conversas com IA: número de 0 a 5000."]);
+  if (draft.stripePriceId && !/^price_[A-Za-z0-9]+$/.test(draft.stripePriceId.trim())) problems.push(["price", "Price ID mensal deve começar com price_."]);
+  if (draft.stripePriceIdYear && !/^price_[A-Za-z0-9]+$/.test(draft.stripePriceIdYear.trim())) problems.push(["price", "Price ID anual deve começar com price_."]);
+  if (draft.isNew && state.plans.some((plan) => plan.id === id)) problems.push(["publish", "Já existe um plano com esse identificador."]);
+  if (problems.length) {
+    state.studio.tab = problems[0][0];
+    renderPlanEditor();
+    toast(problems[0][1], true);
+    return;
+  }
+  const original = state.plans.find((plan) => plan.id === id);
+  const subscribers = (original?.subscribers?.active || 0) + (original?.subscribers?.trial || 0);
+  const changedAccess = original && ((original.active !== false) !== draft.active || Object.keys(FEATURE_LABELS).some((key) => planFeatureEnabled(original, key) !== draft.features[key]));
+  if (changedAccess && subscribers) {
+    const ok = await confirmDialog({ title: "Mudar o acesso de quem já tem o plano?", message: `Recursos ou situação do plano mudam para <strong>${plural(subscribers, "pessoa", "pessoas")}</strong> imediatamente.`, confirmLabel: "Salvar mesmo assim" });
+    if (!ok) return;
+  }
+  if (draft.highlight && state.plans.some((plan) => plan.highlight && plan.id !== id && plan.active !== false && plan.visibility !== "private")) {
+    toast("Dica: já existe outro plano em destaque. Um destaque só costuma vender melhor.");
+  }
+  const button = $("[data-plan-save]");
+  if (button) { button.disabled = true; button.textContent = "Salvando…"; }
+  try {
+    await request("plan-save", {
+      id, name: draft.name.trim(), description: draft.description, tagline: draft.tagline, benefits, badge: draft.badge, highlight: draft.highlight,
+      accent: draft.accent, ctaLabel: draft.ctaLabel, order: draft.order, priceCents: draft.priceCents, billingInterval: draft.billingInterval,
+      yearlyPriceCents: draft.billingInterval === "month" && draft.yearlyPriceCents ? draft.yearlyPriceCents : null,
+      stripePriceId: draft.stripePriceId.trim(), stripePriceIdYear: draft.billingInterval === "month" && draft.yearlyPriceCents ? draft.stripePriceIdYear.trim() : "",
+      trialDays: draft.trialDays, aiDailyLimit: draft.aiDailyLimit, visibility: draft.visibility, active: draft.active, features: draft.features,
+    });
+    toast(draft.isNew ? `Plano ${draft.name.trim()} criado.` : "Plano salvo. A vitrine do app já mostra a nova versão.");
+    state.studio.id = id;
+    state.studio.draft = null;
+    await loadPlans();
+  } catch (error) {
+    toast(errorText(error), true);
+    if (button) { button.disabled = false; button.innerHTML = `${icon("check")}Salvar plano`; }
+  }
+}
+
+function persistPlanOrder() {
+  clearTimeout(state.studio.orderTimer);
+  state.studio.orderTimer = setTimeout(async () => {
+    try {
+      await request("plan-order", { ids: state.plans.map((plan) => plan.id) });
+      state.plans.forEach((plan, index) => { plan.order = (index + 1) * 10; });
+      if (state.studio.draft && !state.studio.draft.isNew) {
+        const wasDirty = studioDirty();
+        state.studio.draft.order = state.plans.find((plan) => plan.id === state.studio.draft.id)?.order ?? state.studio.draft.order;
+        if (!wasDirty) state.studio.original = draftSignature(state.studio.draft);
+      }
+      renderPlanPreview();
+      toast("Ordem da vitrine atualizada.");
+    } catch (error) { toast(errorText(error), true); await loadPlans(); }
+  }, 450);
+}
+
+function movePlan(id, delta) {
+  const index = state.plans.findIndex((plan) => plan.id === id);
+  const next = index + delta;
+  if (index < 0 || next < 0 || next >= state.plans.length) return;
+  const [moved] = state.plans.splice(index, 1);
+  state.plans.splice(next, 0, moved);
+  renderPlanList();
+  const row = $(`#adPlansList [data-plan-id="${CSS.escape(id)}"]`);
+  row?.animate?.([{ transform: `translateY(${delta > 0 ? -18 : 18}px)`, opacity: .6 }, { transform: "none", opacity: 1 }], { duration: 260, easing: "cubic-bezier(.16, 1, .3, 1)" });
+  row?.querySelector(`[data-move-plan="${delta > 0 ? "down" : "up"}"]:not(:disabled)`)?.focus();
+  persistPlanOrder();
+}
+
+function openShowcaseModal() {
+  const plans = state.plans.filter((plan) => plan.active !== false && plan.visibility !== "private").map((plan) => draftAsPublic(planToDraft(plan)));
+  let interval = "month";
+  const draw = (body) => {
+    body.querySelector(".ps-showcase-toggle").innerHTML = renderIntervalToggle(plans, interval);
+    body.querySelector(".ps-showcase-cards").innerHTML = renderPlanCards(plans, { interval, preview: true });
+  };
+  openModal({
+    kicker: "VITRINE DO APP", title: "Como a pessoa vê os planos", wide: true,
+    body: `<div class="pc-scope ps-showcase"><p class="ac-confirm-text">Ordem, preços e textos exatamente como no app (Configurações → Plano e página Planos). Planos privados e inativos não aparecem.</p><div class="ps-showcase-toggle"></div><div class="ps-showcase-cards"></div></div>`,
+    actions: [{ label: "Fechar", kind: "primary" }],
+    onOpen: (body) => {
+      draw(body);
+      const onClick = (event) => { const button = event.target.closest?.("[data-plan-interval]"); if (button) { interval = button.dataset.planInterval; draw(body); } };
+      body.addEventListener("click", onClick);
+      return () => body.removeEventListener("click", onClick);
+    },
+  });
+  $("#adModal")?.classList.add("is-showcase");
+}
+
+function renderPlans() {
+  renderPlansStats();
+  if (state.studio.draft?.isNew) { renderPlanList(); renderPlanPreview(); }
+  else {
+    const keep = state.plans.some((plan) => plan.id === state.studio.id) ? state.studio.id : state.plans[0]?.id || null;
+    if (!studioDirty() || !state.studio.draft) {
+      state.studio.id = keep;
+      const plan = state.plans.find((item) => item.id === keep);
+      state.studio.draft = plan ? planToDraft(plan) : null;
+      state.studio.original = state.studio.draft ? draftSignature(state.studio.draft) : "";
+      renderPlanEditor();
+    }
+    renderPlanList();
+    renderPlanPreview();
+  }
   const filter = $("#adUserPlanFilter");
   if (filter) filter.innerHTML = `<option value="">Todos os planos</option>${state.plans.map((plan) => `<option value="${escapeHtml(plan.id)}" ${state.userPlanFilter === plan.id ? "selected" : ""}>${escapeHtml(plan.name)}</option>`).join("")}`;
 }
 
-function openPlanModal(plan = null) {
-  const value = (key, fallback = "") => escapeHtml(plan?.[key] ?? fallback);
-  const features = FEATURE_GROUPS.map(([group, keys]) => `<fieldset class="ac-feature-group"><legend>${escapeHtml(group)}</legend>${keys.map((key) => `<label class="ac-switch ac-switch--row"><input type="checkbox" name="feature-${key}" ${plan ? (planFeatureEnabled(plan, key) ? "checked" : "") : "checked"} /><span class="ac-switch-ui" aria-hidden="true"></span><span><strong>${escapeHtml(FEATURE_LABELS[key][0])}</strong><small>${escapeHtml(FEATURE_LABELS[key][1])}</small></span></label>`).join("")}</fieldset>`).join("");
-  openModal({
-    kicker: plan ? "EDITAR PLANO" : "NOVO PLANO", title: plan ? plan.name : "Criar plano", wide: true,
-    body: `<div class="ad-form-row"><label class="ac-field">Nome<input name="name" maxlength="80" value="${value("name")}" placeholder="Pro" /></label><label class="ac-field">Identificador<input name="id" maxlength="40" value="${value("id")}" placeholder="pro" ${plan ? "readonly" : ""} pattern="[a-z0-9_-]{2,40}" /></label></div>
-      <label class="ac-field">Descrição<textarea name="description" maxlength="300" rows="2" placeholder="O que este plano entrega">${value("description")}</textarea></label>
-      <div class="ad-form-row"><label class="ac-field">Preço (R$)<input name="price" inputmode="decimal" value="${plan?.priceCents ? (plan.priceCents / 100).toFixed(2).replace(".", ",") : ""}" placeholder="0,00 = grátis" /></label><label class="ac-field">Ciclo<select name="billingInterval"><option value="month">Mensal</option><option value="year" ${plan?.billingInterval === "year" ? "selected" : ""}>Anual</option></select></label></div>
-      <div class="ad-form-row"><label class="ac-field">Quem vê<select name="visibility"><option value="public">Público — aparece para assinar</option><option value="private" ${plan?.visibility === "private" ? "selected" : ""}>Privado — só a equipe atribui</option></select></label><label class="ac-field">Conversas com IA por dia<input name="aiDailyLimit" type="number" min="0" max="5000" step="1" value="${Number.isInteger(plan?.aiDailyLimit) ? plan.aiDailyLimit : ""}" placeholder="padrão (10 grátis · 200 pago)" /></label></div>
-      <label class="ac-field">Stripe Price ID (opcional)<input name="stripePriceId" maxlength="128" value="${value("stripePriceId")}" placeholder="price_... — ativa o botão Assinar no app" autocomplete="off" /></label>
-      <div class="ad-core-features"><strong>Sempre incluído</strong><span>Planner e tarefas</span><span>Notas</span><span>Finanças</span><span>Metas</span></div>
-      ${features}
-      <label class="ac-switch ac-switch--row"><input type="checkbox" name="active" ${plan?.active === false ? "" : "checked"} /><span class="ac-switch-ui" aria-hidden="true"></span><span><strong>Plano ativo</strong><small>Desativado, ninguém novo recebe e quem tem perde os recursos.</small></span></label>`,
-    actions: [
-      { label: "Cancelar" },
-      { label: "Salvar plano", kind: "primary", busy: "Salvando…", onClick: async () => {
-        const form = $("#adModalBody");
-        const field = (name) => form.querySelector(`[name="${name}"]`);
-        const id = String(field("id").value || field("name").value).trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
-        const priceCents = parseMoney(field("price").value);
-        if (!field("name").value.trim() || id.length < 2) { toast("Dê um nome ao plano.", true); return true; }
-        if (Number.isNaN(priceCents)) { toast("Preço inválido (use até duas casas decimais).", true); return true; }
-        const aiRaw = field("aiDailyLimit").value.trim();
-        const features = Object.fromEntries(Object.keys(FEATURE_LABELS).map((key) => [key, field(`feature-${key}`).checked]));
-        if (aiRaw !== "" && (!Number.isInteger(Number(aiRaw)) || Number(aiRaw) < 0 || Number(aiRaw) > 5000)) { toast("Conversas com IA: número de 0 a 5000.", true); return true; }
-        // Lê tudo antes de qualquer confirmação (a confirmação usa o mesmo modal).
-        const payload = { id, name: field("name").value, description: field("description").value, priceCents,
-          billingInterval: field("billingInterval").value, visibility: field("visibility").value, stripePriceId: field("stripePriceId").value.trim(),
-          aiDailyLimit: aiRaw === "" ? null : Number(aiRaw), active: field("active").checked, features };
-        const changedAccess = plan && ((plan.active !== false) !== payload.active || Object.keys(FEATURE_LABELS).some((key) => planFeatureEnabled(plan, key) !== features[key]));
-        if (changedAccess && (plan.subscribers?.active || plan.subscribers?.trial)) {
-          const ok = await confirmDialog({ title: "Alterar recursos do plano?", message: `Isso muda o acesso de ${plural((plan.subscribers.active || 0) + (plan.subscribers.trial || 0), "pessoa", "pessoas")} imediatamente.`, confirmLabel: "Salvar mesmo assim" });
-          if (!ok) return false;
-        }
-        await request("plan-save", payload);
-        toast("Plano salvo.");
-        await loadPlans();
-        return false;
-      } },
-    ],
-    onOpen: (body) => {
-      if (plan) return null;
-      const name = body.querySelector("[name=name]");
-      const id = body.querySelector("[name=id]");
-      name.addEventListener("input", () => { if (!id.dataset.touched) id.value = name.value.trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40); });
-      id.addEventListener("input", () => { id.dataset.touched = "1"; });
-      return null;
-    },
+function bindPlanStudio() {
+  const section = $("#pn-console-plans");
+  if (!section) return;
+  section.addEventListener("click", (event) => {
+    const target = event.target;
+    const select = target.closest("[data-select-plan]");
+    if (select) { selectPlan(select.dataset.selectPlan); return; }
+    const move = target.closest("[data-move-plan]");
+    if (move) { movePlan(move.closest("[data-plan-id]").dataset.planId, move.dataset.movePlan === "up" ? -1 : 1); return; }
+    const tab = target.closest("[data-plan-tab]");
+    if (tab) {
+      state.studio.tab = tab.dataset.planTab;
+      for (const button of $$("[data-plan-tab]", section)) { const on = button === tab; button.classList.toggle("is-active", on); button.setAttribute("aria-selected", String(on)); }
+      for (const panel of $$(".ps-panel", section)) panel.hidden = panel.id !== `psPanel-${state.studio.tab}`;
+      positionTabInk();
+      if (state.studio.tab === "price") renderStripeChecklist();
+      return;
+    }
+    const badge = target.closest("[data-badge-pick]");
+    if (badge) {
+      const input = $("#adPlanForm [name=badge]");
+      const value = state.studio.draft.badge === badge.dataset.badgePick ? "" : badge.dataset.badgePick;
+      state.studio.draft.badge = value;
+      if (input) input.value = value;
+      for (const item of $$("[data-badge-pick]", section)) item.classList.toggle("is-on", item.dataset.badgePick === value);
+      syncDirty(); renderPlanPreview(); return;
+    }
+    const draft = state.studio.draft;
+    if (target.closest("[data-benefit-add]") && draft) { draft.benefits.push(""); rerenderBenefits(draft.benefits.length - 1); return; }
+    const remove = target.closest("[data-benefit-remove]");
+    if (remove && draft) { draft.benefits.splice(Number(remove.dataset.benefitRemove), 1); rerenderBenefits(); return; }
+    const bmove = target.closest("[data-benefit-move]");
+    if (bmove && draft) {
+      const index = Number(bmove.dataset.index);
+      const next = index + (bmove.dataset.benefitMove === "up" ? -1 : 1);
+      [draft.benefits[index], draft.benefits[next]] = [draft.benefits[next], draft.benefits[index]];
+      rerenderBenefits(next);
+      return;
+    }
+    if (target.closest("[data-plan-save]")) { savePlanDraft(); return; }
+    if (target.closest("[data-plan-discard]")) {
+      if (state.studio.draft?.isNew) { state.studio.draft = null; renderPlans(); return; }
+      selectPlan(state.studio.id, { force: true });
+      toast("Alterações descartadas.");
+      return;
+    }
+    if (target.closest("[data-plan-dup]")) { startNewPlan(state.plans.find((plan) => plan.id === state.studio.id)); return; }
+    const mode = target.closest("[data-preview-mode]");
+    if (mode) { state.studio.mode = mode.dataset.previewMode; segOn(mode); renderPlanPreview(); return; }
+    const device = target.closest("[data-preview-device]");
+    if (device) { state.studio.device = device.dataset.previewDevice; segOn(device); $(".ps-stage").dataset.device = state.studio.device; return; }
+    const interval = target.closest("[data-preview-interval]") || target.closest("#adPlanPreview [data-plan-interval]");
+    if (interval) {
+      state.studio.interval = interval.dataset.previewInterval || interval.dataset.planInterval;
+      for (const button of $$("[data-preview-interval]", section)) button.classList.toggle("is-on", button.dataset.previewInterval === state.studio.interval);
+      renderPlanPreview();
+    }
   });
+  const onEdit = (event) => {
+    if (!event.target.closest("#adPlanForm")) return;
+    if (event.target.name === "id") event.target.dataset.touched = "1";
+    readDraftField(event.target);
+    if (["name"].includes(event.target.name)) { const title = $(".ps-editor-head h3"); if (title) title.textContent = state.studio.draft.name || "Novo plano"; if (state.studio.draft.isNew) renderPlanList(); }
+    if (["accent"].includes(event.target.name) && state.studio.draft.isNew) renderPlanList();
+    if (["price", "yearlyPrice", "billingInterval", "stripePriceId", "stripePriceIdYear"].includes(event.target.name)) refreshPriceDerived();
+    if (event.target.name === "badge") for (const item of $$("[data-badge-pick]", section)) item.classList.toggle("is-on", item.dataset.badgePick === event.target.value);
+    syncDirty();
+    renderPlanPreview();
+  };
+  section.addEventListener("input", onEdit);
+  section.addEventListener("change", onEdit);
+  // Arrastar para reordenar (mouse); no toque, as setas fazem o mesmo.
+  const list = $("#adPlansList");
+  list?.addEventListener("dragstart", (event) => {
+    const item = event.target.closest?.("[data-plan-id]");
+    if (!item) return;
+    state.studio.dragId = item.dataset.planId;
+    item.classList.add("is-dragging");
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", item.dataset.planId);
+  });
+  list?.addEventListener("dragover", (event) => {
+    const over = event.target.closest?.("[data-plan-id]");
+    if (!over || !state.studio.dragId || over.dataset.planId === state.studio.dragId) return;
+    event.preventDefault();
+    const rect = over.getBoundingClientRect();
+    const after = event.clientY > rect.top + rect.height / 2;
+    for (const item of $$(".ps-item", list)) item.classList.remove("drop-before", "drop-after");
+    over.classList.add(after ? "drop-after" : "drop-before");
+  });
+  list?.addEventListener("drop", (event) => {
+    event.preventDefault();
+    const over = event.target.closest?.("[data-plan-id]");
+    const dragId = state.studio.dragId;
+    if (!over || !dragId || over.dataset.planId === dragId) return;
+    const after = over.classList.contains("drop-after");
+    const [moved] = state.plans.splice(state.plans.findIndex((plan) => plan.id === dragId), 1);
+    const target = state.plans.findIndex((plan) => plan.id === over.dataset.planId);
+    state.plans.splice(after ? target + 1 : target, 0, moved);
+    renderPlanList();
+    persistPlanOrder();
+  });
+  list?.addEventListener("dragend", () => { state.studio.dragId = null; for (const item of $$(".ps-item", list)) item.classList.remove("is-dragging", "drop-before", "drop-after"); });
+  $("#adPlansShowcase")?.addEventListener("click", openShowcaseModal);
+  if (typeof window?.addEventListener === "function") window.addEventListener("beforeunload", (event) => { if (studioDirty()) { event.preventDefault(); event.returnValue = ""; } });
+}
+
+function segOn(button) {
+  for (const item of $$("button", button.parentElement)) item.classList.toggle("is-on", item === button);
+}
+
+function rerenderBenefits(focusIndex = null) {
+  const box = $("#psBenefits");
+  if (!box) return;
+  box.outerHTML = benefitsEditor(state.studio.draft);
+  if (focusIndex !== null) $(`#psBenefits [data-benefit="${focusIndex}"]`)?.focus();
+  syncDirty();
+  renderPlanPreview();
 }
 
 // ── Recursos, operação e equipe ──────────────────────────────────────
@@ -1256,6 +1803,125 @@ function renderAdmins() {
   $("#adAdminFormLocked").hidden = owner;
   const roles = ["owner", "admin", "finance", "support", "viewer"];
   $("#adRolesMatrix").innerHTML = `<div class="ac-matrix-row ac-matrix-head"><span>Permissão</span>${roles.map((role) => `<span title="${escapeHtml(ROLE_INFO[role][0])}: ${escapeHtml(ROLE_INFO[role][1])}" data-short="${escapeHtml(ROLE_SHORT[role] || ROLE_INFO[role][0].slice(0, 4))}">${ROLE_INFO[role][0]}</span>`).join("")}</div>${PERMISSION_LABELS.map(([key, label]) => `<div class="ac-matrix-row"><span>${escapeHtml(label)}</span>${roles.map((role) => `<span>${ROLE_PERMISSIONS_UI[role].includes(key) ? `<b class="is-yes">${icon("check")}</b>` : `<b class="is-no">—</b>`}</span>`).join("")}</div>`).join("")}`;
+}
+
+// ── Paleta de comandos (Ctrl/⌘ K) ────────────────────────────────────
+// Busca pessoas, planos, telas e ações de qualquer lugar do painel.
+const SECTION_ICONS = { overview: "home", users: "users", subscriptions: "gift", plans: "layers", charges: "wallet", features: "sliders", integrations: "link", security: "shield", settings: "wrench" };
+const cmd = { items: [], index: 0, lastFocus: null };
+const normalizeText = (value) => String(value || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+
+function commandItems(query) {
+  const q = normalizeText(query.trim());
+  const match = (...values) => !q || values.some((value) => normalizeText(value).includes(q));
+  const actions = [
+    ["plan", "Novo plano", "Criar e publicar no estúdio", "plus", "plans.manage", () => startNewPlan(null)],
+    ["charge", "Nova cobrança", "Cobrar uma ou várias pessoas", "receipt", "charges.manage", () => openChargeModal([])],
+    ["showcase", "Ver vitrine do app", "Como a pessoa vê os planos", "eye", null, async () => { if (!state.plans.length) await loadPlans(); openShowcaseModal(); }],
+    ["csv", "Exportar usuários (CSV)", "Lista filtrada atual", "download", null, async () => { if (!state.directory.length) await loadDirectory(); exportUsersCsv(); }],
+    ["maint", state.config?.maintenance?.enabled ? "Encerrar manutenção" : "Ativar manutenção", "Operação do app", "wrench", "config.manage", () => showSection("settings")],
+    ["theme", "Alternar tema claro/escuro", "Aparência do painel", "sun", null, () => applyTheme(document.documentElement.dataset.theme === "light" ? "aurora" : "light")],
+    ["app", "Abrir meu PulseNote", "Voltar ao aplicativo", "external", null, () => { globalThis.location.href = "/app"; }],
+  ].filter(([, , , , perm]) => !perm || can(perm)).filter(([, title, sub]) => match(title, sub))
+    .map(([id, title, sub, iconName, , run]) => ({ group: "Ações", id: `a-${id}`, title, sub, icon: iconName, run }));
+  const sections = Object.entries(SECTION_LABELS).filter(([key, label]) => match(label, SECTION_SUBTITLES[key]))
+    .map(([key, label]) => ({ group: "Ir para", id: `s-${key}`, title: label, sub: SECTION_SUBTITLES[key], icon: SECTION_ICONS[key], run: () => showSection(key) }));
+  const plans = q ? state.plans.filter((plan) => match(plan.name, plan.id, plan.tagline)).slice(0, 4)
+    .map((plan) => ({ group: "Planos", id: `p-${plan.id}`, title: plan.name, sub: `${plan.priceCents ? `${money(plan.priceCents)}/${plan.billingInterval === "year" ? "ano" : "mês"}` : "Grátis"} · ${plan.visibility === "private" ? "privado" : "público"}`, icon: "layers", run: async () => { await showSection("plans"); selectPlan(plan.id); } })) : [];
+  const people = q.length >= 2 ? state.directory.filter((user) => match(user.displayName, user.email)).slice(0, 6)
+    .map((user) => ({ group: "Pessoas", id: `u-${user.uid}`, title: user.displayName || user.email, sub: `${user.email} · ${statusInfo(user)[1]}`, avatar: user, run: async () => { if (state.currentSection !== "users") await showSection("users"); openUserDrawer(user.uid); } })) : [];
+  return q ? [...people, ...plans, ...actions, ...sections] : [...actions.slice(0, 4), ...sections];
+}
+
+function renderCommandList() {
+  const list = $("#adCmdList");
+  if (!list) return;
+  const items = cmd.items;
+  if (!items.length) { list.innerHTML = `<div class="st-cmd-empty">${icon("search")}Nada encontrado. Tente um nome, e-mail ou plano.</div>`; return; }
+  let group = "";
+  list.innerHTML = items.map((item, index) => {
+    const head = item.group !== group ? `<div class="st-cmd-group" role="presentation">${escapeHtml((group = item.group))}</div>` : "";
+    return `${head}<button type="button" role="option" id="adCmd-${index}" class="st-cmd-item${index === cmd.index ? " is-active" : ""}" aria-selected="${index === cmd.index}" data-cmd-index="${index}">
+      ${item.avatar ? avatarHtml(item.avatar, "is-sm") : `<span class="st-cmd-ico">${icon(item.icon)}</span>`}
+      <span class="st-cmd-copy"><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.sub || "")}</small></span>${icon("arrow-right")}</button>`;
+  }).join("");
+  $("#adCmdInput")?.setAttribute("aria-activedescendant", `adCmd-${cmd.index}`);
+  list.querySelector(".is-active")?.scrollIntoView({ block: "nearest" });
+}
+
+function openCommand() {
+  const box = $("#adCmd");
+  if (!box || !box.hidden || $(".ad-shell")?.classList.contains("is-locked")) return;
+  cmd.lastFocus = document.activeElement;
+  box.hidden = false;
+  document.documentElement.classList.add("st-cmd-open");
+  const input = $("#adCmdInput");
+  input.value = "";
+  cmd.index = 0;
+  cmd.items = commandItems("");
+  renderCommandList();
+  requestAnimationFrame(() => input.focus());
+  if (!state.directory.length) loadDirectory().then(() => { if (!box.hidden && input.value) { cmd.items = commandItems(input.value); renderCommandList(); } }).catch(() => {});
+}
+
+function closeCommand() {
+  const box = $("#adCmd");
+  if (!box || box.hidden) return;
+  box.classList.add("is-leaving");
+  setTimeout(() => { box.hidden = true; box.classList.remove("is-leaving"); document.documentElement.classList.remove("st-cmd-open"); }, prefersReducedMotionAdmin() ? 0 : 140);
+  cmd.lastFocus?.focus?.({ preventScroll: true });
+}
+
+function runCommand(index) {
+  const item = cmd.items[index];
+  if (!item) return;
+  closeCommand();
+  Promise.resolve(item.run()).catch((error) => toast(errorText(error), true));
+}
+
+const prefersReducedMotionAdmin = () => globalThis.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+
+function bindCommandPalette() {
+  $("#adCmdTrigger")?.addEventListener("click", openCommand);
+  document.addEventListener("keydown", (event) => {
+    const typing = event.target?.closest?.("input, textarea, select, [contenteditable]");
+    if ((event.key === "k" || event.key === "K") && (event.ctrlKey || event.metaKey)) { event.preventDefault(); if ($("#adCmd").hidden) openCommand(); else closeCommand(); return; }
+    if (event.key === "/" && !typing && $("#adCmd")?.hidden && $("#adModal")?.hidden) { event.preventDefault(); openCommand(); }
+  });
+  $("#adCmdInput")?.addEventListener("input", (event) => { cmd.items = commandItems(event.target.value); cmd.index = 0; renderCommandList(); });
+  $("#adCmdInput")?.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      if (!cmd.items.length) return;
+      cmd.index = (cmd.index + (event.key === "ArrowDown" ? 1 : -1) + cmd.items.length) % cmd.items.length;
+      renderCommandList();
+    } else if (event.key === "Enter") { event.preventDefault(); runCommand(cmd.index); }
+    else if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); closeCommand(); }
+  });
+  $("#adCmd")?.addEventListener("click", (event) => {
+    if (event.target.closest?.("[data-cmd-close]")) { closeCommand(); return; }
+    const button = event.target.closest?.("[data-cmd-index]");
+    if (button) runCommand(Number(button.dataset.cmdIndex));
+  });
+  $("#adCmdList")?.addEventListener("pointermove", (event) => {
+    const button = event.target.closest?.("[data-cmd-index]");
+    if (!button || Number(button.dataset.cmdIndex) === cmd.index) return;
+    cmd.index = Number(button.dataset.cmdIndex);
+    for (const item of $$(".st-cmd-item", $("#adCmdList"))) { const on = item === button; item.classList.toggle("is-active", on); item.setAttribute("aria-selected", String(on)); }
+  });
+}
+
+function bindQuickActions() {
+  $("#adQuick")?.addEventListener("click", async (event) => {
+    const action = event.target.closest?.("[data-quick]")?.dataset.quick;
+    if (!action) return;
+    try {
+      if (action === "charge") await openChargeModal([]);
+      if (action === "plan") await startNewPlan(null);
+      if (action === "trial") { state.userFilter = "none"; await showSection("users"); toast("Selecione as pessoas na lista e toque em “Dar teste”."); }
+      if (action === "showcase") { if (!state.plans.length) await loadPlans(); openShowcaseModal(); }
+    } catch (error) { toast(errorText(error), true); }
+  });
 }
 
 // ── Carregamento ─────────────────────────────────────────────────────
@@ -1362,7 +2028,7 @@ async function showSection(section) {
   if (!SECTION_LABELS[section]) return;
   state.currentSection = section;
   const sequence = ++state.loadSequence;
-  $("#adPageTitle").textContent = section === "overview" ? (isCompact() ? "Administração" : "Administração do PulseNote") : SECTION_LABELS[section];
+  $("#adPageTitle").textContent = section === "overview" ? (isCompact() ? "Administração" : "Visão geral") : SECTION_LABELS[section];
   $("#adPageSubtitle").textContent = section === "overview" && isCompact() ? "Gerencie a operação do PulseNote." : SECTION_SUBTITLES[section];
   document.querySelectorAll(".pn-console-view").forEach((element) => element.classList.toggle("is-active", element.id === `pn-console-${section}`));
   document.querySelectorAll("[data-section]").forEach((button) => button.classList.toggle("is-active", button.dataset.section === section));
@@ -1436,6 +2102,7 @@ function bindNavigation() {
   $("#adRefreshButton")?.addEventListener("click", async () => { state.directoryAt = 0; await showSection(state.currentSection); toast("Dados atualizados."); });
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
+    if ($("#adCmd") && !$("#adCmd").hidden) { closeCommand(); return; }
     if ($("#adModal") && !$("#adModal").hidden) { closeModal(); return; }
     if ($("#adUserDrawer")?.classList.contains("is-open")) { closeUserDrawer(); return; }
     if ($("#adAuditDrawer")?.classList.contains("is-open")) { closeAuditDrawer(); return; }
@@ -1553,8 +2220,6 @@ function bindActions() {
       try { await request("user-update", { uid, disabled }); toast(disabled ? "Conta desativada." : "Conta reativada."); await refreshAfterChange(); } catch (error) { toast(errorText(error), true); }
       return;
     }
-    const editPlan = target.closest("[data-edit-plan]");
-    if (editPlan) { openPlanModal(state.plans.find((plan) => plan.id === editPlan.dataset.editPlan)); return; }
     const chargeButton = target.closest("[data-charge-status]");
     if (chargeButton) {
       const id = chargeButton.closest("[data-charge-id]")?.dataset.chargeId;
@@ -1593,7 +2258,7 @@ function bindActions() {
   });
 
   // Planos e cobranças
-  $("#adNewPlan")?.addEventListener("click", () => openPlanModal(null));
+  $("#adNewPlan")?.addEventListener("click", () => startNewPlan(null));
   $("#adNewCharge")?.addEventListener("click", () => openChargeModal([]));
   $("#adChargeSearch")?.addEventListener("input", (event) => { state.chargeSearch = event.target.value; renderCharges(); });
   $("#adPaymentForm")?.addEventListener("submit", async (event) => {
@@ -1675,12 +2340,16 @@ function bindActions() {
 
 bindNavigation();
 bindActions();
+bindPlanStudio();
+bindCommandPalette();
+bindQuickActions();
+bindGrowthCrosshair();
 if (isCompact()) {
   $("#adPageTitle").textContent = "Administração";
   $("#adPageSubtitle").textContent = "Gerencie a operação do PulseNote.";
 }
 
-onAuthStateChanged(auth, async (user) => {
+async function handleAuthUser(user) {
   const sequence = ++state.authSequence;
   state.user = user;
   // A resposta de uma sessão anterior nunca deve reabrir o painel após logout
@@ -1732,4 +2401,11 @@ onAuthStateChanged(auth, async (user) => {
       : `Não foi possível validar o acesso agora. <button type="button" id="adRetry">Tentar novamente</button>`;
     $("#adRetry")?.addEventListener("click", () => location.reload());
   }
-});
+}
+
+if (PREVIEW) {
+  document.documentElement.classList.add("ad-preview");
+  import("./admin-preview.js").then((module) => { previewModule = module; handleAuthUser(module.previewUser); });
+} else {
+  onAuthStateChanged(auth, handleAuthUser);
+}
