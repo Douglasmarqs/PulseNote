@@ -209,13 +209,51 @@ function relativeTime(value) {
   if (!value) return "nunca";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "—";
-  const seconds = Math.round((date.getTime() - Date.now()) / 1000);
+  const seconds = Math.min(0, Math.round((date.getTime() - Date.now()) / 1000));
+  if (seconds > -60) return "agora mesmo";
   const units = [["year", 31536000], ["month", 2592000], ["day", 86400], ["hour", 3600], ["minute", 60]];
   const formatter = new Intl.RelativeTimeFormat("pt-BR", { numeric: "auto" });
   for (const [unit, size] of units) {
     if (Math.abs(seconds) >= size || unit === "minute") return formatter.format(Math.round(seconds / size), unit);
   }
   return "agora";
+}
+
+// Data e hora por extenso curto: "28 nov 2026, 18:59" (ano some quando é o atual).
+function dateTimeShort(value, { time = true } = {}) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const sameYear = date.getFullYear() === new Date().getFullYear();
+  const text = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short", year: sameYear ? undefined : "numeric", hour: time ? "2-digit" : undefined, minute: time ? "2-digit" : undefined, timeZone: "America/Sao_Paulo" }).format(date);
+  return text.replace(/\./g, "").replace(" de ", " ").replace(" de ", " ");
+}
+
+function daysSince(value) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : Math.max(0, Math.floor((Date.now() - date.getTime()) / 86400000));
+}
+
+// Quão recente foi o último uso: cor + rótulo (hoje, semana, mês, inativa).
+function freshness(value) {
+  if (!value) return { tone: "is-never", label: "Nunca usou o app" };
+  const days = daysSince(value);
+  if (days === null) return { tone: "is-never", label: "Sem registro" };
+  const hours = (Date.now() - new Date(value).getTime()) / 3600000;
+  if (hours < 24) return { tone: "is-hot", label: "Ativa hoje" };
+  if (days <= 7) return { tone: "is-warm", label: "Ativa nesta semana" };
+  if (days <= 30) return { tone: "is-cool", label: "Ativa neste mês" };
+  return { tone: "is-cold", label: `Inativa há ${plural(days, "dia", "dias")}` };
+}
+
+function tenureText(value) {
+  const days = daysSince(value);
+  if (days === null) return "";
+  if (days < 1) return "conta nova, de hoje";
+  if (days < 60) return `${plural(days, "dia", "dias")} de conta`;
+  const months = Math.floor(days / 30.44);
+  if (months < 24) return `${plural(months, "mês", "meses")} de conta`;
+  return `${plural(Math.floor(days / 365.25), "ano", "anos")} de conta`;
 }
 
 function todayIso() {
@@ -860,6 +898,12 @@ function renderUserFilters() {
   }).join("");
 }
 
+function seenCell(user) {
+  const access = user.lastActiveAt || user.lastSignInAt;
+  const fresh = freshness(access);
+  return `<span class="ux-seen ${fresh.tone}" title="${escapeHtml(`${fresh.label}${access ? ` · ${readableTimestamp(access)}` : ""}`)}"><i aria-hidden="true"></i><span><b>${escapeHtml(access ? relativeTime(access) : "nunca")}</b><small>${escapeHtml(access ? dateTimeShort(access) : "sem acesso registrado")}</small></span></span>`;
+}
+
 function userRowHtml(user, { selectable = true, compact = false } = {}) {
   const [tone, label] = statusInfo(user);
   const checked = state.selection.has(user.uid);
@@ -869,7 +913,8 @@ function userRowHtml(user, { selectable = true, compact = false } = {}) {
     <button type="button" class="ac-cell ac-usercell" role="cell" data-user-detail="${escapeHtml(user.uid)}">${avatarHtml(user)}<span><strong>${escapeHtml(user.displayName || user.email || "Sem nome")}${user.admin ? ` <em class="ac-tag">Equipe</em>` : ""}</strong><small>${escapeHtml(user.email || user.uid)}</small></span></button>
     <span class="ac-cell" role="cell" data-label="Plano">${user.planName ? `<span class="ac-chip">${escapeHtml(user.planName)}</span>` : `<span class="ac-chip is-muted">—</span>`}</span>
     <span class="ac-cell" role="cell" data-label="Situação"><span class="ac-status ${tone}"><i></i>${escapeHtml(label)}</span></span>
-    <span class="ac-cell ac-muted" role="cell" data-label="Último acesso" title="${escapeHtml(readableTimestamp(access))}">${escapeHtml(relativeTime(access))}</span>
+    <span class="ac-cell" role="cell" data-label="Último acesso">${seenCell(user)}</span>
+    ${compact ? "" : `<span class="ac-cell ux-born" role="cell" data-label="Conta criada"><b>${escapeHtml(user.createdAt ? relativeTime(user.createdAt) : "—")}</b><small>${escapeHtml(dateTimeShort(user.createdAt, { time: false }))}</small></span>`}
     ${compact ? "" : `<span class="ac-cell" role="cell" data-label="Cobrança">${user.pending?.count ? `<span class="ac-chip is-warn">${money(user.pending.cents)}</span>` : `<span class="ac-muted">—</span>`}</span>`}
     <span class="ac-cell ac-actions" role="cell"><button type="button" class="ac-icon-btn" data-user-detail="${escapeHtml(user.uid)}" aria-label="Gerenciar ${escapeHtml(user.email || "usuário")}">${icon("dots-h")}</button></span>
   </div>`;
@@ -883,7 +928,7 @@ function renderUsers() {
   const visible = users.slice(0, state.userLimit);
   const allVisibleSelected = visible.length > 0 && visible.every((user) => state.selection.has(user.uid));
   list.innerHTML = visible.length
-    ? `<div class="ac-row ac-head" role="row"><label class="ac-cell ac-check" role="columnheader"><input type="checkbox" id="adSelectAll" ${allVisibleSelected ? "checked" : ""} aria-label="Selecionar todos os exibidos" /></label><span class="ac-cell" role="columnheader">Usuário</span><span class="ac-cell" role="columnheader">Plano</span><span class="ac-cell" role="columnheader">Situação</span><span class="ac-cell" role="columnheader">Último acesso</span><span class="ac-cell" role="columnheader">Cobrança</span><span class="ac-cell" role="columnheader"></span></div>${visible.map((user) => userRowHtml(user)).join("")}`
+    ? `<div class="ac-row ac-head" role="row"><label class="ac-cell ac-check" role="columnheader"><input type="checkbox" id="adSelectAll" ${allVisibleSelected ? "checked" : ""} aria-label="Selecionar todos os exibidos" /></label><span class="ac-cell" role="columnheader">Usuário</span><span class="ac-cell" role="columnheader">Plano</span><span class="ac-cell" role="columnheader">Situação</span><span class="ac-cell" role="columnheader">Último acesso</span><span class="ac-cell" role="columnheader">Conta criada</span><span class="ac-cell" role="columnheader">Cobrança</span><span class="ac-cell" role="columnheader"></span></div>${visible.map((user) => userRowHtml(user)).join("")}`
     : `<div class="ad-empty">${state.directory.length ? "Nenhum usuário encontrado com esses filtros." : "Carregando usuários…"}</div>`;
   $("#adUsersPageLabel").textContent = users.length ? `Mostrando ${visible.length.toLocaleString("pt-BR")} de ${users.length.toLocaleString("pt-BR")}` : "";
   $("#adUsersNext").hidden = visible.length >= users.length;
@@ -1056,14 +1101,13 @@ function drawerSummary(user, detail) {
   const aiPct = aiLimit ? Math.min(100, Math.round((aiToday / aiLimit) * 100)) : 0;
   const stat = (iconName, value, name) => `<div class="pf-stat"><span class="pf-stat-ico">${icon(iconName)}</span><strong data-count="${Number(value) || 0}">${(Number(value) || 0).toLocaleString("pt-BR")}</strong><small>${name}</small></div>`;
   const channel = (on, iconName, text) => `<span class="pf-channel ${on ? "is-on" : ""}">${icon(iconName)}${escapeHtml(text)}<i>${on ? "ligado" : "desligado"}</i></span>`;
-  const last = detail.lastActiveAt || user.lastActiveAt;
   return `${drawerPlanCard(user, detail)}${drawerActions(user)}
     <div class="pf-block" style="--i:2"><div class="pf-block-head"><span>Uso no app</span><small>Só totais · conteúdo pessoal fica privado</small></div>
       <div class="pf-stats">${stat("check-circle", activity.tasks, "Tarefas")}${stat("note", activity.notes, "Notas")}${stat("calendar", activity.events, "Compromissos")}${stat("trend", activity.goals, "Metas")}${stat("wallet", activity.finances, "Lançamentos")}${stat("sparkle", aiToday, "Conversas IA hoje")}</div>
       <div class="pf-ai"><div><strong>Pulsinho hoje</strong><small>${aiLimit ? `${aiToday.toLocaleString("pt-BR")} de ${aiLimit.toLocaleString("pt-BR")} conversas` : `${aiToday.toLocaleString("pt-BR")} conversas · sem limite`}</small></div><div class="pf-meter ${aiPct >= 90 ? "is-hot" : ""}"><i style="--to:${aiLimit ? aiPct : 4}%"></i></div></div>
     </div>
-    <div class="pf-block" style="--i:3"><div class="pf-block-head"><span>Atividade e canais</span></div>
-      <p class="pf-last">${icon("clock")}${last ? `Usou o app ${escapeHtml(relativeTime(last))}${detail.lastArea ? ` · em <strong>${escapeHtml(AREA_LABELS[detail.lastArea] || detail.lastArea)}</strong>` : ""}` : "Ainda não usou o app"}</p>
+    <div class="pf-block" style="--i:3"><div class="pf-block-head"><span>Linha da conta</span><small>${escapeHtml(tenureText(user.createdAt))}</small></div>
+      ${drawerJourney(user, detail)}
       <div class="pf-channels">${channel(detail.whatsappLinked, "whatsapp", "WhatsApp")}${channel(detail.whatsappReminderEnabled, "clock", "Lembretes no WhatsApp")}${channel(detail.pushEnabled, "phone", "Notificações push")}</div>
     </div>
     ${drawerDanger(user, 4)}`;
@@ -1142,9 +1186,9 @@ function drawerAccount(user, detail) {
       ${row("E-mail", escapeHtml(user.email || "—"), user.email || "")}
       ${row("Entrada", user.provider === "google" ? "Google" : "E-mail e senha")}
       ${row("E-mail confirmado", user.emailVerified ? `<span class="ac-status is-on"><i></i>Sim</span>` : `<span class="ac-status is-warn"><i></i>Não</span>`)}
-      ${row("Criada em", escapeHtml(readableTimestamp(user.createdAt)))}
-      ${row("Último login", escapeHtml(readableTimestamp(user.lastSignInAt)))}
-      ${row("Último uso", last ? `${escapeHtml(readableTimestamp(last))}${detail.lastArea ? ` · ${escapeHtml(AREA_LABELS[detail.lastArea] || detail.lastArea)}` : ""}` : "—")}
+      ${row("Criada em", `${user.createdAt ? `<span class="pf-when"><b>${escapeHtml(dateTimeShort(user.createdAt))}</b><small>${escapeHtml(relativeTime(user.createdAt))}</small></span>` : "—"}`)}
+      ${row("Último login", `${user.lastSignInAt ? `<span class="pf-when"><b>${escapeHtml(dateTimeShort(user.lastSignInAt))}</b><small>${escapeHtml(relativeTime(user.lastSignInAt))}</small></span>` : "—"}`)}
+      ${row("Último uso", `${last ? `<span class="pf-when"><b>${escapeHtml(dateTimeShort(last))}</b><small>${escapeHtml(relativeTime(last))}</small></span>` : "—"}${last && detail.lastArea ? ` <span class="pf-area">${escapeHtml(AREA_LABELS[detail.lastArea] || detail.lastArea)}</span>` : ""}`)}
       ${row("ID da conta", `<code>${escapeHtml(user.uid)}</code>`, user.uid)}
     </dl></div>${drawerDanger(user, 1)}`;
 }
@@ -1153,8 +1197,45 @@ function drawerSkeleton() {
   return `<div class="pf-skel"><i class="is-card"></i><i></i><i></i><i class="is-short"></i><i></i></div>`;
 }
 
+function drawerVitals(user, detail) {
+  const used = detail?.lastActiveAt || user.lastActiveAt;
+  const fresh = freshness(used);
+  const area = detail?.lastArea ? AREA_LABELS[detail.lastArea] || detail.lastArea : "";
+  const tile = (cls, iconName, title, big, small, tip) => `<div class="pf-vital ${cls}" title="${escapeHtml(tip)}"><span class="pf-vital-ico">${icon(iconName)}</span><small>${title}</small><strong>${escapeHtml(big)}</strong><span>${escapeHtml(small)}</span></div>`;
+  return `<div class="pf-vitals">
+    ${tile(`is-seen ${fresh.tone}`, "clock", "Último acesso", used ? relativeTime(used) : "Nunca", used ? [dateTimeShort(used), area].filter(Boolean).join(" · ") : "Ainda não usou o app", used ? readableTimestamp(used) : "")}
+    ${tile("is-born", "user-plus", "Conta criada", user.createdAt ? relativeTime(user.createdAt) : "—", user.createdAt ? readableDate(user.createdAt) : "", user.createdAt ? `${readableTimestamp(user.createdAt)} · ${tenureText(user.createdAt)}` : "")}
+    ${tile("is-login", "key", "Último login", user.lastSignInAt ? relativeTime(user.lastSignInAt) : "—", user.lastSignInAt ? dateTimeShort(user.lastSignInAt) : "", user.lastSignInAt ? `${readableTimestamp(user.lastSignInAt)} · ${user.provider === "google" ? "Google" : "e-mail e senha"}` : "")}
+  </div>`;
+}
+
+// Linha da conta: da criação até hoje, com o último login e o último uso.
+function drawerJourney(user, detail) {
+  const start = new Date(user.createdAt || 0).getTime();
+  const now = Date.now();
+  if (!user.createdAt || !(now > start)) return "";
+  const pos = (value) => (value ? Math.max(0, Math.min(100, ((new Date(value).getTime() - start) / (now - start)) * 100)) : null);
+  const used = detail.lastActiveAt || user.lastActiveAt;
+  const use = pos(used);
+  const login = pos(user.lastSignInAt);
+  const area = detail.lastArea ? AREA_LABELS[detail.lastArea] || detail.lastArea : "";
+  return `<div class="pf-journey">
+    <div class="pf-track" role="img" aria-label="Conta criada ${escapeHtml(dateTimeShort(user.createdAt, { time: false }))}, último uso ${escapeHtml(used ? relativeTime(used) : "nunca")}">
+      <i class="pf-track-fill" style="--to:${use ?? 0}%"></i>
+      ${login !== null ? `<span class="pf-mark is-login" style="--at:${login.toFixed(1)}%"></span>` : ""}
+      ${use !== null ? `<span class="pf-mark is-use" style="--at:${use.toFixed(1)}%"></span>` : ""}
+    </div>
+    <div class="pf-track-ends"><span>${icon("user-plus")}Criada ${escapeHtml(dateTimeShort(user.createdAt, { time: false }))}</span><span>Hoje</span></div>
+    <ul class="pf-legend">
+      <li><i class="is-use"></i><span>Último uso do app</span><b>${escapeHtml(used ? relativeTime(used) : "nunca")}</b><small>${escapeHtml(used ? [dateTimeShort(used), area].filter(Boolean).join(" · ") : "")}</small></li>
+      <li><i class="is-login"></i><span>Último login</span><b>${escapeHtml(user.lastSignInAt ? relativeTime(user.lastSignInAt) : "—")}</b><small>${escapeHtml(dateTimeShort(user.lastSignInAt))}</small></li>
+    </ul>
+  </div>`;
+}
+
 function renderUserDrawer(user, detail) {
   const [tone, label] = statusInfo(user);
+  const fresh = freshness(detail?.lastActiveAt || user.lastActiveAt);
   const list = drawerList();
   const index = list.findIndex((item) => item.uid === user.uid);
   const tab = state.drawer.tab;
@@ -1181,9 +1262,10 @@ function renderUserDrawer(user, detail) {
         <div class="pf-who">
           <h2 id="adUserDrawerTitle">${escapeHtml(user.displayName || user.email || "Usuário")}</h2>
           ${user.email ? `<button type="button" class="pf-mail" data-copy-text="${escapeHtml(user.email)}" title="Copiar e-mail"><span>${escapeHtml(user.email)}</span>${icon("copy")}</button>` : ""}
-          <div class="pf-chips"><span class="ac-status ${tone}"><i></i>${escapeHtml(label)}</span>${user.admin ? `<span class="pf-tag">${icon("shield")}Equipe</span>` : ""}${user.disabled ? `<span class="pf-tag is-danger">${icon("lock")}Desativada</span>` : ""}${user.pending?.count ? `<span class="pf-tag is-warn">${icon("receipt")}${money(user.pending.cents)} a receber</span>` : ""}</div>
+          <div class="pf-chips"><span class="ac-status ${tone}"><i></i>${escapeHtml(label)}</span><span class="pf-fresh ${fresh.tone}"><i></i>${escapeHtml(fresh.label)}</span>${user.admin ? `<span class="pf-tag">${icon("shield")}Equipe</span>` : ""}${user.disabled ? `<span class="pf-tag is-danger">${icon("lock")}Desativada</span>` : ""}${user.pending?.count ? `<span class="pf-tag is-warn">${icon("receipt")}${money(user.pending.cents)} a receber</span>` : ""}</div>
         </div>
       </div>
+      ${drawerVitals(user, detail)}
       <nav class="pf-tabs" role="tablist" aria-label="Seções da ficha">${DRAWER_TABS.map(([key, text]) => `<button type="button" role="tab" id="pf-tab-${key}" aria-selected="${key === tab}" aria-controls="adDrawerDetail" tabindex="${key === tab ? 0 : -1}" data-drawer-tab="${key}">${text}${counts[key] ? `<em>${counts[key]}</em>` : ""}</button>`).join("")}<i class="pf-ink" aria-hidden="true"></i></nav>
     </header>
     <div class="pf-body" id="adDrawerDetail" role="tabpanel" aria-labelledby="pf-tab-${tab}"><div class="pf-panel ${changed ? "is-updated" : ""}">${panel}</div></div>
@@ -1221,7 +1303,7 @@ function animateCounts(root) {
   }
 }
 
-function setDrawerTab(tab) {
+function setDrawerTab(tab, { focus = false } = {}) {
   if (!DRAWER_TABS.some(([key]) => key === tab) || tab === state.drawer.tab) return;
   const order = DRAWER_TABS.map(([key]) => key);
   const forward = order.indexOf(tab) > order.indexOf(state.drawer.tab);
@@ -1231,7 +1313,7 @@ function setDrawerTab(tab) {
   renderUserDrawer(user, state.drawer.detail);
   const body = $("#adDrawerDetail");
   if (body) { body.scrollTop = 0; body.querySelector(".pf-panel")?.classList.add(forward ? "pf-tab-next" : "pf-tab-prev"); }
-  $(`#pf-tab-${tab}`)?.focus({ preventScroll: true });
+  if (focus) $(`#pf-tab-${tab}`)?.focus({ preventScroll: true });
 }
 
 function closeUserDrawer() {
@@ -1269,7 +1351,7 @@ function bindUserDrawer() {
       event.preventDefault();
       const keys = DRAWER_TABS.map(([key]) => key);
       const next = keys[(keys.indexOf(state.drawer.tab) + (event.key === "ArrowRight" ? 1 : keys.length - 1)) % keys.length];
-      setDrawerTab(next);
+      setDrawerTab(next, { focus: true });
       return;
     }
     if (/^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName || "") || event.metaKey || event.ctrlKey || event.altKey) return;

@@ -115,3 +115,11 @@ test("prévia: histórico da ficha registra ações aplicadas", async () => {
   const again = await preview.previewRequest("user-detail", undefined, { uid: target.uid });
   assert.deepEqual(again.activity, detail.activity, "números estáveis entre recargas");
 });
+
+test("datas em destaque: último acesso com atividade, conta criada e linha da conta", () => {
+  for (const fn of ["function freshness(", "function tenureText(", "function dateTimeShort(", "function seenCell(", "function drawerVitals(", "function drawerJourney("]) assert.ok(js.includes(fn), fn);
+  assert.match(js, /role="columnheader">Conta criada</);
+  assert.match(js, /data-label="Conta criada"/);
+  // datas no futuro (relógio adiantado) não viram "em 9 horas"
+  assert.match(js, /Math\.min\(0, Math\.round\(\(date\.getTime\(\) - Date\.now\(\)\) \/ 1000\)\)/);
+});
