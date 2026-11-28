@@ -3,6 +3,7 @@
 const crypto = require("node:crypto");
 const { getAdmin, requireAdmin, configuredAdminEmails, configuredPrimaryAdminEmail, hasPermission, ROLE_LABELS, ROLE_PERMISSIONS, ASSIGNABLE_ROLES, normalizeRole, saoPauloToday } = require("./_lib/admin");
 const { DEFAULT_FEATURES, getRuntimeConfig, normalizeRuntimeConfig } = require("./_lib/adminConfig");
+const { normalizeShowcase, normalizeOrder, sortPlans } = require("./_lib/plans");
 
 function fail(status, code) {
   const error = new Error(code);
@@ -283,7 +284,7 @@ async function listPlans(db) {
     current[segment === "trial" ? "trial" : "active"]++;
     counts.set(data.planId, current);
   }
-  return { plans: snapshot.docs.map((entry) => ({ id: entry.id, ...entry.data(), subscribers: counts.get(entry.id) || { active: 0, trial: 0 } })) };
+  return { plans: sortPlans(snapshot.docs.map((entry) => ({ id: entry.id, ...entry.data(), subscribers: counts.get(entry.id) || { active: 0, trial: 0 } }))) };
 }
 
 async function listCharges(db) {
@@ -821,15 +822,34 @@ async function savePlan(db, actor, body) {
   // Visibilidade: "public" aparece para os usuários assinarem; "private"
   // só pode ser atribuído pelo painel (ex.: planos de parceria ou teste).
   const visibility = body.visibility === "private" ? "private" : "public";
+  // Vitrine e venda: chamada, vantagens, selo, destaque, cor, botão, ordem,
+  // preço anual alternativo e dias de teste no checkout (ver _lib/plans.js).
+  const showcase = normalizeShowcase(body, { billingInterval });
   const plan = { name, description: text(body.description, 300), active: body.active, features,
     priceCents, currency: "BRL", billingInterval, stripePriceId: stripePriceId || null, aiDailyLimit, visibility,
+    ...showcase,
     updatedAt: new Date().toISOString(), updatedBy: actor.uid };
   const batch = db.batch();
   batch.set(db.collection("adminPlans").doc(id), plan, { merge: true });
   batch.set(db.collection("adminAudit").doc(), { at: new Date().toISOString(), actorUid: actor.uid,
-    actorEmail: actor.email, action: "plan_saved", target: id, details: { active: plan.active, features } });
+    actorEmail: actor.email, action: "plan_saved", target: id, details: { active: plan.active, features, priceCents, visibility, highlight: plan.highlight } });
   await batch.commit();
   return { plan: { id, ...plan } };
+}
+
+// Ordem da vitrine (arrastar no Estúdio de planos).
+async function reorderPlans(db, actor, body) {
+  const order = normalizeOrder(body.ids);
+  const refs = order.map(({ id }) => db.collection("adminPlans").doc(id));
+  const snapshots = await Promise.all(refs.map((ref) => ref.get()));
+  if (snapshots.some((snapshot) => !snapshot.exists)) fail(404, "plan_not_found");
+  const batch = db.batch();
+  const now = new Date().toISOString();
+  order.forEach(({ order: value }, index) => batch.update(refs[index], { order: value, updatedAt: now, updatedBy: actor.uid }));
+  batch.set(db.collection("adminAudit").doc(), { at: now, actorUid: actor.uid, actorEmail: actor.email,
+    action: "plans_reordered", target: "plans", details: { ids: order.map(({ id }) => id) } });
+  await batch.commit();
+  return { order };
 }
 
 async function setEntitlement(firebase, db, actor, body) {
@@ -946,7 +966,7 @@ module.exports = async function adminApi(req, res) {
       const permissionFor = {
         "config-update": "config.manage", "user-update": "users.status", "plan-save": "plans.manage",
         "entitlement-set": "users.access", "access-apply": "users.access",
-        "charge-create": "charges.manage", "charge-bulk": "charges.manage", "charge-update": "charges.manage",
+        "charge-create": "charges.manage", "charge-bulk": "charges.manage", "charge-update": "charges.manage", "plan-order": "plans.manage",
         "admin-role-set": "admins.manage",
       };
       if (!permissionFor[action]) fail(404, "unknown_action");
@@ -959,6 +979,7 @@ module.exports = async function adminApi(req, res) {
       else if (action === "charge-create") result = await createCharge(firebase, db, actor, body);
       else if (action === "charge-bulk") result = await chargeBulk(firebase, db, actor, body);
       else if (action === "charge-update") result = await updateCharge(db, actor, body);
+      else if (action === "plan-order") result = await reorderPlans(db, actor, body);
       else if (action === "admin-role-set") result = await setAdminRole(firebase, db, actor, body);
     }
     return res.status(200).json({ ok: true, ...result });
@@ -969,6 +990,6 @@ module.exports = async function adminApi(req, res) {
   }
 };
 
-module.exports._test = { validateFeatureMap, integrationStatus, countAuthUsers, authUserActivity, summarizeUserState, summarizeUsage, aggregateUsage,
+module.exports._test = { validateFeatureMap, savePlan, reorderPlans, listPlans, integrationStatus, countAuthUsers, authUserActivity, summarizeUserState, summarizeUsage, aggregateUsage,
   dashboard, listUsers, listAdmins, updateConfig, updateUser, setEntitlement, createCharge, updateCharge, setAdminRole,
   directory, userDetail, accessApply, chargeBulk, grantFromCharge, classifyEntitlement, accessSegments, addDaysIso };

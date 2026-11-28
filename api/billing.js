@@ -13,7 +13,7 @@ module.exports = async function billingApi(req, res) {
     const action = String(req.query?.action || "status");
     let result;
     if (req.method === "GET" && action === "status") result = await publicBillingState(firebase, user);
-    else if (req.method === "POST" && action === "checkout") result = await createCheckout(firebase, user, req.body?.planId);
+    else if (req.method === "POST" && action === "checkout") result = await createCheckout(firebase, user, req.body?.planId, req.body?.interval === "year" ? "year" : "month");
     else if (req.method === "POST" && action === "portal") result = await createPortal(firebase, user);
     else if (req.method === "POST" && action === "charge-pay") result = await createChargeCheckout(firebase, user, req.body?.chargeId);
     else return res.status(404).json({ error: "unknown_action" });

@@ -3,6 +3,7 @@
 const crypto = require("node:crypto");
 const { getAdmin, configuredAdminEmails, saoPauloToday } = require("./admin");
 const { getRuntimeConfig } = require("./adminConfig");
+const { publicPlan, sortPlans } = require("./plans");
 
 const OFFICIAL_APP_URL = "https://pulse-note-5erj.vercel.app";
 
@@ -142,19 +143,13 @@ async function publicBillingState(firebase, user) {
   const entitlementData = autoTrial || (entitlementSnapshot.exists ? entitlementSnapshot.data() : null);
   const entitlement = { exists: Boolean(entitlementData), data: () => entitlementData };
   const currentPlanId = entitlementData?.planId || null;
-  const plans = plansSnapshot.docs.filter((entry) => entry.data()?.visibility !== "private" || entry.id === currentPlanId).map((entry) => {
-    const plan = entry.data();
-    return {
-      id: entry.id,
-      name: plan.name || entry.id,
-      description: plan.description || "",
-      priceCents: Number(plan.priceCents) || 0,
-      currency: plan.currency || "BRL",
-      billingInterval: plan.billingInterval || "month",
-      features: plan.features || {},
-      checkoutAvailable: Boolean(plan.stripePriceId && process.env.STRIPE_SECRET_KEY),
-    };
-  }).sort((a, b) => a.priceCents - b.priceCents || a.name.localeCompare(b.name));
+  // Vitrine na ordem escolhida no painel, com a mesma montagem da prévia.
+  const stripeReady = Boolean(process.env.STRIPE_SECRET_KEY);
+  const plans = sortPlans(plansSnapshot.docs
+    .filter((entry) => entry.data()?.visibility !== "private" || entry.id === currentPlanId)
+    .map((entry) => publicPlan(entry.id, entry.data() || {}, { stripeReady })));
+  // Teste grátis no checkout só para quem nunca assinou pelo Stripe.
+  const trialEligible = !(entitlementData?.provider === "stripe" || entitlementData?.providerSubscriptionId);
   const subscription = entitlement.exists ? {
     planId: entitlement.data().planId || null,
     status: entitlement.data().status || "unassigned",
@@ -174,7 +169,7 @@ async function publicBillingState(firebase, user) {
       bypass: config.maintenance.allowAdmins !== false && await isAdminUser(db, user) }
     : { enabled: false };
   const manualPayment = config.payment.pixKey ? { pixKey: config.payment.pixKey, pixHolder: config.payment.pixHolder, instructions: config.payment.instructions } : null;
-  return { configured: stripeConfigured(), plans, subscription, charges, maintenance,
+  return { configured: stripeConfigured(), plans, subscription, charges, maintenance, trialEligible,
     payment: { online: stripeConfigured(), manual: charges.length ? manualPayment : null } };
 }
 
@@ -230,20 +225,32 @@ async function markChargePaid(db, chargeId, uid, providerRef) {
   });
 }
 
-async function createCheckout(firebase, user, planId) {
+async function createCheckout(firebase, user, planId, interval = "month") {
   const id = String(planId || "").trim().toLowerCase();
   if (!/^[a-z0-9_-]{2,40}$/.test(id)) throw billingError(400, "invalid_plan");
-  const planSnapshot = await firebase.firestore().collection("adminPlans").doc(id).get();
+  const db = firebase.firestore();
+  const [planSnapshot, entitlementSnapshot] = await Promise.all([
+    db.collection("adminPlans").doc(id).get(),
+    db.collection("adminEntitlements").doc(user.uid).get(),
+  ]);
   const plan = planSnapshot.data();
   if (!planSnapshot.exists || plan.active === false) throw billingError(404, "plan_unavailable");
-  if (!plan.stripePriceId) throw billingError(409, "plan_checkout_not_configured");
+  // Anual só quando o plano tem preço anual próprio no Stripe.
+  const yearly = interval === "year" && plan.billingInterval !== "year";
+  const priceId = yearly ? plan.stripePriceIdYear : plan.stripePriceId;
+  if (!priceId) throw billingError(409, "plan_checkout_not_configured");
+  // Dias grátis definidos no painel: só para quem nunca assinou (sem repetir teste).
+  const previous = entitlementSnapshot.exists ? entitlementSnapshot.data() || {} : {};
+  const trialDays = Number.isInteger(plan.trialDays) && plan.trialDays > 0 && plan.trialDays <= 60
+    && previous.provider !== "stripe" && !previous.providerSubscriptionId ? plan.trialDays : 0;
   const customerId = await ensureCustomer(firebase, user);
   const base = appBaseUrl();
   const session = await stripeRequest("checkout/sessions", {
     mode: "subscription",
     customer: customerId,
     client_reference_id: user.uid,
-    "line_items[0][price]": plan.stripePriceId,
+    "line_items[0][price]": priceId,
+    ...(trialDays ? { "subscription_data[trial_period_days]": String(trialDays) } : {}),
     "line_items[0][quantity]": "1",
     allow_promotion_codes: "true",
     billing_address_collection: "auto",
